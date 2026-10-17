@@ -3,6 +3,22 @@
 Notable changes on `arena/e223e8b9-slurps` (PR #1). Newest first. Verified in the Linux sandbox
 unless stated otherwise; nothing here claims a Windows or browser run.
 
+## 0.3.0 — Imagination Engine, slice 1: Live Agent Vision + the Living Core
+
+The first real step of the V3 spec (docs/IMAGINATION.md): the window now shows
+the agent's work as a living, timestamped timeline fed by the REAL event
+stream — route choices, tool starts/ends, escalations, approvals, usages and
+the final answer — plus a small Living Core orb that reflects the actual
+state (ready/thinking/working/waiting for you/done/error).
+
+- Pure local rendering: zero extra model calls, zero extra network, no timers,
+  no simulated activity. An idle agent shows an idle core.
+- Model text can never become markup in the canvas (textContent only), steps
+  expose real payloads behind native <details> (keyboard-accessible).
+- Reduced-motion respected; the whole layer is guarded and test-verified to be
+  inert if removed. Plain chat flow untouched.
+- A new run starts with a fresh canvas: an old task can never paint over it.
+
 ## 0.2.1 — update checks that actually find updates, shortcuts that come back
 
 - **Critical:** the update checker defaulted to the archived first repo

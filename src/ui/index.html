@@ -88,6 +88,33 @@ footer{border-top:1px solid var(--line);background:var(--bg2);padding:8px 14px 1
 ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:9px}
 body.simple #panel{display:none}
 #b-expert.on{color:var(--cy)}
+
+#imagine{ margin:0 0 10px; padding:10px 12px; border:1px solid var(--bd,#2a1620); border-radius:14px; background:var(--bg2,#0e0710); }
+#imagine .core-row{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+#imagine .core{ width:16px; height:16px; border-radius:50%; background:var(--pk,#e0457b); flex:none; }
+#imagine .core.idle{ opacity:.35; }
+#imagine .core.thinking{ animation:imPulse 1.6s ease-in-out infinite; }
+#imagine .core.working{ animation:imPulse .7s ease-in-out infinite; box-shadow:0 0 12px var(--pk,#e0457b); }
+#imagine .core.waiting{ background:var(--warn,#e8b350); opacity:.9; }
+#imagine .core.done{ background:var(--ok,#4fc38a); }
+#imagine .core.error{ background:var(--err,#e05555); opacity:.85; }
+#imagine .core-label{ font-size:12px; color:var(--dim,#a98); letter-spacing:.04em; }
+#imagine .imagine-empty{ font-size:12px; color:var(--dim,#a98); }
+#imagine .steps{ display:flex; flex-direction:column; gap:4px; max-height:220px; overflow:auto; }
+#imagine .step{ display:flex; align-items:flex-start; gap:8px; font-size:12.5px; padding:3px 6px; border-radius:8px; }
+#imagine .step.running{ background:rgba(224,69,123,.08); }
+#imagine .step.ok .step-title{ color:var(--ok,#4fc38a); }
+#imagine .step.fail .step-title{ color:var(--err,#e05555); }
+#imagine .step-icon{ flex:none; }
+#imagine .step-body{ flex:1; min-width:0; }
+#imagine .step-title{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#imagine .step-sub{ font-size:11px; color:var(--dim,#a98); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#imagine .step-time{ flex:none; font-size:10.5px; color:var(--dim,#a98); }
+#imagine .step-detail{ width:100%; margin-top:2px; }
+#imagine .step-detail summary{ cursor:pointer; font-size:11px; color:var(--dim,#a98); }
+#imagine .step-detail pre{ font-size:10.5px; max-height:140px; overflow:auto; padding:6px; background:rgba(0,0,0,.3); border-radius:6px; white-space:pre-wrap; word-break:break-word; }
+@keyframes imPulse{ 0%,100%{ transform:scale(1); opacity:.85; } 50%{ transform:scale(1.35); opacity:1; } }
+@media (prefers-reduced-motion: reduce){ #imagine .core{ animation:none !important; } }
 </style>
 </head>
 <body class="simple">
@@ -119,7 +146,7 @@ body.simple #panel{display:none}
     <h3>SCHEDULE</h3><div id="sched" class="kv">no jobs</div>
     <h3>MEMORY</h3><div id="mem" class="kv">–</div>
   </div>
-  <div id="main"><div id="scroller"></div></div>
+  <div id="main"><section id="imagine" hidden></section><div id="scroller"></div></div>
   <div id="panel">
     <h3>ROUTING</h3><div id="routes"></div>
     <h3>MOA</h3><div id="moactl"></div>
@@ -147,6 +174,7 @@ body.simple #panel{display:none}
 </footer>
 <div id="toast"></div>
 <script>window.__MAJIN_TOKEN__='__MAJIN_TOKEN__';window.__MAJIN_VERSION__='__MAJIN_VERSION__';</script>
+<script src="/imagine.js"></script>
 <script src="/app.js"></script>
 <script src="/panels.js"></script>
 </body>

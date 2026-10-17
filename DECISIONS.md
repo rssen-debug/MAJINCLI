@@ -129,3 +129,15 @@ A gate is only as good as its word list.
   bypass the user's installer choice and needs registry-free .lnk writing from
   Node; UsePreviousTasks=no + unconditional Start Menu entry achieves the
   guarantee inside Inno, the tool that owns shortcuts.
+
+## 2026-06-18 (kväll) — Imagination Engine slice 1
+- **imagine.js as a side-loaded module feeding off onEvent(), not a rewrite:**
+  the SSE stream already funnels through onEvent(); one guarded line hands the
+  same real events to the canvas. Deleting imagine.js breaks nothing (guards
+  are asserted in test).
+- **Native <details> for step payloads:** keyboard-accessible, zero JS,
+  textContent only (spec: the LLM never injects markup).
+- **CSS-only core animation:** GPU-cheap, reduced-motion media query stops the
+  pulse with no JS state; energy requirement of the spec met by construction.
+- **Skipped for now:** WebGL/Canvas orb (violates the energy rule for v1),
+  fake "thinking" shimmer (spec forbids fabricated activity).

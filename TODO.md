@@ -108,3 +108,21 @@ Everything here is *not* done — verified against the code, not against memory.
   validation, and sharing means exporting the JSONL yourself.
 - Rewriting MAJIN's own source at runtime (self-config edits *config*, with backup + diff, only).
 - Anything that needs Windows Defender/firewall/service mutation.
+
+## IMAGINATION ENGINE (V3) — phased plan, spec: docs/IMAGINATION.md
+- [x] **Slice 1 — Live Agent Vision + Living Core** (v0.3.0): real event stream
+  rendered as a timestamped visual timeline (route/tool/result/approval/answer),
+  core orb reflects real state, zero extra model calls, reduced-motion safe.
+- [ ] **Slice 2 — cost chip per task** (usage → visible $/token per run, budget cap UI)
+- [ ] **Slice 3 — Living Canvas area** (chat stays default; canvas takes focus
+  when a task wants a visual form; expandable previews, iframe-safe)
+- [ ] **Slice 4 — Preview / Working / Verified** labels on every preview surface
+- [ ] **Slice 5 — Generative UI components** (declarative schema v1: JobCard,
+  WebsitePreview, TaskTimeline, ApprovalCard, DataChart; LLM proposes data only)
+- [ ] **Slice 6 — Visual orchestration** (Planner→Executor→Verifier flow in the
+  canvas; click a role = dropdown model switch)
+- [ ] **Slice 7 — Interact with ideas** (approve/reorder/annotate on canvas)
+- [ ] **Slice 8 — onboarding magic** (provider cards → paste key → verify +
+  auto-detect models → recommended setup; <60 s to first result)
+- [ ] **Gates per slice:** cheap-model E2E, keyboard pass, CPU/mem budget, all
+  prior tests stay green.

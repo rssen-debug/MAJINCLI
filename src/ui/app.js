@@ -134,6 +134,7 @@ function moaGauge(ev) {
 
 /* ------------------------------ event pump ------------------------------ */
 function onEvent(ev) {
+  if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.onEvent(ev); // Live Agent Vision — real events only
   switch (ev.type) {
     case 'route':
       $('c-route').innerHTML = 'route <b>' + esc(ev.job) + '</b> → ' + esc((ev.model || '?').split('/').pop()) + (ev.confidence != null && ev.confidence < 0.45 ? ' <span style="color:var(--warn)">?</span>' : '');
@@ -226,6 +227,8 @@ function closeAnswer(ev) {
 
 /* --------------------------------- send --------------------------------- */
 async function send(text) {
+  if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.reset(); // a new run gets a fresh canvas
+
   const input = String(text || '').trim();
   if (!input || S.busy) return false;
   if (input[0] === '/') {
@@ -336,6 +339,7 @@ function listen() {
     let ev;
     try {
       ev = JSON.parse(msg.data);
+      if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.onEvent({ type: name, ...ev });
     } catch {
       return;
     }
