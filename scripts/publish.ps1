@@ -9,7 +9,7 @@
     ... -CheckOnly        # just report what is on GitHub right now
 #>
 param(
-  [string]$Version = '0.4.0',
+  [string]$Version = '0.4.1',
   [string]$Branch = 'arena/e223e8b9-slurps',
   [string]$Repo = 'rssen-debug/slurps',
   [switch]$CheckOnly,

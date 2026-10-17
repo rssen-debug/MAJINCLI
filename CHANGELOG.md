@@ -3,6 +3,12 @@
 Notable changes on `arena/e223e8b9-slurps` (PR #1). Newest first. Verified in the Linux sandbox
 unless stated otherwise; nothing here claims a Windows or browser run.
 
+## 0.4.1 — the header stop button leaves Simple mode
+
+The RUN button in the composer already becomes STOP the moment a task runs,
+so the emergency stop in the top-right is now hidden in the default view
+(behind the expert toggle it stays — an extra brake for power users).
+
 ## 0.4.0 — Phase B: first-run onboarding, model picker, single-model proof
 
 The simple experience on top of the systems that already existed:
