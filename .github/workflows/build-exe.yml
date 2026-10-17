@@ -1,0 +1,47 @@
+name: build-exe
+
+# Bygger den fristående MAJIN-binären (.exe för Windows) och lägger den som artifact.
+# Kör manligen via Actions → Build exe, eller pusha en tag v* för en release med filen.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # behövs för att softprops/action-gh-release ska kunna skapa releasen med .exe:n
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: install (esbuild + pkg)
+        run: npm ci
+      - name: bundle and package
+        run: node scripts/build-exe.mjs
+      - name: smoke test the built binary
+        # doctor skriver ✔/✖ och lämnar 1 utan API-nyckel — det är förväntat på
+        # en CI-runner, så den raden får inte fälla bygget. version och
+        # config get måste däremot gå — de bevisar att bundlen faktiskt startar.
+        run: |
+          ./dist/majin-win-x64.exe version
+          ./dist/majin-win-x64.exe doctor
+          if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
+          ./dist/majin-win-x64.exe config get name
+      - uses: actions/upload-artifact@v4
+        with:
+          name: majin-win-x64
+          path: dist/majin-win-x64.exe
+          if-no-files-found: error
+      - name: attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/majin-win-x64.exe
+          name: MAJIN ${{ github.ref_name }} (Windows x64)
+          generate_release_notes: true

@@ -1,0 +1,16 @@
+node_modules/
+.lent/
+data/
+lent.config.json
+*.log
+*.pyc
+__pycache__/
+.DS_Store
+coverage/
+dist/
+.env
+
+.pkg-cache/
+memory/
+skills/
+majin.config.json
