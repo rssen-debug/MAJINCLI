@@ -14,3 +14,14 @@ dist/
 memory/
 skills/
 majin.config.json
+
+# staged by scripts/build-installer.mjs before iscc runs
+installer/majin-win-x64.exe
+installer/majin.ico
+installer/majin.cmd
+
+# written by scripts/build-on-windows.ps1
+build-notes.txt
+
+# the downloadable bundle this session produced (built artifacts, not source)
+MAJIN-PATCHES.zip

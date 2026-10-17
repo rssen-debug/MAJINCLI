@@ -26,7 +26,7 @@ const SELF_DIR = (() => {
 const UI_CANDIDATES = [path.resolve(SELF_DIR, 'ui'), path.resolve(SELF_DIR, '../../ui'), path.join(path.dirname(process.execPath), 'ui'), path.resolve(process.cwd(), 'src/ui')];
 const UI_DIR = UI_CANDIDATES.find((d) => fs.existsSync(path.join(d, 'index.html'))) || UI_CANDIDATES[0];
 const MAX_BODY = 64 * 1024 * 1024;
-const VERSION = '0.1.0';
+import { VERSION } from '../version.js';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -98,7 +98,7 @@ export function createServer(rt) {
       try {
         body = JSON.parse(raw || '{}');
       } catch {
-        return json(res, 400, { ok: false, error: 'kropps-JSON trasig' });
+        return json(res, 400, { ok: false, error: 'the request body is not valid JSON' });
       }
       const r = channels.whatsapp.ingest(body);
       return json(res, 200, r.ok !== false ? { ok: true } : { ok: false });
@@ -142,6 +142,19 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
 
     /* ---------- state ---------- */
     if (p === '/api/state') return json(res, 200, rt.state({ includeTools: url.searchParams.get('tools') !== '0' }));
+    if (p === '/api/update' && req.method === 'GET') {
+      return json(res, 200, { ok: true, version: VERSION, update: rt.update.info, current: VERSION });
+    }
+    if (p === '/api/update' && req.method === 'POST') {
+      const body = await readJson(req);
+      const action = body.action === 'download' ? 'download' : 'check';
+      if (action === 'download') {
+        const r = await rt.update.download({ dir: body.dir || undefined, url: body.url || undefined });
+        return json(res, r.ok ? 200 : 502, { ok: r.ok, action, ...r });
+      }
+      const info = await rt.update.check({ force: body.force !== false });
+      return json(res, 200, { ok: !info.error, action, update: info, error: info.error || null });
+    }
     if (p === '/api/config' && req.method === 'GET') return json(res, 200, { ok: true, config: cfg.redacted(), file: cfg.file, diffReady: true });
     if (p === '/api/logs') return json(res, 200, { ok: true, events: bus.tail(Number(url.searchParams.get('n') || 200), Number(url.searchParams.get('after') || 0)) });
     if (p === '/api/usage') return json(res, 200, { ok: true, ...usage.summary(), routes: cfg.routeTable().length });

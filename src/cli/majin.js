@@ -20,6 +20,8 @@ import { fileURLToPath } from 'node:url';
 import { load } from '../core/config.js';
 import { dirs, ensureDirs, expand } from '../core/paths.js';
 import { bus } from '../core/log.js';
+import { logoArt, tagline } from './banner.js';
+import { shortcutAction, shortcutFile } from '../core/shortcut.js';
 import { VERSION, createRuntime } from '../core/runtime.js';
 
 const SELF_DIR = (() => {
@@ -35,7 +37,12 @@ const SELF_DIR = (() => {
   }
 })();
 const argv = process.argv.slice(2);
-const cmd = (argv[0] && !argv[0].startsWith('-') ? argv.shift() : 'start').toLowerCase();
+// A leading -h/--help/-v/--version is a question, not "start with a flag": the
+// first thing a person types after downloading an exe. Everything else that
+// starts with '-' stays where it belongs, in the flag list, and the command
+// defaults to start.
+const FLAG_COMMANDS = new Set(['-h', '--help', '-?', '--version', '-v']);
+const cmd = ((argv[0] && (!argv[0].startsWith('-') || FLAG_COMMANDS.has(argv[0].toLowerCase())) ? argv.shift() : 'start')).toLowerCase();
 const flags = parseFlags(argv);
 const json = () => flags.json;
 
@@ -79,8 +86,17 @@ async function main() {
       return re();
     case 'dataset':
       return dataset();
+    case 'update':
+      return update();
+    case 'stop':
+      return stop();
+    case 'restart':
+      return restart();
     case 'test':
       return test();
+    case 'shortcut':
+    case 'desktop':
+      return shortcut();
     case 'version':
     case '--version':
     case '-v':
@@ -149,8 +165,11 @@ async function serve() {
   const host = rt.cfg.get('server.host') || '0.0.0.0';
   await new Promise((resolve) => server.listen(port, host, resolve));
   const url = `http://127.0.0.1:${port}/?t=${rt.cfg.get('server.token')}`;
+  const shortcutLine = ensureDesktopShortcut(flags);
   process.stdout.write([
-    `MAJIN ${VERSION} listening on http://${host}:${port}`,
+    logoArt(),
+    '',
+    tagline(`MAJIN ${VERSION} listening on http://${host}:${port}`),
     `  config     ${rt.cfg.file}`,
     `  workspace  ${rt.cfg.get('workspace')}`,
     `  tools      ${rt.registry.list().length} (all on, always)`,
@@ -158,6 +177,7 @@ async function serve() {
     `  provider   ${rt.cfg.get('models.provider')} (${rt.cfg.providerStatus().filter((p) => p.ready).map((p) => p.name).join(', ') || 'no key — demo'})`,
     `  channels   ${wantChannels ? `telegram ${rt.cfg.get('channels.telegram.botToken') ? 'token ok' : 'no token'} · whatsapp ${rt.cfg.get('channels.whatsapp.transport')}` : 'off (--no-channels)'}`,
     `  open       ${url}`,
+    ...(shortcutLine ? [shortcutLine] : []),
     '',
   ].join('\n'));
   if (rt.cfg.get('server.openBrowser') !== false && !flags.noBrowser && flags.browser !== false && !flags.noWindow) openWindow(url);
@@ -482,6 +502,117 @@ async function test() {
   process.exitCode = child.exitCode || 0;
 }
 
+/**
+ * Skrivbordsgenvag. `majin shortcut` lagar den, `--remove` tar bort den,
+ * `--print` visar bara PowerShell-raderna. Automatiskt vid forsta korning av
+ * en packad exe — men aldrig om nagot finns kvar att saga om det: en misslyckad
+ * genvag ar en notis, inte ett fel som stoppar programmet.
+ */
+function shortcut() {
+  const action = flags.remove ? 'remove' : (flags.print ? 'print' : 'create');
+  const r = shortcutAction({ action, name: flags.name || 'MAJIN', target: flags.target, dry: Boolean(flags.dry) });
+  if (json()) return process.stdout.write(JSON.stringify(r, null, 2) + '\n');
+  if (action === 'print' || r.ran === false && action !== 'create') {
+    process.stdout.write(`file    ${r.file}\nscript  ${r.script}\n`);
+  }
+  if (r.ok) return process.stdout.write(`${action}: ${r.summary || r.file}\n`);
+  process.stdout.write(`${action} did not happen (${r.code})\n  ${r.error || ''}\n  ${r.script || ''}\n`);
+  process.exitCode = action === 'print' ? 0 : 1;
+}
+
+/** Bara for den fristande exe:n pa Windows, en gang, om den inte finns. */
+function ensureDesktopShortcut(flags = {}) {
+  if (process.platform !== 'win32' || !process.pkg) return null;
+  if (process.env.MAJIN_NO_SHORTCUT || flags.noShortcut) return null;
+  if (flags.noWindow || flags.window === false) return null;
+  try {
+    const file = shortcutFile({ name: flags.name || 'MAJIN' });
+    if (fs.existsSync(file)) return null;
+    const r = shortcutAction({ action: 'create', name: flags.name || 'MAJIN' });
+    if (r.ok) return `  shortcut ${file}\n             (undo: majin shortcut --remove)`;
+    bus.warn('desktop.shortcut', { error: r.error || r.code });
+    return null;
+  } catch (err) {
+    bus.warn('desktop.shortcut', { error: err.message });
+    return null;
+  }
+}
+
+/** Restart in place: stop, then the normal start path (which waits for the port). */
+async function restart() {
+  await stop();
+  if (process.exitCode === 1) {
+    process.stdout.write('  ...starting it fresh instead\n');
+    process.exitCode = 0;
+  }
+  return start();
+}
+
+/**
+ * Ask the running server to shut itself down; the only clean way to stop a
+ * double-clicked program that has no console window of its own. */
+async function stop() {
+  const cfg = load();
+  const port = Number(process.env.MAJIN_PORT || cfg.get('server.port') || 8787);
+  const token = cfg.get('server.token');
+  let res;
+  try {
+    res = await fetch(`http://127.0.0.1:${port}/api/shutdown`, {
+      method: 'POST',
+      headers: token ? { authorization: `Bearer ${token}` } : {},
+      signal: AbortSignal.timeout(6000),
+    });
+  } catch (err) {
+    process.stderr.write(`majin stop: nothing is listening on :${port} (${err.message})\n`);
+    process.exitCode = 1;
+    return;
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    process.stderr.write(`majin stop: ${res.status} ${body.error || ''}\n`);
+    process.exitCode = 1;
+    return;
+  }
+  process.stdout.write('MAJIN stopped\n');
+}
+
+/**
+ * `majin update [--check|--download] [--json]` — what the release page says.
+ * Never fatal: no network, renamed repo or an unpublished tag is a line of text,
+ * not a stack trace, because the program still works either way.
+ */
+async function update() {
+  const { checkForUpdate, downloadSetup, notice, compareVersions } = await import('../core/update.js');
+  const cfg = load();
+  const info = await checkForUpdate({ cfg, version: VERSION, force: flags.check !== false, silent: false });
+  const seen = info.latest ? compareVersions(VERSION, info.latest) < 0 : false;
+  if (flags.download) {
+    const r = await downloadSetup({ cfg, dir: flags.dir ? expand(flags.dir) : undefined });
+    if (json()) return process.stdout.write(JSON.stringify(r, null, 2) + '\n');
+    if (!r.ok) {
+      process.stderr.write(`majin update: ${r.error}\n`);
+      process.exitCode = 1;
+      return;
+    }
+    process.stdout.write(`downloaded  ${r.file}\n            ${r.bytes} bytes, sha256 ${r.sha256}\n`);
+    process.stdout.write('            run it to install; nothing was changed by this command\n');
+    return;
+  }
+  if (json()) {
+    return process.stdout.write(JSON.stringify({ current: VERSION, ...info, available: seen }, null, 2) + '\n');
+  }
+  process.stdout.write(`installed   majin ${VERSION}\n`);
+  process.stdout.write(`latest      ${info.latest || 'unknown'}${info.publishedAt ? ` (${String(info.publishedAt).slice(0, 10)})` : ''}\n`);
+  if (info.error) process.stdout.write(`check       did not finish: ${info.error}\n`);
+  if (info.skipped) process.stdout.write(`check       skipped: ${info.skipped}\n`);
+  const line = notice(info, VERSION);
+  if (seen) process.stdout.write(`update      ${line}\n            download: majin update --download\n`);
+  else if (!info.error) process.stdout.write('update      you are up to date\n');
+  if (info.asset) process.stdout.write(`installer   ${info.asset.name} (${(info.asset.size / 1024 / 1024).toFixed(1)} MB)\n`);
+  else if (info.note) process.stdout.write(`note        ${info.note}\n`);
+  if (info.url) process.stdout.write(`release     ${info.url}\n`);
+}
+
 function help() {
   process.stdout.write(
     [
@@ -491,6 +622,10 @@ function help() {
       '  majin start [--no-window]  run without a window',
       '  majin window               open another window on the running server',
       '  majin doctor [--full]      providers, keys, tools, RE, port, workspace',
+      '  majin stop                  tell the running program to shut down',
+      '  majin restart               stop and start it again in one go',
+      '  majin update [--check]      what GitHub Releases has, --download fetches the installer',
+      '  majin shortcut [--remove]  the desktop icon for the standalone exe',
       '  majin status | url | logs  show what is running',
       '  majin config [get <key> | set <key> <value> | path]',
       '  majin pair telegram|whatsapp   connect a chat',

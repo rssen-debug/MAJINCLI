@@ -15,6 +15,29 @@ async function paintHeader(st) {
   led('led-wa', wa.online ? 'g' : wa.state === 'pairing' ? 'y' : wa.state === 'missing-dep' || wa.state === 'error' ? 'r' : '');
   $('c-tg').title = 'telegram: ' + (tg.state || '?') + (tg.lastError ? ' · ' + tg.lastError : '') + (tg.pairingCode ? ' · code ' + tg.pairingCode : '');
   $('c-wa').title = 'whatsapp: ' + (wa.state || '?') + (wa.transport ? ' · ' + wa.transport : '') + (wa.lastError ? ' · ' + wa.lastError : '');
+  const cu = $('c-update');
+  if (cu) {
+    const upd = st.update || null;
+    const show = Boolean(upd && (upd.available || (upd.notice && !upd.error)));
+    cu.hidden = !show;
+    if (show) {
+      cu.innerHTML = 'update <b>' + String(upd.latest || '?').replace(/[<>&]/g, '') + '</b>';
+      cu.title = (upd.notice || '') + (upd.url ? ' · ' + upd.url : '') + ' · click to download the installer';
+      cu.style.cursor = 'pointer';
+      cu.onclick = async () => {
+        cu.innerHTML = 'update <b>…</b>';
+        try {
+          const r = await api('/update', { method: 'POST', body: { action: 'download' } });
+          note('MAJIN-Setup.exe is in ' + (r.file || 'your Downloads folder') + ' — run it to update. Nothing else changed.');
+          cu.innerHTML = 'update <b>ready</b>';
+        } catch (e) {
+          cu.innerHTML = 'update <b>failed</b>';
+          note('the update download did not work: ' + e.message + ' — the release page has it: ' + ((upd && upd.url) || 'github'));
+        }
+      };
+    }
+  }
+
   const mode = MODE_LABEL[st.guard.mode] || 'approval';
   const bm = $('b-mode');
   if (bm) {

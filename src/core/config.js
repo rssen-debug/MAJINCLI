@@ -200,6 +200,21 @@ export const DEFAULTS = {
   },
   logging: { level: 'info', keepDays: 14, jsonl: true },
   server: { host: '0.0.0.0', port: 8787, token: null, openBrowser: true, allowRemote: false, trustLocal: true },
+  /* Update checks against GitHub Releases. `check: false` means no request is ever made;
+     the rest is only ever written by src/core/update.js, never fetched from. */
+  updates: {
+    check: true,
+    intervalHours: 24,
+    repo: 'rssen-debug/slurps',
+    channel: '',
+    token: null,
+    lastCheck: 0,
+    latest: null,
+    url: null,
+    notes: null,
+    asset: null,
+    checkedVersion: null,
+  },
 };
 
 const SECRET_KEYS = /(^|\.)(apikey|key|token|secret|bottoken|accesstoken|password|appsecret|verifytoken)$/i;

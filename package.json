@@ -1,7 +1,7 @@
 {
   "name": "majin",
-  "version": "0.1.0",
-  "description": "MAJIN — a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
+  "version": "0.1.1",
+  "description": "MAJIN \u2014 a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -35,7 +35,14 @@
     "exe:all": "node scripts/build-exe.mjs --all",
     "exe:bundle": "node scripts/build-exe.mjs --no-pkg",
     "bench": "node ./scripts/bench.mjs",
-    "bench:json": "node ./scripts/bench.mjs --json"
+    "bench:json": "node ./scripts/bench.mjs --json",
+    "icon": "node ./scripts/set-icon.mjs",
+    "shortcut": "node ./src/cli/majin.js shortcut",
+    "setup:exe": "node ./scripts/build-setup.mjs",
+    "setup:payload": "node ./scripts/build-setup.mjs --payload-only",
+    "installer": "node ./scripts/build-installer.mjs",
+    "win:build": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-on-windows.ps1",
+    "win:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-on-windows.ps1 -SkipBuild"
   },
   "optionalDependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
@@ -64,6 +71,8 @@
   ],
   "devDependencies": {
     "@yao-pkg/pkg": "^6.23.0",
-    "esbuild": "^0.24.0"
+    "esbuild": "^0.24.0",
+    "js-yaml": "^5.5.0",
+    "resedit": "^3.1.0"
   }
 }

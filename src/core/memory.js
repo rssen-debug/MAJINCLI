@@ -126,7 +126,7 @@ export class Memory {
     const events = this.recentEvents(8);
     const lines = [
       facts.length ? `Knows about the user:\n${facts.map((f) => `- ${f}`).join('\n')}` : '',
-      events.length ? `Senaste:\n${events.map((e) => `- ${e.type}: ${String(e.summary || e.text || e.msg || '').slice(0, 120)}`).join('\n')}` : '',
+      events.length ? `Latest:\n${events.map((e) => `- ${e.type}: ${String(e.summary || e.text || e.msg || '').slice(0, 120)}`).join('\n')}` : '',
     ].filter(Boolean);
     const out = lines.join('\n\n');
     return out.length > cap ? `${out.slice(0, cap)}\n…` : out;

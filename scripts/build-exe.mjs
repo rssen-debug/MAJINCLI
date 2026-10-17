@@ -75,6 +75,17 @@ import('esbuild').then(async (esbuild) => {
   if (r.errors && r.errors.length) process.exit(1);
 }).catch((e) => { console.error(String((e && e.message) || e)); process.exit(1); });
 `);
+// esbuild is a devDependency; MAJIN runs without any dependency at all, so a bare
+// clone has no node_modules and the real error would be a stack trace from the
+// generated script. Say what to do instead.
+if (spawnSync(process.execPath, ['-e', "require('esbuild')"], { cwd: root, encoding: 'utf8' }).status !== 0) {
+  console.error(
+    'build-exe: esbuild is not installed — run `npm install` first (it is only needed to build;\n' +
+    '  MAJIN itself has no runtime dependencies). To skip building entirely, take a build from the\n' +
+    '  release instead: see docs/EXE.md',
+  );
+  process.exit(1);
+}
 run(process.execPath, [esbuildScript]);
 const bundleBytes = fs.statSync(out).size;
 fs.rmSync(esbuildScript, { force: true });
@@ -111,6 +122,31 @@ fs.writeFileSync(
   )}\n`,
 );
 
+/**
+ * Put the M icon inside the .exe so the taskbar shows the logo. resedit is a
+ * devDependency, and scripts/set-icon.mjs restores the original file if anything
+ * about the patch looks wrong -- so this can only ever be a nicer icon, never a
+ * broken binary. Set MAJIN_NO_ICON=1 to skip it entirely.
+ */
+function embedExeIcon(exe) {
+  if (process.env.MAJIN_NO_ICON === '1') {
+    console.log('  icon      skipped (MAJIN_NO_ICON=1)');
+    return;
+  }
+  const ico = path.join(root, 'assets', 'majin.ico');
+  if (!fs.existsSync(ico)) {
+    console.log('  icon      skipped (no assets/majin.ico)');
+    return;
+  }
+  const r = spawnSync(process.execPath, [path.join(root, 'scripts', 'set-icon.mjs'), exe, ico], {
+    encoding: 'utf8',
+    timeout: 180000,
+  });
+  const line = String(r.stdout || r.stderr || 'icon: no output').trim().split('\n').pop();
+  console.log('  ' + line);
+  if (r.status !== 0) console.log('  icon      left alone -- the exe is still the untouched, working one');
+}
+
 const pkgBin = ['node_modules/@yao-pkg/pkg/lib-es5/bin.js', 'node_modules/@yao-pkg/pkg/lib-es/bin.js', 'node_modules/@yao-pkg/pkg/lib/bin.js']
   .map((r) => path.join(root, ...r.split('/')))
   .find((f) => fs.existsSync(f));
@@ -132,6 +168,7 @@ for (const t of targets) {
     made.push(name);
     process.stdout.write(`\n✔ ${name} (${(fs.statSync(p2).size / 1024 / 1024).toFixed(1)} MB)\n`);
     if (name === 'majin-linux-x64') fs.chmodSync(p2, 0o755);
+    if (name.endsWith('.exe')) embedExeIcon(p2);
   }
 }
 /* ett bygge som inte producerade nagon binar ar ett misslyckande, inte en varning:
