@@ -114,6 +114,7 @@ const pkgBin = ['node_modules/@yao-pkg/pkg/lib-es5/bin.js', 'node_modules/@yao-p
   .find((f) => fs.existsSync(f));
 if (!pkgBin) throw new Error('pkg not found — run: npm i -D @yao-pkg/pkg');
 
+const made = [];
 for (const t of targets) {
   const name = t.includes('win') ? 'majin-win-x64.exe' : t.includes('linux') ? 'majin-linux-x64' : 'majin-macos-x64';
   try {
@@ -125,7 +126,17 @@ for (const t of targets) {
     continue;
   }
   const p2 = path.join(dist, name);
-  if (fs.existsSync(p2)) process.stdout.write(`\n✔ ${name} (${(fs.statSync(p2).size / 1024 / 1024).toFixed(1)} MB)\n`);
-  if (name === 'majin-linux-x64') fs.chmodSync(p2, 0o755);
+  if (fs.existsSync(p2)) {
+    made.push(name);
+    process.stdout.write(`\n✔ ${name} (${(fs.statSync(p2).size / 1024 / 1024).toFixed(1)} MB)\n`);
+    if (name === 'majin-linux-x64') fs.chmodSync(p2, 0o755);
+  }
 }
-process.stdout.write('\nDone. The files are in dist/ (not in git).\n');
+/* ett bygge som inte producerade nagon binar ar ett misslyckande, inte en varning:
+   annars later CI som att majin-win-x64.exe finns och den som laddar ner den far leta */
+if (!made.length) {
+  process.stdout.write('\n✖ no binary was produced. pkg could not fetch its node host binary (it needs the pkg-fetch release assets from github.com).\n');
+  process.stdout.write('  Either build where that download works, or run the bundle directly: node dist/majin.cjs\n');
+  process.exit(1);
+}
+process.stdout.write(`\nDone. ${made.join(', ')} in dist/ (not in git).\n`);
