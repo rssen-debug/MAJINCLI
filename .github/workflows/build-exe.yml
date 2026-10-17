@@ -27,7 +27,22 @@ permissions:
   issues: write
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run check
+      - run: npm run i18n
+
   exe:
+    needs: check
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -47,15 +62,6 @@ jobs:
           node-version: 22.23.2
           cache: npm
       - run: npm ci
-      - name: run the MAJIN tests before packaging
-        shell: pwsh
-        run: |
-          npm test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm run check
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm run i18n
-          exit $LASTEXITCODE
       - name: install zig (the setup stub cross-compiles with it, no SDK needed)
         shell: pwsh
         run: |
