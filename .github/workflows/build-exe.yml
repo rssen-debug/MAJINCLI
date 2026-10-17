@@ -13,6 +13,8 @@ name: build-exe
 on:
   push:
     tags: ['v*']
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       keep_exe:
@@ -45,6 +47,15 @@ jobs:
           node-version: 22.23.2
           cache: npm
       - run: npm ci
+      - name: run the MAJIN tests before packaging
+        shell: pwsh
+        run: |
+          npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run i18n
+          exit $LASTEXITCODE
       - name: install zig (the setup stub cross-compiles with it, no SDK needed)
         shell: pwsh
         run: |
@@ -163,7 +174,7 @@ jobs:
             Unsigned, so Windows may warn once (More info -> Run anyway).
             Or download it with curl:
 
-                curl.exe -L -o majin-win-x64.exe https://github.com/rssen-debug/slurps/releases/latest/download/majin-win-x64.exe
+                curl.exe -L -o majin-win-x64.exe https://github.com/rssen-debug/MAJINCLI/releases/latest/download/majin-win-x64.exe
           files: |
             dist/installer/MAJIN-Setup.exe
             dist/setup/majin-setup.exe
