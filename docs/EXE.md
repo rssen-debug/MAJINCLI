@@ -83,3 +83,16 @@ or Task Scheduler behaviour; only a Windows run does that.
 A packed Node binary that opens a listening port is exactly the profile heuristics flag. If that
 matters to you: sign with your own certificate (`pkg --options` + `signtool`), publish the SHA-256
 next to the artifact, or use the repo install (`install.ps1`) which runs through `node.exe`.
+
+## Direct download
+
+The release asset keeps a stable name, so the same URL works for every version:
+
+```powershell
+curl.exe -L -o majin-win-x64.exe https://github.com/rssen-debug/slurps/releases/latest/download/majin-win-x64.exe
+.\majin-win-x64.exe doctor
+```
+
+If the repository is private, `curl` gets a 404 — download it in the browser while logged in, or use
+`gh release download --pattern '*.exe'`. SmartScreen warns once because the binary is unsigned; nothing
+is installed system-wide and `majin-win-x64.exe` writes only inside its data folder.
