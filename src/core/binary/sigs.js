@@ -169,8 +169,8 @@ export function risk(report) {
 }
 
 function band(s) {
-  if (s >= 70) return 'hög';
-  if (s >= 40) return 'medel';
-  if (s >= 18) return 'förhöjd';
-  return 'låg';
+  if (s >= 70) return 'high';
+  if (s >= 40) return 'medium';
+  if (s >= 18) return 'elevated';
+  return 'low';
 }

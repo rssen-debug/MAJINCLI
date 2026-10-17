@@ -156,7 +156,7 @@ rule Rust_Binary : framework {
 export function analyze(buf, opts = {}) {
   const { name = 'buffer', rules = [], maxStrings = 4000 } = opts;
   const t0 = Date.now();
-  if (!buf?.length) throw new Error('tom fil');
+  if (!buf?.length) throw new Error('empty file');
   const format = detectFormat(buf);
   const full = entropy(buf, 0, Math.min(buf.length, 4_000_000));
   const strs = getStrings(buf, { limit: maxStrings });
@@ -291,7 +291,7 @@ function nextSteps(r, format) {
   if ((r.sections || []).some((s) => s.executable && s.writable)) out.push('Sektion som är både skrivbar och körbar — packa upp den eller dumpa processminnet och analysera det blocket.');
   if (r.entry && r.entry.inImage === false) out.push('Entry point utanför image: kontrollera overlay och TLS-callbacks; trolig self-extractor.');
   if (r.tls?.count) out.push(`${r.tls.count} TLS-callback(s) — dekoder dessa först, de kör före main och döljer ofta avpackningskod.`);
-  if (r.importCount < 10 && (r.entropy?.overall || 0) > 7) out.push('Få imports + hög entropi: nästan garanterat packad/krypterad payload. Försök dynamic analysis.');
+  if (r.importCount < 10 && (r.entropy?.overall || 0) > 7) out.push('Few imports + high entropy: almost certainly a packed or encrypted payload. Try dynamic analysis.');
   if (r.apis.flagged.some((f) => f.tags.includes('inject'))) out.push('Injectering: sätt breakpoint på WriteProcessMemory/CreateRemoteThread i x64dbg och dumpa den skrivna bufferten.');
   if (r.apis.flagged.some((f) => f.tags.includes('downloader'))) out.push('Downloader: extrahera URL:erna, kontrollera domänens ålder och hämta payloaden i en sandbox (aldrig på värden).');
   if (r.apis.flagged.some((f) => f.tags.includes('ransom'))) out.push('Ransomware-mönster: kör i isolerad miljö med dokument som lockbete; dokumentera krypteringsbeteende, nyckelhämtning och utpressningsfil.');
@@ -299,7 +299,7 @@ function nextSteps(r, format) {
   if (r.dotnet?.managed) out.push('.NET: använd ilspycmd/dnSpy (dotnet tool install -g ilspycmd) — hanterad kod är lätt att läsa, slösa inte tid på assembly.');
   if (r.containers?.some((c) => c.kind === 'apk')) out.push('APK: packa upp med apktool, läs AndroidManifest.xml, leta efter url/permission-strängar och dekompile classes.dex.');
   if (r.containers?.some((c) => c.kind === 'asar')) out.push('Electron: montera asar-arkivet (npx @electron/asar extract) och läs JS-bundlen — logiken ligger där, inte i exet.');
-  if (r.overlay?.size > 100000) out.push(`Overlay på ${Math.round(r.overlay.size / 1024)} kB efter sista sektionen: dumpa offset ${r.overlay.offset} och kör entropi på den delen.`);
+  if (r.overlay?.size > 100000) out.push(`Overlay of ${Math.round(r.overlay.size / 1024)} kB after the last section: dump offset ${r.overlay.offset} and run entropy on that part.`);
   if (r.iocs?.urls?.length) out.push(`${r.iocs.urls.length} URL:er — kontrollera DOMÄN-ålder/ssl-certifikat och hämta med web.fetch i sand-box-läge.`);
   if (!out.length && format.kind === 'text') out.push('Textfiler: kör den genom majin.syntax / grep för hårdkodade nycklar, endpoint:er och hemliga strängar.');
   return out.slice(0, 8);

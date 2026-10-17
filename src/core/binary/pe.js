@@ -87,7 +87,8 @@ export function parsePe(buf) {
   const bad = (m, extra) => new BinError(m, { code: 'pe_parse', ...extra });
 
   if (size < 0x40) throw bad('Filen är för liten för en PE-header', { hint: 'Behöver minst 64 byte DOS-header.' });
-  if (view.getUint16(0) !== 0x5a4d) throw bad('Saknar MZ-signatur', { hint: 'Det här är ingen Windows PE-fil.' });
+  // MZ = bytes 4d 5a → little-endian u16 = 0x5a4d (DataView är big-endian som default).
+  if (view.getUint16(0, true) !== 0x5a4d) throw bad('missing MZ signature', { hint: 'this is not a Windows PE file' });
 
   const e_lfanew = view.getUint32(0x3c, true);
   if (e_lfanew <= 0 || e_lfanew + 24 > size) throw bad(`Ogiltig e_lfanew (0x${e_lfanew.toString(16)})`, { offset: 0x3c });
