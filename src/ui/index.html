@@ -140,6 +140,16 @@ body.simple #b-stop{display:none}
 .ob-model.on{ border-color:var(--pk,#e0457b); background:rgba(224,69,123,.12); }
 
 #v-tag{font-size:11px;color:var(--dim,#a98);margin-left:6px;letter-spacing:.05em}
+
+/* Imagination Canvas: a safe, local-first preview of actual HTML files. */
+.preview-panel{margin-top:14px;border:1px solid var(--bd,#34212d);border-radius:13px;overflow:hidden;background:var(--bg2,#0e0710);min-width:0}
+.preview-head{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;gap:12px;border-bottom:1px solid var(--bd,#34212d);font-size:12px}
+.preview-action,.preview-close{cursor:pointer;border:1px solid var(--bd,#34212d);border-radius:8px;padding:5px 9px;background:var(--bg2,#0e0710);color:inherit;font-size:12px}
+.preview-action{margin:8px 0 0 34px}
+.preview-action:hover,.preview-close:hover{border-color:var(--pk,#e0457b)}
+.preview-action:focus-visible,.preview-close:focus-visible{outline:2px solid var(--pk,#e0457b);outline-offset:2px}
+.preview-frame{display:block;width:100%;height:min(54vh,510px);border:0;background:white;color:#111}
+@media (max-width:600px){.preview-frame{height:360px}.preview-panel{margin:8px 0}}
 </style>
 </head>
 <body class="simple">
