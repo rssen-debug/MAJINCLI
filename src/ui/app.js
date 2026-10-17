@@ -300,7 +300,7 @@ async function stop() {
 /* ------------------------------- approvals ------------------------------ */
 function approvalCard(ev) {
   const box = el('div', 'appr');
-  box.append(el('h4', '', '◎ ' + esc(ev.tool) +  wants to run'));
+  box.append(el('h4', '', '◎ ' + esc(ev.tool) + ' wants to run'));
   box.append(el('div', 'kv', esc(ev.reason || '')));
   if (ev.detail) box.append(el('pre', '', esc(String(ev.detail).slice(0, 600))));
   const row = el('div', 'row');
@@ -625,7 +625,7 @@ $('b-theme').onclick = () => {
 };
 try { if (localStorage.getItem('majin.theme') === 'light') document.body.classList.add('light'); } catch { /* ignorera */ }
 $('b-mode').onclick = async () => {
-  const order = [['assist', 'off'], ['approval', 'confirm'], ['full auto', 'strict']];
+  const order = [['assist', 'strict'], ['approval', 'confirm'], ['full auto', 'off']];
   const i = Math.max(0, order.findIndex(([l]) => $('b-mode').textContent.trim() === l));
   const [label, mode] = order[(i + 1) % order.length];
   $('b-mode').textContent = label;

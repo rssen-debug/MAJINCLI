@@ -135,10 +135,11 @@ export async function check(name, args, cfg, { session, defRisk = null, timeoutM
   const auto = cfg.get('guard.autoApprove') || [];
   if (auto.includes(name) || auto.includes(`${name}:${hashArgs(args)}`)) return { run: true, level, why: 'autoApprove' };
   if (level === 'never') {
-    return { run: false, level, why: 'blockerad: mönstret är i guard.neverOn (alltid-förbjudet). Användaren kan flytta det till askOn.' };
+    return { run: false, level, why: 'blocked: the pattern is in guard.neverOn (always forbidden). The user can move it to askOn.' };
   }
-  if (mode === 'off' || level === 'safe' || level === 'write') return { run: true, level };
-  if (level === 'exec' && mode === 'confirm' && (args?.confirm === true || args?.yes === true)) return { run: true, level, why: 'explicit bekräftelse' };
+  if (mode === 'off' || level === 'safe') return { run: true, level };
+  if (level === 'write' && mode !== 'strict') return { run: true, level };
+  if (level === 'exec' && mode === 'confirm' && (args?.confirm === true || args?.yes === true)) return { run: true, level, why: 'explicit confirmation' };
   if (!args) return { run: true, level };
   const { id, promise } = approvals.request(
     {
@@ -155,11 +156,11 @@ export async function check(name, args, cfg, { session, defRisk = null, timeoutM
 }
 
 function reasonFor(name, args, level) {
-  if (level === 'never') return 'alltid blockerat';
-  if (name.startsWith('shell')) return `Kör kommando som kan vara irreversible: ${String(args.command || args.cmd || '').slice(0, 120)}`;
-  if (name === 'fs.delete') return `Tar bort ${args.path} — det går inte att ångra`;
-  if (name === 'shell.stop' || name === 'sys.kill') return `Dödar process: ${args.pid ?? args.name ?? ''}`;
-  return `${name} kan göra en ändring utanför det som är lätt att ångra`;
+  if (level === 'never') return 'always blocked';
+  if (name.startsWith('shell')) return `Runs a command that may be irreversible: ${String(args.command || args.cmd || '').slice(0, 120)}`;
+  if (name === 'fs.delete') return `Deletes ${args.path} — this cannot be undone`;
+  if (name === 'shell.stop' || name === 'sys.kill') return `Kills process: ${args.pid ?? args.name ?? ''}`;
+  return `${name} can change something that is not easy to undo`;
 }
 
 function hashArgs(o) {

@@ -23,7 +23,7 @@ export const majinTools = [
     name: 'majin.configure',
     group: 'majin',
     risk: 'write',
-    desc: 'Ändra LENTs egen config (routes, moa, providers, channels, guard, agent, tools, ui, budget, persona). Validerad JSON-patch; ogiltig patch avvisas med skäl. Använd intent för naturallyspråk.',
+    desc: 'Change MAJIN own configuration (routes, moa, providers, channels, guard, agent, tools, ui, budget, persona). A validated JSON patch; an invalid patch is rejected with a reason. Use intent for natural language.',
     params: {
       patch: 'object: JSON-patch av config-trädet, t.ex. {"models":{"routes":{"code":"deepseek/deepseek-v4-pro"}}}',
       intent: 'string: en instruktion på vanligt språk som översätts till patch, t.ex. "använd deepseek pro för kod alltid"',
@@ -65,7 +65,7 @@ export const majinTools = [
     name: 'majin.routes',
     group: 'majin',
     risk: 'write',
-    desc: 'Modellrouting: visa, sätt eller testa jobben (chat, tasks, tools, code, re, research, plan, analysis, final, summarize, aggregator, router, vision).',
+    desc: 'Model routing: show, set or test the jobs (chat, tasks, tools, code, re, research, plan, analysis, final, summarize, aggregator, router, vision).',
     params: {
       action: 'string: show | set | test | show_all [show|set|test|show_all]',
       job: 'string: vilket jobb (krävs för set)',
@@ -112,7 +112,7 @@ export const majinTools = [
     name: 'majin.provider',
     group: 'majin',
     risk: 'write',
-    desc: 'Hantera providers: list | add | remove | test | models (lista tillgängliga modeller från /models).',
+    desc: 'Manage providers: list | add | remove | test | models (list available models from /models).',
     params: {
       action: 'string: list | add | remove | test | models [list|add|remove|test|models]',
       name: 'string: providernamn (nyckel i config)',
@@ -190,7 +190,7 @@ export const majinTools = [
     name: 'majin.moa',
     group: 'majin',
     risk: 'write',
-    desc: 'Mixture-of-Agents: show | on | off | hard (bara svåra jobb) | set (references/aggregator/width). Alt är på.',
+    desc: 'Mixture-of-Agents: show | on | off | hard (only hard jobs) | set (references/aggregator/width). On by default.',
     params: {
       action: 'string: show | on | off | hard | set [show|on|off|hard|set]',
       references: 'array: [{"model":"provider/model","temperature":0.3}]',
@@ -217,13 +217,13 @@ export const majinTools = [
     name: 'majin.guard',
     group: 'majin',
     risk: 'write',
-    desc: 'Säkerhetsglaset: status | mode(confirm|strict|off) | allow(verktyg) | disallow. Agenten kan INTE godkänna sina egna farliga åtgärder — det gör alltid människan.',
+    desc: 'The safety glass: status | mode(confirm|strict|off) | allow(tool) | disallow. The agent can NOT approve its own dangerous actions — a human always does that.',
     params: { action: 'string: status | mode | allow | disallow [status|mode|allow|disallow]', mode: 'string: confirm | strict | off', tool: 'string: verktygsnamn' },
     async run({ action = 'status', mode = '', tool = '' }, ctx) {
       const g = ctx.cfg.get('guard');
       if (action === 'status') {
         return {
-          result: `guard: ${g.mode}\nautoApprove: ${(g.autoApprove || []).join(', ') || 'ingen'}\nskyddade sökvägar: ${(g.protectedPaths || []).join(', ')}\nfråga-mönster: ${g.askOn.length}\nalltid-nekade: ${g.neverOn.length}\n\nväntande godkännanden: ${ctx.approvals?.list().length || 0}${(ctx.approvals?.list() || []).map((a) => `\n  ${a.id} ${a.tool} — ${a.reason}`).join('') || ''}`,
+          result: `guard: ${g.mode}\nautoApprove: ${(g.autoApprove || []).join(', ') || 'none'}\nprotected paths: ${(g.protectedPaths || []).join(', ')}\nask patterns: ${g.askOn.length}\nalways denied: ${g.neverOn.length}\n\napprovals waiting: ${ctx.approvals?.list().length || 0}${(ctx.approvals?.list() || []).map((a) => `\n  ${a.id} ${a.tool} — ${a.reason}`).join('') || ''}`,
           meta: g,
           summary: `guard ${g.mode}`,
         };
@@ -248,7 +248,7 @@ export const majinTools = [
     name: 'majin.memory',
     group: 'majin',
     risk: 'write',
-    desc: 'Långtidshamnet: remember(text) | recall(query) | forget(query) | list | clear. Agenten sparar preferenser, projekt och lösningar här.',
+    desc: 'Long-term memory: remember(text) | recall(query) | forget(query) | list | clear. The agent stores preferences, projects and solutions here.',
     params: { action: 'string: remember | recall | forget | list | clear [remember|recall|forget|list|clear]', text: 'string: vad som ska minnas', query: 'string: vad du letar efter', tags: 'array: taggar' },
     async run({ action = 'list', text = '', query = '', tags = [] }, ctx) {
       const m = ctx.memory;
@@ -275,7 +275,7 @@ export const majinTools = [
     name: 'majin.skill',
     group: 'majin',
     risk: 'write',
-    desc: 'Inlärda färdigheter (markdown i data/skills): list | save | read | delete | match. En färdighet = hur en typ av uppgift görs, steg för steg.',
+    desc: 'Learned skills (markdown in data/skills): list | save | read | delete | match. A skill is how a kind of task is done, step by step.',
     params: { action: 'string: list | save | read | delete | match [list|save|read|delete|match]', name: 'string: namn', when: 'string: när den ska användas', steps: 'string: stegen (markdown)', tools: 'array: verktyg den använder', query: 'string: för match' },
     async run({ action = 'list', name = '', when = '', steps = '', tools = '', query = '' }, ctx) {
       const s = ctx.skills;
@@ -312,7 +312,7 @@ export const majinTools = [
     name: 'majin.schedule',
     group: 'majin',
     risk: 'write',
-    desc: 'Schemalagt arbete: add | list | remove | run | pause | resume. Anrop som "varje morgon 07:30: gör X och skicka till telegram" ska hamna här.',
+    desc: 'Scheduled work: add | list | remove | run | pause | resume. Requests like "every morning 07:30: do X and send it to telegram" belong here.',
     params: {
       action: 'string: add | list | remove | run | pause | resume [add|list|remove|run|pause|resume]',
       id: 'string: jobb-id (för remove/pause/run)',
@@ -349,7 +349,7 @@ export const majinTools = [
     name: 'majin.channel',
     group: 'majin',
     risk: 'write',
-    desc: 'Kanaler: status | telegram | whatsapp | send | pair. Sätter bot-nycklar, kopplar enheter och skickar meddelanden.',
+    desc: 'Channels: status | telegram | whatsapp | send | pair. Sets bot keys, links devices and sends messages.',
     params: {
       action: 'string: status | telegram | whatsapp | send | pair | unpair [status|telegram|whatsapp|send|pair|unpair]',
       token: 'string: Telegram bot-token (123456:ABC…)',
@@ -421,7 +421,7 @@ export const majinTools = [
     name: 'majin.status',
     group: 'majin',
     risk: 'read',
-    desc: 'Full status: config, routes, MOA, kanaler, externa RE-verktyg, budget, minne, färdigheter, jobb, loggsökväg. Används när användaren frågar "hur mår du?".',
+    desc: 'Full status: config, routes, MOA, channels, external RE tools, budget, memory, skills, jobs, log path. Use it when the user asks "how are you doing?".',
     params: { verbose: 'boolean: med allt' },
     async run({ verbose = false }, ctx) {
       const cfg = ctx.cfg;
@@ -460,7 +460,7 @@ export const majinTools = [
     name: 'majin.selftest',
     group: 'majin',
     risk: 'read',
-    desc: 'Diagnostik: provider-nycklar, en verklig minianrop per provider, verktygsregister, RE-kontroll på en egen binär, kanalstatus, port, skrivbarhet. Kör detta när något beter sig konstigt.',
+    desc: 'Diagnostics: provider keys, one real minimal call per provider, the tool registry, an RE check on its own binary, channel status, port, writability. Run this when something behaves oddly.',
     params: { level: 'string: quick | full [quick|full]' },
     async run({ level = 'quick' }, ctx) {
       const out = [];
@@ -518,7 +518,7 @@ export const majinTools = [
     name: 'majin.tools',
     group: 'majin',
     risk: 'read',
-    desc: 'Lista alla verktyg med beskrivning och risknivå. Alltid alla på — det finns ingen avstängningsknapp.',
+    desc: 'List every tool with its description and risk level. All of them are always on — there is no off switch.',
     params: { group: 'string: filtrera på grupp', describe: 'string: skrivverktygsnamn för full beskrivning' },
     async run({ group = '', describe = '' }, ctx) {
       if (describe) {
@@ -539,7 +539,7 @@ export const majinTools = [
     name: 'majin.backup',
     group: 'majin',
     risk: 'write',
-    desc: 'Exportera/importera allt MAJIN vet (config, minne, färdigheter, scheman) som en tar.gz i workspace/backups.',
+    desc: 'Export/import everything MAJIN knows (config, memory, skills, schedules) as a tar.gz in workspace/backups.',
     params: { action: 'string: export | list | restore [export|list|restore]', file: 'string: arkiv för restore' },
     async run({ action = 'list', file }, ctx) {
       const dir = path.join(ctx.cfg.get('workspace'), 'backups');
@@ -569,7 +569,7 @@ export const majinTools = [
     name: 'majin.ui',
     group: 'majin',
     risk: 'read',
-    desc: 'Öppna UI:t: annars ett eget Edge-/Chrome-fönster (UIA app-läge) på Windows. action=open.|theme|voice.',
+    desc: 'Open the UI: on Windows a dedicated Edge/Chrome app window. action=open | theme | voice.',
     params: { action: 'string: open | theme | voice | wake [open|theme|voice|wake]', theme: 'string: jarvis | arc | minimal', voice: 'boolean: tts på/av', wake: 'boolean: wake word på/av' },
     async run({ action = 'open', theme = '', voice = null, wake = '' }, ctx) {
       if (action !== 'open') {
@@ -604,7 +604,7 @@ export const majinTools = [
     name: 'majin.control',
     group: 'majin',
     risk: 'write',
-    desc: 'Kontrollera agenten själv: restart | stop | pause | resume | clear (session) | sessions | history.',
+    desc: 'Control the agent itself: restart | stop | pause | resume | clear (session) | sessions | history.',
     params: { action: 'string: restart | stop | pause | resume | clear | sessions | history [restart|stop|pause|resume|clear|sessions|history]', session: 'string: sessionen (default aktiv)', limit: 'number: rader vid history' },
     async run({ action = 'sessions', session = 'desktop', limit = 40 }, ctx) {
       if (action === 'sessions') {

@@ -70,10 +70,12 @@ function renderPlan(plan) {
     .join('');
 }
 
+/* Permission modes: Assist = asks for every write/exec, Approval (default) = only
+   destructive and shell work, Full auto = never asks. */
 const GUARD_MODES = [
-  ['assist', 'off', 'Never asks. The agent runs every tool directly.'],
-  ['approval', 'confirm', 'Asks before destructive or shell actions only.'],
-  ['full auto', 'strict', 'Asks before every write, exec and deletion.'],
+  ['assist', 'strict', 'Asks before every write, exec and deletion.'],
+  ['approval', 'confirm', 'Asks only before destructive or shell actions.'],
+  ['full auto', 'off', 'Never asks. The agent runs every tool directly.'],
 ];
 
 async function paintPanel(st) {

@@ -1,5 +1,5 @@
 /**
- * MAJIN — filverktyg. Alltid på, ingen rotnödvändighet.
+ * MAJIN — file tools. Always on, no root required.
  */
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -14,9 +14,9 @@ const IGNORE = new Set(['node_modules', '.git', 'dist', 'build', '.next', '__pyc
 
 export function resolveIn(ctx, p, { allowEmpty = false, never = [] } = {}) {
   if ((p == null || String(p).trim() === '') && !allowEmpty) {
-    const err = new Error('path saknas — ange en sökväg (absolut eller relativ workspacet)');
+    const err = new Error('path missing — give a path (absolute or workspace-relative)');
     err.code = 'bad_args';
-    err.hint = 'exempel: path:"C:\\Users\\dig\\Downloads" eller path:"rapport.txt"';
+    err.hint = 'example: path:"C:\\Users\\you\\Downloads" or path:"report.txt"';
     throw err;
   }
   const raw = String(p ?? '.').trim() || '.';
@@ -27,7 +27,7 @@ export function resolveIn(ctx, p, { allowEmpty = false, never = [] } = {}) {
   const outside = !!rel && (rel.startsWith('..') || path.isAbsolute(rel));
   for (const stop of [...never, root, path.parse(abs).root, path.resolve(os.homedir())]) {
     if (stop && path.resolve(stop) === abs && (never.length || abs === path.parse(abs).root)) {
-      const err = new Error(`vägrar röra ${abs} — nyckelkatalog (workspace/root/home)`);
+      const err = new Error(`refusing to touch ${abs} — key directory (workspace/root/home)`);
       err.code = 'protected';
       throw err;
     }
@@ -48,8 +48,8 @@ export const fileTools = [
     name: 'fs.list',
     group: 'filer',
     risk: 'read',
-    desc: 'Lista en mapp. Ger namn, storlek och datum. Använd `kind` för bara körbara filer eller bara mappar.',
-    params: { path: 'string: mapp att lista (relativt workspace eller absolut sökväg)' },
+    desc: 'List a directory: names, sizes, dates. Use `kind` to get only executables or only folders.',
+    params: { path: 'string: folder to list (workspace-relative or absolute)' },
     examples: ['fs.list({path:"downloads"})'],
     async run({ path: p = '.' }, ctx) {
       const { abs } = resolveIn(ctx, p, { allowEmpty: true });
@@ -75,14 +75,14 @@ export const fileTools = [
     name: 'fs.read',
     group: 'filer',
     risk: 'read',
-    desc: 'Läs en fil. Returnerar radnumrerad text (eller hexdump för binära filer) plus entropi och filhash om den är binär.',
-    params: { path: 'string: fil att läsa', maxBytes: 'number: hur mycket som läses (default 200000)', mode: 'string: auto | text | hex | strings [auto|text|hex|strings]' },
+    desc: 'Read a file. Returns numbered lines (or a hex dump for binary files) plus entropy and a file hash when it is binary.',
+    params: { path: 'string: file to read', maxBytes: 'number: how much to read (default 200000)', mode: 'string: auto | text | hex | strings [auto|text|hex|strings]' },
     async run({ path: p, maxBytes = 200000, mode = 'auto' }, ctx) {
       const { abs } = resolveIn(ctx, p);
       const cap = ctx.cfg.get('tools.files.maxReadBytes') || 4000000;
       const size = sizeOf(abs);
       if (size == null) {
-        const err = new Error(`fanns inte: ${abs}`);
+        const err = new Error(`not found: ${abs}`);
         err.code = 'ENOENT';
         throw err;
       }
@@ -95,9 +95,9 @@ export const fileTools = [
         if (mode === 'hex' || (mode === 'auto' && kind === 'bin')) {
           const strs = extract(buf, { limit: 300 });
           return {
-            result: `BINÄR ${abs} (${size} byte, entropi ${entropy(buf).toFixed(3)})\n-- första ${Math.min(n, 2048)} byte --\n${hexdump(buf.subarray(0, 2048))}\n-- strängar --\n${strs.map((s) => `@${s.offset} ${s.value}`).join('\n')}`,
+            result: `BINARY ${abs} (${size} bytes, entropy ${entropy(buf).toFixed(3)})\n-- first ${Math.min(n, 2048)} bytes --\n${hexdump(buf.subarray(0, 2048))}\n-- strings --\n${strs.map((s) => `@${s.offset} ${s.value}`).join('\n')}`,
             meta: { size, binary: true, entropi: entropy(buf) },
-            summary: `${path.basename(abs)} binär ${size} byte`,
+            summary: `${path.basename(abs)} binary ${size} bytes`,
           };
         }
         const text = buf.toString('utf8');
@@ -114,15 +114,15 @@ export const fileTools = [
     name: 'fs.write',
     group: 'filer',
     risk: 'write',
-    desc: 'Skriv en fil (skapar mappar som saknas). Overskrivar — för små ändringar, använd fs.patch.',
-    params: { path: 'string: målfil', content: 'string: hela filens innehåll', append: 'boolean: lägg till i stället för att skriva över' },
+    desc: 'Write a file (missing folders are created). Overwrites — for small edits use fs.patch.',
+    params: { path: 'string: target file', content: 'string: the full file content', append: 'boolean: append instead of overwriting' },
     async run({ path: p, content = '', append = false }, ctx) {
       const { abs } = resolveIn(ctx, p);
       await fsp.mkdir(path.dirname(abs), { recursive: true });
       await fsp.writeFile(abs, String(content), { flag: append ? 'a' : 'w' });
       const size = sizeOf(abs);
       ctx.bus?.emit?.('file.write', { path: abs, bytes: size });
-      return { result: `skrev ${abs} (${size} byte)`, meta: { path: abs, bytes: size }, summary: `skrev ${path.basename(abs)}` };
+      return { result: `wrote ${abs} (${size} bytes)`, meta: { path: abs, bytes: size }, summary: `wrote ${path.basename(abs)}` };
     },
   }),
 
@@ -130,11 +130,11 @@ export const fileTools = [
     name: 'fs.patch',
     group: 'filer',
     risk: 'write',
-    desc: 'Exakt search/replace i en fil. Enkel, spårbar, ingen fuzzy-match. Returnerar diff.',
+    desc: 'Exact search/replace in a file. Simple, traceable, no fuzzy matching. Returns a diff.',
     params: {
-      path: 'string: fil',
-      edits: 'array: [{"find":"gammal text","replace":"ny text"}] — exakt matchning, rad-gränser ignoreras inte',
-      dry: 'boolean: visa bara vad som skulle hända',
+      path: 'string: file',
+      edits: 'array: [{"find":"old text","replace":"new text"}] — exact match, line boundaries respected',
+      dry: 'boolean: show what would happen without writing',
     },
     async run({ path: p, edits = [], dry = false }, ctx) {
       const { abs } = resolveIn(ctx, p);
@@ -148,14 +148,14 @@ export const fileTools = [
         const count = after.split(find).length - 1;
         if (!count) {
           const near = nearestLine(after, find);
-          throw new Error(`hittade inget "${find.slice(0, 40)}" i ${path.basename(abs)}. ${near ? `Närmaste rad: ${near}` : ''}`);
+          throw new Error(`found no "${find.slice(0, 40)}" i ${path.basename(abs)}. ${near ? `closest line: ${near}` : ''}`);
         }
         after = after.split(find).join(replace);
         log.push({ find: find.slice(0, 60), replace: replace.slice(0, 60), count });
       }
       if (!dry) await fsp.writeFile(abs, after);
       const diff = simpleDiff(before, after);
-      return { result: `${dry ? 'DRY-RUN ' : ''}${path.basename(abs)}: ${log.map((l) => `${l.count}× "${l.find}"`).join(', ')}\n${diff}`, meta: { edits: log, applied: !dry }, summary: `${edits.length} editeringar${dry ? ' (torr)' : ''} i ${path.basename(abs)}` };
+      return { result: `${dry ? 'DRY-RUN ' : ''}${path.basename(abs)}: ${log.map((l) => `${l.count}× "${l.find}"`).join(', ')}\n${diff}`, meta: { edits: log, applied: !dry }, summary: `${edits.length} edits${dry ? ' (dry run)' : ''} in ${path.basename(abs)}` };
     },
   }),
 
@@ -163,18 +163,18 @@ export const fileTools = [
     name: 'fs.search',
     group: 'filer',
     risk: 'read',
-    desc: 'Regex-sök över filer under en mapp. Returnerar fil:rad:match. Använd detta innan du läser hela filer.',
+    desc: 'Regex search across files under a folder. Returns file:line:match. Use this before reading whole files.',
     params: {
-      path: 'string: rot att söka i (default workspace)',
-      pattern: 'string: regex (javascript), eller ord om regex:false',
-      glob: 'string: filtrera filnamn, t.ex. *.ts, *.py, *.dll',
-      ignoreCase: 'boolean: skiftlägeskänslig? default true = okänslig',
-      maxFiles: 'number: max antal träfffiler (default 60)',
-      regex: 'boolean: tolka som regex (default true)',
+      path: 'string: root to search in (default: workspace)',
+      pattern: 'string: regex (javascript), or a plain word when regex:false',
+      glob: 'string: filter file names, e.g. *.ts, *.py, *.dll',
+      ignoreCase: 'boolean: case sensitive? default true = insensitive',
+      maxFiles: 'number: maximum files with hits (default 60)',
+      regex: 'boolean: treat the pattern as regex (default true)',
     },
     async run({ path: root = '.', pattern = '', glob = '', ignoreCase = true, maxFiles = 60, regex = true }, ctx) {
       const { abs } = resolveIn(ctx, root);
-      if (!pattern) throw new Error('mönster saknas');
+      if (!pattern) throw new Error('pattern missing');
       const re = regex ? safeRe(pattern, ignoreCase ? 'i' : '') : new RegExp(escapeRe(pattern), ignoreCase ? 'i' : '');
       if (!re) throw new Error(`olycklig regex: ${re}`);
       const files = await walk(abs, { glob, limit: 12000 });
@@ -200,14 +200,14 @@ export const fileTools = [
             }
           }
         } catch {
-          /* hoppsa över oläsbara filer */
+          /* skip unreadable files */
         }
       }
       bytes.set('scanned', scanned);
       const out = hits.length
         ? hits.map((h) => `${h.file}\n${h.lines.map((l) => `  ${String(l.line).padStart(5)}: ${l.text}`).join('\n')}`).join('\n\n')
-        : `inga träffar för ${pattern} i ${files.length} filer (${abs})`;
-      return { result: `${hits.length} filar med träffar (scannade ${scanned}/${files.length})\n\n${out}`, meta: { hits: hits.length, scanned, files: files.length }, summary: `${hits.length} fil-träffar för ${pattern}` };
+        : `no hits for ${pattern} in ${files.length} files (${abs})`;
+      return { result: `${hits.length} files with hits (scanned ${scanned}/${files.length})\n\n${out}`, meta: { hits: hits.length, scanned, files: files.length }, summary: `${hits.length} file hits for ${pattern}` };
     },
   }),
 
@@ -215,8 +215,8 @@ export const fileTools = [
     name: 'fs.grep',
     group: 'filer',
     risk: 'read',
-    desc: 'Snabb innehållssökning i en EN fil med kontext. Bra för att följa flöde i loggar/källkod.',
-    params: { path: 'string: fil', pattern: 'string: regex/ord', context: 'number: rader runt träffen (default 2)', limit: 'number: max träffar (default 30)' },
+    desc: 'Fast content search in ONE file (or every file under a folder) with context. Good for following flow in logs or source.',
+    params: { path: 'string: file or folder', pattern: 'string: regex or word', context: 'number: lines around each hit (default 2)', limit: 'number: max hits (default 30)' },
     async run({ path: p, pattern = '', context = 2, limit = 30 }, ctx) {
       const { abs } = resolveIn(ctx, p);
       if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) {
@@ -242,9 +242,9 @@ export const fileTools = [
           if (hits.length >= limit) break;
         }
         return {
-          result: hits.length ? `${hits.length} träffar i ${abs}:\n\n${hits.join('\n\n')}` : `inga träffar för ${pattern} (${files.length} filer)`,
+          result: hits.length ? `${hits.length} hits in ${abs}:\n\n${hits.join('\n\n')}` : `no hits for ${pattern} (${files.length} files)`,
           meta: { hits: hits.length, files: files.length, dir: abs },
-          summary: `${hits.length} träffar i ${path.basename(abs)}/`,
+          summary: `${hits.length} hits in ${path.basename(abs)}/`,
         };
       }
       const lines = (await fsp.readFile(abs, 'utf8')).split('\n');
@@ -257,7 +257,7 @@ export const fileTools = [
           out.push(`— ${i + 1}\n${lines.slice(from, to).map((l, k) => `${from + k + 1}| ${l}`).join('\n')}`);
         }
       }
-      return { result: out.length ? out.join('\n') : `inga träffar för ${pattern} i ${path.basename(abs)} (${lines.length} rader)`, summary: `${out.length} träffar` };
+      return { result: out.length ? out.join('\n') : `no hits for ${pattern} in ${path.basename(abs)} (${lines.length} lines)`, summary: `${out.length} hits` };
     },
   }),
 
@@ -265,8 +265,8 @@ export const fileTools = [
     name: 'fs.move',
     group: 'filer',
     risk: 'write',
-    desc: 'Flytta eller byt namn på fil/mapp. Skapar mål-mappar.',
-    params: { from: 'string: källa', to: 'string: mål' },
+    desc: 'Move or rename a file/folder. Creates the target folders.',
+    params: { from: 'string: source', to: 'string: destination' },
     async run({ from, to }, ctx) {
       const a = resolveIn(ctx, from);
       const b = resolveIn(ctx, to);
@@ -280,8 +280,8 @@ export const fileTools = [
     name: 'fs.copy',
     group: 'filer',
     risk: 'write',
-    desc: 'Kopiera fil eller mapp (rekursivt).',
-    params: { from: 'string: källa', to: 'string: mål', overwrite: 'boolean: skriv över befintligt' },
+    desc: 'Copy a file or folder (recursive).',
+    params: { from: 'string: source', to: 'string: destination', overwrite: 'boolean: overwrite what exists' },
     async run({ from, to, overwrite = false }, ctx) {
       const a = resolveIn(ctx, from);
       const b = resolveIn(ctx, to);
@@ -294,8 +294,8 @@ export const fileTools = [
     name: 'fs.delete',
     group: 'filer',
     risk: 'destructive',
-    desc: 'Ta bort fil/mapp. Flyttar till papperskorgen där det går (Win/mac), annars permanent radering. Alltid en bekräftelse.',
-    params: { path: 'string: sökväg', permanent: 'boolean: true = radera direkt, ingen papperskorg' },
+    desc: 'Delete a file or folder. Moves to the recycle bin where possible (Win/mac), otherwise permanent. Always goes through the guard.',
+    params: { path: 'string: path', permanent: 'boolean: true = erase now, no recycle bin' },
     async run({ path: p, permanent = false }, ctx) {
       const { abs } = resolveIn(ctx, p, { never: [ctx.cfg.get('workspace'), dirs.root, dirs.memory, dirs.sessions] });
       const st = await fsp.stat(abs);
@@ -307,7 +307,7 @@ export const fileTools = [
       if (!permanent) {
         const trash = await toTrash(abs, st.isDirectory());
         if (trash.ok) return { result: `papperskorgen ← ${abs}`, summary: `kastade ${path.basename(abs)}` };
-        ctx.bus?.warn?.('trash.unavailable', { why: trash.error, hint: 'använd permanent:true (eller installera `trash`-paketet)' });
+        ctx.bus?.warn?.('trash.unavailable', { why: trash.error, hint: 'use permanent:true (or install the `trash` package)' });
       }
       await fsp.rm(abs, { recursive: true, force: true });
       return { result: `raderade permanent ${abs}`, summary: `raderade ${path.basename(abs)} (permanent)` };
@@ -318,8 +318,8 @@ export const fileTools = [
     name: 'fs.stat',
     group: 'filer',
     risk: 'read',
-    desc: 'Metadata: storlek, datum, rättigheter, hash, entropi, filtyp-magi.',
-    params: { path: 'string: fil' },
+    desc: 'Metadata: size, dates, permissions, hash, entropy, file-type magic.',
+    params: { path: 'string: file' },
     async run({ path: p }, ctx) {
       const { abs } = resolveIn(ctx, p);
       const st = await fsp.stat(abs);
@@ -337,8 +337,8 @@ export const fileTools = [
     name: 'fs.mkdir',
     group: 'filer',
     risk: 'write',
-    desc: 'Skapa mapp (rekursivt).',
-    params: { path: 'string: ny mapp' },
+    desc: 'Create a folder (recursive).',
+    params: { path: 'string: new folder' },
     async run({ path: p }) {
       const { abs } = { abs: path.resolve(String(p)) };
       await fsp.mkdir(abs, { recursive: true });
@@ -350,8 +350,8 @@ export const fileTools = [
     name: 'fs.tar',
     group: 'filer',
     risk: 'write',
-    desc: 'Packa eller packa upp med systemets tar (finns inbyggt i Windows 10+). Används för att bära runt en mapp eller extrahera ett arkiv.',
-    params: { op: 'string: create | extract [create|extract]', archive: 'string: filnamn .tar.gz/.zip', path: 'string: mapp/fil att arbeta med', cwd: 'string: arbetskatalog' },
+    desc: 'Pack or unpack with the system tar (built into Windows 10+). Use it to move a folder around or extract an archive.',
+    params: { op: 'string: create | extract [create|extract]', archive: 'string: archive file .tar.gz/.zip', path: 'string: folder or file to work on', cwd: 'string: working directory' },
     async run({ op, archive, path: p = '.', cwd }, ctx) {
       const { spawnSync } = await import('node:child_process');
       const a = resolveIn(ctx, archive);
@@ -360,7 +360,7 @@ export const fileTools = [
       const rel = path.relative(work, src.abs) || '.';
       const args = op === 'extract' ? ['-xf', a.abs, '-C', src.abs] : ['-czf', a.abs, '-C', work, ...(a.abs.startsWith(work) ? [`--exclude=${path.relative(work, a.abs)}`] : []), rel];
       const r = spawnSync('tar', args, { encoding: 'utf8', windowsHide: true });
-      if (r.error) throw new Error(`tar kunde inte köras: ${r.error.message}`);
+      if (r.error) throw new Error(`tar could not run: ${r.error.message}`);
       const warnings = /file changed as we read it|Removing leading/i.test(r.stderr || '');
       const ok = r.status === 0 || (op === 'create' && r.status === 1 && warnings && (sizeOf(a.abs) || 0) > 0);
       return {
@@ -487,7 +487,7 @@ function simpleDiff(a, b, max = 18) {
     if (al[i] !== undefined) out.push(`- ${i + 1}: ${String(al[i]).slice(0, 160)}`);
     if (bl[i] !== undefined) out.push(`+ ${i + 1}: ${String(bl[i]).slice(0, 160)}`);
   }
-  return out.length ? out.join('\n') : 'ingen synlig radändring';
+  return out.length ? out.join('\n') : 'no visible line change';
 }
 
 async function toTrash(abs, isDir) {

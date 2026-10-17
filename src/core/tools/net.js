@@ -38,8 +38,8 @@ export const netTools = [
     name: 'net.dns',
     group: 'nät',
     risk: 'read',
-    desc: 'Slå upp domän (A/AAAA/TXT/CNAME/NS/MX). Används för att följa IOCs från en binär.',
-    params: { host: 'string: domän eller IP', type: 'string: A | AAAA | TXT | CNAME | NS | MX | ANY [A|AAAA|TXT|CNAME|NS|MX|ANY]' },
+    desc: 'Look up a domain (A/AAAA/TXT/CNAME/NS/MX). Used to follow IOCs found in a binary.',
+    params: { host: 'string: domain or IP', type: 'string: A | AAAA | TXT | CNAME | NS | MX | ANY [A|AAAA|TXT|CNAME|NS|MX|ANY]' },
     async run({ host, type = 'A' }) {
       const dns = await import('node:dns').then((m) => m.default);
       const fn = { A: 'resolve4', AAAA: 'resolve6', TXT: 'resolveTxt', CNAME: 'resolveCname', NS: 'resolveNs', MX: 'resolveMx', ANY: 'resolveAny' }[type] || 'resolve4';
@@ -57,8 +57,8 @@ export const netTools = [
     name: 'net.tcp',
     group: 'nät',
     risk: 'read',
-    desc: 'Testa en TCP-port (öppen/stängd) med timeout. Använd bara mot saker du äger.',
-    params: { host: 'string: värd', port: 'n: number: port', timeoutMs: 'number: millisekund (default 1500)' },
+    desc: 'Probe a TCP port (open/closed) with a timeout. Only use it against things you own.',
+    params: { host: 'string: host', port: 'n: number: port', timeoutMs: 'number: milliseconds (default 1500)' },
     async run({ host, port, timeoutMs = 1500 }) {
       const net = await import('node:net').then((m) => m.default);
       return new Promise((resolve) => {
@@ -83,8 +83,8 @@ export const netTools = [
     name: 'net.http',
     group: 'nät',
     risk: 'read',
-    desc: 'Rå HTTP-request (metod, headers, body). Används för egna API:er och för att testa en lokal webservice.',
-    params: { url: 'string: adress', method: 'string: GET | POST | PUT | DELETE | HEAD | OPTIONS [GET|POST|PUT|DELETE|HEAD|OPTIONS]', headers: 'object: extra headers', body: 'string: body', maxChars: 'number: svarskap (default 8000)' },
+    desc: 'Raw HTTP request (method, headers, body). Use for your own APIs and for testing a local web service.',
+    params: { url: 'string: address', method: 'string: GET | POST | PUT | DELETE | HEAD | OPTIONS [GET|POST|PUT|DELETE|HEAD|OPTIONS]', headers: 'object: extra headers', body: 'string: body', maxChars: 'number: response cap (default 8000)' },
         required: ['url'],
 async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
       const t0 = Date.now();
@@ -102,8 +102,8 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
     name: 'net.serve',
     group: 'nät',
     risk: 'exec',
-    desc: 'Starta en tillfällig HTTP-server som delar en mapp (för att hämta prover till sandlådan). Returnerar URL + jobb-id.',
-    params: { dir: 'string: mapp att dela', port: 'number: port (default 0 = fri)' },
+    desc: 'Start a temporary HTTP server that shares a folder (to pull samples into the sandbox). Returns the URL + job id.',
+    params: { dir: 'string: folder to share', port: 'number: port (default 0 = any free port)' },
     async run({ dir = '.', port = 0 }, ctx) {
       const http = await import('node:http');
       const fsp = await import('node:fs/promises');
@@ -146,8 +146,8 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
     name: 'net.serve_stop',
     group: 'nät',
     risk: 'exec',
-    desc: 'Stäng en tillfällig delnings-server.',
-    params: { port: 'number: porten från net.serve' },
+    desc: 'Stop a temporary sharing server.',
+    params: { port: 'number: the port from net.serve' },
     async run({ port = 0 }, ctx) {
       const s = ctx.servers?.get(Number(port));
       if (!s) return { ok: false, error: { code: 'no_server', message: `ingen server på ${port}` } };
@@ -161,8 +161,8 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
     name: 'screen.capture',
     group: 'skärm',
     risk: 'read',
-    desc: 'Ta skärmbild (PNG). På Windows via .NET; kräver ingen extra mjukvara.',
-    params: { path: 'string: målfil (default skärmbild-<tid>.png)', region: 'string: x,y,bredd,höjd', then: 'string: describe | save [describe|save]' },
+    desc: 'Take a screenshot (PNG). On Windows via .NET; needs no extra software.',
+    params: { path: 'string: target file (default screenshot-<time>.png)', region: 'string: x,y,width,height', then: 'string: describe | save [describe|save]' },
     async run({ path: p, region, then = 'save' }, ctx) {
       const out = resolveIn(ctx, p || `skarmbild-${Date.now()}.png`);
       if (IS_WIN) {
@@ -193,7 +193,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
     name: 'screen.claim',
     group: 'skärm',
     risk: 'read',
-    desc: 'Läs vad som finns i urklipp (text/fil). Bra efter att användaren markerat något i en binär.',
+    desc: 'Read what is in the clipboard (text/file). Handy after the user selected something in a binary.',
     params: {},
     async run() {
       const cmd = IS_WIN ? '(Get-Clipboard -Raw) 2>$null; "---"; (Get-Clipboard -Format FileDropList).Path 2>$null' : 'xclip -selection clipboard -o 2>/dev/null || pbpaste 2>/dev/null';
@@ -207,8 +207,8 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
     name: 'sys.notify',
     group: 'system',
     risk: 'read',
-    desc: 'Pusha en Windows-notis (toast) eller låt MAJIN prata högt. Används när ett långt jobb blir klart.',
-    params: { title: 'string: rubrik', body: 'string: brödtext', speak: 'boolean: läs upp också' },
+    desc: 'Push a Windows toast notification or let MAJIN speak out loud. Use it when a long job finishes.',
+    params: { title: 'string: title', body: 'string: body text', speak: 'boolean: speak it too' },
     async run({ title = 'MAJIN', body, speak = false }) {
       const t = String(title).replace(/'/g, "''").slice(0, 80);
       const b = String(body ?? '').replace(/'/g, "''").slice(0, 300);

@@ -26,7 +26,7 @@ function make(t, patch = {}) {
   return { cfg, registry, ctx };
 }
 
-test('registry: alla verktyg har beskrivning, risk och JSON-schema', () => {
+test('registry: every tool has a description, risk and JSON schema', () => {
   assert.ok(ALL_TOOLS.length >= 70, `för få verktyg: ${ALL_TOOLS.length}`);
   const names = ALL_TOOLS.map((t) => t.name);
   assert.equal(new Set(names).size, names.length, 'dubbletter i verktygsnamn');
@@ -40,7 +40,7 @@ test('registry: alla verktyg har beskrivning, risk och JSON-schema', () => {
   }
 });
 
-test('registry: okänt verktyg föreslår närmaste, dåliga args korrigeras', async (t) => {
+test('registry: unknown tools suggest the closest match, bad args are coerced', async (t) => {
   const { registry } = make(t);
   const bad = await registry.exec('fs.reed', { path: 'x' }, { session: 'test' });
   assert.equal(bad.ok, false);
@@ -48,10 +48,10 @@ test('registry: okänt verktyg föreslår närmaste, dåliga args korrigeras', a
   assert.match(bad.error.hint || '', /fs\.read/, 'borde föreslå fs.read');
   const fixed = await registry.exec('fs.read', { path: path.join(WS, 'finns-icke'), maxBytes: '400' }, { session: 'test' });
   assert.ok(fixed.ok === false);
-  assert.equal(fixed.error.code, 'ENOENT', 'sträng-nummer ska coerce:as och felet vara det äkta');
+  assert.equal(fixed.error.code, 'ENOENT', 'string numbers must coerce and the error be the real one');
 });
 
-test('registry: verktygsdata når filsystemet (write → read → patch → grep → tar)', async (t) => {
+test('registry: tool data reaches the filesystem (write → read → patch → grep → tar)', async (t) => {
   const { registry } = make(t);
   const file = path.join(WS, 'prov.txt');
   const w = await registry.exec('fs.write', { path: 'prov.txt', content: 'rad en\nrad två\nrad tre\n' }, { session: 'test' });
@@ -65,10 +65,10 @@ test('registry: verktygsdata når filsystemet (write → read → patch → grep
   assert.match(fs.readFileSync(file, 'utf8'), /RÄTTAD/);
   const dry = await registry.exec('fs.patch', { path: 'prov.txt', edits: [{ find: 'rad en', replace: 'NY' }], dry: true }, { session: 'test' });
   assert.match(dry.result, /DRY-RUN/);
-  assert.match(fs.readFileSync(file, 'utf8'), /rad en/, 'dry-run får inte skriva');
+  assert.match(fs.readFileSync(file, 'utf8'), /rad en/, 'a dry run must not write');
   const miss = await registry.exec('fs.patch', { path: 'prov.txt', edits: [{ find: 'oväntat ord', replace: 'x' }] }, { session: 'test' });
   assert.equal(miss.ok, false);
-  assert.match(miss.error.message, /hittade inget/);
+  assert.match(miss.error.message, /found no/);
   const g = await registry.exec('fs.grep', { path: '.', pattern: 'RÄTTAD' }, { session: 'test' });
   assert.match(g.result, /prov\.txt/);
   const s = await registry.exec('fs.search', { path: '.', pattern: 'RÄTTAD' }, { session: 'test' });
@@ -83,7 +83,7 @@ test('registry: verktygsdata når filsystemet (write → read → patch → grep
   assert.ok(fs.existsSync(path.join(WS, 'backup.tar')));
 });
 
-test('fs.delete: vägrar workspace-rot och tom sökväg', async (t) => {
+test('fs.delete: refuses the workspace root and an empty path', async (t) => {
   const { registry } = make(t);
   const empty = await registry.exec('fs.delete', {}, { session: 'test' });
   assert.equal(empty.ok, false);
@@ -91,22 +91,22 @@ test('fs.delete: vägrar workspace-rot och tom sökväg', async (t) => {
   const root = await registry.exec('fs.delete', { path: WS }, { session: 'test' });
   assert.equal(root.ok, false, JSON.stringify(root));
   assert.match(root.error.message + root.result, /rot|skydda|workspace|skydd/i);
-  assert.ok(fs.existsSync(path.join(WS, 'under')), 'workspacet får inte försvinna');
+  assert.ok(fs.existsSync(path.join(WS, 'under')), 'the workspace must survive');
   const single = await registry.exec('fs.delete', { path: 'under/kopia.txt', permanent: true }, { session: 'test' });
   assert.equal(single.ok, true, JSON.stringify(single.error));
   assert.ok(!fs.existsSync(path.join(WS, 'under', 'kopia.txt')));
 });
 
-test('guard: risknivåer, neverOn och godkännandekö', async (t) => {
+test('guard: risk levels, neverOn and the approval queue', async (t) => {
   const { cfg, registry } = make(t);
   cfg.patch({
     guard: { mode: 'confirm', neverOn: [...(cfg.get('guard.neverOn') || []), '\\bmkfs\\b'] },
     tasks: { approvalTimeoutMs: 400 },
   });
-  assert.equal(levelFor('fs.list', {}, cfg, 'read'), 'safe', 'läsning får inte kräva godkännande');
+  assert.equal(levelFor('fs.list', {}, cfg, 'read'), 'safe', 'reading must not need approval');
   assert.equal(levelFor('fs.write', { path: 'a.txt' }, cfg, 'write'), 'write');
   assert.equal(levelFor('fs.delete', { path: 'a.txt' }, cfg, 'write'), 'destructive');
-  assert.equal(levelFor('shell.run', { command: 'bash -c "rm -rf /"' }, cfg, 'exec'), 'destructive', 'citattecken tvättar inte bort en farlig kommando');
+  assert.equal(levelFor('shell.run', { command: 'bash -c "rm -rf /"' }, cfg, 'exec'), 'destructive', 'quotes must not launder a dangerous command');
   assert.equal(levelFor('shell.run', { command: 'rm -rf .' }, cfg, 'exec'), 'destructive');
   assert.equal(levelFor('shell.run', { command: 'dd if=/dev/zero of=/dev/sda' }, cfg, 'exec'), 'never', 'neverOn');
   assert.equal(levelFor('shell.run', { command: 'mkfs.ext4 /dev/sda1' }, cfg, 'exec'), 'never', 'anpassad neverOn');
@@ -118,12 +118,12 @@ test('guard: risknivåer, neverOn och godkännandekö', async (t) => {
   /* exec kräver beslut — avslaget ska verktyget stoppas och kön tömmas */
   const deniedP = registry.exec('shell.run', { command: 'echo hej' }, { session: 'guard-test' });
   await until(() => approvals.list().length > 0);
-  assert.equal(approvals.list().length, 1, 'exakt en köpost');
-  assert.match(approvals.list()[0].reason, /kommando|approval|decision/i);
+  assert.equal(approvals.list().length, 1, 'exactly one queue entry');
+  assert.match(approvals.list()[0].reason, /command|approval|decision/i);
   assert.equal(approvals.respond(approvals.list()[0].id, false, 'test'), true);
   const denied = await deniedP;
   assert.equal(denied.ok, false, JSON.stringify(denied));
-  assert.equal(approvals.list().length, 0, 'kön måste tömmas efter beslut');
+  assert.equal(approvals.list().length, 0, 'the queue must drain after a decision');
 
   /* godkänt beslut släpper igenom samma verktyg */
   const okP = registry.exec('shell.run', { command: 'echo hej' }, { session: 'guard-test' });
@@ -135,7 +135,7 @@ test('guard: risknivåer, neverOn och godkännandekö', async (t) => {
   /* time utan svar = nej (inget evigt hängande) */
   const timeoutP = registry.exec('shell.run', { command: 'echo tyst' }, { session: 'guard-test' });
   const timeoutRun = await timeoutP;
-  assert.equal(timeoutRun.ok, false, 'utan beslut inom fristen får det inte köras');
+  assert.equal(timeoutRun.ok, false, 'no decision inside the window means no run');
   assert.match(timeoutRun.error.message, /timeout|ingen beslut|avslog/i, JSON.stringify(timeoutRun.error));
 
   /* neverOn går aldrig in i kön */
@@ -159,7 +159,7 @@ async function until(fn, ms = 1500) {
   return fn();
 }
 
-test('shell.run: fångar stdout, cwd och timeout', async (t) => {
+test('shell.run: captures stdout, cwd and the timeout', async (t) => {
   const { registry } = make(t);
   const r = await registry.exec('shell.run', { command: 'echo hej-från-shell && pwd' }, { session: 'test' });
   assert.equal(r.ok, true, JSON.stringify(r.error));
@@ -183,15 +183,15 @@ test('resolveIn + globToRe + hexdump', () => {
       return e;
     }
   })();
-  assert.ok(err && err.code === 'bad_args', 'tom path måste nekas');
+  assert.ok(err && err.code === 'bad_args', 'an empty path must be refused');
   assert.ok(globToRe('*.js').test('x.js'), 'ändat mönster');
   assert.equal(globToRe('*.js').test('x.mjs'), false);
   assert.equal(globToRe('*.js').test('a/x.js'), false, '* får inte korsa sökväg');
   assert.ok(globToRe('**/*.txt').test('a/b/c.txt'), '** måste korsa mappar');
   const BS = String.fromCharCode(92);
-  assert.ok(globToRe('build' + BS + '?et').test('build' + BS + 'bet'), 'mönstret måste tolerera Windows-separator');
+  assert.ok(globToRe('build' + BS + '?et').test('build' + BS + 'bet'), 'the pattern must tolerate Windows separators');
   assert.ok(globToRe('src/**/*.js').test('src/a/b/c.js'), 'mönster i mitten');
   const hx = hexdump(Buffer.from('MZ\u0090\u0000hej världen 1234567890'));
-  assert.match(hx, /^0{8} /m, 'hexdump börjar med offset 0');
+  assert.match(hx, /^0{8} /m, 'hexdump starts at offset 0');
   assert.match(hx, /4d 5a/);
 });

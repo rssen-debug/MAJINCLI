@@ -12,7 +12,8 @@ import { dirs, safeJoin } from '../paths.js';
 import { readHistory } from '../context.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UI_DIR = path.resolve(__dirname, '../../ui');
+const UI_CANDIDATES = [path.resolve(__dirname, '../../ui'), path.join(path.dirname(process.execPath), 'ui'), path.resolve(process.cwd(), 'src/ui')];
+const UI_DIR = UI_CANDIDATES.find((d) => fs.existsSync(path.join(d, 'index.html'))) || UI_CANDIDATES[0];
 const MAX_BODY = 64 * 1024 * 1024;
 const VERSION = '0.1.0';
 
@@ -62,7 +63,7 @@ export function createServer(rt) {
 
     /* WhatsApp Cloud-webhook (Meta verifierar med eget token, ingen MAJIN-token) */
     if (p === '/whatsapp' || p === '/api/webhook/whatsapp') {
-      if (!channels) return json(res, 503, { ok: false, error: 'kanaler är inte igång' });
+      if (!channels) return json(res, 503, { ok: false, error: 'channels are not running' });
       if (req.method === 'GET') {
         const q = Object.fromEntries(url.searchParams);
         const v = channels.whatsapp.verifyWebhook(q);
@@ -90,25 +91,25 @@ export function createServer(rt) {
     if (p === '/api/keys/claim') {
       const code = String(url.searchParams.get('code') || '').toUpperCase();
       const hit = pairs.get(code);
-      if (!hit || hit.expires < Date.now()) return json(res, 404, { ok: false, error: 'koden är ogiltig eller utgången' });
+      if (!hit || hit.expires < Date.now()) return json(res, 404, { ok: false, error: 'the code is invalid or expired' });
       pairs.delete(code);
       return json(res, 200, { ok: true, token });
     }
 
     if (!authed) {
       if (p === '/' || p === '/index.html') {
-        return html(res, 200, `<!doctype html><meta charset=utf-8><title>MAJIN — nyckel krävs</title>
+        return html(res, 200, `<!doctype html><meta charset=utf-8><title>MAJIN — key required</title>
 <style>body{background:#04070a;color:#9fe8ff;font:15px/1.6 ui-monospace,Menlo,Consolas,monospace;display:grid;place-items:center;height:100vh;margin:0}
 a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px solid #14384d;border-radius:8px;color:#c9f5ff}</style>
-<div><b>MAJIN</b> kräver engångsnyckeln.<br>Kör <pre>majin window</pre> så öppnas fönstret med nyckeln inbakad.<br>Eller öppna <pre>http://${req.headers.host}/?t=${token}</pre> den här gången.</div>`);
+<div><b>MAJIN</b> needs the one-time key.<br>Run <pre>majin window</pre> to open a window with the key baked in.<br>Or open <pre>http://${req.headers.host}/?t=${token}</pre> just this once.</div>`);
       }
-      return json(res, 401, { ok: false, error: 'token krävs', hint: `öppna med ?t=${token} eller skicka header \"authorization: Bearer ${token}\"` });
+      return json(res, 401, { ok: false, error: 'token required', hint: `open with ?t=${token} or send the header \"authorization: Bearer ${token}\"` });
     }
 
     /* ---------- UI + statica ---------- */
     if (p === '/' || p === '/index.html' || p === '/app') {
       const file = path.join(UI_DIR, 'index.html');
-      if (!fs.existsSync(file)) return html(res, 200, '<pre>UI saknas — kör npm run ui</pre>');
+      if (!fs.existsSync(file)) return html(res, 200, '<pre>UI missing — run: npm run ui</pre>');
       const raw = fs.readFileSync(file, 'utf8').replace(/__MAJIN_TOKEN__/g, token).replace(/__MAJIN_VERSION__/g, VERSION).replace(/__MAJIN___/g, cfg.get('name') || 'MAJIN');
       res.setHeader('set-cookie', `majin=${token}; Path=/; SameSite=Lax`);
       return html(res, 200, raw);
@@ -187,7 +188,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const abs = path.isAbsolute(want) ? path.resolve(want) : path.resolve(cfg.get('workspace'), want);
       const roots = [dirs.workspace, dirs.out, dirs.uploads, dirs.cache, dirs.memory, dirs.sessions, dirs.rules];
       const allowed = roots.some((root) => abs.startsWith(path.resolve(root) + path.sep) || abs === path.resolve(root));
-      if (!allowed || !fs.existsSync(abs)) return json(res, 403, { ok: false, error: 'inte tillåten sökväg', hint: 'servern serverar bara workspace, out, uploads och memory' });
+      if (!allowed || !fs.existsSync(abs)) return json(res, 403, { ok: false, error: 'path not allowed', hint: 'the server only serves workspace, out, uploads and memory' });
       const st = fs.statSync(abs);
       res.writeHead(200, { 'content-type': MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream', 'content-length': st.size, 'content-disposition': `attachment; filename="${path.basename(abs)}"` });
       return fs.createReadStream(abs).pipe(res);
@@ -276,7 +277,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
         apiKey: body.apiKey || '',
         models: Array.isArray(body.models) && body.models.length ? body.models : preset?.models || [],
       };
-      if (!entry.baseUrl && entry.kind !== 'mock') return json(res, 422, { ok: false, error: 'baseUrl krävs för egen provider' });
+      if (!entry.baseUrl && entry.kind !== 'mock') return json(res, 422, { ok: false, error: 'baseUrl is required for a custom provider' });
       const r = cfg.patch({ providers: { [name]: entry } }, { source: 'ui' });
       if (!r.ok) return json(res, 422, { ok: false, errors: r.errors });
       return json(res, 200, { ok: true, provider: name, status: cfg.providerStatus().find((p2) => p2.name === name) });
@@ -300,14 +301,14 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const prov = (cfg.get('providers') || {})[name];
       if (!prov) return json(res, 404, { ok: false, error: `okänd provider "${name}"` });
       const listUrl = listModelsUrl(prov);
-      if (!listUrl) return json(res, 200, { ok: true, provider: name, models: prov.models || [], note: 'provider saknar modellista — skriv modellnamnet själv' });
+      if (!listUrl) return json(res, 200, { ok: true, provider: name, models: prov.models || [], note: 'the provider has no model list — type the model name yourself' });
       try {
         const r = await fetch(listUrl, { headers: prov.apiKey ? { authorization: `Bearer ${prov.apiKey}` } : {}, signal: AbortSignal.timeout(12000) });
         const j = await r.json().catch(() => ({}));
         const models = (j.data || j.models || j || []).map((m) => (typeof m === 'string' ? m : m.id)).filter(Boolean).sort();
         return json(res, 200, { ok: r.ok, provider: name, models: models.slice(0, 400), count: models.length, status: r.status });
       } catch (err) {
-        return json(res, 200, { ok: false, error: err.message, hint: 'nätverksfel eller fel baseUrl' });
+        return json(res, 200, { ok: false, error: err.message, hint: 'network error or a wrong baseUrl' });
       }
     }
     if (p === '/api/approve' && req.method === 'POST') {
@@ -316,7 +317,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       return json(res, 200, { ok, pending: approvals.list().length });
     }
     if (p === '/api/schedule' && req.method === 'POST') {
-      if (!scheduler) return json(res, 503, { ok: false, error: 'schemaläggaren är av' });
+      if (!scheduler) return json(res, 503, { ok: false, error: 'the scheduler is off' });
       const body = await readJson(req);
       try {
         return json(res, 200, { ok: true, job: scheduler.add({ when: body.when, task: body.task, deliver: body.deliver || 'silent', model: body.model || null, name: body.name || '' }) });
@@ -346,14 +347,14 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     if (p === '/api/channels/telegram' && req.method === 'POST') {
       const body = await readJson(req);
       if (body.botToken) cfg.patch({ channels: { telegram: { botToken: String(body.botToken).trim(), enabled: true } } });
-      if (!channels) return json(res, 503, { ok: false, error: 'kanaler är inte igång (starta om MAJIN med channels aktiverade)' });
+      if (!channels) return json(res, 503, { ok: false, error: 'channels are not running (restart MAJIN with channels enabled)' });
       const ok = body.action === 'stop' ? channels.stopTelegram() : await channels.startTelegram();
       return json(res, 200, { ok: Boolean(ok), status: channels.telegram.status(), pairingCode: channels.telegram.status().pairingCode });
     }
     if (p === '/api/channels/whatsapp' && req.method === 'POST') {
       const body = await readJson(req);
       if (body.transport) cfg.patch({ channels: { whatsapp: { transport: body.transport === 'cloud' ? 'cloud' : 'baileys', enabled: true, ...(body.cloud || {}) } } });
-      if (!channels) return json(res, 503, { ok: false, error: 'kanaler är inte igång' });
+      if (!channels) return json(res, 503, { ok: false, error: 'channels are not running' });
       if (body.action === 'stop') await channels.stopWhatsapp();
       else await channels.startWhatsapp();
       return json(res, 200, { ok: true, status: channels.whatsapp.status() });
@@ -372,7 +373,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const name = sanitize(String(url.searchParams.get('name') || 'prov.bin'));
       const cap = cfg.get('tools.re.maxFileBytes') || 6e8;
       const buf = await readBody(req, cap);
-      if (buf.length > cap) return json(res, 413, { ok: false, error: `för stor fil (${buf.length} > ${cap})` });
+      if (buf.length > cap) return json(res, 413, { ok: false, error: `file too large (${buf.length} > ${cap})` });
       const abs = path.join(dirs.uploads, `${Date.now()}-${name}`);
       fs.mkdirSync(dirs.uploads, { recursive: true });
       fs.writeFileSync(abs, buf);

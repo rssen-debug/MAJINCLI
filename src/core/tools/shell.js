@@ -106,22 +106,22 @@ export const shellTools = [
     name: 'shell.run',
     group: 'shell',
     risk: 'exec',
-    desc: 'Kör ett kommando och väntar. Allt är tillåtet — guarden stoppar bara det som är irreversibelt. cwd är workspace om inget annat anges.',
+    desc: 'Run a command and wait. Everything is allowed — the guard only stops what is irreversible or destructive. cwd defaults to the workspace.',
     params: {
-      command: 'string: kommandot som körs i systemets skal (PowerShell på Windows)',
-      cwd: 'string: arbetskatalog (valfritt)',
-      timeoutSec: 'number: sekunder innan det dödas (default 150)',
-      env: 'object: extra miljövariabler',
+      command: 'string: command run in the system shell (PowerShell on Windows)',
+      cwd: 'string: working directory (optional)',
+      timeoutSec: 'number: seconds before it is killed (default 150)',
+      env: 'object: extra environment variables',
     },
     examples: ['shell.run({command:"git -C . status -s"})', 'shell.run({command:"Get-Process | sort CPU | select -last 5"})'],
     async run({ command, cwd, timeoutSec = 150, env }, ctx) {
-      const dir = cwd ? path.resolve(String(cwd)) : ctx.cfg.get('workspace') || process.cwd();
+      const dir = cwd ? path.resolve(String(cwd)) : ctx.cfg.get('workspace') || dirs.workspace || process.cwd();
       const max = ctx.cfg.get('tools.shell.maxOutputChars') || 12000;
       ctx.emit?.({ type: 'shell', command: command.slice(0, 200), cwd: dir });
       const r = await runShell(command, { cwd: dir, timeoutSec, maxChars: max * 3, env });
       if (r.error) return { ok: false, error: { code: 'spawn_failed', message: r.error, hint: r.hint } };
       const out = `${r.stdout || ''}${r.stderr ? `\n-- stderr --\n${r.stderr}` : ''}`.trim();
-      const status = r.ok ? 'ok' : `exit ${r.exitCode}${r.killed ? ' (dödad efter timeout)' : ''}`;
+      const status = r.ok ? 'ok' : `exit ${r.exitCode}${r.killed ? ' (killed after timeout)' : ''}`;
       return {
         ok: true,
         result: `$ ${command}\n[${status} · ${r.ms}ms · ${r.shell}${out.length ? ` · ${out.length} tecken` : ''}]\n${out || '(ingen output)'}`,
@@ -135,8 +135,8 @@ export const shellTools = [
     name: 'shell.bg',
     group: 'shell',
     risk: 'exec',
-    desc: 'Starta långlivat jobb i bakgrunden och få ett id. Används för servrar, watchers, ghidra-headless, capture.',
-    params: { command: 'string: kommando', name: 'string: etikett (valfritt)', cwd: 'string: katalog' },
+    desc: 'Start a long-running job in the background and get an id. Use for servers, watchers, ghidra-headless, captures.',
+    params: { command: 'string: command', name: 'string: label (optional)', cwd: 'string: directory' },
     async run({ command, name, cwd }, ctx) {
       const id = name || `bg-${Date.now().toString(36)}`;
       const dir = cwd ? path.resolve(String(cwd)) : ctx.cfg.get('workspace') || process.cwd();
@@ -156,7 +156,7 @@ export const shellTools = [
         ctx.emit?.({ type: 'shell.bg.done', id, code });
       });
       ctx.emit?.({ type: 'shell.bg.start', id, command: command.slice(0, 160), pid: child.pid });
-      return { result: `bakgrundsjobb ${id} startat (pid ${child.pid})\n$ ${command}`, meta: { id, pid: child.pid }, summary: `bg ${id} igång` };
+      return { result: `background job ${id} started (pid ${child.pid})\n$ ${command}`, meta: { id, pid: child.pid }, summary: `bg ${id} running` };
     },
   }),
 
@@ -164,8 +164,8 @@ export const shellTools = [
     name: 'shell.jobs',
     group: 'shell',
     risk: 'read',
-    desc: 'Lista bakgrundsjobb + deras senaste output. Används för att följa servrar/captures.',
-    params: { id: 'string: filtrera på ett jobb-id', tail: 'number: rader output per jobb (default 30)' },
+    desc: 'List background jobs and their latest output. Use to follow servers and captures.',
+    params: { id: 'string: filter on one job id', tail: 'number: output lines per job (default 30)' },
     async run({ id = '', tail = 30 }) {
       const list = [...jobs.values()].filter((j) => !id || j.id === id);
       if (!list.length) return { result: 'inga bakgrundsjobb', summary: '0 jobb' };
@@ -183,18 +183,18 @@ export const shellTools = [
     name: 'shell.stop',
     group: 'shell',
     risk: 'exec',
-    desc: 'Stoppa ett bakgrundsjobb (SIGTERM sedan SIGKILL).',
-    params: { id: 'string: jobb-id från shell.bg' },
+    desc: 'Stop a background job (SIGTERM, then SIGKILL).',
+    params: { id: 'string: job id from shell.bg' },
     async run({ id }) {
       const j = jobs.get(id);
-      if (!j) return { ok: false, error: { code: 'no_job', message: `okänt jobb ${id}`, hint: `kända: ${[...jobs.keys()].join(', ') || 'inga'}` } };
+      if (!j) return { ok: false, error: { code: 'no_job', message: `unknown job ${id}`, hint: `known: ${[...jobs.keys()].join(', ') || 'none'}` } };
       try {
         process.kill(-j.pid, 'SIGTERM');
       } catch {
         try {
           process.kill(j.pid, 'SIGTERM');
         } catch {
-          /* redan död */
+          /* already dead */
         }
       }
       setTimeout(() => {
@@ -213,8 +213,8 @@ export const shellTools = [
     name: 'shell.env',
     group: 'shell',
     risk: 'read',
-    desc: 'Läs miljövariabler och shell-val. Användbart innan du bygger kommandon.',
-    params: { name: 'string: en specifik variabel (valfritt)' },
+    desc: 'Read environment variables and shell settings. Useful before building commands.',
+    params: { name: 'string: one specific variable (optional)' },
     async run({ name }) {
       if (name) return { result: `${name}=${process.env[name] ?? '(ej satt)'}` };
       const keys = Object.keys(process.env).filter((k) => !/TOKEN|KEY|SECRET|PASSWORD/i.test(k)).sort();

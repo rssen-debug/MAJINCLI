@@ -55,29 +55,29 @@ export class Agent {
     const guard = cfg.get('guard.mode');
     const now = new Date();
     return [
-      `Du är ${cfg.get('name')} — en agent som kör direkt på användarens Windows-maskin. Plattform ${os.platform()} ${os.arch()}, nod ${process.version}. Lokal tid ${now.toISOString().slice(0, 16).replace('T', ' ')} (${now.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}).`,
+      `You are ${cfg.get('name')} — an agent running directly on the user's machine (Windows first). Platform ${os.platform()} ${os.arch()}, node ${process.version}. Local time ${now.toISOString().slice(0, 16).replace('T', ' ')} (${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}).`,
       `Workspace ${cfg.get('workspace')} · data ${dirs.root}.`,
       '',
       cfg.get('persona.identity'),
       cfg.get('persona.style'),
       cfg.get('persona.safety'),
       '',
-      `VERKTYG: alla ${tools.length} är alltid på — det finns inget att aktivera. Grupper: ${groups.join(', ')}.`,
-      'Använd verktyg i stället för att gissa. Flera oberoende anrop i samma svar körs parallellt — batcha dem. Vid fel: läs felet, rätta argumenten, kör igen (efter två fel i rad eskalerar modellen automatiskt).',
-      'Sökvägar: absolut eller relativt workspacet. Skriv aldrig över något du inte läst, och radera inte det du inte skapat.',
-      'RE: re.analyze = headers, sektioner+entropi, imports med riskmarkering, YARA, IOC-strängar, opkodsmönster och "nästa steg". re.strings/re.search/re.yara/re.diff är mikrofonen. re.tool kopplar på ghidra/rizin/objdump om de finns på maskinen.',
-      'Om användaren beskriver en inställning på naturligt språk ("använd X för Y alltid", "kör moa på allt", "fråga inte mer") → kör majin.configure med intent, eller säg exakt vad du ändrade.',
+      `TOOLS: all ${tools.length} are always on — there is nothing to enable. Groups: ${groups.join(', ')}.`,
+      'Use tools instead of guessing. Independent calls in one answer run in parallel — batch them. On error: read the message, fix the arguments, run again (after two failures in a row the model escalates automatically).',
+      'Paths: absolute or workspace-relative. Never overwrite something you have not read, and never delete something you did not create.',
+      'RE: re.analyze = headers, sections+entropy, imports with risk flags, YARA, IOC strings, opcode patterns and "nästa steg". re.strings/re.search/re.yara/re.diff are the microscope. re.tool hooks up ghidra/rizin/objdump when they are installed on the machine.',
+      'If the user describes a setting in natural language ("använd X för Y alltid", "kör moa på allt", "fråga inte mer") → run majin.configure with the intent, or state exactly what you changed.',
       '',
-      `ROUTING (jobb → modell): ${Object.entries(routeSummary(cfg)).map(([k, v]) => `${k}:${v}`).join('  ')}`,
-      `Den här turen: jobb=${decision.job} (säkerhet ${decision.confidence}), primär=${turnPlan.route?.ref || '?'}, ${turnPlan.moa?.enabled ? `MOA ${turnPlan.moa.width} referenser → aggregator ${turnPlan.moa.aggregator}` : 'MOA av för den här typen'}.`,
-      `Guard: ${guard === 'off' ? 'AV — inga bekräftelser, du äger konsekvensen' : 'frågar bara före irreversible åtgärder'}.`,
+      `ROUTING (job → model): ${Object.entries(routeSummary(cfg)).map(([k, v]) => `${k}:${v}`).join('  ')}`,
+      `Den här turen: jobb=${decision.job} (confidence ${decision.confidence}), primär=${turnPlan.route?.ref || '?'}, ${turnPlan.moa?.enabled ? `MOA ${turnPlan.moa.width} references → aggregator ${turnPlan.moa.aggregator}` : 'MOA off for this kind of turn'}.`,
+      `Guard: ${guard === 'off' ? 'OFF — no confirmations, you own the consequences' : 'asks only before irreversible actions'}.`,
       '',
       this.skills.prompt(),
       this.memory?.digest?.() || '',
-      attachments?.length ? `BILAGOR (redan sparade på disk):\n${attachments.map((a) => `- ${a.name} · ${a.kind} · ${a.size} byte${a.path ? ` · ${a.path}` : ''}${a.note ? ` · ${a.note}` : ''}`).join('\n')}` : '',
-      this.plans.get(session)?.length ? `AKTIV PLAN:\n${this.plans.get(session).map((p) => `[${p.status === 'done' ? 'x' : p.status === 'doing' ? '~' : p.status === 'blocked' ? '!' : ' '}] ${p.text}`).join('\n')}` : '',
+      attachments?.length ? `ATTACHMENTS (already saved to disk):\n${attachments.map((a) => `- ${a.name} · ${a.kind} · ${a.size} byte${a.path ? ` · ${a.path}` : ''}${a.note ? ` · ${a.note}` : ''}`).join('\n')}` : '',
+      this.plans.get(session)?.length ? `ACTIVE PLAN:\n${this.plans.get(session).map((p) => `[${p.status === 'done' ? 'x' : p.status === 'doing' ? '~' : p.status === 'blocked' ? '!' : ' '}] ${p.text}`).join('\n')}` : '',
       '',
-      'Svara på användarens språk. Kort före långt. Ingen metadata om dig själv.',
+      'Reply in English unless the user clearly writes another language. Short before long. No metadata about yourself.',
     ]
       .filter((l) => l !== '')
       .join('\n');
@@ -91,13 +91,13 @@ export class Agent {
       try {
         onEvent(ev);
       } catch {
-        /* frånvarande UI får inte sänka agenten */
+        /* a missing UI must not take the agent down */
       }
       this.bus.emit(`agent.${ev.type}`, { session, ...ev });
     };
 
     try {
-      /* 1) naturallyspråk → direkt config utan modell */
+      /* 1) natural language → direct config, no model */
       const intent = parseIntent(input, cfg);
       let intentNote = null;
       if (intent.matched) {
@@ -253,7 +253,7 @@ export class Agent {
         temperature: 0,
         messages: [
           { role: 'system', content: 'Extrahera HÖGST 3 bestående fakta om användaren eller dennes projekt från konversationen.Endast sådant som gäller imorgon också (preferenser, hårdvara, sökvägar, beslut). En rad per faktum, ingen prefix eller numrering. Inget att spara → svara exakt: TOMT' },
-          { role: 'user', content: `${String(input).slice(0, 800)}\n\nVERKTYG: ${res.toolLog.map((t) => `${t.tool}:${t.ok ? 'ok' : 'fel'}`).join(', ').slice(0, 600)}\n\nSVAR: ${String(res.text).slice(0, 1500)}` },
+          { role: 'user', content: `${String(input).slice(0, 800)}\n\nTOOLS: ${res.toolLog.map((t) => `${t.tool}:${t.ok ? 'ok' : 'errors'}`).join(', ').slice(0, 600)}\n\nANSWER: ${String(res.text).slice(0, 1500)}` },
         ],
       });
       const text = String(r.text || '').trim();

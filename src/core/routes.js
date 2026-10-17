@@ -156,7 +156,7 @@ export function parseIntent(text, cfg) {
     const provider = /(deepseek|openrouter|groq|anthropic|openai|gemini|ollama|lmstudio|vllm|custom|lokal)[^\w]?/i.exec(s)?.[1];
     if (provider) {
       patch.providers = { ...(patch.providers || {}), [provider]: { baseUrl: url.replace(/[.,;]$/, '') } };
-      notes.push(`satte baseUrl för ${provider}`);
+      notes.push(`set the baseUrl for ${provider}`);
       matched = true;
     }
   }
@@ -189,7 +189,7 @@ export function parseIntent(text, cfg) {
     for (const job of jobWords) {
       if (job === '*') {
         for (const j of JOBS) patch.models.routes[j] = ref.ref;
-        notes.push(`satte ${ref.ref} på alla ${JOBS.length} jobben`);
+        notes.push(`pointed all ${JOBS.length} jobs at ${ref.ref}`);
       } else {
         patch.models.routes[job] = ref.ref;
         notes.push(`${job} → ${ref.ref}`);
@@ -254,7 +254,7 @@ export function parseIntent(text, cfg) {
         notes.push(`bredd ${w}`);
       }
     }
-    notes.push(off ? 'MOA av' : hard ? 'MOA på svåra jobb' : 'MOA på alltid');
+    notes.push(off ? 'MOA off' : hard ? 'MOA on for hard jobs' : 'MOA on for everything');
     matched = true;
   }
   const widthOnly = /^(?:kör|använd|use|sätt|set|slå på)?\s*(?:med)?\s*(\d)\s*(?:stucks\s+)?(referenser|referens|refs|modeller|modeller parallellt)\b/i.exec(s);
@@ -282,15 +282,15 @@ export function parseIntent(text, cfg) {
   /* 6) Guard */
   if (/alltid på|utan att fråga|fråga inte|inget bekräfta|no confirm|auto-?approve|kör på direkt/i.test(s)) {
     patch.guard = { mode: 'off' };
-    notes.push('guard av — kör allt direkt');
+    notes.push('guard off — everything runs straight away');
     matched = true;
   } else if (/bekr[aä]fta allt|alltid bekr[aä]ftelse|fr[aä]ga varje g[aä]ng|strict mode|var strikt|ingen auto/i.test(s)) {
     patch.guard = { mode: 'strict' };
-    notes.push('guard strikt — allt som kan göra skada bekräftas');
+    notes.push('guard strict — anything that can do damage is confirmed');
     matched = true;
   } else if (/fråga innan (radera|farliga|destructive)|confirm mode|sitt på bekräfta/i.test(s)) {
     patch.guard = { mode: 'confirm' };
-    notes.push('guard på för destruktiva saker');
+    notes.push('guard on for destructive things');
     matched = true;
   } else if (/\bguard\s*(på|off|av|till)?\s*(confirm|strict|off)\b/i.test(s)) {
     const mode = /off|av\b/i.test(s) ? 'off' : /strict/i.test(s) ? 'strict' : 'confirm';
@@ -303,7 +303,7 @@ export function parseIntent(text, cfg) {
   const style = /(?:var|vær|bli|svara|uppträd|uppträda|prata|för||bli)\s+(kortare|kort|längre|mer direkt|rakt på sak|rakt\s+på\s+sak|mindre fluff|mindre|rolig|allvarlig|teknisk|enkel|på svenska|på engelska|svenska|engelska)/i.exec(s);
   if (style) {
     const w = style[1].toLowerCase();
-    const add = /rakt på sak/.test(w) ? 'Ingen inledning, ingen sammanfattning — saken först.' : w.includes('kort') ? 'Var extremt kort: en till två rader före nästa åtgärd.' : w.includes('direkt') ? 'Ingen inledning, ingen sammanfattning, bara svaret.' : w.includes('teknisk') ? 'Svara som en ingenjör: exakta tal, sökvägar, kommandon.' : w.includes('svensk') ? 'Svara alltid på svenska.' : w.includes('engelsk') ? 'Svara alltid på engelska.' : 'Förklara lite mer när det behövs.';
+    const add = /rakt p.{0,3} sent|straight to the point/.test(w) ? 'No preamble, no summary — the thing first.' : /kort|concise|short/.test(w) ? 'Be extremely short: one or two lines before the next action.' : /direkt|immediate/.test(w) ? 'No preamble, no summary, just the answer.' : /teknisk|technical/.test(w) ? 'Answer like an engineer: exact numbers, paths, commands.' : /svensk/.test(w) ? 'Always reply in Swedish.' : /english/.test(w) ? 'Always reply in English.' : 'Explain a bit more when it helps.';
     patch.persona = { style: `${cfg.get('persona.style') || ''} ${add}`.trim() };
     notes.push('personlighet uppdaterad');
     matched = true;
@@ -320,7 +320,7 @@ export function parseIntent(text, cfg) {
   if (budgetHit) {
     const usd = Number(budgetHit[1].replace(',', '.'));
     patch.budget = { mode: 'cap', monthlyUsd: usd };
-    notes.push(`budget ${usd} USD/mån`);
+    notes.push(`budget ${usd} USD per month`);
     matched = true;
   }
   if (/spara inga (loggar|minnen)|glöm allt|minne av/i.test(s)) {

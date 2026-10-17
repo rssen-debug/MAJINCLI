@@ -78,7 +78,7 @@ export function agreement(texts) {
 
 export function parseAnswers(text) {
   const out = [];
-  const re = /(?:^|\n)\s*(?:#{1,4}\s*)?SVAR\s*\[?(\d+)\]?\s*(?:\[[^\]]*\])?\s*[:：]\s*/gi;
+  const re = /(?:^|\n)\s*(?:#{1,4}\s*)?(?:ANSWER|SVAR)\s*\[?(\d+)\]?\s*(?:\[[^\]]*\])?\s*[:：]\s*/gi;
   let m;
   const marks = [];
   while ((m = re.exec(text))) marks.push({ n: Number(m[1]), start: m.index + m[0].length, at: m.index });
@@ -90,15 +90,15 @@ export function parseAnswers(text) {
 }
 
 const REF_SYSTEM = (style) =>
-  `Du är en av ${style.width} parallella referensmodeller i en Mixture-of-Agents-grupp. Svara direkt på användarens fråga med ditt bästa svar. Ingenting om att du är en modell, ingen ursäkt, ingen metadata. Maks ${style.maxChars} tecken. ${style.style}`;
+  `You are one of ${style.width} parallel reference models in a Mixture-of-Agents group. Answer the user question directly with your best answer. Nothing about being a model, no apologies, no metadata. At most ${style.maxChars} characters. ${style.style}`;
 
-const AGG_SYSTEM = `Du är aggregatorsmodellen i en Mixture-of-Agents-grupp. Du får frågan och ${'N'} parallella svar.
-Regler:
-1. Behåll bara påståenden som stöds av minst ett svar.
-2. Vid konflikt: välj det svar som är mest konkret och verifierbart, och säg kort vem som är osäker.
-3. Slå ihop det bästa till ett enda svar i samma språk som frågan.
-4. Inga "enligt modell 1"-hänvisningar i brödtexten — slutnotering räcker om det behövs.
-5. Kortare än referenserna. Algoritmen/koden behåll ordagrant.`;
+const AGG_SYSTEM = `You are the aggregator model in a Mixture-of-Agents group. You get the question and ${'N'} parallel answers.
+Rules:
+1. Keep only claims supported by at least one answer.
+2. On conflict: pick the most concrete, verifiable answer and say briefly who is unsure.
+3. Merge the best into one answer in the language of the question.
+4. No "according to model 1" references in the body — a footnote is enough if needed.
+5. Shorter than the references. Keep algorithms and code verbatim.`;
 
 /**
  * @returns {Promise<{answer:string, refs:Array, agreement:Object, escalated:boolean, usage:Object}>}
@@ -166,7 +166,7 @@ export async function run({ cfg, question, context, job, onEvent, signal, maxTok
       stream: false,
       maxTokens: moa.referenceMaxTokens ?? 900,
       temperature: 0,
-      messages: [{ role: 'system', content: 'Svara kort och exakt. Du är tie-breaker i en MOA-grupp som inte kunde enas.' }, ...(context || []), { role: 'user', content: question }],
+      messages: [{ role: 'system', content: 'Answer briefly and exactly. You are the tie-breaker in a MOA group that could not agree.' }, ...(context || []), { role: 'user', content: question }],
       signal,
     });
     if (res.text) {
@@ -182,7 +182,7 @@ export async function run({ cfg, question, context, job, onEvent, signal, maxTok
   for (const r of ok) store?.record({ job: `moa:${job}`, ref: r.ref, usage: r.usage, moa: true });
 
   const aggRoute = cfg.resolveModel(moa.aggregator || cfg.get('models.routes.aggregator'), `${job}:aggregator`);
-  const numbered = ok.map((r, i) => `Svar ${i + 1} [${r.ref}]:\n${clip(r.text, 2600)}`).join('\n\n');
+  const numbered = ok.map((r, i) => `ANSWER ${i + 1} [${r.ref}]:\n${clip(r.text, 2600)}`).join('\n\n');
   let answer = '';
   try {
     const res = await complete({
@@ -195,7 +195,7 @@ export async function run({ cfg, question, context, job, onEvent, signal, maxTok
         { role: 'system', content: AGG_SYSTEM.replace('N', String(ok.length)) },
         {
           role: 'user',
-          content: `FRÅGA:\n${clip(question, 6000)}\n\nSVAR FRÅN ${ok.length} REFERENSER (enighet ${finalAgr.score}):\n\n${numbered}`,
+          content: `QUESTION:\n${clip(question, 6000)}\n\nANSWERS FROM ${ok.length} REFERENCES (agreement ${finalAgr.score}):\n\n${numbered}`,
         },
       ],
       onEvent,

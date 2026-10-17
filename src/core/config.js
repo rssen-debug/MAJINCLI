@@ -32,10 +32,10 @@ export const DEFAULTS = {
   workspace: null,
   persona: {
     identity:
-      'Du är MAJIN — en personlig agent som kör på användarens egen Windows-maskin. Du pratar kort, på användarens språk, utan att förklara vad du ska göra innan du gjort det.',
+      "MAJIN — a personal agent running directly on the user's own machine (Windows first). You talk briefly, in the language the user writes in, and you never explain what you are about to do before you have done it.",
     style:
-      'Agera först, rapportera sedan. Korta meningar. Ingen fluff, inga ursäkter. Siffror och sökvägar före adjektiv. Om du är osäker: säg exakt vad som är osäkert, inte att du är ledsen.',
-    safety: 'Du har tillgång till hela maskinen. Verifiera innan du förstör. Radera aldrig något du inte själv skapat.',
+      "Act first, report after. Short sentences. No fluff, no apologies. Numbers and paths before adjectives. If you are unsure, say exactly what is uncertain instead of saying sorry.",
+    safety: "You have access to the whole machine. Verify before you destroy. Never delete something you did not create.",
   },
   providers: {
     /* Alla presets finns från början med tom nyckel — UI:t och "lägg till provider"
@@ -180,9 +180,9 @@ export const DEFAULTS = {
   },
   ui: {
     title: 'MAJIN',
-    tagline: 'allt på — alltid redo',
+    tagline: 'everything on — always ready',
     theme: 'jarvis',
-    voice: { enabled: true, lang: 'sv-SE', wakeWord: 'majin', tts: true, ttsVoice: null, rate: 1.05, pitch: 0.95 },
+    voice: { enabled: true, lang: 'en-US', wakeWord: 'majin', tts: true, ttsVoice: null, rate: 1.05, pitch: 0.95 },
     transparency: { showTools: 'verbose', showThinking: 'summary', showTokens: true },
     density: 'comfortable',
     autoOpen: true,
@@ -490,7 +490,7 @@ export function toRegex(spec) {
 
 export function validatePatch(patch, current) {
   const errors = [];
-  if (!isObj(patch)) return [{ path: '', msg: 'patch måste vara ett objekt' }];
+  if (!isObj(patch)) return [{ path: '', msg: 'the patch must be an object' }];
   for (const key of Object.keys(patch)) {
     if (!ALLOWED.has(key)) errors.push({ path: key, msg: `okänd toppnyckel. Tillåtna: ${[...ALLOWED].join(', ')}` });
   }
@@ -507,15 +507,15 @@ export function validatePatch(patch, current) {
       }
       if (p === 'providers' && isObj(v)) {
         for (const [name, prov] of Object.entries(v)) {
-          if (!isObj(prov)) errors.push({ path: p, msg: 'provider måste vara ett objekt' });
+          if (!isObj(prov)) errors.push({ path: p, msg: 'the provider must be an object' });
           else {
             const cur = (current && current.providers && current.providers[name]) || {};
             const kind = prov.kind || cur.kind || PRESETS[prov.preset || cur.preset]?.kind || 'openai';
             const base = prov.baseUrl || cur.baseUrl || PRESETS[prov.preset]?.baseUrl || PRESETS[cur.preset]?.baseUrl;
-            if (kind !== 'mock' && !base) errors.push({ path: `${p}.${name}.baseUrl`, msg: 'saknar baseUrl (eller välj ett preset med en)' });
+            if (kind !== 'mock' && !base) errors.push({ path: `${p}.${name}.baseUrl`, msg: 'missing baseUrl (or pick a preset that has one)' });
             if (prov.kind && !['openai', 'anthropic', 'mock'].includes(prov.kind)) errors.push({ path: `${p}.${name}.kind`, msg: 'kind: openai | anthropic | mock' });
             if (prov.preset && !presetNames().includes(prov.preset)) errors.push({ path: `${p}.${name}.preset`, msg: `okänt preset: ${prov.preset}` });
-            if (prov.models && !Array.isArray(prov.models)) errors.push({ path: `${p}.${name}.models`, msg: 'models måste vara en array' });
+            if (prov.models && !Array.isArray(prov.models)) errors.push({ path: `${p}.${name}.models`, msg: 'models must be an array' });
           }
         }
       }
@@ -523,25 +523,25 @@ export function validatePatch(patch, current) {
         v.forEach((r, i) => {
           if (!isObj(r) || typeof r.model !== 'string') errors.push({ path: `${p}[${i}]`, msg: 'varje referens behöver model "provider/model"' });
         });
-        if (v.length < 2) errors.push({ path: p, msg: 'MOA behöver minst 2 referenser' });
+        if (v.length < 2) errors.push({ path: p, msg: 'MOA needs at least 2 references' });
       }
       if (p === 'moa.policy' && !['always', 'hard', 'off'].includes(v)) errors.push({ path: p, msg: 'policy: always | hard | off' });
       if (p === 'guard.mode' && !['confirm', 'off', 'strict'].includes(v)) errors.push({ path: p, msg: 'mode: confirm | strict | off' });
       if (p === 'routing.rules' && Array.isArray(v)) {
         v.forEach((r, i) => {
-          if (!isObj(r) || typeof r.match !== 'string' || !r.job) errors.push({ path: `${p}[${i}]`, msg: '{ match, job } krävs' });
+          if (!isObj(r) || typeof r.match !== 'string' || !r.job) errors.push({ path: `${p}[${i}]`, msg: '{ match, job } required' });
           else {
-            if (!toRegex(r.match)) errors.push({ path: `${p}[${i}].match`, msg: 'olycklig regex' });
+            if (!toRegex(r.match)) errors.push({ path: `${p}[${i}].match`, msg: 'unhappy regex (invalid pattern)' });
             if (!JOBS.includes(r.job)) errors.push({ path: `${p}[${i}].job`, msg: `okänt jobb "${r.job}"` });
           }
         });
       }
-      if (p === 'server.port' && (typeof v !== 'number' || v < 1 || v > 65535)) errors.push({ path: p, msg: 'port måste vara 1-65535' });
+      if (p === 'server.port' && (typeof v !== 'number' || v < 1 || v > 65535)) errors.push({ path: p, msg: 'port must be 1-65535' });
       if (p === 'channels.telegram.enabled' || p === 'channels.whatsapp.enabled') {
-        if (typeof v !== 'boolean') errors.push({ path: p, msg: 'boolean' });
+        if (typeof v !== 'boolean') errors.push({ path: p, msg: 'boolean expected' });
       }
       if (p === 'channels.telegram.botToken' && v && !/^\d+:[\w-]{30,}$/.test(String(v))) errors.push({ path: p, msg: 'ser inte ut som en Telegram bot-token (123456:ABC-DEF…)' });
-      if (p === 'tools.allow' && v !== '*' && !Array.isArray(v)) errors.push({ path: p, msg: 'tools.allow: "*" eller array av verktygsnamn' });
+      if (p === 'tools.allow' && v !== '*' && !Array.isArray(v)) errors.push({ path: p, msg: 'tools.allow: "*" or an array av verktygsnamn' });
       if (isPlain(v)) walk(v, p);
     }
   };

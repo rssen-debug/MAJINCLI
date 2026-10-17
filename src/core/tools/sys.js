@@ -12,7 +12,7 @@ export const sysTools = [
     name: 'sys.info',
     group: 'system',
     risk: 'read',
-    desc: 'Maskinens läge: OS, arkitektur, CPU, minne, hemkatalog, workspace, nod-version.',
+    desc: 'Machine status: OS, architecture, CPU, memory, home dir, workspace, node version.',
     params: {},
     async run(_a, ctx) {
       const cpus = os.cpus();
@@ -46,8 +46,8 @@ export const sysTools = [
     name: 'sys.ps',
     group: 'system',
     risk: 'read',
-    desc: 'Processlista (namn, pid, minne, cpu). Filterbar med regex.',
-    params: { filter: 'string: regex mot processnamn (valfritt)', sortBy: 'string: mem | cpu | name [mem|cpu|name]', limit: 'number: max rader (default 40)' },
+    desc: 'Process list (name, pid, memory, cpu). Filterable with a regex.',
+    params: { filter: 'string: regex against process names (optional)', sortBy: 'string: mem | cpu | name [mem|cpu|name]', limit: 'number: max lines (default 40)' },
     async run({ filter, sortBy = 'mem', limit = 40 }) {
       const cmd = IS_WIN
         ? `Get-Process | Select-Object Name,Id,Responding,@{n='WS_MB';e={[math]::Round($_.WorkingSet64/1MB,1)}},@{n='CPU_s';e={if($_.CPU){[math]::Round($_.CPU,1)}else{0}}} | ConvertTo-Csv -NoTypeInformation`
@@ -78,8 +78,8 @@ export const sysTools = [
     name: 'sys.ports',
     group: 'system',
     risk: 'read',
-    desc: 'Lyssnande portar + pid. Används för att se vad som redan kör (t.ex. MAJIN-ui, frida, ollama).',
-    params: { port: 'number: filtrera på en port' },
+    desc: 'Listening ports + pid. Use it to see what already runs (e.g. the MAJIN ui, frida, ollama).',
+    params: { port: 'number: filter on one port' },
     async run({ port }) {
       const cmd = IS_WIN
         ? "Get-NetTCPConnection -State Listen | Select-Object LocalAddress,LocalPort,OwningProcess | Sort-Object LocalPort | ConvertTo-Csv -NoTypeInformation"
@@ -106,7 +106,7 @@ export const sysTools = [
     name: 'sys.fs_usage',
     group: 'system',
     risk: 'read',
-    desc: 'Diskar och fri yta. Bra innan du packar upp något stort.',
+    desc: 'Disks and free space. Handy before unpacking something big.',
     params: {},
     async run() {
       const cmd = IS_WIN ? 'Get-PSDrive -PSProvider FileSystem | Select-Object Name,Used,Free | ConvertTo-Csv -NoTypeInformation' : 'df -h | head -12';
@@ -123,8 +123,8 @@ export const sysTools = [
     name: 'sys.procs_top',
     group: 'system',
     risk: 'read',
-    desc: 'Snabb topp-5 CPU/minne med Kommandorad (cmdline) — används för att identifiera misstänkta processer.',
-    params: { n: 'number: antal (default 8)' },
+    desc: 'Quick top-N by CPU/memory with the command line — used to spot suspicious processes.',
+    params: { n: 'number: how many (default 8)' },
     async run({ n = 8 }) {
       const cmd = IS_WIN
         ? `Get-CimInstance Win32_Process | Sort-Object WorkingSetSize -Descending | Select-Object -First ${Number(n) || 8} ProcessId,Name,CommandLine,WorkingSetSize | ConvertTo-Csv -NoTypeInformation`
@@ -145,7 +145,7 @@ export const sysTools = [
     name: 'sys.services',
     group: 'system',
     risk: 'read',
-    desc: 'Tjänster/processer som startar automatiskt — persistence-kontroll (RE och ren felsökning).',
+    desc: 'Services/processes that start automatically — persistence check (RE and plain debugging).',
     params: { filter: 'string: regex' },
     async run({ filter }) {
       const cmd = IS_WIN

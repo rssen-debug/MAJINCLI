@@ -1,7 +1,7 @@
 /**
  * MAJIN — web.
- * Sök utan API-nyckel (duckduckgo/bing/searxng) och en fetch som ger ren text.
- * `web.download` är RE-genvägen: hämta provet, analysera det, slipp webbläsaren.
+ * Search without an API key (duckduckgo/bing/searxng) plus a fetch that returns clean text.
+ * `web.download` is the RE shortcut: fetch the sample, analyze it, skip the browser.
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -105,8 +105,8 @@ export const webTools = [
     name: 'web.search',
     group: 'web',
     risk: 'read',
-    desc: 'Sök på webben. Inget API-nyckel behövs (duckduckgo/bing fallback). Returnerar titel, url, utdrag.',
-    params: { query: 'string: vad du söker', count: 'number: antal träffar (default 8)', engine: 'string: auto | duckduckgo | bing | searxng | brave [auto|duckduckgo|bing|searxng|brave]' },
+    desc: 'Search the web. No API key needed (duckduckgo/bing fallback). Returns title, url and snippet.',
+    params: { query: 'string: what to look for', count: 'number: results to return (default 8)', engine: 'string: auto | duckduckgo | bing | searxng | brave [auto|duckduckgo|bing|searxng|brave]' },
     examples: ['web.search({query:"pe file format data directories"})'],
     async run({ query, count = 8, engine = 'auto' }, ctx) {
       const key = `search:${engine}:${query}`;
@@ -122,16 +122,16 @@ export const webTools = [
           const res = e === 'searxng' ? await searchSearxng(query, count, searx) : e === 'brave' ? await searchBrave(query, count, braveKey) : e === 'bing' ? await searchBing(query, count) : await searchDuckDuckGo(query, count);
           if (res.results.length) {
             const body = res.results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join('\n');
-            const out = { ok: true, result: `${res.engine}: ${res.results.length} träffar för "${query}"\n\n${body}`, meta: { engine: res.engine, count: res.results.length, query }, summary: `${res.engine} ${res.results.length} träffar` };
+            const out = { ok: true, result: `${res.engine}: ${res.results.length} results for "${query}"\n\n${body}`, meta: { engine: res.engine, count: res.results.length, query }, summary: `${res.engine} ${res.results.length} results` };
             cache.set(key, { at: Date.now(), res: out });
             return out;
           }
-          errors.push(`${e}: 0 träffar`);
+          errors.push(`${e}: 0 results`);
         } catch (err) {
           errors.push(`${e}: ${err.message}`);
         }
       }
-      return { ok: false, error: { code: 'search_failed', message: `ingen sökmotor svarade (${errors.join('; ')})`, hint: 'sätt tools.web.searxng eller tools.web.braveKey i config, eller kontrollera internetåtkomsten' } };
+      return { ok: false, error: { code: 'search_failed', message: `no search engine answered (${errors.join('; ')})`, hint: 'set tools.web.searxng or tools.web.braveKey in the config, or check internet access' } };
     },
   }),
 
@@ -139,19 +139,19 @@ export const webTools = [
     name: 'web.fetch',
     group: 'web',
     risk: 'read',
-    desc: 'Hämta en URL och få ren text (eller json/rådata). Används för dokumentation, API:er, sidor. Följer redirects, cap:ad storlek.',
+    desc: 'Fetch a URL as clean text (or json/raw). Use for docs, APIs and pages. Follows redirects, size-capped.',
     params: {
-      url: 'string: http(s)-adress',
+      url: 'string: http(s) address',
       extract: 'string: text | html | json | raw [text|html|json|raw]',
-      maxChars: 'number: max tecken i svar (default 24000)',
+      maxChars: 'number: max characters in the response (default 24000)',
       method: 'string: GET | POST | PUT | DELETE [GET|POST|PUT|DELETE]',
       headers: 'object: extra headers',
-      body: 'string: request body för POST/PUT',
+      body: 'string: request body for POST/PUT',
     },
     examples: ['web.fetch({url:"https://api.deepseek.com/models"})'],
         required: ['url'],
 async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {}, body }, ctx) {
-      if (!/^https?:\/\//i.test(url)) throw new Error('url måste börja med http:// eller https://');
+      if (!/^https?:\/\//i.test(url)) throw new Error('url must start with http:// or https://');
       const t0 = Date.now();
       const r = await httpGet(url, { timeoutSec: ctx.cfg.get('tools.web.timeoutSec') || 25, method, headers, body });
       const type = r.headers['content-type'] || '';
@@ -170,10 +170,10 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       }
       const clipped = text.length > maxChars ? `${text.slice(0, maxChars)}\n…[${text.length - maxChars} tecken klippt]` : text;
       ctx.emit?.({ type: 'web', url, status: r.status, chars: text.length });
-      if (!r.ok) return { ok: false, error: { code: `http_${r.status}`, message: `${r.status} för ${r.url}`, hint: r.status === 403 ? 'blockerad (bot-skydd). Försök en annan källa eller web.download.' : null } };
+      if (!r.ok) return { ok: false, error: { code: `http_${r.status}`, message: `${r.status} for ${r.url}`, hint: r.status === 403 ? 'blocked (bot protection). Try another source or web.download.' : null } };
       return {
         ok: true,
-        result: `${r.status} ${r.url} · ${type.split(';')[0] || 'okänd typ'} · ${r.body.length} byte${note ? ` ${note}` : ''}\n\n${clipped}`,
+        result: `${r.status} ${r.url} · ${type.split(';')[0] || 'unknown type'} · ${r.body.length} byte${note ? ` ${note}` : ''}\n\n${clipped}`,
         meta: { status: r.status, url: r.url, bytes: r.body.length, ms: Date.now() - t0, contentType: type },
         summary: `${r.status} ${new URL(r.url).host} (${r.body.length} byte)`,
       };
@@ -184,24 +184,24 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     name: 'web.download',
     group: 'web',
     risk: 'write',
-    desc: 'Ladda ner en fil till workspace (prover, arkiv, dokument). Körtbara filer kräver ett godkännande — du vill inte att en agent ska exekvera något av misstag.',
-    params: { url: 'string: adress', path: 'string: målfil (default under uploads/)', sha256: 'string: förväntad hash, verifieras om given' },
+    desc: 'Download a file into the workspace (samples, archives, documents). Executables require an approval — an agent should not run something by accident.',
+    params: { url: 'string: address', path: 'string: target file (default under uploads/)', sha256: 'string: expected hash, verified when given' },
     async run({ url, path: p, sha256 }, ctx) {
-      if (!/^https?:\/\//i.test(url)) throw new Error('url måste vara http(s)');
+      if (!/^https?:\/\//i.test(url)) throw new Error('url must be http(s)');
       const name = p || path.join('downloads', path.basename(new URL(url).pathname) || 'file.bin');
       const { abs } = resolveIn(ctx, name);
       const r = await httpGet(url, { timeoutSec: 120, maxBytes: ctx.cfg.get('tools.re.maxFileBytes') || 268435456 });
-      if (!r.ok) return { ok: false, error: { code: `http_${r.status}`, message: `${r.status} för ${url}` } };
+      if (!r.ok) return { ok: false, error: { code: `http_${r.status}`, message: `${r.status} for ${url}` } };
       const crypto = await import('node:crypto');
       const digest = crypto.createHash('sha256').update(r.body).digest('hex');
       if (sha256 && digest !== sha256.toLowerCase()) {
-        return { ok: false, error: { code: 'hash_mismatch', message: `sha256 ${digest} ≠ ${sha256}`, hint: 'filen har ändrats eller så är länken fel' } };
+        return { ok: false, error: { code: 'hash_mismatch', message: `sha256 ${digest} ≠ ${sha256}`, hint: 'the file changed or the link is wrong' } };
       }
       await fs.mkdir(path.dirname(abs), { recursive: true });
       await fs.writeFile(abs, r.body);
       bus.info('download', { url, bytes: r.body.length, path: abs });
       return {
-        result: `sparade ${abs} (${r.body.length} byte, sha256 ${digest})\nKör re.triage({path:"${abs}"}) för analys.`,
+        result: `saved ${abs} (${r.body.length} bytes, sha256 ${digest})\nRun re.triage({path:"${abs}") to analyze it.`,
         meta: { path: abs, bytes: r.body.length, sha256: digest },
         summary: `laddade ner ${path.basename(abs)} (${Math.round(r.body.length / 1024)} kB)`,
       };

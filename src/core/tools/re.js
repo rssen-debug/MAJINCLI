@@ -50,7 +50,7 @@ export const reTools = [
     name: 're.analyze',
     group: 'reverse',
     risk: 'read',
-    desc: 'Full triage av en binär: format, headers, sections+entropi, imports/exports, packare, YARA, IOC-strängar, opkodemönster, riskpoäng och föreslagna nästa steg. Starta här.',
+    desc: 'Full triage of a binary: format, headers, sections+entropy, imports/exports, packers, YARA, IOC strings, opcode patterns, a risk score and suggested next steps. Start here.',
     params: { path: 'string: fil att analysera', maxStrings: 'number: max antal strängar (default 4000)', rules: 'string: "builtin", "builtin+user" eller [auto|builtin|builtin+user]' },
     examples: ['re.analyze({path:"downloads/suspect.exe"})'],
     async run({ path: p, maxStrings = 4000, rules = 'builtin+user' }, ctx) {
@@ -96,7 +96,7 @@ export const reTools = [
     name: 're.strings',
     group: 'reverse',
     risk: 'read',
-    desc: 'Extrahera strängar (ascii + utf16) med offset. Filtrera med regex. Används för att hitta URL:er, vägar, mutexar, viktiga API-namn.',
+    desc: 'Extract strings (ascii + utf16) with offsets. Filter with a regex. Used to find URLs, paths, mutexes and important API names.',
     params: {
       path: 'string: fil',
       min: 'number: minsta längd (default 5)',
@@ -124,7 +124,7 @@ export const reTools = [
     name: 're.hexdump',
     group: 'reverse',
     risk: 'read',
-    desc: 'Hex-dump vid ett offset. Används för headers, overlay, packar-signaturer och RAW-jämförelse.',
+    desc: 'Hex dump at an offset. Used for headers, the overlay, packer signatures and raw comparison.',
     params: { path: 'string: fil', offset: 'string: 0x40 eller 64', length: 'number: antal byte (default 512, max 8192)' },
     async run({ path: p, offset = '0', length = 512 }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -139,7 +139,7 @@ export const reTools = [
     name: 're.search',
     group: 'reverse',
     risk: 'read',
-    desc: 'Mönsterjakt i bytes: "4d 5a ?? (e8|eb)" eller en textsträng. Returnerar offset + kontext.',
+    desc: 'Pattern hunt in bytes: "4d 5a ?? (e8|eb)" or a text string. Returns offset + context.',
     params: { path: 'string: fil', pattern: 'string: hex-mönster eller text', max: 'number: max träffar (default 60)', context: 'number: byte runt varje träff (default 24)' },
     async run({ path: p, pattern, max = 60, context = 24 }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -156,7 +156,7 @@ export const reTools = [
     name: 're.entropy',
     group: 'reverse',
     risk: 'read',
-    desc: 'Entropiprofil per sektion + block. Hög entropi = packad/krypterad. Används för att välja vad som ska packas upp.',
+    desc: 'Entropy profile per section + block. High entropy = packed or encrypted. Used to decide what to unpack.',
     params: { path: 'string: fil', block: 'number: blockstorlek i byte (default 1024)', threshold: 'number: markera över detta (default 7.0)' },
     async run({ path: p, block = 1024, threshold = 7.0 }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -181,7 +181,7 @@ export const reTools = [
     name: 're.sections',
     group: 'reverse',
     risk: 'read',
-    desc: 'Sektionstabla med flaggor, entropi och avvikelse (name/size/perm). Avvikelserna är det du ska titta på.',
+    desc: 'Section table with flags, entropy and deviation (name/size/perm). The deviations are what to look at.',
     params: { path: 'string: fil' },
     async run({ path: p }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -212,7 +212,7 @@ export const reTools = [
     name: 're.imports',
     group: 'reverse',
     risk: 'read',
-    desc: 'Importtabeller (DLL → funktioner) med riskmarkering. Delay imports inklusterade.',
+    desc: 'Import tables (DLL → functions) with risk flags. Delay imports included.',
     params: { path: 'string: fil', dll: 'string: filtrera på dll-namn', flagged: 'boolean: bara riskfyllda' },
     async run({ path: p, dll = '', flagged = false }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -237,7 +237,7 @@ export const reTools = [
     name: 're.exports',
     group: 'reverse',
     risk: 'read',
-    desc: 'Exporttabell (för DLL:er) + framförda exports. Används för att lista hook-/backend-funktioner.',
+    desc: 'Export table (for DLLs) + forwarded exports. Used to list hook and backend functions.',
     params: { path: 'string: fil', limit: 'number: max antal (default 200)' },
     async run({ path: p, limit = 200 }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -255,7 +255,7 @@ export const reTools = [
     name: 're.yara',
     group: 'reverse',
     risk: 'read',
-    desc: 'Kör YARA-regler (MAJINs inbyggda mini-motor, inget yara-binärt behövs). Egna regler kan läggas till i rules/majin.yar.',
+    desc: 'Run YARA rules with the built-in mini engine — no yara binary needed. Add your own rules in rules/majin.yar.',
     params: { path: 'string: fil', ruleText: 'string: egna regler i YARA-syntax', only: 'string: filtrera på regelnamn (regex)' },
     async run({ path: p, ruleText = '', only = '' }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -273,7 +273,7 @@ export const reTools = [
     name: 're.iocs',
     group: 'reverse',
     risk: 'read',
-    desc: 'Plocka ut och gruppera IOCs (URL:er, IPs, filvägar, registry-nycklar, mutexar, e-post, GUID) och löser domäner om du ber om det.',
+    desc: 'Pull out and group IOCs (URLs, IPs, file paths, registry keys, mutexes, e-mail, GUIDs) and resolve domains when asked.',
     params: { path: 'string: fil', resolve: 'boolean: gör DNS-uppslag på domäner', save: 'boolean: skriv listan till workspace/re/<namn>-iocs.json' },
     async run({ path: p, resolve = false, save = false }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -307,7 +307,7 @@ export const reTools = [
     name: 're.overlay',
     group: 'reverse',
     risk: 'read',
-    desc: 'Hämta (och ev. extrahera) datan efter sista sektionen — där packare och self-extractare gömmer sig.',
+    desc: 'Read (and optionally extract) the data after the last section — where packers and self-extractors hide.',
     params: { path: 'string: fil', extract: 'boolean: skriv overlayen till workspace/re/<namn>.overlay', maxPeek: 'number: byte att visa (default 256)' },
     async run({ path: p, extract = false, maxPeek = 256 }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -334,7 +334,7 @@ export const reTools = [
     name: 're.extract',
     group: 'reverse',
     risk: 'write',
-    desc: 'Extrahera ZIP/APK/asar-poster eller en PE-resurs till workspace. Används för att komma åt inbäddat innehåll.',
+    desc: 'Extract ZIP/APK/asar entries or a PE resource into the workspace. Used to reach embedded content.',
     params: { path: 'string: arkiv eller PE', entry: 'string: postnamn (regex) i arkivet', all: 'boolean: hämta alla matchande', resourceType: 'string: PE-resurs att dumpa (RCDATA, MANIFEST, VERSION)', out: 'string: målmapp (default workspace/re/<namn>)' },
     async run({ path: p, entry = '', all = false, resourceType = '', out = '' }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -378,7 +378,7 @@ export const reTools = [
     name: 're.apk',
     group: 'reverse',
     risk: 'read',
-    desc: 'Android-paket: permissions, komponenter, DEX-storlekar, signerare — utan apktool.',
+    desc: 'Android package: permissions, components, DEX sizes, signer — no apktool needed.',
     params: { path: 'string: .apk/.aab' },
     async run({ path: p }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -396,7 +396,7 @@ export const reTools = [
     name: 're.pcap',
     group: 'reverse',
     risk: 'read',
-    desc: 'Sammanfatta en pcap/pcapng: värdar, portar, HTTP-requestar och DNS-namn. Används för C2-trafik från en sandbox-körning.',
+    desc: 'Summarize a pcap/pcapng: hosts, ports, HTTP requests and DNS names. Used for C2 traffic from a sandbox run.',
     params: { path: 'string: .pcap/.cap' },
     async run({ path: p }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -410,7 +410,7 @@ export const reTools = [
     name: 're.diff',
     group: 'reverse',
     risk: 'read',
-    desc: 'Jämför två binärer (versioner, variantar, ren vs injicerad). Ger hash-/imports-/stränghamnad + sektionsdifferens.',
+    desc: 'Compare two binaries (versions, variants, clean vs injected). Gives hash/import/string deltas plus a section diff.',
     params: { a: 'string: första filen', b: 'string: andra filen', strings: 'number: antal strängar som jämförs' },
     async run({ a, b, strings = 6000 }, ctx) {
       const A = await load(ctx, a);
@@ -448,7 +448,7 @@ export const reTools = [
     name: 're.modules',
     group: 'reverse',
     risk: 'read',
-    desc: 'Moduler/DLL:er som laddats i en körande process + ovanliga sökvägar. Används för att se injection/hooking live.',
+    desc: 'Modules/DLLs loaded in a running process + unusual paths. Used to see injection or hooking live.',
     params: { process: 'string: processnamn eller pid', filter: 'string: regex på modulsökvägen' },
     async run({ process: proc = '', filter = '' }) {
       const { runShell, IS_WIN } = await import('./shell.js');
@@ -471,7 +471,7 @@ export const reTools = [
     name: 're.tool',
     group: 'reverse',
     risk: 'exec',
-    desc: 'Koppla på extern RE-verktyg när du behöver riktig kraft: ghidra (decompile), rizin, objdump, binwalk, upx, yara, jadx, apktool, ilspycmd. Auto-detekterar installerade verktyg.',
+    desc: 'Hook up external RE tools when you need real power: ghidra (decompile), rizin, objdump, binwalk, upx, yara, jadx, apktool, ilspycmd. Auto-detects what is installed.',
     params: {
       tool: 'string: ghidra | rizin | objdump | binwalk | upx | yara | jadx | apktool | ilspycmd | nm',
       path: 'string: filen som behandlas',
@@ -506,7 +506,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     name: 're.tools',
     group: 'reverse',
     risk: 'read',
-    desc: 'Vilka externa RE-verktyg som finns och vad som saknas. MAJINs egen parser behöver ingenting — detta är för djupare jobb.',
+    desc: 'Which external RE tools exist and what is missing. The built-in parser needs nothing — this is for deeper work.',
     params: { refresh: 'boolean: slå i PATH igen' },
     async run({ refresh = false }) {
       const d = await detectTools({ refresh: Boolean(refresh) });
@@ -519,7 +519,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     name: 're.disasm',
     group: 'reverse',
     risk: 'read',
-    desc: 'Disassemblera vid en address/offset. Använder rizin/objdump om de finns — annars bytes + mönsteranalys, aldrig gissningar.',
+    desc: 'Disassemble at an address/offset. Uses rizin/objdump when present — otherwise bytes + pattern analysis, never guesses.',
     params: { path: 'string: fil', address: 'string: 0x401000 eller offset', count: 'number: antal instruktioner (default 80)', mode: 'string: auto | rizin | objdump | bytes' },
     async run({ path: p, address = '0', count = 80, mode = 'auto' }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -548,7 +548,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     name: 're.unpack',
     group: 'reverse',
     risk: 'write',
-    desc: 'Försök packa upp kända packare. UPX går direkt; annars: entropi-/sektionsbedömning + carve av overlay.',
+    desc: 'Try to unpack known packers. UPX works directly; otherwise: entropy/section assessment + carving the overlay.',
     params: { path: 'string: fil', out: 'string: målfil' },
     async run({ path: p, out }, ctx) {
       const abs = resolveIn(ctx, p).abs;
@@ -579,7 +579,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     name: 're.hash',
     group: 'reverse',
     risk: 'read',
-    desc: 'MD5/SHA1/SHA256 + imphash för en eller flera filer. Används för att söka efter kända prover.',
+    desc: 'MD5/SHA1/SHA256 + imphash for one or more files. Used to look up known samples.',
     params: { path: 'string: fil, eller mapp med glob', glob: 'string: bara vid mapp (default *)' },
     async run({ path: p, glob = '*' }, ctx) {
       const { abs } = resolveIn(ctx, p);
@@ -604,7 +604,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     name: 're.rules',
     group: 'reverse',
     risk: 'read',
-    desc: 'Lista och spara YARA-regler i rules/majin.yar (agentens egen regeldatabas).',
+    desc: 'List and save YARA rules in rules/majin.yar (its own rule database).',
     params: { action: 'string: list | save | delete [list|save|delete]', name: 'string: reglens namn', text: 'string: regeltext (sparas i filen)' },
     async run({ action = 'list', name = '', text = '' }, ctx) {
       const file = path.join(dirs.rules, 'majin.yar');

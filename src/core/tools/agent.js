@@ -10,11 +10,11 @@ export const agentTools = [
     name: 'agent.plan',
     group: 'agent',
     risk: 'read',
-    desc: 'Skriv och uppdatera den synliga arbetslistan för sessionen. Används för mer än 3 steg; UI:t visar den live.',
+    desc: 'Write and update the visible work list for the session. Use it for more than 3 steps; the UI shows it live.',
     params: {
       items: 'array: [{"text":"gör detta","status":"todo|doing|done|blocked"}]',
       mode: 'string: replace | merge [replace|merge]',
-      note: 'string: kort varför planen ser ut så här',
+      note: 'string: briefly why the plan looks like this',
     },
     async run({ items = [], mode = 'replace', note }, ctx) {
       const norm = items.map((it, i) => ({
@@ -39,7 +39,7 @@ export const agentTools = [
     desc: 'Skicka ett delproblem till en subagent med eget stegbudschet (den ser dina verktyg men inte din historik). Används för parallellt gräv — t.ex. "analysera dessa 3 filer".',
     params: {
       tasks: 'array: [{"task":"beskriv uppgiften","job":"code|re|tasks|research","maxSteps":12}]',
-      parallel: 'boolean: kör alla samtidigt (default true)',
+      parallel: 'boolean: run them all at once (default true)',
     },
     examples: ['agent.delegate({tasks:[{task:"triage a.exe",job:"re"},{task:"triage b.exe",job:"re"}]})'],
     async run({ tasks = [], parallel = true }, ctx) {
@@ -66,8 +66,8 @@ export const agentTools = [
     name: 'agent.moa',
     group: 'agent',
     risk: 'read',
-    desc: 'Kör en extra Mixture-of-Agents-runda på ett delproblem (flera modeller parallellt + aggregator). Används vid svåra beslut, inte för allt.',
-    params: { question: 'string: underfrågan', context: 'string: bakgrund som behövs', width: 'number: antal referenser (default config)' },
+    desc: 'Run an extra Mixture-of-Agents round on a sub-problem (several models in parallel + an aggregator). Use for hard decisions, not for everything.',
+    params: { question: 'string: the sub-question', context: 'string: the background it needs', width: 'number: how many references (default: config)' },
     async run({ question, context, width }, ctx) {
       const { run: moaRun } = await import('../moa.js');
       const res = await moaRun({ cfg: ctx.cfg, question: String(question), context: context ? [{ role: 'system', content: String(context).slice(0, 6000) }] : [], job: ctx.cfg.get('routing.auto') === false ? 'analysis' : 'analysis', forceWidth: width ? Number(width) : undefined, emit: ctx.emit });
@@ -83,8 +83,8 @@ export const agentTools = [
     name: 'agent.approve',
     group: 'agent',
     risk: 'read',
-    desc: 'Svara på en väntande bekräftelse i UI:t (godkänn/avslå). Endast när användaren uttryckligen bett dig göra det.',
-    params: { id: 'string: approvals-id', approved: 'boolean: godkänn?', note: 'string: varför' },
+    desc: 'Answer a pending confirmation in the UI (approve/deny). Only when the user explicitly told you to.',
+    params: { id: 'string: approval id', approved: 'boolean: approve?', note: 'string: why' },
     async run({ id, approved, note }, ctx) {
       const { approvals } = await import('../guard.js');
       const ok = approvals.respond(String(id), Boolean(approved), note);
