@@ -58,7 +58,7 @@ export class WhatsApp {
       received: this.received,
       sent: this.sent,
       lastError: this.lastError,
-      hint: this.state === 'stopped' ? 'majin.pair whatsapp (baileys) eller fyll i cloud-token i config' : null,
+      hint: this.state === 'stopped' ? 'pair from the window (majin pair whatsapp) or fill in a cloud token in config' : null,
     };
   }
 
@@ -75,7 +75,7 @@ export class WhatsApp {
     const c = this.cfg.get('channels.whatsapp.cloud') || {};
     if (!c.accessToken || !c.phoneNumberId) {
       this.state = 'no-token';
-      this.lastError = 'cloud: accessToken + phoneNumberId saknas';
+      this.lastError = 'cloud: accessToken + phoneNumberId missing';
       return false;
     }
     this.state = 'connected';
@@ -92,7 +92,7 @@ export class WhatsApp {
       headers: { authorization: `Bearer ${c.accessToken}`, 'content-type': 'application/json' },
       body: JSON.stringify({ messaging_product: 'whatsapp', to: String(to).replace(/[^0-9]/g, ''), type: 'text', text: { preview_url: false, body: waOut(text) } }),
     }).catch((e) => null);
-    if (!res) return { ok: false, error: 'nätverksfel mot Meta' };
+    if (!res) return { ok: false, error: 'network error towards Meta' };
     const j = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, error: `${res.status} ${j.error?.message || ''}`.trim() };
     this.sent += 1;
@@ -102,7 +102,7 @@ export class WhatsApp {
   /** Meta webhook-validering (GET hub.challenge). */
   verifyWebhook(query) {
     const c = this.cfg.get('channels.whatsapp.cloud') || {};
-    if (!c.verifyToken) return { ok: false, error: 'channels.whatsapp.cloud.verifyToken är inte satt' };
+    if (!c.verifyToken) return { ok: false, error: 'channels.whatsapp.cloud.verifyToken is not set' };
     if (query['hub.mode'] !== 'subscribe' || query['hub.verify_token'] !== c.verifyToken) return { ok: false, error: 'verify_token matchar inte' };
     return { ok: true, challenge: query['hub.challenge'] };
   }
@@ -149,8 +149,8 @@ export class WhatsApp {
         baileys = await import('baileys');
       } catch {
         this.state = 'missing-dep';
-        this.lastError = 'baileys är inte installerat';
-        this.bus.warn('whatsapp.missing', { hint: 'kör: npm i @whiskeysockets/baileys qrcode' });
+        this.lastError = 'baileys is not installed';
+        this.bus.warn('whatsapp.missing', { hint: 'run: npm i @whiskeysockets/baileys qrcode' });
         return false;
       }
     }
@@ -183,19 +183,32 @@ export class WhatsApp {
       }
       if (connection === 'open') {
         this.state = 'connected';
+        this.retries = 0;
         this.qr = null;
         this.qrString = null;
-        this.linked = sock.user?.id || 'okänd';
+        this.linked = sock.user?.id || 'unknown';
         this.bus.info('whatsapp.connected', { jid: this.linked });
       }
       if (connection === 'close') {
         const code = lastDisconnect?.error?.output?.statusCode;
         const loggedOut = code === DisconnectReason?.loggedOut;
+        this.retries = (this.retries || 0) + 1;
+        const cap = Number(this.cfg.get('channels.whatsapp.maxRetries') || 6);
+        // A QR nobody scans must not retry every 3 s forever: log spam, CPU and needless
+        // WebSocket connections against WhatsApp. Back off, and stop once we clearly
+        // never got paired.
+        if (!loggedOut && !this.linked && this.retries > cap) {
+          this.state = 'stopped';
+          this.lastError = `gave up after ${cap} attempts (never paired)`;
+          this.bus.warn('whatsapp.gaveup', { attempts: this.retries, code });
+          return;
+        }
         this.state = loggedOut ? 'logged-out' : 'reconnecting';
-        this.lastError = `stängde (${code})`;
-        this.bus.warn('whatsapp.close', { code, loggedOut });
+        this.lastError = `closed (${code})`;
+        this.bus.warn('whatsapp.close', { code, loggedOut, retries: this.retries });
         if (!loggedOut && this.cfg.get('channels.whatsapp.enabled')) {
-          setTimeout(() => this.startBaileys().catch(() => {}), 3000).unref?.();
+          const delay = Math.min(3000 * 2 ** Math.max(0, this.retries - 1), 300000);
+          setTimeout(() => this.startBaileys().catch(() => {}), delay).unref?.();
         }
       }
     });
@@ -207,7 +220,7 @@ export class WhatsApp {
         const from = m.key.remoteJid;
         const allowed = this.cfg.get('channels.whatsapp.allowedJids') || [];
         if (allowed.length && !allowed.map(String).includes(String(from))) {
-          this.bus.warn('whatsapp.blocked', { from, code: `skicka "pair ${from.split('@')[0]}" för att släppa in` });
+          this.bus.warn('whatsapp.blocked', { from, code: `skicka "pair ${from.split('@')[0]}" to grant access` });
           continue;
         }
         this.received += 1;
@@ -237,7 +250,7 @@ export class WhatsApp {
   }
 
   async sendDocument(jid, filePath, caption = '') {
-    if (!fs.existsSync(filePath)) return { ok: false, error: 'filen saknas' };
+    if (!fs.existsSync(filePath)) return { ok: false, error: 'the file is missing' };
     if (!this.sock) return { ok: false, error: 'ingen whatsapp-session' };
     const res = await this.sock.sendMessage(jid, { document: { url: filePath }, caption: waOut(caption) }).catch((e) => ({ error: e.message }));
     return res?.error ? { ok: false, error: res.error } : { ok: true };

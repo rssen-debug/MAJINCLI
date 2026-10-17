@@ -46,7 +46,7 @@ export function capText(text, max) {
   const tail = s.slice(s.length - Math.floor(max * 0.24));
   const file = spill('tool-output.txt', s);
   return {
-    text: `${head}\n\n…${s.length - head.length - tail.length} tecken utelämnade…\n${tail}\n\n[full output: ${file || 'kunde inte sparas'}]`,
+    text: `${head}\n\n…${s.length - head.length - tail.length} characters omitted…\n${tail}\n\n[full output: ${file || 'could not be saved'}]`,
     spilled: file,
     clipped: true,
     chars: s.length,
@@ -91,7 +91,7 @@ export async function compact({ cfg, messages, brief }) {
     const nextBrief = (res.text || '').trim();
     bus.info('context.compacted', { before: now, headDropped: head.length, briefChars: nextBrief.length });
     return {
-      messages: [{ role: 'system', content: `ARBETSMINNESBRIEF (från MAJIN, komprimerad historik):\n${nextBrief}` }, ...tail],
+      messages: [{ role: 'system', content: `WORKING MEMORY BRIEF (from MAJIN, compressed history):\n${nextBrief}` }, ...tail],
       brief: nextBrief,
       compacted: true,
       tokens: messagesTokens(tail) + estimateTokens(nextBrief),

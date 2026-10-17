@@ -50,7 +50,7 @@ test('validatePatch: känn vid toppnycklar, rutter och regex', () => {
   assert.equal(validatePatch({ name: 'X' }, clone(DEFAULTS)).length, 0);
   const bad = validatePatch({ bogus: 1 }, clone(DEFAULTS));
   assert.equal(bad.length, 1);
-  assert.match(bad[0].msg, /okänd toppnyckel/);
+  assert.match(bad[0].msg, /unknown top-level key/);
   assert.ok(validatePatch({ models: { routes: { snusk: 'a/b' } } }, clone(DEFAULTS)).length > 0);
   assert.ok(validatePatch({ models: { routes: { code: 'utankustav/' } } }, clone(DEFAULTS)).length > 0);
   assert.ok(validatePatch({ moa: { references: [{ model: 'a/b' }] } }, clone(DEFAULTS)).length > 0);

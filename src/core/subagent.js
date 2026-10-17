@@ -12,10 +12,10 @@ export async function run({ cfg, task, job = 'tasks', maxSteps = 10, registry, s
     {
       role: 'system',
       content: [
-        `Du är en subagent inom ${cfg.get('name')}. Du får en avgränsad uppgift och levererar ett komprimerat faktasvar — ingen konversation, ingen självberättelse.`,
-        `Verktyg: ${registry.list().length} tillgängliga, alla på. Jobb: ${job}, modell: ${route?.ref || 'default'}.`,
-        'Jobba tyst: kör verktyg, samla bevis, svara sedan med 3–12 rader: vad du hittade, sökvägar/värden, osäkerheter.',
-        memory?.digest?.() ? `Kontext från minnet:\n${memory.digest().slice(0, 900)}` : '',
+        `You are a subagent inside ${cfg.get('name')}. You get one bounded task and deliver a compressed factual answer — no conversation, no self-narratelse.`,
+        `Verktyg: ${registry.list().length} available, all on. Job: ${job}, modell: ${route?.ref || 'default'}.`,
+        'Work quietly: run tools, gather evidence, then answer with 3-12 lines: what you found, paths/values, uncertainties.',
+        memory?.digest?.() ? `Context from memory:\n${memory.digest().slice(0, 900)}` : '',
       ]
         .filter(Boolean)
         .join('\n'),

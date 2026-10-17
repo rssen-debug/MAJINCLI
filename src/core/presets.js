@@ -23,7 +23,7 @@ export const PRESETS = {
     keyEnv: 'OPENROUTER_API_KEY',
     keyUrl: 'https://openrouter.ai/settings/keys',
     models: ['deepseek/deepseek-flash', 'anthropic/claude-sonnet-5', 'openai/gpt-5.2', 'x-ai/grok-4-fast'],
-    notes: '200+ modeller, en nyckel. Bra för MOA-reference.',
+    notes: '200+ models, one key. Good for MOA references.',
   },
   nous: {
     label: 'Nous Portal',
@@ -41,7 +41,7 @@ export const PRESETS = {
     keyEnv: 'GROQ_API_KEY',
     keyUrl: 'https://console.groq.com/keys',
     models: ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b'],
-    notes: 'Låg latens — bra för tool-loop och röst.',
+    notes: 'Low latency — good for the tool loop and voice.',
   },
   openai: {
     label: 'OpenAI',
@@ -58,7 +58,7 @@ export const PRESETS = {
     keyEnv: 'ANTHROPIC_API_KEY',
     keyUrl: 'https://console.anthropic.com/settings/keys',
     models: ['claude-sonnet-5', 'claude-opus-4-6'],
-    notes: 'Native messages-API översätts internt, verktyg fungerar som annars.',
+    notes: 'The native messages API is translated internally, tools work as usual.',
   },
   gemini: {
     label: 'Google Gemini',
@@ -75,7 +75,7 @@ export const PRESETS = {
     keyEnv: null,
     apiKey: 'ollama',
     models: ['qwen3-coder:30b', 'deepseek-r1:14b', 'llama3.2:3b'],
-    notes: 'Ingen nyckel behövs. Kostar 0 kr — används som fallback när molnet strular.',
+    notes: 'No key needed. Costs nothing — used as a fallback when the cloud misbehaves.',
   },
   lmstudio: {
     label: 'LM Studio (lokalt)',
@@ -92,7 +92,7 @@ export const PRESETS = {
     keyEnv: null,
     apiKey: 'mock',
     models: ['demo-fast', 'demo-pro'],
-    notes: 'Rubricerad provider för att testa agenten offline. Ingen data lämnar datorn.',
+    notes: 'Scripted provider for testing the agent offline. No data leaves the machine.',
   },
 };
 

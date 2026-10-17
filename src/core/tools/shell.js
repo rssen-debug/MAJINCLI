@@ -168,7 +168,7 @@ export const shellTools = [
     params: { id: 'string: filter on one job id', tail: 'number: output lines per job (default 30)' },
     async run({ id = '', tail = 30 }) {
       const list = [...jobs.values()].filter((j) => !id || j.id === id);
-      if (!list.length) return { result: 'inga bakgrundsjobb', summary: '0 jobb' };
+      if (!list.length) return { result: 'no background jobs', summary: '0 jobb' };
       const out = list
         .map((j) => {
           const secs = Math.round((Date.now() - j.started) / 1000);

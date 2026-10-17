@@ -21,7 +21,7 @@ const SIGS = [
   { kind: 'wasm', magic: '\0asm', exts: ['.wasm'] },
   { kind: 'shell', magic: '#!', name: 'Script med shebang', exts: ['.sh'] },
   { kind: 'hex', name: 'Intel HEX', magic: ':02000002', exts: ['.hex', '.ihex'] },
-  { kind: 'bin', name: 'Okänd binär', exts: ['.bin', '.dat', '.raw'] },
+  { kind: 'bin', name: 'Unknown binary', exts: ['.bin', '.dat', '.raw'] },
 ];
 
 export function detectFormat(buf) {
@@ -36,7 +36,7 @@ export function detectFormat(buf) {
     const kind = /<\?xml|^<[a-z!]/i.test(s) ? 'xml' : /^\s*[{[]/.test(s) ? 'json' : /^\s*(?:function|const|let|=>|import |require\()/m.test(s) ? 'js' : /(^|\n)\s*(def |class |import |from \w+ import)/.test(s) ? 'python' : /CREATE TABLE|SELECT .* FROM/i.test(s) ? 'sql' : /<html|<script/i.test(s) ? 'html' : 'text';
     return { kind, name: `Text (${kind})`, detected: `${kind} (text)`, text: true };
   }
-  return { kind: 'unknown', name: 'Okändt format', detected: 'ingen känd signatur' };
+  return { kind: 'unknown', name: 'Unknown format', detected: 'no known signature' };
 }
 
 export function looksText(buf) {
@@ -106,13 +106,13 @@ export function peekContainer(buf, { name = '', strings = [] } = {}) {
   }
   const asar = strings.find((s) => s.includes('"header_size"') || s.includes('electron.asar'));
   if (asar || /\.asar$/i.test(lower)) out.push({ kind: 'asar', note: 'Electron-arkiv — packa upp med npx @electron/asar' });
-  if (strings.some((s) => /classes\d*\.dex/.test(s))) out.push({ kind: 'dex', note: 'Android DEX i behållare' });
+  if (strings.some((s) => /classes\d*\.dex/.test(s))) out.push({ kind: 'dex', note: 'Android DEX in a container' });
   const nsis = strings.some((s) => /Nullsoft Inst|NSIS/i.test(s));
   if (nsis) out.push({ kind: 'nsis', note: 'NSIS-installationsprogram — Extrahera med 7z/unsis' });
   const inno = strings.some((s) => /Inno Setup/i.test(s));
   if (inno) out.push({ kind: 'inno', note: 'Inno Setup — extrahera med innounp' });
   const msi = buf.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
-  if (msi) out.push({ kind: 'ole', note: 'OLE/MSI-container (compound file) — läs strömmarna' });
+  if (msi) out.push({ kind: 'ole', note: 'OLE/MSI container (compound file) — read the streams' });
   return out;
 }
 

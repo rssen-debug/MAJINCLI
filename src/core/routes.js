@@ -137,15 +137,20 @@ export function parseIntent(text, cfg) {
   let matched = false;
   let m;
 
-  /* 1) API key: "här är min nyckel sk-…", "sätt nyckeln för deepseek: …" */
+  /* 1) API key: "here is my key sk-…", "set the deepseek key to sk-…".
+     Kravet på avstånd (<= 40 tecken mellan avsiktsordet och nyckeln) är hela poängen: en
+     användare som klistrar in en logg eller frågar om en fil som råkar nämna en nyckel får
+     inte sin config överskriven. */
   const keyHit =
-    /(?:nyckel|key|token)\s*(?:är|:|=|till|för)?\s*[`'"]?((?:sk|pk|ghp|xoxb|nanogpt|AIza)[-\w]{16,})[`'"]?/i.exec(s) ||
-    /((?:sk|pk)-[A-Za-z0-9_-]{20,})/.exec(s);
+    /(?:nyckel|key|token|apikey|api_key)[\s,:=-]{0,8}(?:är|is|:|=)[\s,:=-]{0,8}[`'"]?((?:sk|pk|ghp|xoxb|nanogpt|AIza)[-\w]{16,})[`'"]?/i.exec(s) ||
+    /\b(?:set|sätt|use|använd|byta?ter|here|här|save|spara)\b[^.\n]{0,40}?((?:sk|pk)-[A-Za-z0-9_-]{20,})/i.exec(s) ||
+    /* bara nyckeln i meddelandet = entydig avsikt, inget att misstolka */
+    /^\s*[`'"]?((?:sk|pk)-[A-Za-z0-9_-]{20,})[`'"]?\s*$/.exec(s);  // a message that is only a key
   if (keyHit) {
     const provider = /(deepseek|openrouter|groq|anthropic|openai|gemini|nous|ollama|lmstudio|portal)[^\w]?/i.exec(s)?.[1] || cfg.get('models.provider') || 'deepseek';
     patch.providers = patch.providers || {};
     patch.providers[provider] = { apiKey: keyHit[1] };
-    notes.push(`sparade nyckeln som provider "${provider}"`);
+    notes.push(`saved the key as provider "${provider}"`);
     matched = true;
   }
 
@@ -326,6 +331,25 @@ export function parseIntent(text, cfg) {
   if (/spara inga (loggar|minnen)|glöm allt|minne av|don'?t (store|save|keep) (any )?(memor|minnen)|no memor|stop remembering|forget everything|memory off/i.test(s)) {
     patch.memory = { auto: false };
     notes.push('auto-memory off');
+    matched = true;
+  }
+
+  /* 9) learning from runs — samma form som minnet: en flagga, reversibel, inget lämnar maskinen */
+  const OFF = /\b(stop|don'?t|do\s+not|dont|never|turn off|disable|sluta|avsluta)\b/i;
+  const OBJECT = /\b(runs?|turns?|trajector\w*|sessions?|dataset|training data|träningsdata|körningar|svar)\b/i;
+  const ON = (/\b(learn|train|record|capture|save|collect)\b[^.!?]{0,28}\b(runs?|turns?|trajector\w*|sessions?|data)\b/.test(s) && OBJECT.test(s)
+    && /\b(my|our|majin'?s|dataset|training)\b/i.test(s))
+    || /\bdataset (on|enable|mode)\b/.test(s) || /lär (dig|av)|samla (tränings|träningsdata)/i.test(s);
+  const OFF_HIT = (/\b(stop|don'?t|do\s+not|dont|never|turn off|disable|sluta|avsluta)\b[^.!?]{0,28}\b(learn|record\w*|captur\w*|collect\w*|train\w*|sav\w*)\b/.test(s)
+    || /\bdataset (off|disable)\b/i.test(s)
+    || /ingen träningsdata|sluta (lära|spela in|logga)/i.test(s)) && OBJECT.test(s);
+  if (OFF_HIT) {
+    patch.dataset = { capture: false };
+    notes.push('dataset capture OFF — nothing new is recorded');
+    matched = true;
+  } else if (ON && !OFF.test(s)) {
+    patch.dataset = { capture: true };
+    notes.push('dataset capture ON — stored locally after redaction, export by hand, never uploaded');
     matched = true;
   }
 

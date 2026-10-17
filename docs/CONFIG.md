@@ -142,20 +142,49 @@ is the job used when the classifier did not pick one.
 
 ```jsonc
 "channels": {
-  "telegram": { "enabled": true, "botToken": null, "allowedChatIds": [], "pairingCode": null,
-                "parseMode": "HTML", "reactions": true, "proxy": null, "apiBase": "…" },
-  "whatsapp": { "enabled": false, "allowFrom": [], "pairingCode": null, "webhook": {
-                "enabled": false, "host": "0.0.0.0", "port": 8788, "path": "/whatsapp",
-                "tunnel": "none", "appId": null, "appSecret": null, "verifyToken": null } }
+  "telegram": { "enabled": true, "botToken": null, "apiBase": "https://api.telegram.org",
+                "allowedChatIds": [], "pairingCode": null, "pollTimeoutSec": 30,
+                "parseMode": "HTML", "proxy": null, "reactions": true },
+  "whatsapp": { "enabled": true, "transport": "baileys",          // baileys | cloud
+                "baileys": { "sessionDir": "whatsapp", "verbose": false },
+                "cloud": { "accessToken": null, "phoneNumberId": null, "verifyToken": null,
+                            "apiVersion": "v23.0", "appSecret": null, "allowedNumbers": [] },
+                "allowedJids": [], "replyPrefix": "", "maxMessageChars": 4000, "maxRetries": 6 },
+  "shared":   { "forwardToChat": true, "requirePairing": true, "idleSessionCloseMin": 720,
+                "deliverTo": null, "replyWhileStreaming": false },
+  "webhook":  { "enabled": false, "host": "0.0.0.0", "port": 8788, "path": "/whatsapp",
+                "tunnel": "none" }
 },
 "schedule": { "enabled": true, "timezone": "local", "maxConcurrent": 2, "tickMs": 20000 },
 "budget":   { "mode": "track", "monthlyUsd": 0, "warnAt": 0.8 }
 ```
 
-`enabled` on a channel means "start it if a token/creds exist" — nothing dials a tool off.
-`allowedChatIds` / `allowFrom` are the allow-lists; empty means only the paired chat (a pairing
+`enabled` on a channel means "start it if a token/creds exist" — nothing dials a tool off. With
+`transport: "baileys"` and no session on disk, MAJIN shows a QR in the window; a QR nobody scans
+retries with exponential backoff and then stops (`maxRetries`, default 6, ends in state `stopped`
+rather than reconnecting every three seconds forever). `cloud` talks to Meta's Graph API instead and
+needs `accessToken` + `phoneNumberId`; the webhook URL is `http://<host>:<webhook.port><path>`.
+`allowedChatIds` / `allowedJids` are the allow-lists; empty means only the paired chat (a pairing
 run stores your chat id). `budget.mode: "cap"` refuses to start a turn that would cross
 `monthlyUsd`; `"track"` only warns at `warnAt` (80 %) and the UI chip turns amber.
+
+## Dataset (learning from your own runs)
+
+```jsonc
+"dataset": {
+  "capture": false,          // nothing is recorded until you or the user says so
+  "dir": null,               // null = <data dir>/dataset
+  "keepDays": 90,            // trimmed on start-up
+  "include": { "answer": true, "toolArgs": true, "plan": true }
+}
+```
+
+One JSONL line per turn: instruction, plan, tool sequence with arguments, answer, usage, error and a
+`rating` that stays `null` until you label it. Redaction runs before every write and cannot be
+switched off; a turn that says "do not save this" is skipped entirely. There is **no** `upload` key —
+`dataset.upload` is rejected by validation, because the only way data leaves the machine is you
+carrying the exported file. [docs/DATA.md](DATA.md) documents the record shape, the switches and the
+CLI (`majin dataset on|off|list|export|purge`).
 
 ## UI
 

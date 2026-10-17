@@ -8,46 +8,46 @@
 export const API_RISK = [
   { re: /^CreateRemoteThread(Ex)?$/, sev: 5, why: 'kodinjectering', tags: ['inject'] },
   { re: /^WriteProcessMemory$/, sev: 5, why: 'skriver in minne i annan process', tags: ['inject'] },
-  { re: /^ReadProcessMemory$/, sev: 3, why: 'läser annans minne', tags: ['steal'] },
-  { re: /^VirtualAlloc(Ex)?$/, sev: 3, why: 'reserverar körbart minne — shellcode-steg 1', tags: ['mem'] },
-  { re: /^VirtualProtect(Ex)?$/, sev: 4, why: 'ändrar skydd på minne — packare/klargör shellcode', tags: ['mem'] },
+  { re: /^ReadProcessMemory$/, sev: 3, why: 'reads another process memory', tags: ['steal'] },
+  { re: /^VirtualAlloc(Ex)?$/, sev: 3, why: 'reserves executable memory — shellcode step 1', tags: ['mem'] },
+  { re: /^VirtualProtect(Ex)?$/, sev: 4, why: 'changes memory protection — packer/shellcode staging', tags: ['mem'] },
   { re: /^NtUnmapViewOfSection$/, sev: 5, why: 'process hollowing', tags: ['inject', 'hollow'] },
   { re: /^SetWindowsHookEx[AW]?$/, sev: 4, why: 'keylogger/mhook', tags: ['keylog'] },
   { re: /^GetAsyncKeyState$/, sev: 3, why: ' tangenttryckningar', tags: ['keylog'] },
   { re: /^(URL)?DownloadTo(CacheFile|File)[AW]?$/, sev: 5, why: 'downloads code', tags: ['downloader'] },
-  { re: /^InternetReadFile$/, sev: 3, why: 'hämtar data över nätet', tags: ['net'] },
+  { re: /^InternetReadFile$/, sev: 3, why: 'fetches data over the network', tags: ['net'] },
   { re: /^WinHttp.*/, sev: 2, why: 'http-klient', tags: ['net'] },
   { re: /^URLDownloadToFileWithProgress$/, sev: 5, why: 'downloader', tags: ['downloader'] },
   { re: /^(CreateFile|WriteFile)$/, sev: 1, why: 'fil-io (bara intressant i kluster)', tags: ['fs'] },
   { re: /^Reg(SetValue|CreateKey|OpenKey|DeleteKey)[AW]?$/, sev: 3, why: 'skriver i registret (persistence)', tags: ['persist'] },
   { re: /^SHDeleteKey[AW]?$/, sev: 4, why: 'raderar registernyckel', tags: ['persist'] },
-  { re: /^WinExec$/, sev: 4, why: 'kör kommando', tags: ['exec'] },
-  { re: /^ShellExecute[EW]?[AW]?$/, sev: 3, why: 'startar process', tags: ['exec'] },
-  { re: /^CreateProcess[AW]?$/, sev: 2, why: 'startar process', tags: ['exec'] },
-  { re: /^Crypt(Encrypt|Decrypt)(File)?[AW]?$/, sev: 3, why: 'kryptering — ransomware använder detta', tags: ['crypt'] },
-  { re: /^CryptDeriveKey$/, sev: 3, why: 'nyckelhärledning', tags: ['crypt'] },
+  { re: /^WinExec$/, sev: 4, why: 'runs a command', tags: ['exec'] },
+  { re: /^ShellExecute[EW]?[AW]?$/, sev: 3, why: 'starts a process', tags: ['exec'] },
+  { re: /^CreateProcess[AW]?$/, sev: 2, why: 'starts a process', tags: ['exec'] },
+  { re: /^Crypt(Encrypt|Decrypt)(File)?[AW]?$/, sev: 3, why: 'encryption — ransomware uses this', tags: ['crypt'] },
+  { re: /^CryptDeriveKey$/, sev: 3, why: 'key derivation', tags: ['crypt'] },
   { re: /^BCrypt.*/, sev: 2, why: 'cng-krypto', tags: ['crypt'] },
-  { re: /^Process32(First|Next)32(2)?$/, sev: 3, why: 'räknar processer (recon)', tags: ['recon'] },
+  { re: /^Process32(First|Next)32(2)?$/, sev: 3, why: 'enumerates processes (recon)', tags: ['recon'] },
   { re: /^LogicalProcessorInformation$/, sev: 2, why: 'VM-detection', tags: ['vm'] },
   { re: /^GetSystemFirmwareTable$/, sev: 4, why: 'klassisk VM/sandbox-detection', tags: ['vm'] },
-  { re: /^QueryPerformanceCounter$/, sev: 1, why: 'tidsmätning (anti-debug, men också benchmark)', tags: ['anti_dbg'] },
+  { re: /^QueryPerformanceCounter$/, sev: 1, why: 'timing (anti-debug, but also benchmarks)', tags: ['anti_dbg'] },
   { re: /^IsDebuggerPresent$/, sev: 5, why: 'anti-debug', tags: ['anti_dbg'] },
   { re: /^CheckRemoteDebuggerPresent$/, sev: 5, why: 'anti-debug', tags: ['anti_dbg'] },
   { re: /^NtQueryInformationProcess$/, sev: 4, why: 'anti-debug via ProcessDebugFlags', tags: ['anti_dbg'] },
   { re: /^OutputDebugStringA?$/, sev: 2, why: 'last error side-channel anti-debug', tags: ['anti_dbg'] },
-  { re: /^Sleep$/, sev: 1, why: 'sandbox-fördröjning (vanligt, svagt tecken)', tags: ['anti_dbg'] },
+  { re: /^Sleep$/, sev: 1, why: 'sandbox delay (common, weak signal)', tags: ['anti_dbg'] },
   { re: /^GetTickCount(64)?$/, sev: 1, why: 'sandbox-tidscheck', tags: ['anti_dbg'] },
   { re: /^DeleteFile[AW]?$/, sev: 2, why: 'raderar filer', tags: ['fs'] },
   { re: /^MoveFileWithProgress[AW]?$/, sev: 3, why: 'flyttar/utbyter filer (pending file rename ops)', tags: ['persist'] },
-  { re: /^AdjustTokenPrivileges$/, sev: 4, why: 'höjer behörighet', tags: ['priv'] },
-  { re: /^OpenProcessToken$/, sev: 3, why: 'åtkomst till process-token', tags: ['priv'] },
-  { re: /^LookupPrivilegeValue[AW]?$/, sev: 3, why: 'slår upp privilegium (t.ex. SeDebugPrivilege)', tags: ['priv'] },
+  { re: /^AdjustTokenPrivileges$/, sev: 4, why: 'raises privilege', tags: ['priv'] },
+  { re: /^OpenProcessToken$/, sev: 3, why: 'access to a process token', tags: ['priv'] },
+  { re: /^LookupPrivilegeValue[AW]?$/, sev: 3, why: 'looks up privileges (e.g. SeDebugPrivilege)', tags: ['priv'] },
   { re: /^LsaOpenPolicy$/, sev: 5, why: 'LSA-policy — credential theft', tags: ['creds'] },
-  { re: /^NetUser(Enum|Add|GetInfo)/, sev: 3, why: 'användarrecon / konton', tags: ['recon'] },
-  { re: /^WNetAddConnection2[AW]?$/, sev: 3, why: 'monterar nätverksresurs (lateral)', tags: ['lateral'] },
+  { re: /^NetUser(Enum|Add|GetInfo)/, sev: 3, why: 'user recon / accounts', tags: ['recon'] },
+  { re: /^WNetAddConnection2[AW]?$/, sev: 3, why: 'mounts a network resource (lateral movement)', tags: ['lateral'] },
   { re: /^CreateNamedPipe[AW]?$/, sev: 3, why: 'pipe — C2/staging', tags: ['c2'] },
-  { re: /^SetThreadContext$/, sev: 4, why: 'skriver över trådkontext (hollowing)', tags: ['inject'] },
-  { re: /^ResumeThread$/, sev: 3, why: 'släpper på suspended thread (process injection)', tags: ['inject'] },
+  { re: /^SetThreadContext$/, sev: 4, why: 'overwrites a thread context (hollowing)', tags: ['inject'] },
+  { re: /^ResumeThread$/, sev: 3, why: 'releases a suspended thread (process injection)', tags: ['inject'] },
   { re: /^CreateToolhelp32Snapshot$/, sev: 3, why: 'process/toolhelp snapshot', tags: ['recon'] },
   { re: /^Vss?.*(Create|Delete)/, sev: 5, why: 'skuggkopior — ransomware-prep', tags: ['ransom'] },
   { re: /^GetVolumeInformation[AW]?$/, sev: 2, why: 'volymsinfo (ransomware mappar)', tags: ['ransom'] },
@@ -118,17 +118,17 @@ export function detectPackers({ sections = [], overlay = {}, strings = '', impor
   const ent = sections.filter((s) => s.rawSize > 512).map((s) => s.entropy || 0);
   const high = ent.length ? ent.reduce((a, b) => a + b, 0) / ent.length : 0;
   const execWrite = sections.filter((s) => s.executable && s.writable).map((s) => s.name);
-  if (high > 7.35 && importsCount < 6) hits.push({ packer: 'okänd packare/arkiv', evidence: `hög entropi (${high.toFixed(2)}) + nästan inga imports` });
+  if (high > 7.35 && importsCount < 6) hits.push({ packer: 'unknown packer/archive', evidence: `high entropy (${high.toFixed(2)}) + almost no imports` });
   if (execWrite.length) hits.push({ packer: 'RWX section', evidence: execWrite.join(', '), severity: 4 });
   if (overlay.size > 4096) hits.push({ packer: 'overlay-data', evidence: `${overlay.size} byte efter sista sektionen (signatur, arkiv eller payload)` });
-  for (const l of LINKER_STAMPS) if (l.re.test(strings)) hits.push({ packer: l.name, evidence: 'strängsignatur', severity: l.sev, runtime: true });
+  for (const l of LINKER_STAMPS) if (l.re.test(strings)) hits.push({ packer: l.name, evidence: 'string signature', severity: l.sev, runtime: true });
   const uniq = new Map();
   for (const h of hits) if (!uniq.has(h.packer)) uniq.set(h.packer, h);
   return [...uniq.values()];
 }
 
 /**
- * Riskpoäng 0-100. Bara ett mått på "vad bör en människa eller en modell titta på",
+ * Riskpoäng 0-100. Bara ett mått på "what a human or a model should look at",
  * inte ett domslut. Rapporteras alltid med sina grunder.
  */
 export function risk(report) {

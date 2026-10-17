@@ -77,6 +77,8 @@ async function main() {
     case 're':
     case 'analyze':
       return re();
+    case 'dataset':
+      return dataset();
     case 'test':
       return test();
     case 'version':
@@ -101,7 +103,7 @@ async function start() {
   const alive = await ping(port);
   if (alive) {
     process.stdout.write(`MAJIN already runs on :${port} — ${alive.url}\n`);
-    if (flags.window !== false) openWindow(alive.url);
+    if (flags.window !== false && !flags.noBrowser) openWindow(alive.url);
     return;
   }
   const self = (() => {
@@ -112,7 +114,10 @@ async function start() {
     }
     return process.argv[1];
   })();
-  const child = spawn(process.execPath === self ? self : process.execPath, [self, '_serve', ...(flags.json ? ['--json'] : []), ...(flags.port ? [`--port=${flags.port}`] : []), ...(flags.noChannels || flags.channels === false ? ['--no-channels'] : [])], {
+  // Skicka vidare allt användaren faktiskt skrev — annars tappas --host/--no-browser/--no-channels
+  // och barnet kör på standarderna (0.0.0.0, webbbläsare, whatsapp-försök).
+  const pass = argv.filter((a) => !/^--(no-window|window)$/.test(a) && a !== 'start');
+  const child = spawn(process.execPath === self ? self : process.execPath, [self, '_serve', ...pass], {
     stdio: 'inherit',
     env: { ...process.env, MAJIN_PORT: String(port) },
   });
@@ -126,13 +131,18 @@ async function start() {
   });
   process.on('SIGINT', () => child.kill('SIGINT'));
   process.on('SIGTERM', () => child.kill('SIGTERM'));
-  if (!flags.noWindow && flags.window !== false) setTimeout(() => openWindow(`http://127.0.0.1:${port}/?t=${cfg.get('server.token')}`), 900);
+  if (!flags.noWindow && flags.window !== false && !flags.noBrowser && flags.browser !== false) setTimeout(() => openWindow(`http://127.0.0.1:${port}/?t=${cfg.get('server.token')}`), 900);
   return new Promise((r) => child.on('exit', r));
 }
 
 async function serve() {
-  const rt = await createRuntime({ channels: flags.channels !== false, scheduler: true });
-  if (flags.port) rt.cfg.patch({ server: { port: Number(flags.port) } });
+  const wantChannels = !(flags.noChannels || flags.channels === false);
+  const rt = await createRuntime({ channels: wantChannels, scheduler: true });
+  const serverPatch = {};
+  if (Number(flags.port)) serverPatch.port = Number(flags.port);
+  if (typeof flags.host === 'string' && flags.host) serverPatch.host = flags.host;
+  if (flags.noBrowser || flags.browser === false) serverPatch.openBrowser = false;
+  if (Object.keys(serverPatch).length) rt.cfg.patch({ server: serverPatch });
   const { createServer } = await import('../core/server/index.js');
   const server = createServer(rt);
   const port = Number(process.env.MAJIN_PORT || rt.cfg.get('server.port') || 8787);
@@ -141,16 +151,16 @@ async function serve() {
   const url = `http://127.0.0.1:${port}/?t=${rt.cfg.get('server.token')}`;
   process.stdout.write([
     `MAJIN ${VERSION} listening on http://${host}:${port}`,
-    `  konfigur   ${rt.cfg.file}`,
+    `  config     ${rt.cfg.file}`,
     `  workspace  ${rt.cfg.get('workspace')}`,
     `  tools      ${rt.registry.list().length} (all on, always)`,
     `  MOA        ${rt.cfg.get('moa.policy')} · width ${rt.cfg.get('moa.width')} → ${String(rt.cfg.get('moa.aggregator') || '').split('/').pop()}`,
     `  provider   ${rt.cfg.get('models.provider')} (${rt.cfg.providerStatus().filter((p) => p.ready).map((p) => p.name).join(', ') || 'no key — demo'})`,
-    `  channels   telegram ${rt.cfg.get('channels.telegram.botToken') ? 'token ok' : 'no token'} · whatsapp ${rt.cfg.get('channels.whatsapp.transport')}`,
+    `  channels   ${wantChannels ? `telegram ${rt.cfg.get('channels.telegram.botToken') ? 'token ok' : 'no token'} · whatsapp ${rt.cfg.get('channels.whatsapp.transport')}` : 'off (--no-channels)'}`,
     `  open       ${url}`,
     '',
   ].join('\n'));
-  if (rt.cfg.get('server.openBrowser') !== false && !flags.noWindow) openWindow(url);
+  if (rt.cfg.get('server.openBrowser') !== false && !flags.noBrowser && flags.browser !== false && !flags.noWindow) openWindow(url);
   const bye = async (sig) => {
     process.stdout.write(`\nshutting down (${sig})\n`);
     try {
@@ -404,7 +414,7 @@ async function send() {
 
 async function re() {
   const target = argv.shift();
-  if (!target) return process.stderr.write('majin re <fil> [--json]\n');
+  if (!target) return process.stderr.write('majin re <file> [--json]\n');
   const abs = path.resolve(expand(target));
   if (!fs.existsSync(abs)) return process.stderr.write(`cannot find ${abs}\n`);
   const rt = await createRuntime({ channels: false, scheduler: false });
@@ -413,6 +423,50 @@ async function re() {
   if (json()) return process.stdout.write(JSON.stringify(out.meta || out, null, 2) + '\n');
   if (!out.ok) return process.stderr.write((out.error?.message || 'failed') + '\n');
   process.stdout.write(String(out.result) + '\n');
+}
+
+/* --------------------------- dataset (training data) ---------------------- */
+
+async function dataset() {
+  const { Dataset, DATASET_DOCS } = await import('../core/dataset.js');
+  const cfg = load();
+  const ds = new Dataset(cfg);
+  const sub = argv.shift() || 'stats';
+  const say = (x) => process.stdout.write(x + '\n');
+  if (sub === 'on' || sub === 'off') {
+    const r = cfg.patch({ dataset: { capture: sub === 'on' } }, { source: `cli:dataset:${sub}` });
+    if (!r.ok) return process.stderr.write((r.errors || []).map((e) => `${e.path}: ${e.msg}`).join('\n') + '\n');
+    say(`dataset capture ${sub === 'on' ? 'ON' : 'OFF'}`);
+    if (sub === 'on') say(`  writing to ${ds.file()} — redacted on write, nothing leaves this machine`);
+    else say(`  ${ds.stats().records} record(s) remain on disk; majin dataset purge removes them`);
+    return;
+  }
+  if (sub === 'list') {
+    const st = ds.stats();
+    const rows = ds.read().slice(-(Number(argv[0]) || 12)).reverse();
+    say(`capture ${ds.on ? 'on' : 'OFF'} · ${st.records} records · ${Math.round(st.bytes / 1024)} kB${st.rated ? ` · ${st.rated} rated (avg ${st.avgRating})` : ''}`);
+    for (const r of rows) say(`  ${r.id}  ${r.at}  ${r.rating == null ? '   ' : r.rating > 0 ? '👍 ' : '👎 '}  ${String(r.instruction).slice(0, 68).replace(/\n/g, ' ')}`);
+    if (!rows.length) say('  nothing captured yet — run: majin dataset on');
+    return;
+  }
+  if (sub === 'export') {
+    const r = ds.export({ clean: Boolean(flags.clean) });
+    if (!r.ok) return process.stderr.write(r.error + '\n');
+    say(`exported ${r.records} records → ${r.file} (${Math.round(r.bytes / 1024)} kB JSONL)${flags.clean ? ' [metadata only]' : ''}`);
+    say('read it yourself before sharing: redacted is not the same as anonymous');
+    return;
+  }
+  if (sub === 'purge') {
+    const r = ds.purge({ all: true });
+    return say(r.ok ? `removed ${r.removed} records` : `majin dataset purge: ${r.error}`);
+  }
+  if (sub === 'help') return say(DATASET_DOCS);
+  const st = ds.stats();
+  say(`dataset ${ds.on ? '— capture ON' : '— capture OFF (default)'} · ${st.records} records · ${Math.round(st.bytes / 1024)} kB`);
+  if (st.records) say(`  rated ${st.rated}${st.avgRating == null ? '' : ` (avg ${st.avgRating})`} · avg tool calls ${st.avgToolCalls ?? 0} · errors ${st.errors}`);
+  say(`  file: ${st.file}`);
+  say('  upload: there is none — you export the file yourself');
+  say('  majin dataset on|off|list|export [--clean]|purge');
 }
 
 async function test() {

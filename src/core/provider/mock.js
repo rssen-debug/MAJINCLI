@@ -22,15 +22,15 @@ export async function mockComplete(o) {
     return emit(o, step);
   }
   if (job === 'router') return emit(o, { text: 'code' });
-  if (job === 'moa') return emit(o, { text: `MOA-svar på "${q.slice(0, 40)}"` });
+  if (job === 'moa') return emit(o, { text: `MOA answer on "${q.slice(0, 40)}"` });
   if (o.tools?.length && !messages.some((m) => m.role === 'tool')) {
     return emit(o, {
-      text: 'Jag kollar läget först.',
+      text: 'Checking the situation first.',
       toolCalls: [{ id: 'call_mock1', name: o.tools[0].name, argsJson: '{}' }],
       stopReason: 'tool_calls',
     });
   }
-  return emit(o, { text: `Demo-svar (mock): ${q.slice(0, 240) || 'inget att göra'}\n\nSätt en riktig API-nyckel under Settings för att koppla på hjärnan.` });
+  return emit(o, { text: `Demo answer (mock): ${q.slice(0, 240) || 'nothing to do'}\n\nAdd a real API key in the panel to connect a brain.` });
 }
 
 function textOf(c) {

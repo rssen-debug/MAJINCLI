@@ -28,7 +28,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     steps += 1;
     const stepJob = escalated ? cfg.get('routing.escalateJob') || 'analysis' : steps === 1 ? job : agent.stepJob || 'tasks';
     const route = routeFor(cfg, stepJob);
-    if (!route) throw new Error('ingen provider med API-nyckel — lägg till en (Settings → Providers)');
+    if (!route) throw new Error('no provider with an API key — add one (Settings -> Providers)');
     onEvent({ type: 'step', label, step: steps, of: limit, job: stepJob, model: route.ref, escalated });
 
     let res;
@@ -55,8 +55,8 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       bus.error('loop.provider', { label, step: steps, error: err.message, code: err.code });
       onEvent({ type: 'error', label, where: 'provider', message: err.message, hint: err.hint || null });
       if (errors >= 2) escalated = true;
-      if (errors >= 4) return { text: answer || `Provider-fel: ${err.message}`, steps, toolLog, usage: tally, error: err.message, escalated };
-      messages.push({ role: 'user', content: `Föregående anrop misslyckades (${err.code || 'error'}: ${String(err.message).slice(0, 200)}). Försök igen, enklare.` });
+      if (errors >= 4) return { text: answer || `Provider error after ${errors} failures: ${err.message}`, steps, toolLog, usage: tally, error: err.message, escalated };
+      messages.push({ role: 'user', content: `The previous call failed (${err.code || 'error'}: ${String(err.message).slice(0, 200)}). Try again, simpler.` });
       continue;
     }
 
@@ -78,7 +78,9 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     const runOne = async (c) => {
       const args = safeParse(c.argsJson);
       const out = await registry.exec(c.name, args, { ...ctx, session: ctx?.session ?? 'desktop', step: steps });
-      return { id: c.id, name: c.name, out };
+      // args följer med i loggen: utan dem är en spårning värdelös som träningsdata
+      // (och trådhistoriken kan inte återskapa *varför* verktyget kördes).
+      return { id: c.id, name: c.name, args, out };
     };
     const results = allowTools && cfg.get('agent.parallel') !== false ? await Promise.all(calls.map(runOne)) : await sequential(calls, runOne);
 
@@ -86,7 +88,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       const ok = r.out.ok !== false;
       if (!ok) errors += 1;
       else errors = Math.max(0, errors - 1);
-      toolLog.push({ tool: r.name, ok, error: ok ? null : r.out.error?.message || 'fel', ms: r.out.ms, summary: summarize(r.out) });
+      toolLog.push({ tool: r.name, args: r.args ?? {}, ok, error: ok ? null : r.out.error?.message || 'unknown error', ms: r.out.ms, summary: summarize(r.out) });
       onEvent({ type: 'tool_result', label, tool: r.name, ok, error: r.out.error || null, spilled: r.out.spilled || null, summary: summarize(r.out), meta: r.out.meta || null });
       messages.push({
         role: 'tool',
@@ -113,7 +115,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
 
   onEvent({ type: 'loop.limit', label, steps, toolCalls: toolLog.length });
   return {
-    text: answer || `Steggräns ${limit} nåddes utan slut svar (${toolLog.length} verktygskörningar). Höj agent.maxSteps eller dela upp uppgiften.`,
+    text: answer || `Step limit ${limit} reached without a final answer (${toolLog.length} tool runs). Raise agent.maxSteps or split the task.`,
     steps,
     toolLog,
     usage: tally,

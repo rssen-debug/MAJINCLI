@@ -246,7 +246,7 @@ export function parseMachO(buf) {
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   const magic = view.getUint32(0, true);
   const info = MH_MAGIC[magic];
-  if (!info) throw new BinError('okänd Mach-O-magi', { code: 'macho_parse' });
+  if (!info) throw new BinError('unknown Mach-O magic', { code: 'macho_parse' });
   const le = info.le;
   const cputype = view.getUint32(4, le);
   const cpusub = view.getUint32(8, le);

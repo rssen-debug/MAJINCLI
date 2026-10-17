@@ -150,8 +150,8 @@ export async function run({ cfg, question, context, job, onEvent, signal, maxTok
   let escalated = false;
 
   if (ok.length < 2) {
-    const answer = ok[0]?.text || 'MOA: alla referenser misslyckades.';
-    onEvent?.({ type: 'moa:degraded', reason: ok.length ? 'en referens klarade sig' : 'inga referenser' });
+    const answer = ok[0]?.text || 'MOA: every reference failed, answering without them.';
+    onEvent?.({ type: 'moa:degraded', reason: ok.length ? 'one reference survived' : 'no references' });
     return { answer, refs: results, agreement: { ...agr, score: 0 }, escalated, usage, elapsedMs: Date.now() - t0 };
   }
 

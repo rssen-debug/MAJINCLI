@@ -67,7 +67,7 @@ export const sysTools = [
       rows.sort((a, b) => (sortBy === 'cpu' ? b.cpu - a.cpu : sortBy === 'name' ? String(a.name).localeCompare(String(b.name)) : b.mb - a.mb));
       const top = rows.slice(0, limit);
       return {
-        result: `${rows.length} processer (visar ${top.length}, sorterat efter ${sortBy}):\n${top.map((x) => `${String(x.pid).padStart(7)}  ${String(x.mb).padStart(7)}MB  ${String(x.cpu ?? '').padStart(7)}s  ${x.name}`).join('\n')}`,
+        result: `${rows.length} processes (showing ${top.length}, sorted by ${sortBy}):\n${top.map((x) => `${String(x.pid).padStart(7)}  ${String(x.mb).padStart(7)}MB  ${String(x.cpu ?? '').padStart(7)}s  ${x.name}`).join('\n')}`,
         meta: { count: rows.length },
         summary: `${rows.length} processer`,
       };
@@ -97,7 +97,7 @@ export const sysTools = [
         rows = rows.filter((x) => !seen.has(`${x.addr}:${x.port}`) && seen.add(`${x.addr}:${x.port}`));
       }
       if (port) rows = rows.filter((x) => x.port === Number(port));
-      const text = rows.length ? rows.map((x) => `${String(x.addr).padEnd(16)}:${String(x.port).padEnd(6)} pid ${x.pid || '?'}`).join('\n') : 'inga lyssnande portar';
+      const text = rows.length ? rows.map((x) => `${String(x.addr).padEnd(16)}:${String(x.port).padEnd(6)} pid ${x.pid || '?'}`).join('\n') : 'no listening ports';
       return { result: `lyssnande portar (${rows.length}):\n${text}`, meta: { count: rows.length }, summary: `${rows.length} lyssnande portar` };
     },
   }),
@@ -155,7 +155,7 @@ export const sysTools = [
       let text = (r.stdout || '').replace(/\r/g, '');
       if (filter) {
         const re = safeRe(filter);
-        text = text.split('\n').filter((l) => re?.test(l)).join('\n') || 'inga träffar';
+        text = text.split('\n').filter((l) => re?.test(l)).join('\n') || 'no hits';
       }
       return { result: `autostart/persistence:\n${text.slice(0, 8000)}`, summary: 'persistence-poster listade' };
     },

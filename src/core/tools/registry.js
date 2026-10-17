@@ -112,7 +112,7 @@ export function toSchema(params, run = null) {
   for (const [k, v] of Object.entries(params)) {
     if (typeof v === 'string') {
       const m = /^(\w+)(\?)?:\s*(.+?)(?:\s+\[(.+)\])?$/s.exec(v.trim());
-      const type = (m?.[1] === 'n' || /antal|index/.test(m?.[4] || '') ? 'number' : null) || guess(v);
+      const type = (m?.[1] === 'n' || /count|index/.test(m?.[4] || '') ? 'number' : null) || guess(v);
       properties[k] = { type, description: (m?.[3] || v).trim() };
       if (m?.[4]) properties[k].enum = m[4].split('|').map((x) => x.trim());
       const optional = m?.[2] === '?' || /\?\s*:|\(valfritt\)|\(optional\)|\boptional\b|default:|standard:|endast om|om det anges|valfritt/i.test(v);
@@ -172,7 +172,7 @@ export class Registry {
     const t = this.byName.get(name);
     if (!t) {
       const near = fuzzy(name, [...this.byName.keys()])[0];
-      return { ok: false, tool: name, error: { code: 'unknown_tool', message: `verktyg "${name}" finns inte`, hint: near ? `menade du ${near}?` : `tillgängliga: ${[...this.byName.keys()].slice(0, 12).join(', ')}…` } };
+      return { ok: false, tool: name, error: { code: 'unknown_tool', message: `tool "${name}" does not exist`, hint: near ? `menade du ${near}?` : `available: ${[...this.byName.keys()].slice(0, 12).join(', ')}…` } };
     }
     const parsed = coerce(t, args);
     if (parsed.error) return { ok: false, tool: name, error: { code: 'bad_args', message: parsed.error, hint: `parametrar: ${Object.keys(t.raw).join(', ')}` } };
@@ -180,8 +180,8 @@ export class Registry {
     if (verdict.wait) {
       const decision = await verdict.wait;
       if (!decision?.approved) {
-        bus.warn('tool.denied', { tool: name, session, why: decision?.why || 'avslagen av användaren' });
-        return { ok: false, tool: name, error: { code: 'denied', message: `användaren sa nej: ${decision?.note || decision?.why || 'ingen förklaring'}`, hint: 'be om ett undantag, eller be användaren godkänna i fönstret' }, denied: true };
+        bus.warn('tool.denied', { tool: name, session, why: decision?.why || 'declined by the user' });
+        return { ok: false, tool: name, error: { code: 'denied', message: `the user said no: ${decision?.note || decision?.why || 'no explanation'}`, hint: 'ask for an exception, or have the user approve in the window' }, denied: true };
       }
       bus.info('tool.approved', { tool: name, approvalId: verdict.id });
     } else if (!verdict.run) {
@@ -257,11 +257,11 @@ function coerce(tool, args) {
       const n = Number(String(v).replace(/[,_\s]/g, ''));
       if (Number.isFinite(n)) out[k] = n;
       else if (typeof v === 'string' && /^0x[0-9a-f]+$/i.test(v.trim())) out[k] = parseInt(v.trim(), 16);
-      else return { error: `${k} måste vara ett nummer, fick "${String(v).slice(0, 40)}"` };
+      else return { error: `${k} must be a number, got "${String(v).slice(0, 40)}"` };
     } else if (want === 'integer' && typeof v !== 'number') {
       const n = parseInt(String(v), 10);
       if (Number.isFinite(n)) out[k] = n;
-      else return { error: `${k} måste vara ett heltal` };
+      else return { error: `${k} must be an integer` };
     } else if (want === 'boolean' && typeof v !== 'boolean') {
       if (BOOLISH.test(String(v))) out[k] = /^(true|yes|ja|1)$/i.test(String(v));
       else out[k] = Boolean(v);
@@ -281,7 +281,7 @@ function coerce(tool, args) {
     if (out[k] === undefined && typeof spec === 'object' && spec.default !== undefined) out[k] = spec.default;
   }
   const missing = (tool.parameters.required || []).filter((k) => out[k] === undefined || out[k] === '');
-  if (missing.length) return { error: `saknar parametr${missing.length > 1 ? 'ar' : 'na'}: ${missing.join(', ')}` };
+  if (missing.length) return { error: `missing parameter${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}` };
   return { args: out };
 }
 

@@ -65,11 +65,11 @@ export class Agent {
       `TOOLS: all ${tools.length} are always on — there is nothing to enable. Groups: ${groups.join(', ')}.`,
       'Use tools instead of guessing. Independent calls in one answer run in parallel — batch them. On error: read the message, fix the arguments, run again (after two failures in a row the model escalates automatically).',
       'Paths: absolute or workspace-relative. Never overwrite something you have not read, and never delete something you did not create.',
-      'RE: re.analyze = headers, sections+entropy, imports with risk flags, YARA, IOC strings, opcode patterns and "nästa steg". re.strings/re.search/re.yara/re.diff are the microscope. re.tool hooks up ghidra/rizin/objdump when they are installed on the machine.',
-      'If the user describes a setting in natural language ("använd X för Y alltid", "kör moa på allt", "fråga inte mer") → run majin.configure with the intent, or state exactly what you changed.',
+      'RE: re.analyze = headers, sections+entropy, imports with risk flags, YARA, IOC strings, opcode patterns and "next steps". re.strings/re.search/re.yara/re.diff are the microscope. re.tool hooks up ghidra/rizin/objdump when they are installed on the machine.',
+      'If the user describes a setting in natural language ("use X for Y always", "run moa on everything", "stop asking") → run majin.configure with the intent, or state exactly what you changed.',
       '',
       `ROUTING (job → model): ${Object.entries(routeSummary(cfg)).map(([k, v]) => `${k}:${v}`).join('  ')}`,
-      `Den här turen: jobb=${decision.job} (confidence ${decision.confidence}), primär=${turnPlan.route?.ref || '?'}, ${turnPlan.moa?.enabled ? `MOA ${turnPlan.moa.width} references → aggregator ${turnPlan.moa.aggregator}` : 'MOA off for this kind of turn'}.`,
+      `This turn: job=${decision.job} (confidence ${decision.confidence}), primary=${turnPlan.route?.ref || '?'}, ${turnPlan.moa?.enabled ? `MOA ${turnPlan.moa.width} references → aggregator ${turnPlan.moa.aggregator}` : 'MOA off for this kind of turn'}.`,
       `Guard: ${guard === 'off' ? 'OFF — no confirmations, you own the consequences' : 'asks only before irreversible actions'}.`,
       '',
       this.skills.prompt(),
@@ -81,6 +81,24 @@ export class Agent {
     ]
       .filter((l) => l !== '')
       .join('\n');
+  }
+
+  /** A verdict-only turn is a label, not a task — spend no tokens on it. */
+  maybeRate(input, session, emit) {
+    if (!this.shared?.dataset?.on) return false;
+    const s = String(input || '').trim().toLowerCase().replace(/[.!]+$/, '');
+    if (!s || s.length > 32) return false;
+
+    const good = /^(good|great|nice|perfect|yes|exactly|thanks|tack|bra|bra jobbat|korrekt|👍|\+1|nice one)$/.test(s);
+    const bad = /^(wrong|bad|no|useless|fel|dåligt|nejs|👎|-1)$/.test(s);
+    if (!good && !bad) return false;
+    const r = this.shared.dataset.rate('', good ? 1 : -1);
+    if (!r.ok) return false;
+    const text = good
+      ? `Logged as a good run (${r.id}).`
+      : `Logged as a bad run (${r.id}). Tell me what was wrong and I can retry — that correction becomes part of the label.`;
+    emit({ type: 'answer', text, meta: { rating: good ? 1 : -1, fastPath: true } });
+    return { text, rating: good ? 1 : -1, id: r.id };
   }
 
   async turn({ input, session = 'desktop', attachments = [], onEvent = () => {}, history = [], source = null }) {
@@ -97,6 +115,10 @@ export class Agent {
     };
 
     try {
+      /* 0) a bare verdict labels the last captured turn and stops there */
+      const rated = this.maybeRate(input, session, emit);
+      if (rated) return { ...rated, steps: 0, tools: [], usage: null, fastPath: true };
+
       /* 1) natural language → direct config, no model */
       const intent = parseIntent(input, cfg);
       let intentNote = null;
@@ -109,9 +131,9 @@ export class Agent {
             const changed = cfg.routeTable().filter((r) => intent.notes.some((n) => n.startsWith(`${r.job} →`)));
             const text = [
               `Klart. ${intent.notes.join(', ')}.`,
-              changed.length ? changed.map((r) => `${r.job} → ${r.ref}${r.ready ? '' : '  (ingen nyckel ännu)'}`).join('\n') : '',
-              cfg.get('moa.policy') === 'always' ? 'MOA: på — varje svar går genom referenser + aggregator.' : '',
-              'Sparat i config, gäller från och med nu.',
+              changed.length ? changed.map((r) => `${r.job} → ${r.ref}${r.ready ? '' : '  (no key yet)'}`).join('\n') : '',
+              cfg.get('moa.policy') === 'always' ? 'MOA: on — every answer goes through references + aggregator.' : '',
+              'Saved in config, applies from now on.',
             ]
               .filter(Boolean)
               .join('\n');
@@ -160,7 +182,7 @@ export class Agent {
       const messages = [
         { role: 'system', content: sys },
         ...history.filter((m) => m.role !== 'system').slice(-((cfg.get('agent.historyInPrompt') || 40) - 2)),
-        ...(intentNote ? [{ role: 'system', content: `CONFIG ÄNDRAD DENNA TURN: ${intentNote}` }] : []),
+        ...(intentNote ? [{ role: 'system', content: `CONFIG CHANGED THIS TURN: ${intentNote}` }] : []),
         { role: 'user', content: formatUser(input, attachments) },
       ];
 
@@ -185,7 +207,7 @@ export class Agent {
         const evidence = summarizeRun(res, messages);
         const moaRes = await moaRun({
           cfg,
-          question: `${input}\n\nBEVIS FRÅN DENNA TURN (verktyg, inte gissningar):\n${evidence}`,
+          question: `${input}\n\nEVIDENCE FROM THIS TURN (tools, not guesses):\n${evidence}`,
           context: [{ role: 'system', content: sys }],
           job: 'final',
           onEvent: emit,
@@ -229,6 +251,17 @@ export class Agent {
         aborted: res.aborted,
       };
       emit({ type: 'answer', text: out.text, meta: { steps: out.steps, tools: out.tools.length, moa: out.moa, job: out.job, usage: out.usage } });
+      // Turn-slutsrad = träningslabel. Bara när användaren slagit på capture; redaction och
+      // opt-out hanteras inne i Dataset.capture.
+      try {
+        const cap = this.shared?.dataset?.capture?.(input, {
+          session, plan: this.plans.get(session), job: out.job, model: turnPlan.route?.ref,
+          moa: out.moa ? { on: true, refs: out.moa.refs, aggregator: out.moa.aggregator } : null,
+          tools: res.toolLog, text: out.text, usage: out.usage, costUsd: this.usage?.summary?.().costUsd,
+          stopped: out.aborted, error: out.error ? String(out.error).slice(0, 300) : null,
+        });
+        if (cap?.ok) emit({ type: 'dataset', id: cap.record.id, bytes: cap.record.answer?.length });
+      } catch { /* insamling får aldrig sänka ett svar */ }
       if (this.usage?.overBudget?.()) emit({ type: 'budget', used: this.usage.summary().costUsd, cap: cfg.get('budget.monthlyUsd') });
       return out;
     } catch (err) {
@@ -252,12 +285,12 @@ export class Agent {
         maxTokens: 220,
         temperature: 0,
         messages: [
-          { role: 'system', content: 'Extrahera HÖGST 3 bestående fakta om användaren eller dennes projekt från konversationen.Endast sådant som gäller imorgon också (preferenser, hårdvara, sökvägar, beslut). En rad per faktum, ingen prefix eller numrering. Inget att spara → svara exakt: TOMT' },
+          { role: 'system', content: 'Extract AT MOST 3 durable facts about the user or their project from this conversation. Only things that still matter tomorrow (preferences, hardware, paths, decisions). One line per fact, no prefix and no numbering. Nothing worth saving → answer exactly: NONE' },
           { role: 'user', content: `${String(input).slice(0, 800)}\n\nTOOLS: ${res.toolLog.map((t) => `${t.tool}:${t.ok ? 'ok' : 'errors'}`).join(', ').slice(0, 600)}\n\nANSWER: ${String(res.text).slice(0, 1500)}` },
         ],
       });
       const text = String(r.text || '').trim();
-      if (!text || /^TOMT$/i.test(text)) return [];
+      if (!text || /^(NONE|TOMT)$/i.test(text)) return [];
       return text
         .split('\n')
         .map((l) => l.replace(/^[-*\d.\s]+/, '').trim())
@@ -279,8 +312,8 @@ function summarizeRun(res, messages) {
   const lines = [];
   for (const t of res.toolLog.slice(-14)) lines.push(`- ${t.tool}: ${t.ok ? 'ok' : 'FEL'} — ${String(t.summary || '').slice(0, 220)}`);
   const last = [...messages].reverse().find((m) => m.role === 'assistant')?.content;
-  if (last) lines.push(`- utkast till svar: ${String(last).slice(0, 1200)}`);
-  return lines.join('\n') || '(inga verktyg körda)';
+  if (last) lines.push(`- draft answer: ${String(last).slice(0, 1200)}`);
+  return lines.join('\n') || '(no tools run)';
 }
 
 const firstLine = (s) => String(s || '').replace(/\s+/g, ' ').slice(0, 160);
@@ -297,10 +330,10 @@ function suggestSkill(input, res) {
     .slice(0, 40);
   if (!name) return null;
   return {
-    name: `flöde: ${name}`,
+    name: `flow: ${name}`,
     when: firstLine(input).slice(0, 120),
     tools: uniq.slice(0, 8),
-    steps: `Körd sekvens (${res.steps} steg):\n${uniq.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\nNotera: genererad av MAJIN efter en lyckad körning — förfina vid behov.`,
+    steps: `Executed sequence (${res.steps} steps):\n${uniq.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\nNotera: generated by MAJIN after a successful run — refine as needed.`,
   };
 }
 

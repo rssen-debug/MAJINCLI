@@ -65,7 +65,7 @@ function addMsg(cls, who, text) {
   return { m, b };
 }
 const note = (t) => addMsg('sys', 'MAJIN · notis', t);
-const err = (t) => addMsg('err', 'MAJIN · fel', t);
+const err = (t) => addMsg('err', 'MAJIN · error', t);
 
 function ensureAgent() {
   if (S.cur) return S.cur;

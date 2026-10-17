@@ -86,7 +86,7 @@ export function parsePe(buf) {
   const size = buf.length;
   const bad = (m, extra) => new BinError(m, { code: 'pe_parse', ...extra });
 
-  if (size < 0x40) throw bad('Filen är för liten för en PE-header', { hint: 'Behöver minst 64 byte DOS-header.' });
+  if (size < 0x40) throw bad('The file is too small for a PE header', { hint: 'Needs at least a 64 byte DOS header.' });
   // MZ = bytes 4d 5a → little-endian u16 = 0x5a4d (DataView är big-endian som default).
   if (view.getUint16(0, true) !== 0x5a4d) throw bad('missing MZ signature', { hint: 'this is not a Windows PE file' });
 
@@ -105,7 +105,7 @@ export function parsePe(buf) {
 
   const opt = coff + 20;
   const magic = view.getUint16(opt, true);
-  if (magic !== 0x10b && magic !== 0x20b) throw bad(`Okänd optional header magic 0x${magic.toString(16)}`, { offset: opt, hint: 'PE32 (0x10b) eller PE32+ (0x20b) förväntades.' });
+  if (magic !== 0x10b && magic !== 0x20b) throw bad(`Unknown optional header magic 0x${magic.toString(16)}`, { offset: opt, hint: 'Expected PE32 (0x10b) or PE32+ (0x20b).' });
   const is64 = magic === 0x20b;
   const bits = is64 ? 64 : 32;
 
@@ -300,7 +300,7 @@ function parseImports(buf, view, d, rvaToOffset, bits) {
         funcs.push({ name, hint, thunkRva: Number(val & 0xffffffffn) });
       }
     }
-    if (funcs.length || dll) out.push({ dll: dll || `<okänd@0x${nameRva.toString(16)}>`, functions: funcs, count: funcs.length });
+    if (funcs.length || dll) out.push({ dll: dll || `<unknown@0x${nameRva.toString(16)}>`, functions: funcs, count: funcs.length });
   }
   return out;
 }

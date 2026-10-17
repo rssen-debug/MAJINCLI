@@ -125,7 +125,7 @@ export class Memory {
     const facts = this.facts().slice(0, 40);
     const events = this.recentEvents(8);
     const lines = [
-      facts.length ? `Vet om användaren:\n${facts.map((f) => `- ${f}`).join('\n')}` : '',
+      facts.length ? `Knows about the user:\n${facts.map((f) => `- ${f}`).join('\n')}` : '',
       events.length ? `Senaste:\n${events.map((e) => `- ${e.type}: ${String(e.summary || e.text || e.msg || '').slice(0, 120)}`).join('\n')}` : '',
     ].filter(Boolean);
     const out = lines.join('\n\n');
@@ -204,7 +204,7 @@ export class Skills {
     const max = this.cfg?.get('skills.maxInPrompt') || 12;
     const list = this.list().slice(0, max);
     if (!list.length) return '';
-    return `Inlärda färdigheter (följ dem om de passar):\n${list.map((s) => `- ${s.name} — ${s.when}\n${s.steps.split('\n').slice(0, 12).map((l) => `    ${l}`).join('\n')}`).join('\n')}`;
+    return `Learned skills (follow them when they fit):\n${list.map((s) => `- ${s.name} — ${s.when}\n${s.steps.split('\n').slice(0, 12).map((l) => `    ${l}`).join('\n')}`).join('\n')}`;
   }
 }
 

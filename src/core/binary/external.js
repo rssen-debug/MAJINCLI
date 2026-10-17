@@ -16,8 +16,8 @@ export const TOOL_SPECS = [
     bins: ['analyzeHeadless', 'support/analyzeHeadless'],
     env: ['GHIDRA_HOME', 'GHIDRA_DIR'],
     winPaths: ['C:\\ghidra', 'C:\\Tools\\ghidra', '%USERPROFILE%\\ghidra', 'C:\\Program Files\\ghidra'],
-    hint: 'Hämta från https://ghidra-sre.org (kräver JDK 21). Sätt GHIDRA_HOME eller lägg mappen i PATH.',
-    use: 'decompilera funktioner till C, typåterställning',
+    hint: 'Get it from https://ghidra-sre.org (needs JDK 21). Set GHIDRA_HOME or put the folder in PATH.',
+    use: 'decompile functions to C, type recovery',
     build: ({ file, cfg, args }) => {
       const home = cfg.get('tools.re.ghidraDir') || process.env.GHIDRA_HOME;
       const bin = home ? path.join(home, 'support', 'analyzeHeadless') : 'analyzeHeadless';
@@ -25,7 +25,7 @@ export const TOOL_SPECS = [
       return {
         cmd: bin,
         args: [proj, 'MAJIN', '-import', file, '-processorPath', '.', ...(args || []), '-scriptPath', path.join(os.tmpdir(), 'majin-ghidra-scripts'), '-postScript', 'MAJIN-Export.c', '-deleteProject'],
-        note: `Ghidra-projekt skapas i ${proj} (tar bort efteråt).`,
+        note: `A Ghidra project is created in ${proj} (removed afterwards).`,
       };
     },
   },
@@ -48,7 +48,7 @@ export const TOOL_SPECS = [
   },
   {
     id: 'binwalk',
-    label: 'binwalk (inbäddade filer)',
+    label: 'binwalk (embedded files)',
     bins: ['binwalk'],
     hint: 'pip install binwalk',
     use: 'hitta arkiv/firmware/bootloader inuti en fil',
@@ -59,7 +59,7 @@ export const TOOL_SPECS = [
     label: 'UPX',
     bins: ['upx'],
     hint: 'winget install upx.upx',
-    use: 'upx -d för att packa upp UPX-binärer',
+    use: 'upx -d to unpack UPX binaries',
     build: ({ file, out }) => ({ cmd: 'upx', args: ['-d', '-o', out || `${file}.unpacked`, file] }),
   },
   {
@@ -67,22 +67,22 @@ export const TOOL_SPECS = [
     label: 'YARA',
     bins: ['yara', 'yara64'],
     hint: 'winget install Yara-Yara',
-    use: 'kör fullständiga YARA-regler (MAJIN har egen mini-motor för de vanligaste)',
+    use: 'run full YARA rules (MAJIN has its own mini engine for the common ones)',
     build: ({ file, rules, namespace }) => ({ cmd: 'yara', args: ['-r', ...(namespace ? ['-n', namespace] : []), rules, file] }),
   },
   {
     id: 'jadx',
     label: 'jadx (Android → Java)',
     bins: ['jadx'],
-    hint: 'winget install skydoves.jadx · kräver Java',
-    use: 'decompilera APK/DEX till läsbar Java',
+    hint: 'winget install skydoves.jadx · needs Java',
+    use: 'decompile APK/DEX into readable Java',
     build: ({ file, out }) => ({ cmd: 'jadx', args: ['-q', '--no-res', ...(out ? ['-d', out] : []), file] }),
   },
   {
     id: 'apktool',
     label: 'apktool (Android-resurser)',
     bins: ['apktool'],
-    hint: 'https://apktool.org (kräver Java)',
+    hint: 'https://apktool.org (needs Java)',
     use: 'avpacka resurser + AndroidManifest.xml',
     build: ({ file, out }) => ({ cmd: 'apktool', args: ['d', '-f', ...(out ? ['-o', out] : []), file] }),
   },
@@ -98,8 +98,8 @@ export const TOOL_SPECS = [
     id: 'nm',
     label: 'nm / strings / file',
     bins: ['nm', 'strings', 'file'],
-    hint: 'ingår i binutils/MSYS',
-    use: 'snabb symbol-/strängdump',
+    hint: 'included in binutils/MSYS',
+    use: 'fast symbol/string dump',
     build: ({ file, tool = 'strings' }) => ({ cmd: tool, args: ['-a', file] }),
   },
 ];
@@ -191,7 +191,7 @@ export async function run(cmd, args, { cwd, timeoutMs = 120000, env = {}, maxCha
     }
     child.on('error', (e) => {
       clearTimeout(timer);
-      resolve({ ok: false, error: `${cmd}: ${e.message}`, hint: /ENOENT/.test(e.message) ? 'Verktyget finns inte i PATH. Se tools.re install-hints.' : null, exitCode: -1, ms: Date.now() - t0 });
+      resolve({ ok: false, error: `${cmd}: ${e.message}`, hint: /ENOENT/.test(e.message) ? 'The tool is not in PATH. See the install hints in tools.re.' : null, exitCode: -1, ms: Date.now() - t0 });
     });
     child.on('close', (code) => {
       clearTimeout(timer);
@@ -204,10 +204,10 @@ export async function run(cmd, args, { cwd, timeoutMs = 120000, env = {}, maxCha
 
 export async function call(id, { file, ...rest } = {}, cfg) {
   const spec = TOOL_SPECS.find((s) => s.id === id);
-  if (!spec) return { ok: false, error: `okänt verktyg ${id}`, available: Object.keys(await detect({})) };
+  if (!spec) return { ok: false, error: `unknown tool ${id}`, available: Object.keys(await detect({})) };
   const det = await detect({});
   if (!det[id]?.available && !spec.bins.some((b) => b.includes(path.sep))) {
-    if (!det[id]?.available) return { ok: false, error: `${spec.label} är inte installerat`, hint: spec.hint, use: spec.use };
+    if (!det[id]?.available) return { ok: false, error: `${spec.label} is not installed`, hint: spec.hint, use: spec.use };
   }
   const built = spec.build({ file, cfg, ...rest });
   const cmd = built.cmd.includes(path.sep) || fs.existsSync(built.cmd) ? built.cmd : det[id]?.path || built.cmd;

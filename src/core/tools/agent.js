@@ -12,7 +12,7 @@ export const agentTools = [
     risk: 'read',
     desc: 'Write and update the visible work list for the session. Use it for more than 3 steps; the UI shows it live.',
     params: {
-      items: 'array: [{"text":"gör detta","status":"todo|doing|done|blocked"}]',
+      items: 'array: [{"text":"do this","status":"todo|doing|done|blocked"}]',
       mode: 'string: replace | merge [replace|merge]',
       note: 'string: briefly why the plan looks like this',
     },
@@ -37,7 +37,7 @@ export const agentTools = [
     name: 'agent.delegate',
     group: 'agent',
     risk: 'read',
-    desc: 'Skicka ett delproblem till en subagent med eget stegbudschet (den ser dina verktyg men inte din historik). Används för parallellt gräv — t.ex. "analysera dessa 3 filer".',
+    desc: 'Send a sub-problem to a subagent with its own step budget (it sees your tools but not your history). Use it for parallel digging — t.ex. "analysera dessa 3 filer".',
     params: {
       tasks: 'array: [{"task":"beskriv uppgiften","job":"code|re|tasks|research","maxSteps":12}]',
       parallel: 'boolean: run them all at once (default true)',
@@ -89,7 +89,7 @@ export const agentTools = [
     async run({ id, approved, note }, ctx) {
       const { approvals } = await import('../guard.js');
       const ok = approvals.respond(String(id), Boolean(approved), note);
-      return { ok, result: ok ? `${approved ? 'godkände' : 'avslog'} ${id}` : `ingen väntande förfrågan med id ${id} (kanske redan besvarad)`, meta: { pending: approvals.list().map((p) => p.id) } };
+      return { ok, result: ok ? `${approved ? 'approved' : 'declined'} ${id}` : `no pending request with id ${id} (maybe already answered)`, meta: { pending: approvals.list().map((p) => p.id) } };
     },
   }),
 ];

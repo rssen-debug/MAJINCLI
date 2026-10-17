@@ -45,7 +45,7 @@ const MIME = {
 };
 
 export function createServer(rt) {
-  const { cfg, agent, registry, memory, skills, usage, approvals, scheduler, channels } = rt;
+  const { cfg, agent, registry, memory, skills, usage, approvals, scheduler, channels, dataset } = rt;
   const pairs = new Map();
 
   const server = http.createServer((req, res) => {
@@ -150,9 +150,10 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       return json(res, 200, { ok: true, facts: q ? memory.recall(q, 20) : memory.facts(), events: memory.recentEvents(25), stats: memory.stats() });
     }
     if (p === '/api/skills') return json(res, 200, { ok: true, skills: skills.list() });
+    if (p === '/api/dataset' && req.method !== 'POST') return json(res, 200, { ok: true, capture: dataset.on, share: 'no upload path exists', ...dataset.stats() });
     if (p === '/api/tools') return json(res, 200, { ok: true, count: registry.list().length, groups: registry.groups(), tools: registry.list().map((t) => ({ name: t.name, group: t.group, risk: t.risk, desc: t.desc, params: Object.keys(t.raw || {}) })) });
     if (p === '/api/schedule') return json(res, 200, { ok: true, jobs: scheduler ? scheduler.list() : [], enabled: Boolean(scheduler) });
-    if (p === '/api/channels') return json(res, 200, { ok: true, ...(channels ? channels.status() : { telegram: { online: false, state: 'av' }, whatsapp: { online: false, state: 'av' } }) });
+    if (p === '/api/channels') return json(res, 200, { ok: true, ...(channels ? channels.status() : { telegram: { online: false, state: 'off' }, whatsapp: { online: false, state: 'off' } }) });
     if (p === '/api/approvals') return json(res, 200, { ok: true, pending: approvals.list(), recent: approvals.recent(12) });
     if (p === '/api/sessions') {
       let files = [];
@@ -288,7 +289,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const { PRESETS } = await import('../presets.js');
       const preset = PRESETS[body.preset];
       const name = String(body.name || (preset ? body.preset : 'custom')).replace(/[^a-z0-9_-]/gi, '').toLowerCase().slice(0, 24);
-      if (!name) return json(res, 400, { ok: false, error: 'providerspecifikt namn saknas' });
+      if (!name) return json(res, 400, { ok: false, error: 'the provider-specific name is missing' });
       const entry = {
         label: body.label || preset?.label || name,
         kind: body.kind || preset?.kind || 'openai',
@@ -318,7 +319,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const { listModelsUrl } = await import('../presets.js');
       const name = String(url.searchParams.get('provider') || cfg.get('models.provider'));
       const prov = (cfg.get('providers') || {})[name];
-      if (!prov) return json(res, 404, { ok: false, error: `okänd provider "${name}"` });
+      if (!prov) return json(res, 404, { ok: false, error: `unknown provider "${name}"` });
       const listUrl = listModelsUrl(prov);
       if (!listUrl) return json(res, 200, { ok: true, provider: name, models: prov.models || [], note: 'the provider has no model list — type the model name yourself' });
       try {
@@ -403,7 +404,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     if (p === '/api/re/analyze' && req.method === 'POST') {
       const body = await readJson(req);
       const out = await registry.exec('re.analyze', { path: String(body.path || ''), maxStrings: Number(body.maxStrings) || 0, rules: body.rules || 'builtin+user' }, { ...rt.ctx, session: 'ui-api', step: 1 });
-      if (!out.ok) return json(res, 422, { ok: false, error: out.error?.message || 'analys gick inte', hint: out.error?.hint || null });
+      if (!out.ok) return json(res, 422, { ok: false, error: out.error?.message || 'the analysis failed', hint: out.error?.hint || null });
       return json(res, 200, { ok: true, result: out.result, meta: out.meta, spilled: out.spilled });
     }
     if (p === '/api/selftest' && req.method === 'POST') {
@@ -411,19 +412,24 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const out = await registry.exec('majin.selftest', { level: body.level === 'full' ? 'full' : 'quick' }, { ...rt.ctx, session: 'ui-api', step: 1 });
       return json(res, 200, { ok: out.ok !== false, text: out.result, meta: out.meta || null, error: out.error?.message || null });
     }
+    if (p === '/api/dataset' && req.method === 'POST') {
+      const body = await readJson(req).catch(() => ({}));
+      const out = await registry.exec('majin.dataset', { ...body }, { ...rt.ctx, session: 'ui-api', step: 1 });
+      return json(res, out.ok === false ? 422 : 200, { ok: out.ok !== false, text: out.result, meta: out.meta || null, error: out.error?.message || null, hint: out.error?.hint || null });
+    }
     if (p === '/api/tool' && req.method === 'POST') {
       const body = await readJson(req);
       const name = String(body.tool || body.name || '');
-      if (!name) return json(res, 400, { ok: false, error: 'tool saknas' });
+      if (!name) return json(res, 400, { ok: false, error: 'tool missing' });
       const out = await registry.exec(name, body.args || {}, { ...rt.ctx, session: 'ui-api', step: 1 });
       return json(res, 200, { ok: out.ok !== false, result: out.result, meta: out.meta || null, error: out.error || null, ms: out.ms });
     }
     if (p === '/api/usage/reset' && req.method === 'POST') {
       const ok = usage.reset ? usage.reset() : false;
-      return json(res, 200, { ok, note: ok ? 'månaden nollställd' : 'usage.reset finns inte i den här bygget' });
+      return json(res, 200, { ok, note: ok ? 'month reset' : 'usage.reset is not in this build' });
     }
     if (p === '/api/restart' && req.method === 'POST') {
-      json(res, 200, { ok: true, restart: true, note: 'stänger med kod 75 — majin start startar om' });
+      json(res, 200, { ok: true, restart: true, note: 'shutting down with code 75 — majin start will bring it back' });
       setTimeout(() => {
         try {
           server.close();
@@ -507,7 +513,7 @@ function readBody(req, max = MAX_BODY) {
     req.on('data', (c) => {
       n += c.length;
       if (n > max) {
-        reject(Object.assign(new Error(`body för stort (${n} > ${max})`), { code: 'too_big' }));
+        reject(Object.assign(new Error(`body too large (${n} > ${max})`), { code: 'too_big' }));
         req.destroy();
         return;
       }

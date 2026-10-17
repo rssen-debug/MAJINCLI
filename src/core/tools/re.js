@@ -25,8 +25,8 @@ async function load(ctx, p) {
   const { abs } = resolveIn(ctx, p);
   const st = await fs.stat(abs);
   const max = ctx.cfg.get('tools.re.maxFileBytes') || 268435456;
-  if (st.size > max) throw new Error(`filen är ${fmt(st.size)}, gränsen är ${fmt(max)}. Sänk med tools.re.maxFileBytes eller klipp ut en bit med re.hexdump.`);
-  if (!st.isFile()) throw new Error(`${abs} är inte en fil (mapp: ${st.isDirectory()})`);
+  if (st.size > max) throw new Error(`the file is ${fmt(st.size)}, the limit is ${fmt(max)}. Lower tools.re.maxFileBytes or carve a piece with re.hexdump.`);
+  if (!st.isFile()) throw new Error(`${abs} is not a file (directory: ${st.isDirectory()})`);
   return { abs, buf: await fs.readFile(abs), st };
 }
 
@@ -51,7 +51,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Full triage of a binary: format, headers, sections+entropy, imports/exports, packers, YARA, IOC strings, opcode patterns, a risk score and suggested next steps. Start here.',
-    params: { path: 'string: fil att analysera', maxStrings: 'number: max antal strängar (default 4000)', rules: 'string: "builtin", "builtin+user" eller [auto|builtin|builtin+user]' },
+    params: { path: 'string: file to analyse', maxStrings: 'number: max number of strings (default 4000)', rules: 'string: "builtin", "builtin+user" or [auto|builtin|builtin+user]' },
     examples: ['re.analyze({path:"downloads/suspect.exe"})'],
     async run({ path: p, maxStrings = 4000, rules = 'builtin+user' }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -73,7 +73,7 @@ export const reTools = [
         imports: (r.imports || []).slice(0, 12).map((i) => (i.dll ? `${i.dll} (${i.count ?? i.functions?.length ?? 0})` : i.name)).filter(Boolean),
         flaggedApis: (r.apis?.flagged || []).slice(0, 12).map((f) => `${f.dll ? `${f.dll}!` : ''}${f.api} [${f.severity}] ${f.why}`),
         yara: (r.yara || []).map((y) => `${y.rule}${y.meta?.severity ? `/${y.meta.severity}` : ''}`),
-        opcodes: (r.opcodes?.hits || []).slice(0, 8).map((h) => `${h.name} ×${h.count}`),
+        opcodes: (r.opcodes?.hits || []).slice(0, 8).map((h) => `${h.name} x${h.count}`),
         embedded: (r.embedded || []).slice(0, 8).map((e) => `${e.name}@${e.offset}`),
         containers: (r.containers || []).map((c) => `${c.kind}${c.entries ? ` (${c.entries} poster)` : ''}`),
         strings: (r.strings?.sample || []).slice(0, 25).map((s) => s.value),
@@ -99,11 +99,11 @@ export const reTools = [
     desc: 'Extract strings (ascii + utf16) with offsets. Filter with a regex. Used to find URLs, paths, mutexes and important API names.',
     params: {
       path: 'string: fil',
-      min: 'number: minsta längd (default 5)',
-      filter: 'string: regex som strängen måste matcha',
+      min: 'number: minimum length (default 5)',
+      filter: 'string: regex the string must match',
       encoding: 'string: ascii | utf16 | both [ascii|utf16|both]',
-      limit: 'number: max antal (default 400)',
-      classify: 'boolean: gruppera också som IOCs',
+      limit: 'number: max count (default 400)',
+      classify: 'boolean: also group as IOCs',
     },
     async run({ path: p, min = 5, filter = '', encoding = 'both', limit = 400, classify: cl = false }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -116,7 +116,7 @@ export const reTools = [
       const shown = rows.slice(0, Number(limit));
       const body = shown.map((s) => `0x${s.offset.toString(16).padStart(8, '0')} ${s.encoding === 'utf16le' ? 'u16' : '   '} ${s.value.replace(/\s+/g, ' ').slice(0, 160)}`).join('\n');
       const extra = cl ? `\n\nIOC-kluster:\n${JSON.stringify(classifyStrings(rows.map((s) => s.value)), null, 1).slice(0, 3000)}` : '';
-      return { result: `${path.basename(abs)}: ${rows.length} strängar (${all.length} totalt), visar ${shown.length}\n${body}${extra}`, meta: { total: all.length, matched: rows.length }, summary: `${rows.length} strängar i ${path.basename(abs)}` };
+      return { result: `${path.basename(abs)}: ${rows.length} strings (${all.length} total), showing ${shown.length}\n${body}${extra}`, meta: { total: all.length, matched: rows.length }, summary: `${rows.length} strings in ${path.basename(abs)}` };
     },
   }),
 
@@ -125,7 +125,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Hex dump at an offset. Used for headers, the overlay, packer signatures and raw comparison.',
-    params: { path: 'string: fil', offset: 'string: 0x40 eller 64', length: 'number: antal byte (default 512, max 8192)' },
+    params: { path: 'string: fil', offset: 'string: 0x40 eller 64', length: 'number: bytes to read (default 512, max 8192)' },
     async run({ path: p, offset = '0', length = 512 }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const off = typeof offset === 'number' ? offset : parseInt(String(offset).replace(/^0x/i, ''), 16) || 0;
@@ -140,7 +140,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Pattern hunt in bytes: "4d 5a ?? (e8|eb)" or a text string. Returns offset + context.',
-    params: { path: 'string: fil', pattern: 'string: hex-mönster eller text', max: 'number: max träffar (default 60)', context: 'number: byte runt varje träff (default 24)' },
+    params: { path: 'string: file', pattern: 'string: hex pattern or text', max: 'number: max hits (default 60)', context: 'number: bytes around each hit (default 24)' },
     async run({ path: p, pattern, max = 60, context = 24 }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const isHex = /^[\s0-9a-fx?,;()|]+$/i.test(String(pattern).replace(/ /g, '')) && /[0-9a-f]{2}/i.test(String(pattern));
@@ -148,7 +148,7 @@ export const reTools = [
       const body = hits
         .map((o) => `0x${o.toString(16).padStart(8, '0')}\n  ${buf.subarray(Math.max(0, o - 4), o).toString('hex').replace(/../g, '$1 ').trim()} │ ${hexdump(buf.subarray(o, Math.min(buf.length, o + Number(context)))).split('\n')[0]}`)
         .join('\n');
-      return { result: `${hits.length} träffar för ${pattern} i ${path.basename(abs)}${hits.length ? `\n${body}` : ''}`, meta: { hits: hits.length, pattern, mode: isHex ? 'hex' : 'text' }, summary: `${hits.length} träffar` };
+      return { result: `${hits.length} hits for ${pattern} in ${path.basename(abs)}${hits.length ? `\n${body}` : ''}`, meta: { hits: hits.length, pattern, mode: isHex ? 'hex' : 'text' }, summary: `${hits.length} hits` };
     },
   }),
 
@@ -157,7 +157,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Entropy profile per section + block. High entropy = packed or encrypted. Used to decide what to unpack.',
-    params: { path: 'string: fil', block: 'number: blockstorlek i byte (default 1024)', threshold: 'number: markera över detta (default 7.0)' },
+    params: { path: 'string: file', block: 'number: block size in bytes (default 1024)', threshold: 'number: flag above this (default 7.0)' },
     async run({ path: p, block = 1024, threshold = 7.0 }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const win = entropyWindow(buf, { block: Number(block), threshold: Number(threshold) });
@@ -170,9 +170,9 @@ export const reTools = [
       }
       const islands = findCodeIslands(buf, { minBytes: Math.max(128, Number(block)), max: 8 });
       return {
-        result: `${path.basename(abs)}: total entropy ${entropy(buf).toFixed(3)} över ${fmt(buf.length)}\n${sections.length ? `Sections:\n${sections.map((s) => `  ${s.name.padEnd(9)} ${fmt(s.size).padStart(10)}  H=${s.entropy}${s.entropy > 7.2 ? ' ← high' : ''}`).join('\n')}\n` : ''}Blocks above threshold (${threshold}): ${win.length ? `${win.length} block, första @0x${win[0]?.offset.toString(16)}, total ${fmt(win.length * block)}` : 'inga'}\n${islands.length ? `Non-text islands (shellcode candidates):\n${islands.map((i) => `  ${i.offset} ${i.bytes} byte, printable ${i.printable}\n    ${i.head}`).join('\n')}` : ''}`,
+        result: `${path.basename(abs)}: total entropy ${entropy(buf).toFixed(3)} across ${fmt(buf.length)}\n${sections.length ? `Sections:\n${sections.map((s) => `  ${s.name.padEnd(9)} ${fmt(s.size).padStart(10)}  H=${s.entropy}${s.entropy > 7.2 ? ' ← high' : ''}`).join('\n')}\n` : ''}Blocks above threshold (${threshold}): ${win.length ? `${win.length} blocks, first @0x${win[0]?.offset.toString(16)}, total ${fmt(win.length * block)}` : 'none'}\n${islands.length ? `Non-text islands (shellcode candidates):\n${islands.map((i) => `  ${i.offset} ${i.bytes} byte, printable ${i.printable}\n    ${i.head}`).join('\n')}` : ''}`,
         meta: { blocks: win.length, islands: islands.length },
-        summary: `entropi ${entropy(buf).toFixed(2)}, ${win.length} höga block`,
+        summary: `entropy ${entropy(buf).toFixed(2)}, ${win.length} high blocks`,
       };
     },
   }),
@@ -197,8 +197,8 @@ export const reTools = [
       });
       const anomalies = [];
       for (const s of pe.sections) {
-        if (s.executable && s.writable) anomalies.push(`${s.name}: körbar OCH skrivbar`);
-        if (s.rawSize === 0 && s.virtualSize > 0) anomalies.push(`${s.name}: tom på disk men ${s.virtualSize} byte i minnet (BSS/packare)`);
+        if (s.executable && s.writable) anomalies.push(`${s.name}: executable AND writable`);
+        if (s.rawSize === 0 && s.virtualSize > 0) anomalies.push(`${s.name}: empty on disk but ${s.virtualSize} bytes in memory (BSS/packer)`);
         if (/\.text$/.test(s.name) && s.rawSize % 0x200) anomalies.push(`${s.name}: rawSize inte alignerad — manipulering?`);
       }
       return {
@@ -213,14 +213,14 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Import tables (DLL → functions) with risk flags. Delay imports included.',
-    params: { path: 'string: fil', dll: 'string: filtrera på dll-namn', flagged: 'boolean: bara riskfyllda' },
+    params: { path: 'string: file', dll: 'string: filter on dll name', flagged: 'boolean: only risky ones' },
     async run({ path: p, dll = '', flagged = false }, ctx) {
       const { abs, buf } = await load(ctx, p);
       let pe;
       try {
         pe = parsePe(buf);
       } catch {
-        return { ok: false, error: { code: 'not_pe', message: 'no PE import table (for ELF use re.analyze)', hint: 'använd re.analyze' } };
+        return { ok: false, error: { code: 'not_pe', message: 'no PE import table (for ELF use re.analyze)', hint: 'use re.analyze' } };
       }
       const score = scoreApis(pe.imports);
       const all = [...pe.imports, ...(pe.delayImports || []).map((d) => ({ ...d, delayed: true }))];
@@ -229,7 +229,7 @@ export const reTools = [
       const body = flagged
         ? score.flagged.map((f) => `${'!'.repeat(f.severity)} ${f.dll}!${f.api} — ${f.why}`).join('\n') || 'nothing flagged'
         : rows.map((i) => `${i.delayed ? '@delay ' : ''}${i.dll} (${i.count})\n  ${(i.functions || []).slice(0, 40).map((f) => f.name).join(', ')}`).join('\n');
-      return { result: `${path.basename(abs)} — ${rows.length} DLL:er, ${score.flagged.length} riskfyllda anrop, imphash ${pe.imphash || 'n/a'}\n\n${body}`, meta: { dlls: rows.length, flagged: score.flagged.length }, summary: `${rows.length} DLL-imports, ${score.flagged.length} flaggade` };
+      return { result: `${path.basename(abs)} — ${rows.length} DLLs, ${score.flagged.length} risky calls, imphash ${pe.imphash || 'n/a'}\n\n${body}`, meta: { dlls: rows.length, flagged: score.flagged.length }, summary: `${rows.length} DLL-imports, ${score.flagged.length} flaggade` };
     },
   }),
 
@@ -238,11 +238,11 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Export table (for DLLs) + forwarded exports. Used to list hook and backend functions.',
-    params: { path: 'string: fil', limit: 'number: max antal (default 200)' },
+    params: { path: 'string: fil', limit: 'number: max count (default 200)' },
     async run({ path: p, limit = 200 }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const pe = parsePe(buf);
-      if (!pe.exports) return { result: `${path.basename(abs)}: saknar exporttabell (typiskt för EXE)`, summary: 'inga exports' };
+      if (!pe.exports) return { result: `${path.basename(abs)}: no export table (typical for an EXE)`, summary: 'no exports' };
       const e = pe.exports;
       return {
         result: `${path.basename(abs)} — exports (${e.numNames} namngivna av ${e.numFunctions} funksjoner, bas ${e.ordinalBase})\n${(e.functions || []).slice(0, limit).map((f) => `  #${f.ordinal} 0x${f.rva?.toString(16) || '?'} ${f.name}${f.forwarder ? ` → ${f.forwarder}` : ''}`).join('\n')}`,
@@ -256,15 +256,15 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Run YARA rules with the built-in mini engine — no yara binary needed. Add your own rules in rules/majin.yar.',
-    params: { path: 'string: fil', ruleText: 'string: egna regler i YARA-syntax', only: 'string: filtrera på regelnamn (regex)' },
+    params: { path: 'string: file', ruleText: 'string: your own rules in YARA syntax', only: 'string: filter on rule name (regex)' },
     async run({ path: p, ruleText = '', only = '' }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const rules = parseRules(ruleText || userRules(ctx));
       const hits = yaraScan(buf, rules).filter((h) => (only ? new RegExp(only, 'i').test(h.rule) : true));
       return {
-        result: `${path.basename(abs)}: ${hits.length}/${rules.length} regler matchade\n${hits.map((h) => `${h.rule}${h.tags.length ? ` [${h.tags.join(',')}]` : ''} ${h.meta?.severity ? `sev=${h.meta.severity}` : ''}\n${h.strings.map((s) => `   ${s.name} ×${s.count} @ ${s.offsets.map((o) => `0x${o.toString(16)}`).join(', ')}`).join('\n')}`).join('\n') || 'no hits'}`,
+        result: `${path.basename(abs)}: ${hits.length}/${rules.length} rules matched\n${hits.map((h) => `${h.rule}${h.tags.length ? ` [${h.tags.join(',')}]` : ''} ${h.meta?.severity ? `sev=${h.meta.severity}` : ''}\n${h.strings.map((s) => `   ${s.name} x${s.count} @ ${s.offsets.map((o) => `0x${o.toString(16)}`).join(', ')}`).join('\n')}`).join('\n') || 'no hits'}`,
         meta: { rules: rules.length, hits: hits.length },
-        summary: `YARA ${hits.length}/${rules.length} träffar`,
+        summary: `YARA ${hits.length}/${rules.length} hits`,
       };
     },
   }),
@@ -274,7 +274,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Pull out and group IOCs (URLs, IPs, file paths, registry keys, mutexes, e-mail, GUIDs) and resolve domains when asked.',
-    params: { path: 'string: fil', resolve: 'boolean: gör DNS-uppslag på domäner', save: 'boolean: skriv listan till workspace/re/<namn>-iocs.json' },
+    params: { path: 'string: file', resolve: 'boolean: resolve the domains via DNS', save: 'boolean: write the list to workspace/re/<name>-iocs.json' },
     async run({ path: p, resolve = false, save = false }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const strs = extractStrings(buf, { limit: 120000 });
@@ -288,7 +288,7 @@ export const reTools = [
           try {
             out.dns[d] = await dns.promises.resolve4(d);
           } catch (err) {
-            out.dns[d] = `fel: ${err.code || err.message}`;
+            out.dns[d] = `error: ${err.code || err.message}`;
           }
         }
       }
@@ -313,7 +313,7 @@ export const reTools = [
       const { abs, buf } = await load(ctx, p);
       const pe = parsePe(buf);
       const data = peOverlay(buf, pe);
-      if (!data.length) return { result: `${path.basename(abs)}: ingen overlay (sista sektionen är filslut)`, summary: 'ingen overlay' };
+      if (!data.length) return { result: `${path.basename(abs)}: no overlay (the last section ends the file)`, summary: 'no overlay' };
       let file = null;
       if (extract) {
         file = path.join(ctx.cfg.get('workspace'), 're', `${path.basename(abs)}.overlay`);
@@ -323,7 +323,7 @@ export const reTools = [
       const e = entropy(data);
       const zip = data.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
       return {
-        result: `overlay ${fmt(data.length)} @0x${pe.overlay.offset.toString(16)} (entropi ${e.toFixed(3)})${zip ? ' — det är en ZIP!' : ''}${file ? `\nsparad: ${file}` : ''}\n${hexdump(data.subarray(0, Math.min(data.length, Number(maxPeek))))}`,
+        result: `overlay ${fmt(data.length)} @0x${pe.overlay.offset.toString(16)} (entropy ${e.toFixed(3)})${zip ? ' — it is a ZIP!' : ''}${file ? `\nsparad: ${file}` : ''}\n${hexdump(data.subarray(0, Math.min(data.length, Number(maxPeek))))}`,
         meta: { size: data.length, offset: pe.overlay.offset, entropy: e, file, zip },
         summary: `overlay ${fmt(data.length)} (H=${e.toFixed(2)})`,
       };
@@ -335,7 +335,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'write',
     desc: 'Extract ZIP/APK/asar entries or a PE resource into the workspace. Used to reach embedded content.',
-    params: { path: 'string: arkiv eller PE', entry: 'string: postnamn (regex) i arkivet', all: 'boolean: hämta alla matchande', resourceType: 'string: PE-resurs att dumpa (RCDATA, MANIFEST, VERSION)', out: 'string: målmapp (default workspace/re/<namn>)' },
+    params: { path: 'string: archive or PE', entry: 'string: entry name (regex) inside the archive', all: 'boolean: take every match', resourceType: 'string: PE resource to dump (RCDATA, MANIFEST, VERSION)', out: 'string: target folder (default workspace/re/<name>)' },
     async run({ path: p, entry = '', all = false, resourceType = '', out = '' }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const base = resolveIn(ctx, out || path.join('re', `${path.basename(abs)}.extracted`));
@@ -385,7 +385,7 @@ export const reTools = [
       const a = apkPeek(buf);
       if (!a) return { ok: false, error: { code: 'not_apk', message: 'no ZIP/APK structure in the file' } };
       return {
-        result: `${path.basename(abs)} — APK/AAB\n  poster: ${a.entries}\n  dex: ${a.dex.map((d) => `${d.name} ${fmt(d.size)}`).join(', ') || 'inga'}\n  paket: ${a.packageGuess || '?'}\n  debuggable: ${a.debuggable ? 'JA (testbygge!)' : 'nej'}\n  nät-säkerhet: ${a.networkSecurity ? 'network_security_config.xml finns' : 'ingen'}\n  signerare: ${a.v2Signer ? 'RSA/DSA-nät i META-INF' : 'okänd'}\n  tillåtet (${a.permissions.length}):\n    ${a.permissions.join('\n    ')}\n  komponenter (${a.components.length}):\n    ${a.components.slice(0, 40).join('\n    ')}\n  lib: ${a.libs.slice(0, 12).join(', ')}`,
+        result: `${path.basename(abs)} — APK/AAB\n  entries: ${a.entries}\n  dex: ${a.dex.map((d) => `${d.name} ${fmt(d.size)}`).join(', ') || 'none'}\n  package: ${a.packageGuess || '?'}\n  debuggable: ${a.debuggable ? 'YES (test build!)' : 'no'}\n  network security: ${a.networkSecurity ? 'network_security_config.xml present' : 'none'}\n  signer: ${a.v2Signer ? 'RSA/DSA blobs in META-INF' : 'unknown'}\n  permissions (${a.permissions.length}):\n    ${a.permissions.join('\n    ')}\n  komponenter (${a.components.length}):\n    ${a.components.slice(0, 40).join('\n    ')}\n  lib: ${a.libs.slice(0, 12).join(', ')}`,
         meta: a,
         summary: `APK ${a.entries} poster, ${a.permissions.length} permissions`,
       };
@@ -402,7 +402,7 @@ export const reTools = [
       const { abs, buf } = await load(ctx, p);
       const s = pcapSummary(buf);
       if (!s) return { ok: false, error: { code: 'not_pcap', message: 'no pcap magic in the file' } };
-      return { result: `${path.basename(abs)}: ${s.packets} paket (länktyp ${s.linkType})\nVärdar: ${s.hosts.join(', ')}\nPortar: ${s.ports.join(', ')}\nHTTP:\n  ${s.http.join('\n  ')}\nDNS:\n  ${s.dns.join('\n  ')}`, meta: s, summary: `${s.packets} paket, ${s.hosts.length} värdar` };
+      return { result: `${path.basename(abs)}: ${s.packets} packets (link type ${s.linkType})\nHosts: ${s.hosts.join(', ')}\nPorts: ${s.ports.join(', ')}\nHTTP:\n  ${s.http.join('\n  ')}\nDNS:\n  ${s.dns.join('\n  ')}`, meta: s, summary: `${s.packets} packets, ${s.hosts.length} hosts` };
     },
   }),
 
@@ -411,7 +411,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Compare two binaries (versions, variants, clean vs injected). Gives hash/import/string deltas plus a section diff.',
-    params: { a: 'string: första filen', b: 'string: andra filen', strings: 'number: antal strängar som jämförs' },
+    params: { a: 'string: the first file', b: 'string: the second file', strings: 'number: how many strings to compare' },
     async run({ a, b, strings = 6000 }, ctx) {
       const A = await load(ctx, a);
       const B = await load(ctx, b);
@@ -431,15 +431,15 @@ export const reTools = [
         result: `DIFF ${path.basename(A.abs)} ↔ ${path.basename(B.abs)}
   storlek: ${fmt(A.buf.length)} ↔ ${fmt(B.buf.length)} (${B.buf.length - A.buf.length >= 0 ? '+' : ''}${B.buf.length - A.buf.length} byte)
   sha256: ${A.buf.length === B.buf.length && A.buf.equals(B.buf) ? 'IDENTISKA' : 'olika'}
-  stränglikhet: ${strSim.toFixed(3)} · importlikhet: ${impSim.toFixed(3)}
-  imphash: ${ea?.imphash || '-'} ↔ ${eb?.imphash || '-'}${ea && eb && ea.imphash && ea.imphash === eb.imphash ? '  ← SAMMA IMPORTMÖNSTER' : ''}
+  string similarity: ${strSim.toFixed(3)} · import similarity: ${impSim.toFixed(3)}
+  imphash: ${ea?.imphash || '-'} ↔ ${eb?.imphash || '-'}${ea && eb && ea.imphash && ea.imphash === eb.imphash ? '  ← SAME IMPORT PATTERN' : ''}
   entropi: ${entropy(A.buf).toFixed(3)} ↔ ${entropy(B.buf).toFixed(3)}
   imports bara i A: ${onlyA.slice(0, 20).join(', ') || '-'}
   imports bara i B: ${onlyB.slice(0, 20).join(', ') || '-'}
-  strängar bara i A: ${sOnlyA.slice(0, 12).join(' | ') || '-'}
-  strängar bara i B: ${sOnlyB.slice(0, 12).join(' | ') || '-'}`,
+  strings only in A: ${sOnlyA.slice(0, 12).join(' | ') || '-'}
+  strings only in B: ${sOnlyB.slice(0, 12).join(' | ') || '-'}`,
         meta: { strSim, impSim, sameImphash: ea?.imphash === eb?.imphash },
-        summary: `diff: strängh ${strSim.toFixed(2)}, import ${impSim.toFixed(2)}`,
+        summary: `diff: strings ${strSim.toFixed(2)}, imports ${impSim.toFixed(2)}`,
       };
     },
   }),
@@ -449,10 +449,10 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Modules/DLLs loaded in a running process + unusual paths. Used to see injection or hooking live.',
-    params: { process: 'string: processnamn eller pid', filter: 'string: regex på modulsökvägen' },
+    params: { process: 'string: process name or pid', filter: 'string: regex on the module path' },
     async run({ process: proc = '', filter = '' }) {
       const { runShell, IS_WIN } = await import('./shell.js');
-      if (!IS_WIN) return { ok: false, error: { code: 'windows_only', message: 'the module list uses Get-Process Modules', hint: 'på Linux: läs /proc/<pid>/maps via shell.run' } };
+      if (!IS_WIN) return { ok: false, error: { code: 'windows_only', message: 'the module list uses Get-Process Modules', hint: 'on Linux: read /proc/<pid>/maps via shell.run' } };
       const sel = /^\d+$/.test(String(proc)) ? `(Get-Process -Id ${proc})` : proc ? `(Get-Process -Name '${String(proc).replace(/'/g, "''")}')` : '(Get-Process | Select -First 1)';
       const cmd = `${sel} | ForEach-Object { $_.Modules | ForEach-Object { "{0}|{1}|{2}" -f $_.ModuleName,$_.FileName,$_.Size } }`;
       const r = await runShell(cmd, { timeoutSec: 45, maxChars: 80000 });
@@ -460,9 +460,9 @@ export const reTools = [
       if (filter) lines = lines.filter((l) => new RegExp(filter, 'i').test(l));
       const suspicious = lines.filter((l) => /(\\Temp\\|\\AppData\\Local\\Temp|\\Users\\Public|\\ProgramData\\|NoLoad|rundll|\\Windows\\Help|\.tmp$|\.dat$)/i.test(l));
       return {
-        result: `${lines.length} moduler${suspicious.length ? `\n\nOvanliga sökvägar (${suspicious.length}):\n${suspicious.slice(0, 25).join('\n')}` : '\ninga misstänkta sökvägar'}\n\nFörsta 40:\n${lines.slice(0, 40).join('\n')}`,
+        result: `${lines.length} moduler${suspicious.length ? `\n\nUnusual paths (${suspicious.length}):\n${suspicious.slice(0, 25).join('\n')}` : '\nno suspicious paths'}\n\nFirst 40:\n${lines.slice(0, 40).join('\n')}`,
         meta: { modules: lines.length, suspicious: suspicious.length },
-        summary: `${lines.length} moduler, ${suspicious.length} oväntade`,
+        summary: `${lines.length} modules, ${suspicious.length} unexpected`,
       };
     },
   }),
@@ -478,7 +478,7 @@ export const reTools = [
       commands: 'string: rizin-kommandon (semikollon) eller objdump-flaggor',
       args: 'array: extra CLI-argument',
       extract: 'boolean: binwalk -e',
-      out: 'string: målmapp/fil',
+      out: 'string: target folder/file',
       timeoutSec: 'number: timeout (ghidra kan ta minuter)',
     },
     examples: ['re.tool({tool:"rizin",path:"a.exe",commands:"aa;afl;s entry0;pdf"})'],
@@ -490,7 +490,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
         const spec = TOOL_SPECS.find((s) => s.id === tool);
         return {
           ok: false,
-          error: { code: 'tool_missing', message: `${tool} is not installed on this machine`, hint: `${spec?.hint || 'installera verktyget'}\ntillgängliga nu: ${Object.values(avail).filter((v) => v.available).map((v) => v.label).join(', ') || 'inga'}` },
+          error: { code: 'tool_missing', message: `${tool} is not installed on this machine`, hint: `${spec?.hint || 'install the tool'}\navailabliga nu: ${Object.values(avail).filter((v) => v.available).map((v) => v.label).join(', ') || 'inga'}` },
         };
       }
       const res = await callTool(tool, { file: abs, commands: commands ? String(commands).split(';') : undefined, args, extract, out: out ? resolveIn(ctx, out).abs : undefined, timeoutMs: timeoutSec ? Number(timeoutSec) * 1000 : undefined }, ctx.cfg);
@@ -498,7 +498,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
       const file = path.join(dirs.out, `re-tool-${tool}-${Date.now().toString(36)}.txt`);
       await fs.mkdir(dirs.out, { recursive: true });
       await fs.writeFile(file, `${res.cmd}\n\n${res.stdout || ''}${res.stderr ? `\n--stderr--\n${res.stderr}` : ''}`);
-      return { result: `${tool} kördes (${fmt((res.stdout || '').length)}, ${res.ms}ms) → full output: ${file}\n\n${clipText(res.stdout || '', 6000)}${res.stderr ? `\n--stderr--\n${clipText(res.stderr, 1200)}` : ''}`, meta: { file, tool }, summary: `${tool} klart (${res.ms}ms)` };
+      return { result: `${tool} ran (${fmt((res.stdout || '').length)}, ${res.ms}ms) → full output: ${file}\n\n${clipText(res.stdout || '', 6000)}${res.stderr ? `\n--stderr--\n${clipText(res.stderr, 1200)}` : ''}`, meta: { file, tool }, summary: `${tool} klart (${res.ms}ms)` };
     },
   }),
 
@@ -507,7 +507,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     group: 'reverse',
     risk: 'read',
     desc: 'Which external RE tools exist and what is missing. The built-in parser needs nothing — this is for deeper work.',
-    params: { refresh: 'boolean: slå i PATH igen' },
+    params: { refresh: 'boolean: look it up in PATH again' },
     async run({ refresh = false }) {
       const d = await detectTools({ refresh: Boolean(refresh) });
       const rows = Object.entries(d).map(([id, v]) => `${v.available ? '✓' : '·'} ${id.padEnd(9)} ${v.label}${v.available ? ` — ${v.path}` : ` — ${v.hint || 'inte installerad'}`}`);
@@ -537,7 +537,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
       const slice = buf.subarray(off, Math.min(buf.length, off + Number(count) * 4));
       const hits = opcodeScan(buf, { sections: [{ name: 'slice', rawPointer: off, rawSize: buf.length, executable: true }] }, 'pe');
       return {
-        result: `INGEN disassembler installerad — raw bytes @0x${off.toString(16)}:\n${hexdump(slice, { width: 16 })}\n\nMönster i hela filen: ${hits.hits.map((h) => `${h.name}×${h.count}`).join(', ') || 'inga'}\nInstallera för riktigt: winget install rizin.rizin  (eller binutils för objdump)`,
+        result: `NO disassembler installed — raw bytes @0x${off.toString(16)}:\n${hexdump(slice, { width: 16 })}\n\nPatterns in the whole file: ${hits.hits.map((h) => `${h.name} x${h.count}`).join(', ') || 'none'}\nInstall one for real coverage: winget install rizin.rizin  (or binutils for objdump)`,
         meta: { raw: true },
         summary: `bytes @0x${off.toString(16)} (ingen disassembler)`,
       };
@@ -549,7 +549,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     group: 'reverse',
     risk: 'write',
     desc: 'Try to unpack known packers. UPX works directly; otherwise: entropy/section assessment + carving the overlay.',
-    params: { path: 'string: fil', out: 'string: målfil' },
+    params: { path: 'string: file', out: 'string: target file' },
     async run({ path: p, out }, ctx) {
       const abs = resolveIn(ctx, p).abs;
       const buf = await fs.readFile(abs);
@@ -561,16 +561,16 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
           const target = out ? resolveIn(ctx, out).abs : `${abs}.unpacked`;
           if (fss.existsSync(target)) {
             const r = analyze(fss.readFileSync(target), { name: path.basename(target), rules: parseRules(DEFAULT_RULES_TEXT) });
-            return { result: `UPX-uppackning klar → ${target} (${fmt(fss.statSync(target).size)}). Risk ${r.risk.score}/100, imports ${r.importCount}, ${r.strings?.total || 0} strängar.\nNästa: re.analyze({path:"${target}"})`, summary: `unpackad till ${path.basename(target)}` };
+            return { result: `UPX unpacked → ${target} (${fmt(fss.statSync(target).size)}). Risk ${r.risk.score}/100, imports ${r.importCount}, ${r.strings?.total || 0} strings.\nNext: re.analyze({path:"${target}"})`, summary: `unpacked to ${path.basename(target)}` };
           }
         }
-        return { ok: false, error: { code: 'upx_failed', message: res.stderr || res.error || 'okänt fel', hint: res.cmd } };
+        return { ok: false, error: { code: 'upx_failed', message: res.stderr || res.error || 'unknown error', hint: res.cmd } };
       }
       const pe = tryParse(buf);
       const overlay = pe ? peOverlay(buf, pe) : Buffer.alloc(0);
       return {
-        result: `${isUpx ? 'UPX-signatur finns men upx är inte installerat' : 'no UPX signature'}.\nEntropi ${entropy(buf).toFixed(3)}, ${pe ? `${pe.sections.length} sektioner, overlay ${fmt(overlay.length)}` : 'ingen PE-header'}.\nProva: re.tool({tool:"binwalk", path:"${path.relative(ctx.cfg.get('workspace'), abs)}", extract:true}) för inbäddade arkiv, eller kör filen i en sandbox och dumpa minnet (ghidra/rizin räcker inte mot VMProtect/Themida).`,
-        summary: isUpx ? 'UPX men inget upx-binär' : 'no simple packer found',
+        result: `${isUpx ? 'UPX signature present but the upx binary is not installed' : 'no UPX signature'}.\nEntropy ${entropy(buf).toFixed(3)}, ${pe ? `${pe.sections.length} sections, overlay ${fmt(overlay.length)}`   : 'no PE header'}.\nProva: re.tool({tool:"binwalk", path:"${path.relative(ctx.cfg.get('workspace'), abs)}", extract:true}) for embedded archives, or run the file in a sandbox and dump memory (ghidra/rizin will not beat VMProtect/Themida statically).`,
+        summary: isUpx ? 'UPX present, no upx binary' : 'no simple packer found',
       };
     },
   }),
@@ -623,13 +623,13 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
       if (action === 'delete') {
         const kept = parseRules(cur).filter((r) => r.name !== name);
         await fs.writeFile(rulesFile, kept.length ? `${rulesToText(kept)}\n` : '');
-        return { result: kept.length ? `tog bort ${name}, ${kept.length} regler kvar i ${rulesFile}` : `tog bort ${name} (filen är nu tom)`, summary: `regel ${name} bort` };
+        return { result: kept.length ? `removed ${name}, ${kept.length} rules left in ${rulesFile}` : `tog bort ${name} (the file is now empty)`, summary: `regel ${name} bort` };
       }
       const parsed = parseRules(text || '');
       if (!parsed.length) return { ok: false, error: { code: 'bad_rule', message: 'could not parse the rule text', hint: 'format: rule Namn { strings: $a = "x" } condition: any of them }' } };
       await fs.appendFile(rulesFile, `\n${(text || '').trim()}\n`);
       bus.info('yara.add', { name: parsed[0].name, file: rulesFile });
-      return { result: `sparade ${parsed.length} regel/regler i ${rulesFile}. De körs nu automatiskt i re.analyze och re.yara.`, summary: `${parsed.length} regler sparade` };
+      return { result: `saved ${parsed.length} rule(s) in ${rulesFile}. They now run automatically in re.analyze and re.yara.`, summary: `${parsed.length} rules sparade` };
     },
   }),
 ];

@@ -80,13 +80,13 @@ export class Telegram {
   async start() {
     if (!this.token) {
       this.state = 'no-token';
-      this.lastError = 'channels.telegram.botToken är tom';
+      this.lastError = 'channels.telegram.botToken is empty';
       return false;
     }
     const me = await this.getMe();
     if (!me) {
       this.state = 'error';
-      this.lastError = 'getMe misslyckades — fel token eller ingen nätverksåtkomst';
+      this.lastError = 'getMe failed — wrong token or no network access';
       return false;
     }
     this.me = me;
@@ -117,7 +117,7 @@ export class Telegram {
         const res = await fetch(`${base}/bot${this.token}/getUpdates?${q}`, { method: 'POST', signal: AbortSignal.timeout((timeout + 15) * 1000) });
         const j = await res.json().catch(() => ({}));
         if (!j.ok) {
-          this.lastError = j.description || 'fel';
+          this.lastError = j.description || 'error';
           await sleep(3000);
           continue;
         }
@@ -147,21 +147,21 @@ export class Telegram {
       const code = text.split(/\s+/)[1] || '';
       if (!allowed.includes(Number(chat)) && this.cfg.get('channels.telegram.pairing') !== false) {
         if (code.toUpperCase() !== String(this.pairingCode).toUpperCase()) {
-          await this.send(chat, `Inte para. Skicka <code>pair ${this.pairingCode}</code> för att koppla den här chatten till MAJIN. (Fullständig access till maskinen — lägg inte till främlingar.)`);
+          await this.send(chat, `Not paired. Send <code>pair ${this.pairingCode}</code> to connect this chat to MAJIN. (Full access to the machine — do not add strangers.)`);
           return;
         }
         const list = [...new Set([...allowed, Number(chat)])];
         this.cfg.patch({ channels: { telegram: { allowedChatIds: list } } });
         this.pairingCode = Math.random().toString(36).slice(2, 8).toUpperCase();
-        await this.send(chat, `Parat. ${list.length} chatt(ar) tillåtna. Ny parningskod: <code>${this.pairingCode}</code>\nSkriv /status för att se vad jag kör.`);
+        await this.send(chat, `Parat. ${list.length} chat(s) allowed. New pairing code: <code>${this.pairingCode}</code>\nWrite /status to see what is running.`);
         this.bus.info('telegram.paired', { chat, from });
         return;
       }
-      await this.send(chat, `MAJIN är redo. <b>${this.registryCount?.() ?? 'Alla'} verktyg på</b>, MOA ${this.cfg.get('moa.policy')}. /status /tools /stop /help`);
+      await this.send(chat, `MAJIN is ready. <b>${this.registryCount?.() ?? 'All'} tools on</b>, MOA ${this.cfg.get('moa.policy')}. /status /tools /stop /help`);
       return;
     }
     if (/^\/help\b/i.test(text)) {
-      await this.send(chat, '<b>MAJIN</b>\n/status — vad som är på\n/tools — alla verktyg\n/model — routing\n/stop — avbryt pågående tur\n/pair — ny kod\nSkriv som du vill: "använd deepseek pro för kod alltid", "analysera filen jag skickade", "kollara status".');
+      await this.send(chat, '<b>MAJIN</b>\n/status — what is on\n/tools — every tool\n/model — routing\n/stop — cancel the current turn\n/pair — new code\nJust write normally: "use deepseek pro for code always", "analyse the file I sent", "check the status".');
       return;
     }
     if (/^\/stop\b/i.test(text)) {
@@ -173,7 +173,7 @@ export class Telegram {
       if (this.cfg.get('channels.telegram.pairing') === false) {
         // pairing avstängt = öppen bot — farligt men användarens val
       } else {
-        await this.send(chat, `Okänd chatt. Skicka <code>pair ${this.pairingCode}</code> för att para.`);
+        await this.send(chat, `Unknown chat. Send <code>pair ${this.pairingCode}</code> to pair.`);
         this.bus.warn('telegram.unpaired', { chat, from });
         return;
       }
@@ -255,7 +255,7 @@ export class Telegram {
     if (caption) fd.append('caption', stripTags(chunk(caption, 900)[0]));
     fd.append('document', new Blob([buf], { type: 'application/octet-stream' }), path.basename(filePath));
     const res = await this.api('sendDocument', fd).catch((e) => null);
-    if (!res) return { ok: false, error: 'sändning misslyckades' };
+    if (!res) return { ok: false, error: 'sending failed' };
     const j = await res.json().catch(() => ({}));
     if (!j.ok) return { ok: false, error: j.description };
     return { ok: true, size: buf.length };

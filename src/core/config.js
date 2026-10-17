@@ -39,7 +39,7 @@ export const DEFAULTS = {
   },
   providers: {
     /* Alla presets finns från början med tom nyckel — UI:t och "lägg till provider"
-       ska visa vad som går att välja, och naturallyspråk ("använd openrouter …") ska
+       ska visa vad som går att välja, och naturligt språk ("använd openrouter …") ska
        kunna peka en rutt på dem direkt. */
     ...Object.fromEntries(
       Object.entries(PRESETS)
@@ -53,7 +53,7 @@ export const DEFAULTS = {
       apiKey: '{env:DEEPSEEK_API_KEY}',
       models: ['deepseek-flash', 'deepseek-v4-pro'],
     },
-    demo: { label: 'Demo (lokal)', kind: 'mock', baseUrl: 'mock://local', apiKey: 'demo', models: ['demo-fast', 'demo-pro'] },
+    demo: { label: 'Demo (local)', kind: 'mock', baseUrl: 'mock://local', apiKey: 'demo', models: ['demo-fast', 'demo-pro'] },
   },
   models: {
     provider: 'deepseek',
@@ -141,8 +141,8 @@ export const DEFAULTS = {
     maxDigestChars: 2400,
     sessionCap: 400,
     facts: [
-      'Användaren vill att alla verktyg är alltid på — inget enable/disable.',
-      'Agenten får ändra sin egen config när användaren säger saker som "använd X för Y alltid".',
+      'The user wants every tool on all the time — no enable/disable.',
+      'The agent may change its own config when the user says things like "use X for Y always".',
     ],
   },
   skills: { dir: 'skills', auto: true, maxInPrompt: 12 },
@@ -158,6 +158,7 @@ export const DEFAULTS = {
       allowedJids: [],
       replyPrefix: '',
       maxMessageChars: 4000,
+    maxRetries: 6,                  // QR ingen skannar: backa och ge upp i stället för att spamma
     },
     shared: { forwardToChat: true, requirePairing: true, idleSessionCloseMin: 720, deliverTo: null, replyWhileStreaming: false },
     webhook: { enabled: false, host: '0.0.0.0', port: 8788, path: '/whatsapp', tunnel: 'none' },
@@ -188,6 +189,15 @@ export const DEFAULTS = {
     autoOpen: true,
   },
   budget: { mode: 'track', monthlyUsd: 0, warnAt: 0.8 },
+  // Spelas endast in när användaren uttryckligen bett om det. Uppladdning finns inte som
+  // kodväg alls — export är ett medvetet steg, ingen tyst dataflöde från en privat maskin.
+  dataset: {
+    capture: false,                  // inget spelas in förrän användaren säger till
+    dir: null,                       // null = <MAJIN_HOME>/dataset
+    keepDays: 90,                    // gammalt tas bort, mappen växer för alltid
+    include: { answer: true, toolArgs: true, plan: true },
+    // ingen upload-nyckel alls — den som vill dela en uppsättning exporterar filen själv
+  },
   logging: { level: 'info', keepDays: 14, jsonl: true },
   server: { host: '0.0.0.0', port: 8787, token: null, openBrowser: true, allowRemote: false, trustLocal: true },
 };
@@ -492,7 +502,20 @@ export function validatePatch(patch, current) {
   const errors = [];
   if (!isObj(patch)) return [{ path: '', msg: 'the patch must be an object' }];
   for (const key of Object.keys(patch)) {
-    if (!ALLOWED.has(key)) errors.push({ path: key, msg: `okänd toppnyckel. Tillåtna: ${[...ALLOWED].join(', ')}` });
+    if (!ALLOWED.has(key)) errors.push({ path: key, msg: `unknown top-level key. Allowed: ${[...ALLOWED].join(', ')}` });
+  }
+  /* Dataset section is the only one holding training data, so a typo must not create a control.
+     There is deliberately no upload key: MAJIN has no code path that sends anything anywhere. */
+  if (isPlain(patch.dataset)) {
+    const knownDataset = ['capture', 'dir', 'keepDays', 'include'];
+    for (const k of Object.keys(patch.dataset)) {
+      if (!knownDataset.includes(k)) errors.push({ path: `dataset.${k}`, msg: `unknown dataset key. Allowed: ${knownDataset.join(', ')} — there is no upload key by design` });
+    }
+    if (patch.dataset.include && isPlain(patch.dataset.include)) {
+      for (const k of Object.keys(patch.dataset.include)) {
+        if (!['answer', 'toolArgs', 'plan'].includes(k)) errors.push({ path: `dataset.include.${k}`, msg: 'unknown include key. Allowed: answer, toolArgs, plan' });
+      }
+    }
   }
   const walk = (obj, prefix = '') => {
     if (!isPlain(obj)) return;
@@ -500,9 +523,9 @@ export function validatePatch(patch, current) {
       const p = prefix ? `${prefix}.${k}` : k;
       if (p === 'models.routes' && isObj(v)) {
         for (const [job, ref] of Object.entries(v)) {
-          if (!JOBS.includes(job)) errors.push({ path: `${p}.${job}`, msg: `okänd jobbrutt. Tillåtna: ${JOBS.join(', ')}` });
+          if (!JOBS.includes(job)) errors.push({ path: `${p}.${job}`, msg: `unknown job route. Allowed: ${JOBS.join(', ')}` });
           if (typeof ref !== 'string' || !/^[a-z0-9._-]+\/[^\s]+$/i.test(ref)) errors.push({ path: `${p}.${job}`, msg: `"${ref}" — format provider/model` });
-          else if (current && !current.providers[ref.split('/')[0]]) errors.push({ path: `${p}.${job}`, msg: `okänd provider "${ref.split('/')[0]}". Lägg till i providers först.` });
+          else if (current && !current.providers[ref.split('/')[0]]) errors.push({ path: `${p}.${job}`, msg: `unknown provider "${ref.split('/')[0]}". Lägg till i providers först.` });
         }
       }
       if (p === 'providers' && isObj(v)) {
@@ -514,14 +537,14 @@ export function validatePatch(patch, current) {
             const base = prov.baseUrl || cur.baseUrl || PRESETS[prov.preset]?.baseUrl || PRESETS[cur.preset]?.baseUrl;
             if (kind !== 'mock' && !base) errors.push({ path: `${p}.${name}.baseUrl`, msg: 'missing baseUrl (or pick a preset that has one)' });
             if (prov.kind && !['openai', 'anthropic', 'mock'].includes(prov.kind)) errors.push({ path: `${p}.${name}.kind`, msg: 'kind: openai | anthropic | mock' });
-            if (prov.preset && !presetNames().includes(prov.preset)) errors.push({ path: `${p}.${name}.preset`, msg: `okänt preset: ${prov.preset}` });
+            if (prov.preset && !presetNames().includes(prov.preset)) errors.push({ path: `${p}.${name}.preset`, msg: `unknown preset "${prov.preset}" — use one of: ${presetNames().join(', ')}` });
             if (prov.models && !Array.isArray(prov.models)) errors.push({ path: `${p}.${name}.models`, msg: 'models must be an array' });
           }
         }
       }
       if (p === 'moa.references' && Array.isArray(v)) {
         v.forEach((r, i) => {
-          if (!isObj(r) || typeof r.model !== 'string') errors.push({ path: `${p}[${i}]`, msg: 'varje referens behöver model "provider/model"' });
+          if (!isObj(r) || typeof r.model !== 'string') errors.push({ path: `${p}[${i}]`, msg: 'every reference needs model "provider/model"' });
         });
         if (v.length < 2) errors.push({ path: p, msg: 'MOA needs at least 2 references' });
       }
@@ -532,7 +555,7 @@ export function validatePatch(patch, current) {
           if (!isObj(r) || typeof r.match !== 'string' || !r.job) errors.push({ path: `${p}[${i}]`, msg: '{ match, job } required' });
           else {
             if (!toRegex(r.match)) errors.push({ path: `${p}[${i}].match`, msg: 'unhappy regex (invalid pattern)' });
-            if (!JOBS.includes(r.job)) errors.push({ path: `${p}[${i}].job`, msg: `okänt jobb "${r.job}"` });
+            if (!JOBS.includes(r.job)) errors.push({ path: `${p}[${i}].job`, msg: `unknown job "${r.job}"` });
           }
         });
       }

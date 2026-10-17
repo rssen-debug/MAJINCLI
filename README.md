@@ -4,7 +4,7 @@
 runs its own configuration, and answers to you — in the browser window, from Telegram, or from
 WhatsApp on your phone. No subscription, no hosted runtime: your keys, your models, your files.
 
-MAJIN is a single Node.js process (or a single `.exe`) with a built-in web UI, 75 tools, a
+MAJIN is a single Node.js process (or a single `.exe`) with a built-in web UI, 76 tools, a
 tool-calling agent loop, Mixture-of-Agents answering, persistent memory and self-modifying
 config. It ships with a real reverse-engineering stack (PE/ELF/APK/pcap parsers, a mini-YARA
 engine, entropy and string analysis) because "read this file and tell me what it is" should not
@@ -32,6 +32,7 @@ node src/cli/majin.js
 * [docs/WINDOWS.md](docs/WINDOWS.md) — installer, data layout, ports, uninstall, stumbles
 * [docs/EXE.md](docs/EXE.md) — how the single-file exe is built and why CI builds it
 * [docs/BENCHMARKS.md](docs/BENCHMARKS.md) — deterministic scenario harness + reference numbers
+* [docs/DATA.md](docs/DATA.md) — what MAJIN may record about its own runs, and how to keep it off
 
 ## What it does
 
@@ -105,6 +106,7 @@ majin config [get <key> | set <key> <value> | path]
 majin pair telegram|whatsapp      connect a chat channel (one-time code)
 majin send "text"                 one question through the agent
 majin re <file> [--json]          RE analysis, no server needed
+majin dataset [on|off|list|export|purge]   the local trajectory record (off by default)
 majin test                        the test suite
 ```
 
@@ -128,7 +130,7 @@ the browser's Web Speech API and off until you turn it on.
 
 ## Tools
 
-75 tools, always all on. Risk is per tool, not per group — that is what the guard reads.
+76 tools, always all on. Risk is per tool, not per group — that is what the guard reads.
 
 | prefix | count | tools |
 |---|---|---|
@@ -237,7 +239,7 @@ src/core/routes.js      job classification
 src/core/moa.js         Mixture-of-Agents
 src/core/guard.js       modes, askOn/neverOn, approvals
 src/core/server/        HTTP + SSE + static UI, token auth
-src/core/tools/         the 75 tools, nine groups
+src/core/tools/         the 76 tools, nine groups
 src/core/binary/        PE, ELF, Mach-O, containers, entropy, strings, YARA subset
 src/core/channels/      telegram (long poll), whatsapp (baileys)
 src/core/provider/      openai-compat, anthropic, gemini, mock/demo
@@ -251,6 +253,9 @@ install.ps1             Windows setup (bin, PATH, task, start menu, icon)
 
 * MAJIN sends your prompt (and file excerpts you drop in) to whichever provider you configured.
   Nothing is sent anywhere else; `web.*`/`net.*` only do what you or the agent asks for.
+* MAJIN can record its own turns as training data, but only if you say so (`dataset.capture`, off by
+  default, redacted on write, trimmed after `keepDays`). There is no upload code path and no upload
+  key — sharing means you export `trajectories.jsonl` yourself. See [docs/DATA.md](docs/DATA.md).
 * Keys live in `<home>/config.json` (0600 on POSIX). Redaction is enforced on every read
   endpoint: no route returns a raw key.
 * `majin re` reads files; it never executes them. External decompilers are only used if you have

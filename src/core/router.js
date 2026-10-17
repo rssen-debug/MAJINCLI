@@ -83,7 +83,7 @@ export function classify(text, opts = {}) {
   const hadToolResult = history.some((m) => m.role === 'tool');
   if (hadToolResult) bump('tools', 0.55, 'verktygssvar i historik');
   if (ACTION_VERB.test(t)) bump('tools', 0.35, 'handlingsverb');
-  if (t.length > 900) bump('analysis', 0.25, 'lång text');
+  if (t.length > 900) bump('analysis', 0.25, 'long text');
   if (t.length < 60 && !scores.size) bump('chat', 0.55, 'kort');
 
   const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1]);
@@ -116,7 +116,7 @@ export async function llmClassify(text, { cfg, candidates = ['code', 're', 'task
       maxTokens: 12,
       temperature: 0,
       messages: [
-        { role: 'system', content: `Välj exakt ett jobb för följande användarturn. Svara med endast en av: ${candidates.join(', ')}.` },
+        { role: 'system', content: `Pick exactly one job for the following user turn. Answer with only one of: ${candidates.join(', ')}.` },
         { role: 'user', content: String(text).slice(0, 1200) },
       ],
     });
@@ -137,7 +137,7 @@ export function routeFor(cfg, job) {
   if (r && r.apiKey) return r;
   const fb = fallback(cfg, job);
   if (fb) {
-    bus.warn('route.fallback', { job, wanted: ref, used: fb.ref, why: 'ingen nyckel för önskad provider' });
+    bus.warn('route.fallback', { job, wanted: ref, used: fb.ref, why: 'no key for the requested provider' });
     return fb;
   }
   return r;

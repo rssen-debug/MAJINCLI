@@ -19,7 +19,7 @@ export function parseWhen(input) {
   if (every) {
     const n = Number(every[1]);
     const unit = { s: 1000, sek: 1000, sekund: 1000, sekunder: 1000, m: 60000, min: 60000, minuter: 60000, h: 3600000, tim: 3600000, timme: 3600000, timmar: 3600000, d: 86400000, dag: 86400000, dagar: 86400000 }[every[2]];
-    if (!n || !unit) throw new Error(`kunde inte tolka intervallet i "${raw}"`);
+    if (!n || !unit) throw new Error(`could not parse intervallet i "${raw}"`);
     const label = unit === 60000 ? ' min' : unit === 3600000 ? ' h' : unit === 86400000 ? ' dag' : ' s';
     return { kind: 'every', everyMs: n * unit, display: `var ${n}${label}` };
   }
@@ -47,7 +47,7 @@ export function parseWhen(input) {
   }
   const cron = s.split(/\s+/);
   if (cron.length === 5 && /^[\d*,\/-]+$/.test(cron.join(''))) return { kind: 'cron', spec: cron.join(' '), display: cron.join(' ') };
-  throw new Error(`kunde inte tolka "${raw}" — använd "07:30 daily", "every 30m", "10:00 mån", "2026-01-01 09:00" eller cron "0/15 * * * *"`);
+  throw new Error(`could not parse "${raw}" — use "07:30 daily", "every 30m", "10:00 mån", "2026-01-01 09:00" or cron "0/15 * * * *"`);
 }
 
 export function nextRun(spec, from = Date.now()) {
@@ -148,7 +148,7 @@ export class Scheduler {
 
   async runNow(id) {
     const j = this.jobs.find((x) => x.id === id || x.name === id);
-    if (!j) return { error: `okänt jobb ${id}` };
+    if (!j) return { error: `unknown job ${id}` };
     return this.fire(j, { manual: true });
   }
 
@@ -184,14 +184,14 @@ export class Scheduler {
     j.lastRun = new Date().toISOString();
     try {
       const res = await this.runTask({ input: j.task, session: `schedule:${j.id}`, source: { type: 'schedule', job: j.name }, deliver: j.deliver, model: j.model });
-      j.lastStatus = res.error ? `fel: ${res.error}` : 'ok';
+      j.lastStatus = res.error ? `error: ${res.error}` : 'ok';
       j.lastSummary = String(res.text || '').slice(0, 400);
       bus.info('schedule.done', { id: j.id, status: j.lastStatus, chars: (res.text || '').length });
       this.running.delete(j.id);
       this.save();
       return res;
     } catch (err) {
-      j.lastStatus = `fel: ${err.message}`;
+      j.lastStatus = `error: ${err.message}`;
       bus.error('schedule.failed', { id: j.id, error: err.message });
       this.running.delete(j.id);
       this.save();

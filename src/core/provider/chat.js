@@ -57,9 +57,9 @@ async function dispatch(o) {
   const { route } = o;
   if (route.kind === 'mock') return mockComplete(o);
   if (!route.apiKey) {
-    throw new ProviderError(`Ingen API-nyckel för "${route.providerName}"`, {
+    throw new ProviderError(`No API key for "${route.providerName}"`, {
       code: 'no_key',
-      hint: 'Lägg till nyckel i Settings → Providers, eller säg till mig: "sätt nyckeln för deepseek: sk-…"',
+      hint: 'Add a key in Settings -> Providers, or just tell me: "set the deepseek key to sk-…"',
     });
   }
   if (route.kind === 'anthropic') return o.stream ? anthropicStream(o) : anthropicOnce(o);

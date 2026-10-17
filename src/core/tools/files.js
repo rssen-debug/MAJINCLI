@@ -67,7 +67,7 @@ export const fileTools = [
         }),
       );
       rows.sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1));
-      return { result: `${abs} — ${rows.length} poster\n${rows.map((r) => `${r.dir ? 'd' : '-'} ${String(r.size).padStart(11)} ${r.mtime}  ${r.name}`).join('\n')}`, meta: { count: rows.length, dir: abs }, summary: `${rows.length} poster i ${path.basename(abs)}` };
+      return { result: `${abs} — ${rows.length} entries\n${rows.map((r) => `${r.dir ? 'd' : '-'} ${String(r.size).padStart(11)} ${r.mtime}  ${r.name}`).join('\n')}`, meta: { count: rows.length, dir: abs }, summary: `${rows.length} entries in ${path.basename(abs)}` };
     },
   }),
 
@@ -365,7 +365,7 @@ export const fileTools = [
       const ok = r.status === 0 || (op === 'create' && r.status === 1 && warnings && (sizeOf(a.abs) || 0) > 0);
       return {
         ok,
-        result: `${ok ? 'ok' : 'fel'}: tar ${args.join(' ')}\n${(r.stderr || '').slice(0, 2000)}\n${sizeOf(a.abs) || 0} byte i arkiv`,
+        result: `${ok ? 'ok' : 'failed'}: tar ${args.join(' ')}\n${(r.stderr || '').slice(0, 2000)}\n${sizeOf(a.abs) || 0} byte i arkiv`,
         meta: { archive: a.abs, bytes: sizeOf(a.abs) || 0, op },
         summary: `${op} ${path.basename(a.abs)} (${sizeOf(a.abs) || 0} byte)`,
         ...(ok ? {} : { error: { code: 'tar_failed', message: (r.stderr || `tar exit ${r.status}`).slice(0, 400) } }),

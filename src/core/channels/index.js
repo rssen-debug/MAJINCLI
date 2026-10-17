@@ -52,7 +52,7 @@ export class Channels {
     if (!session || !session.includes(':')) return;
     const [channel, chatId] = session.split(':');
     const text = [
-      `⚠️ ${ev.reason || 'Bekräftelse krävs'}`,
+      `⚠️ ${ev.reason || 'Confirmation required'}`,
       ev.detail ? `\`${String(ev.detail).slice(0, 300)}\`` : '',
       '',
       `Svara: /ja ${ev.id}  ·  /nej ${ev.id}`,
@@ -77,7 +77,7 @@ export class Channels {
     if (approval) {
       const yes = /^(\/?(ja|godk[aä]nn|approve|allow))/i.test(approval[1]);
       const ok = approvals.respond(approval[2], yes, `channel ${msg.channel}`);
-      await msg.reply(ok ? (yes ? 'Klart — kör.' : 'Nej, stoppat.') : 'Det godkännandet är redan utrett eller utgånget.');
+      await msg.reply(ok ? (yes ? 'Cleared — go.' : 'Nej, stoppat.') : 'That approval was already resolved or has expired.');
       return;
     }
     if (/^\/?(status|state)\b/i.test(text)) {
@@ -102,23 +102,23 @@ export class Channels {
     }
     if (/^\/?(avbryt|stop|cancel)\b/i.test(text)) {
       this.agent?.stop(session);
-      await msg.reply('Avbryter pågående tur.');
+      await msg.reply('Cancelling the current turn.');
       return;
     }
     if (/^pair\b/i.test(text) && msg.channel === 'whatsapp') {
       const jid = String(text.split(/\s+/)[1] || msg.chatId);
       await this.whatsapp.allow(jid.includes('@') ? jid : `${jid}@s.whatsapp.net`);
-      await msg.reply('Numret är tillåtet. Skriv /status när du vill köra.');
+      await msg.reply('Number allowed. Write /status when you want to run.');
       return;
     }
     if (/^\/?para\s+([A-Z0-9]{4,10})$/i.test(text) && msg.channel === 'whatsapp') {
       const ok = text.toUpperCase() === String(this.telegram.pairingCode || '').toUpperCase();
-      await msg.reply(ok ? 'Kod ok men telegram är egen kanal — använd /pair i Telegram.' : 'Okänd kod.');
+      await msg.reply(ok ? 'code accepted, but telegram is its own channel — use /pair inside Telegram.' : 'unknown code.');
       return;
     }
 
     if (!this.agent) {
-      await msg.reply('Agenten är inte inkopplad på den här kanalen än.');
+      await msg.reply('The agent is not wired to this channel yet.');
       return;
     }
     this.active.set(session, msg);
@@ -138,7 +138,7 @@ export class Channels {
         source: msg.channel,
         history: readHistory(session, 40),
         onEvent: (ev) => {
-          if (ev.type === 'tool_result' && !ev.ok) msg.reply(`⚠️ ${ev.tool}: ${String(ev.error?.message || ev.error || 'fel').slice(0, 300)}`).catch(() => {});
+          if (ev.type === 'tool_result' && !ev.ok) msg.reply(`⚠️ ${ev.tool}: ${String(ev.error?.message || ev.error || 'error').slice(0, 300)}`).catch(() => {});
           if (ev.type === 'answer' && this.cfg.get('channels.shared.replyWhileStreaming')) {
             const head = String(ev.text || '').slice(0, 90);
             if (head) msg.reply(`${head}…`).catch(() => {});

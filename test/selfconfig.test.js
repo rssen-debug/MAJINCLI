@@ -105,7 +105,7 @@ test('MOA, guard, budget, maxSteps, memory and persona — Swedish and English',
   }
 });
 
-test('okänd intent lämnar orört och flaggar', (t) => {
+test('unknown intent leaves config untouched and flags', (t) => {
   const c = cfg0(t);
   const i = parseIntent('vad är vädret imorgon', c);
   assert.equal(i.matched, false);
@@ -115,11 +115,17 @@ test('okänd intent lämnar orört och flaggar', (t) => {
   assert.equal(JSON.stringify(c.raw()), before);
 });
 
-test('bar nyckel hamnar på default-providern', (t) => {
+test('a bare key lands on the default provider, a key inside a task does not', (t) => {
   const c = cfg0(t);
   const i = parseIntent('sk-abc123def45678901234567890', c);
   assert.equal(i.matched, true);
   const name = Object.keys(i.patch.providers)[0];
-  assert.equal(c.get('models.provider'), 'deepseek', 'default-providern är deepseek');
+  assert.equal(c.get('models.provider'), 'deepseek', 'the default provider is deepseek');
   assert.equal(i.patch.providers[name].apiKey, 'sk-abc123def45678901234567890');
+  // en nyckel som nämns i en uppgift är inte en konfigurationsbegäran
+  const q = parseIntent('read notes.txt key sk-LIVESECRET1234567890AB', c);
+  assert.equal(q.matched, false, 'a mentioned key must not rewrite the provider config');
+  const r = parseIntent('what does this log line mean: user=sk-abcdefghijklmnop1234', c);
+  assert.equal(r.patch.providers, undefined, 'no provider patch from a quoted log line');
+  assert.equal(parseIntent('my openai key is sk-abcdefghijklmnop1234', c).patch.providers.openai.apiKey, 'sk-abcdefghijklmnop1234');
 });

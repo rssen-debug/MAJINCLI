@@ -15,7 +15,7 @@ export class BinError extends Error {
 
 export class Reader {
   constructor(buf) {
-    if (!Buffer.isBuffer(buf)) throw new BinError('buffert är inte en Buffer', { code: 'bad_input' });
+    if (!Buffer.isBuffer(buf)) throw new BinError('the buffer is not a Buffer', { code: 'bad_input' });
     this.buf = buf;
     this.view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
     this.size = buf.length;
@@ -23,7 +23,7 @@ export class Reader {
 
   need(off, len) {
     if (!Number.isInteger(off) || off < 0 || off + len > this.size) {
-      throw new BinError(`läsning utanför filen @${off}+${len} (storlek ${this.size})`, { code: 'oob', offset: off });
+      throw new BinError(`read outside the file @${off}+${len} (size ${this.size})`, { code: 'oob', offset: off });
     }
     return this;
   }

@@ -107,7 +107,7 @@ async function fail(res) {
     status: res.status,
     code: parsed?.error?.code || `http_${res.status}`,
     retryable: res.status === 429 || res.status >= 500,
-    hint: res.status === 401 ? 'Fel eller borttagen API-nyckel.' : res.status === 429 ? 'Ratelimit — MAJIN backoffar och försöker igen.' : res.status === 404 ? 'baseUrl eller modellnamn fel.' : null,
+    hint: res.status === 401 ? 'Fel eller borttagen API-nyckel.' : res.status === 429 ? 'Rate limited — MAJIN backs off and retries.' : res.status === 404 ? 'wrong baseUrl or model name.' : null,
   });
 }
 

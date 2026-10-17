@@ -13,6 +13,7 @@ import { Memory, Skills } from './memory.js';
 import { Usage } from './usage.js';
 import { buildRegistry, ALL_TOOLS } from './tools/index.js';
 import { Agent } from './agent.js';
+import { Dataset } from './dataset.js';
 import { Scheduler } from './schedule.js';
 import { approvals } from './guard.js';
 import { readHistory } from './context.js';
@@ -25,8 +26,10 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
   const memory = new Memory(cfg);
   const skills = new Skills(cfg);
   const usage = new Usage(cfg);
+  const dataset = new Dataset(cfg, bus);
+  dataset.trim();
 
-  const ctx = { cfg, bus, memory, skills, usage, approvals, agent: null, channels: null, scheduler: null, emit: (ev) => bus.emit(`tool.${ev.type}`, ev) };
+  const ctx = { cfg, bus, memory, skills, usage, dataset, approvals, agent: null, channels: null, scheduler: null, emit: (ev) => bus.emit(`tool.${ev.type}`, ev) };
   const registry = buildRegistry(ctx);
 
   const agent = new Agent({ cfg, registry, memory, skills, usage, bus, shared: ctx });
@@ -73,7 +76,7 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
       return res;
     } catch (err) {
       bus.error('schedule.run', { error: err.message, session });
-      if (chans && session.includes(':')) await chans.deliver(session, `Schemat misslyckades: ${err.message}`).catch(() => {});
+      if (chans && session.includes(':')) await chans.deliver(session, `The schedule failed: ${err.message}`).catch(() => {});
       return { error: err.message };
     }
   }
@@ -126,6 +129,7 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
     memory,
     skills,
     usage,
+    dataset,
     registry,
     agent,
     scheduler: sched,

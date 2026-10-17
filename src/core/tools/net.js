@@ -48,7 +48,7 @@ export const netTools = [
         const rows = (Array.isArray(res) ? res : [res]).map((x) => (typeof x === 'object' ? Object.entries(x).map(([k, v]) => `${k}=${v}`).join(' ') : String(x)));
         return { result: `${host} ${type}\n${rows.join('\n')}`, meta: { rows: rows.length }, summary: `${host}: ${rows.length} ${type}-poster` };
       } catch (err) {
-        return { ok: false, error: { code: 'dns_failed', message: `${type} ${host}: ${err.code || err.message}`, hint: err.code === 'ENOTFOUND' ? 'domänen finns inte — kan vara en död C2 eller en fejkad IOC-sträng' : null } };
+        return { ok: false, error: { code: 'dns_failed', message: `${type} ${host}: ${err.code || err.message}`, hint: err.code === 'ENOTFOUND' ? "domain does not exist — could be a dead C2 or a spoofed IOC string" : null } };
       }
     },
   }),
@@ -71,7 +71,7 @@ export const netTools = [
           resolve(r);
         };
         sock.setTimeout(Number(timeoutMs) || 1500);
-        sock.once('connect', () => finish({ result: `${host}:${port} öppen`, summary: `${port} öppen` }));
+        sock.once('connect', () => finish({ result: `${host}:${port} open`, summary: `${port} open` }));
         sock.once('timeout', () => finish({ ok: false, error: { code: 'timeout', message: `${host}:${port} svarade inte inom ${timeoutMs}ms` } }));
         sock.once('error', (e) => finish({ ok: false, error: { code: 'tcp_error', message: `${host}:${port}: ${e.code || e.message}` } }));
         sock.connect(Number(port), String(host));
@@ -138,7 +138,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
       ctx.servers ||= new Map();
       ctx.servers.set(real, server);
       const ips = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
-      return { result: `delar ${abs}\n  http://127.0.0.1:${real}/\n${ips.map((i) => `  http://${i}:${real}/`).join('\n')}\nStoppa med net.serve_stop(${real})`, meta: { port: real }, summary: `server på :${real}` };
+      return { result: `sharing ${abs}\n  http://127.0.0.1:${real}/\n${ips.map((i) => `  http://${i}:${real}/`).join('\n')}\nStop it with net.serve_stop({port:${real}})`, meta: { port: real }, summary: `server på :${real}` };
     },
   }),
 
@@ -150,10 +150,10 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
     params: { port: 'number: the port from net.serve' },
     async run({ port = 0 }, ctx) {
       const s = ctx.servers?.get(Number(port));
-      if (!s) return { ok: false, error: { code: 'no_server', message: `ingen server på ${port}` } };
+      if (!s) return { ok: false, error: { code: 'no_server', message: `no server on ${port}` } };
       s.close();
       ctx.servers.delete(Number(port));
-      return { result: `stängde :${port}`, summary: `server :${port} stoppad` };
+      return { result: `stopped :${port}`, summary: `server :${port} stopped` };
     },
   }),
 
@@ -170,7 +170,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
         const size = bounds ? `[Drawing.Rectangle]::FromLTRB(${bounds.join(',')})` : '[System.Windows.Forms.SystemInformation]::VirtualScreen';
         const cmd = `Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $b=${size}; $bmp=New-Object Drawing.Bitmap($b.Width,$b.Height); $g=[Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location,[Drawing.Point]::Empty,$b.Size); $bmp.Save('${out.abs}'); 'saved'`;
         const r = await runShell(cmd, { timeoutSec: 30 });
-        if (!/saved/.test(r.stdout || '')) return { ok: false, error: { code: 'screenshot_failed', message: (r.stderr || 'okänt fel').slice(0, 300), hint: 'fungerar bara i en interaktiv session' } };
+        if (!/saved/.test(r.stdout || '')) return { ok: false, error: { code: 'screenshot_failed', message: (r.stderr || 'unknown error').slice(0, 300), hint: 'fungerar bara i en interaktiv session' } };
       } else if (process.platform === 'darwin') {
         await runShell(`screencapture ${region ? `-R${region}` : ''} "${out.abs}"`, { timeoutSec: 30 });
       } else {
@@ -178,14 +178,14 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
         void r;
       }
       const fsSync = await import('node:fs');
-      if (!fsSync.existsSync(out.abs)) return { ok: false, error: { code: 'no_file', message: 'skärmbilden skapades inte', hint: 'installera grim (wayland) eller imagemagick (x11)' } };
+      if (!fsSync.existsSync(out.abs)) return { ok: false, error: { code: 'no_file', message: 'the screenshot was not created', hint: 'installera grim (wayland) eller imagemagick (x11)' } };
       const size = fsSync.statSync(out.abs).size;
       if (then === 'describe') {
         const { analyzeImage } = await import('../vision.js');
-        const d = await analyzeImage({ cfg: ctx.cfg, imagePath: out.abs, question: 'Vad syns på skärmen? Beskriv fönster, text, felmeddelanden och vad som kan behöva åtgärdas.' });
-        return { result: `${out.abs} (${size} byte)\n\n${d}`, summary: 'skärmbild + beskrivning' };
+        const d = await analyzeImage({ cfg: ctx.cfg, imagePath: out.abs, question: 'What is on screen? Describe windows, text, errors and what may need fixing.' });
+        return { result: `${out.abs} (${size} byte)\n\n${d}`, summary: 'screenshot + description' };
       }
-      return { result: `${out.abs} (${size} byte)`, meta: { path: out.abs }, summary: `skärmbild ${(size / 1024) | 0} kB` };
+      return { result: `${out.abs} (${size} byte)`, meta: { path: out.abs }, summary: `screenshot ${(size / 1024) | 0} kB` };
     },
   }),
 
@@ -199,7 +199,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
       const cmd = IS_WIN ? '(Get-Clipboard -Raw) 2>$null; "---"; (Get-Clipboard -Format FileDropList).Path 2>$null' : 'xclip -selection clipboard -o 2>/dev/null || pbpaste 2>/dev/null';
       const r = await runShell(cmd, { timeoutSec: 15, maxChars: 20000 });
       const text = clean(r.stdout).join('\n');
-      return { result: text || '(urklippet är tomt)', summary: text ? `urklipp ${text.length} tecken` : 'tomt urklipp' };
+      return { result: text || '(the clipboard is empty)', summary: text ? `clipboard ${text.length} chars` : 'empty clipboard' };
     },
   }),
 
