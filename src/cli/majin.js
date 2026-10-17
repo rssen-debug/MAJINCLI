@@ -135,9 +135,17 @@ async function start() {
   // 'start' and --window belong to the parent (it is the one that opens the window); --no-window
   // must survive so the child honors 'run headless' too (window open + first-run shortcut).
   const pass = argv.filter((a) => a !== 'start' && a !== '--window');
-  const child = spawn(process.execPath === self ? self : process.execPath, [self, '_serve', ...pass], {
+  // pkg treats argv[1] as the entry point to run when it is a real file on disk -- passing the exe
+  // path there (process.execPath) made pkg compile its own binary as JS and die with
+  // 'SyntaxError: Invalid or unexpected token'. Only the node-spawns-script case needs the script
+  // path prepended; for the packaged exe the executable itself is implicit and argv[1] is free.
+  const serveArgs = typeof process.pkg !== 'undefined' ? ['_serve', ...pass] : [self, '_serve', ...pass];
+  const child = spawn(process.execPath === self ? self : process.execPath, serveArgs, {
     stdio: 'inherit',
-    env: { ...process.env, MAJIN_PORT: String(port) },
+    // pkg's patchChildProcess forces PKG_EXECPATH=<exe> into self-spawns, which makes the child
+    // treat its first arg as a module to run (it tried to run '_serve' / its own .exe). Any
+    // pre-set value is honored instead, so a sentinel keeps the child on the normal app path.
+    env: { ...process.env, MAJIN_PORT: String(port), ...(typeof process.pkg !== 'undefined' ? { PKG_EXECPATH: 'majin-respawn' } : {}) },
   });
   child.on('exit', (code, sig) => {
     if (code === 75) {
