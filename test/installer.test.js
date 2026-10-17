@@ -43,6 +43,8 @@ test('iss: autostart and the desktop icon are choices, and the command line is o
   assert.match(iss, /uninsdeletevalue/, 'and it is the installer\s job to remove it again');
   assert.match(iss, /^Name: "cmdline"[^\n]*Flags: unchecked$/m, 'PATH is also opt-in');
   assert.match(iss, /Tasks: desktopicon/, 'the desktop icon is wired to its task');
+  assert.match(iss, /UsePreviousTasks=no/, 'each install shows fresh shortcut choices, never inheriting an old "no icon"');
+  assert.match(iss, /Name: "\{group\}\\\{#MyAppName\}"/, 'the Start Menu shortcut is unconditional -- there is always a way back in');
   assert.doesNotMatch(iss, /HKLM/, 'nothing machine-wide without an elevation the user asked for');
   assert.doesNotMatch(iss, /HKEY_LOCAL_MACHINE/, 'same on the long spelling');
 });

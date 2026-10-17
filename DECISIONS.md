@@ -120,3 +120,12 @@ A gate is only as good as its word list.
   (`usage.json`, the dataset). — Why: `majin` must be copyable by hand and greppable when it misbehave.
 - **Cost truth is partial by design.** Only DeepSeek has `pricing` entries; everything else reports
   $0 with the TODO item open, rather than a table of guessed prices.
+
+## 2026-06-18
+- **Update repo migration in repoSlug (not a config migration pass):** the check
+  path is the only reader of updates.repo, so fixing it there covers CLI, server
+  and UI at once without a versioned config-migration framework we do not have.
+- **Rejected: auto-creating a desktop shortcut from the running app.** Would
+  bypass the user's installer choice and needs registry-free .lnk writing from
+  Node; UsePreviousTasks=no + unconditional Start Menu entry achieves the
+  guarantee inside Inno, the tool that owns shortcuts.

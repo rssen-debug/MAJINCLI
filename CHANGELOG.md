@@ -3,6 +3,20 @@
 Notable changes on `arena/e223e8b9-slurps` (PR #1). Newest first. Verified in the Linux sandbox
 unless stated otherwise; nothing here claims a Windows or browser run.
 
+## 0.2.1 — update checks that actually find updates, shortcuts that come back
+
+- **Critical:** the update checker defaulted to the archived first repo
+  (`rssen-debug/slurps`, which never published a release), so every installed
+  MAJIN looked "never outdated". Default is now `rssen-debug/MAJINCLI`, and a
+  config written by an older version is migrated on sight and persisted.
+- **Installer:** `UsePreviousTasks=no` -- an unchecked "desktop icon" box from
+  an old install no longer reproduces itself forever, leaving people with no
+  way to start the app. Start Menu shortcut stays unconditional.
+- Installer publisher/support URLs pointed at the archived repo; now MAJINCLI.
+- README download/clone links pointed at the archived repo; fixed.
+- The "no network" update test is deterministic now (impossible repo), which
+  caught only because the repo fix above made the sandbox actually reach GitHub.
+
 ## Unreleased — 2026-10-17 (onboarding)
 
 Run as a beginner, not as a developer: an empty data home, a local stand-in gateway that counts every

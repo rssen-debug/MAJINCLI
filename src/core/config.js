@@ -205,7 +205,7 @@ export const DEFAULTS = {
   updates: {
     check: true,
     intervalHours: 24,
-    repo: 'rssen-debug/slurps',
+    repo: 'rssen-debug/MAJINCLI',
     channel: '',
     token: null,
     lastCheck: 0,

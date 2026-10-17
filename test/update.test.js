@@ -216,6 +216,9 @@ test('the runtime exposes the update state and the server serves it', async (t) 
 
 test('majin update works with no network at all and never crashes', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-upd-cli-'));
+  // deterministically "offline": an impossible repo owner yields a 404 with
+  // network and a request error without -- either way `error` must be set.
+  fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify({ updates: { repo: 'majin-offline-test/does-not-exist' } }));
   const r = spawnSync(process.execPath, [path.join(ROOT, 'src/cli/majin.js'), 'update', '--json'], {
     encoding: 'utf8',
     timeout: 60000,
@@ -251,4 +254,16 @@ test('the window shows a chip for it, in the same language as everything else', 
   assert.match(panels, /st\.update/, 'the chip reads the state, not its own guess');
   assert.match(panels, /api\('\/update', \{ method: 'POST'/, 'and one endpoint does the work');
   assert.match(panels, /MAJIN-Setup\.exe is in/, 'the answer names the file it produced');
+});
+
+test('update checks point at the live repo, and a legacy default is migrated', () => {
+  const blank = { get: () => undefined, set: () => {} };
+  const slug = U.repoSlug(blank);
+  assert.equal(slug.owner + '/' + slug.repo, 'rssen-debug/MAJINCLI', 'fresh installs never ask the archived repo');
+
+  const writes = [];
+  const legacy = { get: (k) => (k === 'updates.repo' ? 'rssen-debug/slurps' : undefined), set: (k, v) => writes.push([k, v]) };
+  const migrated = U.repoSlug(legacy);
+  assert.equal(migrated.repo, 'MAJINCLI', 'the old archived repo no longer swallows update checks');
+  assert.deepEqual(writes, [['updates.repo', 'rssen-debug/MAJINCLI']], 'and the fix is persisted so it only happens once');
 });

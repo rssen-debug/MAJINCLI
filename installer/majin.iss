@@ -19,10 +19,10 @@
 #define MyAppName "MAJIN"
 ; the build passes /DMyAppVersion=<package.json version>; keep a fallback for hand runs
 #ifndef MyAppVersion
-  #define MyAppVersion "0.2.0"
+  #define MyAppVersion "0.2.1"
 #endif
 #define MyAppPublisher "rssen-debug"
-#define MyAppURL "https://github.com/rssen-debug/slurps"
+#define MyAppURL "https://github.com/rssen-debug/MAJINCLI"
 #define MyAppExeName "majin-win-x64.exe"
 
 [Setup]
@@ -38,6 +38,7 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 DisableWelcomePage=no
 AllowNoIcons=yes
+UsePreviousTasks=no
 OutputDir=..\dist\installer
 OutputBaseFilename=MAJIN-Setup
 SetupIconFile=majin.ico

@@ -16,16 +16,27 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { load } from './config.js';
 
-const DEFAULT_REPO = 'rssen-debug/slurps';
+const DEFAULT_REPO = 'rssen-debug/MAJINCLI';
+const LEGACY_REPO = 'rssen-debug/slurps'; // the archived first home -- never published a release
 const ASSET = 'MAJIN-Setup.exe';
 const TIMEOUT_MS = 8000;
 
 export const SETUP_ASSET = ASSET;
 
 export function repoSlug(cfg) {
-  const raw = (cfg && cfg.get && cfg.get('updates.repo')) || DEFAULT_REPO;
-  const m = /^([\w.-]+)\/([\w.-]+)$/.exec(String(raw).trim());
-  return m ? { owner: m[1], repo: m[2] } : { owner: 'rssen-debug', repo: 'slurps' };
+  let raw = (cfg && cfg.get && cfg.get('updates.repo')) || DEFAULT_REPO;
+  raw = String(raw).trim();
+  // the project moved: a config written by an old version still points at the
+  // archived repo (which has no releases, so the app looked "never outdated").
+  // Move it to the new home once, persist, and carry on.
+  if (raw === LEGACY_REPO) {
+    raw = DEFAULT_REPO;
+    try { if (cfg && cfg.set) cfg.set('updates.repo', DEFAULT_REPO); } catch { /* read-only */ }
+  }
+  const m = /^([\w.-]+)\/([\w.-]+)$/.exec(raw);
+  if (m) return { owner: m[1], repo: m[2] };
+  const d = DEFAULT_REPO.split('/');
+  return { owner: d[0], repo: d[1] };
 }
 
 /** 'v0.1.2' / '0.1.2' -> [0,1,2] ; anything unparseable is the lowest thing there is. */
