@@ -321,7 +321,7 @@ async function respond(id, approved, box) {
     if (box) box.querySelectorAll('button').forEach((b) => {
       b.disabled = true;
     });
-    if (box) box.style.borderColor = approved ? '#2b7c99' : '#4d2430';
+    if (box) box.style.borderColor = approved ? 'var(--ok)' : 'var(--bad)';
   } catch (e) {
     toast('could not answer: ' + e.message);
   }

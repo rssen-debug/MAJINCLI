@@ -9,6 +9,7 @@ import path from 'node:path';
 import { load } from './config.js';
 import { PRESETS, presetCard } from './presets.js';
 import { bus } from './log.js';
+import { checkForUpdate, downloadSetup, notice, scheduleUpdateCheck } from './update.js';
 import { dirs, ensureDirs } from './paths.js';
 import { Memory, Skills } from './memory.js';
 import { Usage } from './usage.js';
@@ -19,7 +20,8 @@ import { Scheduler } from './schedule.js';
 import { approvals } from './guard.js';
 import { readHistory } from './context.js';
 
-export const VERSION = '0.1.0';
+import { VERSION as APP_VERSION } from './version.js';
+export const VERSION = APP_VERSION;
 
 export async function createRuntime({ channels = true, scheduler = true, open = null } = {}) {
   ensureDirs();
@@ -113,6 +115,7 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
       providers: cfg.providerStatus(),
       routes: cfg.routeTable(),
       needsSetup: cfg.needsSetup?.() ?? !cfg.providerStatus().some((p) => p.ready),
+      update: updateInfo.info ? { ...updateInfo.info, notice: updateInfo.notice } : null,
       // hela presetlistan, sa att valjaren aldrig hardkodar en leverantor
       presets: Object.entries(PRESETS).map(([name, p]) => presetCard(name, p)),
       moa: { policy: moa.policy, enabled: moa.enabled, width: moa.width, refs: moa.references.map((r) => r.model), aggregator: moa.aggregator, disagreementFloor: moa.disagreementFloor },
@@ -128,9 +131,36 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
     };
   }
 
+  const updateInfo = { info: null, notice: '' };
+  const update = {
+    get info() {
+      return updateInfo.info ? { ...updateInfo.info, notice: updateInfo.notice } : null;
+    },
+    /** force skips the interval; a failing check returns the info with `error` set, never throws. */
+    async check(o = {}) {
+      const info = await checkForUpdate({ cfg, version: VERSION, fetchImpl: o.fetchImpl, force: o.force === true });
+      updateInfo.info = info;
+      updateInfo.notice = info && !info.error ? notice(info, VERSION) : '';
+      return update.info;
+    },
+    download(o = {}) {
+      return downloadSetup({ cfg, ...o });
+    },
+  };
+  scheduleUpdateCheck({
+    cfg,
+    version: VERSION,
+    log: bus,
+    onInfo: (i) => {
+      updateInfo.info = i;
+      updateInfo.notice = i.notice || '';
+    },
+  });
+
   return {
     cfg,
     bus,
+    update,
     memory,
     skills,
     usage,

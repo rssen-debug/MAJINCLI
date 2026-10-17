@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const WORDS = `Notera notera Testa testar Testa Kvar kvarvarande ange svara svarar svarade svaret bort borta borttagen fil filer filsnack filnamn mapp mappar katalog sökväg sökvägar sida sidor rad rader
+const WORDS = `trasig saknas finns kor starta hamta ner aktuell senaste updatera uppdatering din egen skrivbord genvag Notera notera Testa testar Testa Kvar kvarvarande ange svara svarar svarade svaret bort borta borttagen fil filer filsnack filnamn mapp mappar katalog sökväg sökvägar sida sidor rad rader
 antal namn namnen beskrivning användare använd används använda välj visa göm skapa ta_bort lägga
 uppdatera hämta skicka skickas kör köra körning körningar svar svaret fråga frågor fel försök
 resultat sparade sparas spara verktyg inställning inställningar begränsa tillåten tillåtet
@@ -26,7 +26,6 @@ föregående foregaende efterföljande eeftersom eftersom fastän fastan ehuru a
   .filter(Boolean)
   .map((w) => w.replace(/_/g, '[\\s-]'));
 
-const DIACRITIC = /[åäöÅÄÖ]/;
 
 function* walk(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -39,9 +38,11 @@ function* walk(dir) {
 }
 
 // Lines that must stay Swedish: they are how Swedish *input* keeps working.
+const DIACRITIC = /[åäöÅÄÖ]/;
 const ALLOW = [
   'words: [', 'JOBS_SV', 'använd anvand use', 'const stop = new Set(', 'match: \'/(',
   'could not parse', 'const map = { amp', 'Exempel', 'glöm',
+  'path.join(homedir, ',  // desktop folder names we look for, not messages (Skrivbord)
 ];
 
 const TARGETS = [];

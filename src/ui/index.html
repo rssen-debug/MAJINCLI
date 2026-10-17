@@ -7,8 +7,8 @@
 <link rel="icon" href="/logo.png" />
 <link rel="apple-touch-icon" href="/logo.png" />
 <style>
-:root{--bg:#04070a;--bg2:#07101a;--bg3:#050b11;--ink:#bfeaf7;--dim:#6e8fa0;--cy:#57e6ff;--pink:#ff8fd0;--cysoft:rgba(87,230,255,.14);--ok:#6cf2b6;--warn:#ffd479;--bad:#ff7a7a;--line:#12303f;--mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Roboto Mono",monospace}
-body.light{--bg:#f6f8fa;--bg2:#eef2f6;--bg3:#fff;--ink:#122430;--dim:#637683;--cy:#0f7f9c;--pink:#c9417f;--cysoft:rgba(15,127,156,.10);--ok:#0f7a4f;--warn:#8a5b00;--bad:#a92a2a;--line:#ccd8e0}
+:root{--bg:#0b0509;--bg2:#160a12;--bg3:#10070e;--ink:#f7dbe9;--dim:#bb8ba3;--cy:#ff8fd0;--pink:#ffc9dd;--cysoft:rgba(255,143,208,.16);--ok:#7ce0b6;--warn:#ffd479;--bad:#ff7a9a;--line:#3a1a2c;--mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,"Roboto Mono",monospace}
+body.light{--bg:#fbf3f7;--bg2:#f5e6ee;--bg3:#fff;--ink:#2b1220;--dim:#8a5f74;--cy:#c2185b;--pink:#e05c9c;--cysoft:rgba(194,24,91,.10);--ok:#0f7a4f;--warn:#8a5b00;--bad:#b3213f;--line:#e8ccd9}
 *{box-sizing:border-box}html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.55 var(--mono);display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}
 body::after{content:"";position:fixed;inset:0;pointer-events:none;opacity:.35;background:repeating-linear-gradient(0deg,rgba(255,255,255,.022) 0 1px,transparent 1px 3px)}
@@ -19,7 +19,7 @@ body.pan-off #app{grid-template-columns:214px 1fr 0}
 @media(max-width:960px){#app{grid-template-columns:1fr}#rail,#panel{display:none}}
 header{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);background:radial-gradient(120% 300% at 12% -60%,var(--cysoft),transparent 60%),var(--bg2)}
 header h1{margin:0;font-size:13px;letter-spacing:.32em;color:var(--cy);text-shadow:0 0 12px rgba(87,230,255,.35)}
-.logo{width:22px;height:22px;display:block;flex:0 0 auto;filter:drop-shadow(0 0 8px rgba(255,143,208,.45))}
+.logo{width:22px;height:22px;display:block;flex:0 0 auto;border-radius:5px;box-shadow:0 0 10px rgba(255,143,208,.35)}
 .sub{color:var(--dim);font-size:11px}
 .chip{border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:11px;color:var(--dim);white-space:nowrap;background:rgba(127,127,127,.04)}
 .chip b{color:var(--ink);font-weight:600}
@@ -90,18 +90,14 @@ footer{border-top:1px solid var(--line);background:var(--bg2);padding:8px 14px 1
 </head>
 <body>
 <header>
-  <svg class="logo" viewBox="0 0 64 64" aria-label="MAJIN" role="img">
-    <path d="M32 3C17 3 7 13 7 27c0 10 5 17 12 22 4 3 7 6 7 11h12c0-5 3-8 7-11 7-5 12-12 12-22C57 13 47 3 32 3Z" fill="currentColor" opacity=".14"/>
-    <path d="M18 46V20c0-2 3-3 4-1l10 17 10-17c1-2 4-1 4 1v26" fill="none" stroke="#0a0a0a" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M18 46V20c0-2 3-3 4-1l10 17 10-17c1-2 4-1 4 1v26" fill="none" stroke="#ff8fd0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
-    <circle cx="24" cy="16" r="2.6" fill="#ff8fd0"/><circle cx="40" cy="16" r="2.6" fill="#ff8fd0"/>
-  </svg>
+  <img class="logo" src="/logo.png" alt="MAJIN" width="22" height="22">
   <h1 id="brand">MAJIN</h1>
   <span class="sub" id="tagline"></span>
   <span class="chip" id="c-route">route <b>–</b></span>
   <span class="chip" id="c-moa">MOA <b>–</b></span>
   <span class="chip" id="c-tools">tools <b>–</b></span>
   <span class="chip" id="c-cost">$<b>0</b></span>
+  <span class="chip" id="c-update" hidden title="new version available"></span>
   <span class="spacer"></span>
   <span class="chip" id="c-tg"><i class="led" id="led-tg"></i>telegram</span>
   <span class="chip" id="c-wa"><i class="led" id="led-wa"></i>whatsapp</span>

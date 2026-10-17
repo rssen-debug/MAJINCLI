@@ -203,7 +203,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       return {
         result: `saved ${abs} (${r.body.length} bytes, sha256 ${digest})\nRun re.triage({path:"${abs}") to analyze it.`,
         meta: { path: abs, bytes: r.body.length, sha256: digest },
-        summary: `laddade ner ${path.basename(abs)} (${Math.round(r.body.length / 1024)} kB)`,
+        summary: `downloaded ${path.basename(abs)} (${Math.round(r.body.length / 1024)} kB)`,
       };
     },
   }),

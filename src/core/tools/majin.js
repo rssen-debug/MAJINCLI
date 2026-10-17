@@ -14,6 +14,7 @@ import { PRESETS, listModelsUrl, needsKeyFor } from '../presets.js';
 import { complete } from '../provider/chat.js';
 import { dirs } from '../paths.js';
 import { bus } from '../log.js';
+import { VERSION } from '../version.js';
 import { detect as detectRe } from '../binary/external.js';
 
 const mask = (v) => (!v ? '' : v.length <= 6 ? '•••' : `${v.slice(0, 3)}…${v.slice(-2)}`);
@@ -439,7 +440,7 @@ export const majinTools = [
       const re = await detectRe({}).catch(() => ({}));
       const u = ctx.usage?.summary?.() || {};
       const out = {
-        version: '0.1.0',
+        version: VERSION,
         node: process.version,
         platform: `${os.platform()} ${os.arch()}`,
         uptimeS: Math.round(process.uptime()),

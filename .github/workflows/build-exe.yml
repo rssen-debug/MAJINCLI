@@ -1,71 +1,128 @@
 name: build-exe
 
-# Bygger den fristående MAJIN-binären (.exe för Windows) och lägger den som artifact.
-# Kör manligen via Actions → Build exe, eller pusha en tag v* för en release med filen.
-
+# A normal user should be able to get MAJIN as a double-clickable program.
+# Windows itself has no such thing as "npx majin", and pkg must run on the same
+# family of binaries as the target -- so a Windows runner builds the .exe and
+# uploads it to a release. The bundle itself is built on Ubuntu in `npm test`,
+# this workflow is allowed to fail only on the release part.
+#
+# Triggers:
+#   * a tag v* -> the .exe lands on that release
+#   * manual (gh workflow run build-exe.yml) -> lands on a fresh "latest"
+#     pre-release with the commit sha in the name
 on:
-  workflow_dispatch:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      keep_exe:
+        description: 'Upload the .exe to the release (default: yes)'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
-  issues: write     # bara säreporteringen behover detta: ett issue med loggen, sa att
-                     # ett fel ga att lasa aven nar logg-slutpunkten ar otillganglig   # behövs för att softprops/action-gh-release ska kunna skapa releasen med .exe:n
 
 jobs:
-  windows:
+  exe:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca169201130bdb73c4d277ef5d # v6.0.1
         with:
-          # Pinned, not "22": @yao-pkg/pkg needs a prebuilt node host binary from
-          # pkg-fetch for the exact runner version. The runner's floating 22.x (we
-          # hit 22.23.3) has none, and then pkg tries to compile Node from source
-          # on Windows and dies. 22.23.2 is the newest minor pkg-fetch ships.
+          # pkg fetches a ready-made node binary ("host") for the exact node
+          # version it runs on. The Windows host that pkg's own fetch script
+          # builds is unusable (node.exe exits 2), so pkg-fetch must hand over a
+          # published one. Published hosts for the node 22 line: 22.22.3,
+          # 22.23.1, 22.23.2 (22.23.3 and newer = none). A floating "22" follows
+          # the runner image and breaks the day that image gets a new patch.
+          # So: an exact version that exists, and build-exe.mjs derives the
+          # target from it (never "node22-win-x64" as a constant).
+          # If this has to move forward: list the assets first --
+          #   gh api repos/yao-pkg/pkg-fetch/releases/latest --jq '.assets[].name'
           node-version: 22.23.2
-      - name: install (esbuild + pkg)
-        run: npm ci
-      - name: bundle and package
-        # De sista raderna loggas som annotationer vid fel — utan det ar ett
-        # ront steg hit intet att lasa (loggrarnas vard ar blockad for oss).
+          cache: npm
+      - run: npm ci
+      - name: install zig (the setup stub cross-compiles with it, no SDK needed)
+        shell: pwsh
         run: |
-          node scripts/build-exe.mjs 2>&1 | Tee-Object -FilePath build.log | Out-String -Stream | Write-Host
-          if ($LASTEXITCODE -ne 0) {
-            Get-Content build.log -Tail 8 | ForEach-Object { Write-Output "::error::$_" }
+          python -m pip install --quiet ziglang
+          python -m ziglang version
+      - name: build the exe
+        shell: pwsh
+        run: |
+          # the small installer first: it is built from the same bundle and does
+          # not depend on pkg or on fetching a node host binary, so a user always
+          # gets *something* to download even when the big exe cannot be made
+          node scripts/build-setup.mjs *>&1 | Tee-Object -FilePath setup.log
+          $setupOk = Test-Path dist/setup/majin-setup.exe
+          if (-not $setupOk) { "::warning::majin-setup.exe was not built -- see setup.log" }
+
+          # all output into a file which can be uploaded as an artifact even on failure
+          node scripts/build-exe.mjs *>&1 | Tee-Object -FilePath build.log
+          $code = $LASTEXITCODE
+          Write-Output "--- build-exe exit: $code ---"
+          Get-ChildItem dist | Select-Object Name, Length | Format-Table -AutoSize | Out-String
+          if (($code -ne 0 -or -not (Test-Path dist/majin-win-x64.exe)) -and -not $setupOk) {
+            # the last lines usually hold the real error -- print them into the log so
+            # nobody has to download anything to find out what pkg complained about
+            "---- build.log tail (last 40 lines) ----"
+            Get-Content build.log -Tail 40
+            if ($code -ne 0) { Write-Output "::error::build-exe.mjs exited $code" }
+            if (-not (Test-Path dist/majin-win-x64.exe)) { Write-Output "::error::dist/majin-win-x64.exe was never produced" }
             exit 1
           }
-          if (-not (Test-Path dist/majin-win-x64.exe)) {
-            Get-Content build.log -Tail 14 | ForEach-Object { Write-Output "::error::no exe: $_" }
+          if ($code -ne 0 -or -not (Test-Path dist/majin-win-x64.exe)) {
+            Write-Output "::warning::the single-file exe is missing, releasing majin-setup.exe only"
+          }
+          exit 0
+      - name: build MAJIN-Setup.exe with Inno Setup
+        shell: pwsh
+        run: |
+          # pinned install: the runner image is not guaranteed to carry Inno Setup
+          choco install innosetup -y --no-progress | Select-Object -Last 3
+          node scripts/build-installer.mjs *>&1 | Tee-Object -FilePath installer.log
+          if (-not (Test-Path dist/installer/MAJIN-Setup.exe)) {
+            "---- installer.log tail ----"
+            Get-Content installer.log -Tail 30 -ErrorAction SilentlyContinue
+            Write-Output "::error::dist/installer/MAJIN-Setup.exe was never produced"
             exit 1
           }
-      - name: smoke test the built binary
-        # Endast `version` far falla bygget: det ar beviset for att den fristande
-        # exe:n startar. doctor lamnar 1 nar ingen API-nyckel finns (och skriver
-        # ✔/✖-tecken), sa dar är raderna information som loggas som varningar —
-        # de syns i lönen utan att behöva logg-sidan, och de stoppar inte release.
+          Get-ChildItem dist/installer | Select-Object Name, Length | Format-Table -AutoSize
+
+      - name: the installer must install, run, survive a restart and uninstall
+        # One verifier for CI and for a person's own laptop: the same script the
+        # owner can run locally. -SkipBuild because the artifacts above already
+        # exist, -Ci so a failure also lands as ::error:: on the right line.
+        shell: pwsh
         run: |
-          $ErrorActionPreference = 'Continue'
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-on-windows.ps1 -SkipBuild -Ci
+          if ($LASTEXITCODE -ne 0) { Write-Output "::error::the install/verify/uninstall script failed (exit $LASTEXITCODE)" }
+          exit $LASTEXITCODE
+
+      - name: the exe must run without touching anything
+        shell: pwsh
+        run: |
+          $env:MAJIN_HOME = "$env:GITHUB_WORKSPACE\.smokehome"
+          $env:MAJIN_WORKSPACE = "$env:GITHUB_WORKSPACE\.smokews"
+          New-Item -ItemType Directory -Force -Path $env:MAJIN_HOME, $env:MAJIN_WORKSPACE | Out-Null
+          # only "version" is allowed to gate the release: it must run with no config
+          # and no network. doctor exits 1 whenever a row is X, which is the case on a
+          # key-less CI runner, so its rows are reported as warnings instead.
           $v = & ./dist/majin-win-x64.exe version 2>&1
           $vc = $LASTEXITCODE
           "version (exit $vc): $v"
-          if ($vc -ne 0) {
-            ($v | Select-Object -Last 6) | ForEach-Object { Write-Output "::error::binary does not run: $_" }
-            exit 1
-          }
-          $d = & ./dist/majin-win-x64.exe doctor 2>&1
+          $d = & ./dist/majin-win-x64.exe doctor --json 2>&1
           $dc = $LASTEXITCODE
-          "doctor (exit $dc):"
-          $d | ForEach-Object { "  $_" }
           if ($dc -ne 0) { ($d | Where-Object { "$_" -like '*X *' } | Select-Object -First 6) | ForEach-Object { Write-Output "::warning::doctor (no api key in CI): $_" } }
           $c = & ./dist/majin-win-x64.exe config get name 2>&1
           "config get name (exit $LASTEXITCODE): $c"
           exit 0
       - name: report the failure log as an issue
-        # Logg-endpointen for actions ar inte alltid naabar; ett issue med de sista
-        # raderna kan lasas med 'gh issue view' och gor blindfelsokning omoglig.
+        # GitHub's log endpoint is not always reachable; an issue with the last
+        # lines can be read with `gh issue view` and makes blind debugging
+        # impossible
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -75,13 +132,41 @@ jobs:
           $body = "run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID`n`n$f`n$log`n$f`n"
           $payload = @{ title = "build-exe failed on $($env:GITHUB_SHA.Substring(0,7))"; body = $body; labels = @('ci') } | ConvertTo-Json -Compress
           Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/issues" -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" } -Body $payload | ForEach-Object { "opened $($_.html_url)" }
-      # Ingen actions/upload-artifact: artefakt-lagret ar det som tar slut pa
-      # fria konton (100 MB), och en .exe pa 80 MB per koda rad FORPALAR den.
-      # Release-tilgangar raknas inte in i den kvoten, sa filen laggs dar.
-      - name: attach to release
-        if: startsWith(github.ref, 'refs/tags/v')
+      # No artifact upload step at all. Free accounts have 100 MB of artifact
+      # storage and a .exe of ~80 MB per build fills it immediately, so the second
+      # run dies with "Artifact storage quota has been hit" -- an infrastructure
+      # failure that would otherwise look like a build failure. Release assets are
+      # not counted against that quota, so the file goes there instead.
+      - name: release the exe
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.keep_exe || github.event_name == 'push' }}
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/majin-win-x64.exe
-          name: MAJIN ${{ github.ref_name }} (Windows x64)
+          # a tag push reuses that tag; a manual run makes its own dev tag
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('exe-v{0}', github.run_number) }}
+          name: ${{ github.ref_type == 'tag' && format('MAJIN {0}', github.ref_name) || format('MAJIN exe (run {0})', github.run_number) }}
+          body: |
+            Two files, both unsigned, both no-admin:
+
+            - **MAJIN-Setup.exe** (~40 MB) — the real installer: desktop icon, Start-menu entry, optional
+              autostart, optional "majin" on PATH, and an uninstaller in Add/Remove programs. Nothing else is
+              needed afterwards: no terminal, no Node, no git
+            - **majin-setup.exe** (~0.5 MB) — the tiny stub for a machine that already has node; it installs into
+              `%LOCALAPPDATA%\MAJIN`, fetches node if you have none, and puts a MAJIN icon on the Desktop.
+              `--print` shows the three commands it would run. Verify it: `certutil -hashfile majin-setup.exe SHA256`
+            - **majin-win-x64.exe** (~80 MB) — the single-file build, nothing installed at all
+
+            Double-click either to start MAJIN, or open a terminal in the folder and run:
+
+                .\majin-win-x64.exe start
+
+            Unsigned, so Windows may warn once (More info -> Run anyway).
+            Or download it with curl:
+
+                curl.exe -L -o majin-win-x64.exe https://github.com/rssen-debug/slurps/releases/latest/download/majin-win-x64.exe
+          files: |
+            dist/installer/MAJIN-Setup.exe
+            dist/setup/majin-setup.exe
+            dist/majin-win-x64.exe
+          # the installer is always there; the single-file exe only when pkg worked
+          fail_on_unmatched_files: false
           generate_release_notes: true

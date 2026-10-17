@@ -158,7 +158,7 @@ test('token: query, header, cookie — and refusal from outside', async () => {
 
 test('/api/state and /api/config: right shape and redacted keys', async () => {
   const st = JSON.parse((await get(`/api/state?t=${TOKEN}`)).body);
-  assert.equal(st.version, '0.1.0');
+  assert.equal(st.version, JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version, 'the app must report the version it was released as');
   assert.equal(st.name, 'MAJIN');
   assert.equal(st.tools.length, 77, 'state must list every tool');
   assert.equal(JSON.parse((await get(`/api/state?tools=0&t=${TOKEN}`)).body).tools.count, 77);
