@@ -20,12 +20,12 @@ function harness() {
       this._text = '';
       this.classList = {
         add: (...names) => {
-          const set = new Set(this.className.split(/\\s+/).filter(Boolean));
+          const set = new Set(this.className.split(/\s+/).filter(Boolean));
           names.forEach((name) => set.add(name));
           this.className = [...set].join(' ');
         },
         remove: (...names) => {
-          const set = new Set(this.className.split(/\\s+/).filter(Boolean));
+          const set = new Set(this.className.split(/\s+/).filter(Boolean));
           names.forEach((name) => set.delete(name));
           this.className = [...set].join(' ');
         },
@@ -43,7 +43,7 @@ function harness() {
     remove() { if (!this.parentNode) return; const a = this.parentNode.children; const i = a.indexOf(this); if (i >= 0) a.splice(i, 1); this.parentNode = null; }
     setAttribute(name, value) { this.attrs[name] = value; }
     querySelector(selector) {
-      if (selector.startsWith('.')) return this.find((e) => e.className.split(/\\s+/).includes(selector.slice(1)));
+      if (selector.startsWith('.')) return this.find((e) => e.className.split(/\s+/).includes(selector.slice(1)));
       return null;
     }
     find(pred) {
