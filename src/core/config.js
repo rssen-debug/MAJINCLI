@@ -595,6 +595,10 @@ export function load() {
   }
   const data = expandEnv(merge(clone(DEFAULTS), stored));
   if (!data.server.token) data.server.token = genToken();
+  // Env kör före filen: MAJIN_TOKEN/MAJIN_PORT är dokumenterade för planerare,
+  // startmaterial och test — utan detta ignoreras de tyst (401 mot ett slumpat uuid).
+  if (process.env.MAJIN_TOKEN && String(process.env.MAJIN_TOKEN).trim()) data.server.token = String(process.env.MAJIN_TOKEN).trim();
+  if (Number.isFinite(Number(process.env.MAJIN_PORT))) data.server.port = Number(process.env.MAJIN_PORT);
   if (!data.workspace) data.workspace = dirs.workspace;
   const cfg = new Config(data, file);
   compileRuntime(cfg);

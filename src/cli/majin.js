@@ -537,9 +537,19 @@ function url_() {
   process.stdout.write(`http://${shown}:${cfg.get('server.port')}/?t=${cfg.get('server.token')}\n`);
 }
 
+function valueFlags() {
+  return new Set([
+  'port', 'host', 'token', 'home', 'config', 'file', 'out', 'wait', 'waitMs', 'name', 'model', 'llm', 'session',
+  'provider', 'key', 'target', 'path', 'exe', 'task', 'level', 'glob', 'rules', 'code', 'url', 'seconds',
+  'ms', 'size', 'command', 'args', 'channel', 'to', 'id', 'limit', 'format', 'encoding', 'offset',
+  ]);
+}
+
 function parseFlags(list) {
+  const VALUE_FLAGS = valueFlags();
   const out = {};
-  for (const a of list) {
+  for (let i = 0; i < list.length; i += 1) {
+    const a = list[i];
     if (!a.startsWith('-')) {
       (out._ ||= []).push(a);
       continue;
@@ -547,8 +557,18 @@ function parseFlags(list) {
     const m = /^--?([\w-]+)(?:=(.*))?$/.exec(a);
     if (!m) continue;
     const key = m[1].replace(/-([a-z])/g, (_x, c) => c.toUpperCase());
-    out[key] = m[2] === undefined ? true : m[2];
-    if (m[2] === 'false') out[key] = false;
+    if (m[2] !== undefined) {
+      out[key] = m[2] === 'false' ? false : m[2];
+      continue;
+    }
+    // `--port 8931` ska fungera som `--port=8931`; okända flaggor förblir booleska
+    const next = list[i + 1];
+    if (VALUE_FLAGS.has(key) && next !== undefined && !next.startsWith('-')) {
+      out[key] = next === 'false' ? false : next;
+      i += 1;
+    } else {
+      out[key] = true;
+    }
   }
   return out;
 }

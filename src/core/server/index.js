@@ -56,6 +56,10 @@ export function createServer(rt) {
     });
   });
 
+  /** SPA-djuplänk: /panel, /session/xyz … ger index.html, okända filer ger 404. */
+  const wantsIndex = (pp) => pp === '/' || pp === '/index.html' || pp === '/app'
+    || (!pp.startsWith('/api/') && !path.extname(pp) && !fs.existsSync(path.join(UI_DIR, pp.replace(/\.\./g, ''))));
+
   async function handle(req, res) {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const p = url.pathname.replace(/\/+$/, '') || '/';
@@ -117,8 +121,8 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       return json(res, 401, { ok: false, error: 'token required', hint: `open with ?t=${token} or send the header \"authorization: Bearer ${token}\"` });
     }
 
-    /* ---------- UI + statica ---------- */
-    if (p === '/' || p === '/index.html' || p === '/app') {
+    /* ---------- UI + statiska ---------- */
+    if (wantsIndex(p)) {
       const file = path.join(UI_DIR, 'index.html');
       if (!fs.existsSync(file)) return html(res, 200, '<pre>UI missing — run: npm run ui</pre>');
       const raw = fs.readFileSync(file, 'utf8').replace(/__MAJIN_TOKEN__/g, token).replace(/__MAJIN_VERSION__/g, VERSION).replace(/__MAJIN___/g, cfg.get('name') || 'MAJIN');
@@ -132,7 +136,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
         res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });
         return fs.createReadStream(file).pipe(res);
       }
-      return json(res, 404, { ok: false, error: `hittar inte ${p}` });
+      return json(res, 404, { ok: false, error: `not found: ${p}` });
     }
 
     /* ---------- state ---------- */
@@ -190,7 +194,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     if (p === '/api/report' && req.method === 'GET') {
       const file = url.searchParams.get('file') || '';
       const abs = safeJoin(dirs.out, file);
-      if (!abs || !fs.existsSync(abs)) return json(res, 404, { ok: false, error: 'rapporten finns inte' });
+      if (!abs || !fs.existsSync(abs)) return json(res, 404, { ok: false, error: 'the report does not exist' });
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-disposition': `attachment; filename="${path.basename(abs)}"` });
       return fs.createReadStream(abs).pipe(res);
     }
@@ -225,11 +229,14 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     }
     if (p === '/api/chat') {
       const body = await readJson(req);
-      const input = String(body.input || body.text || '').trim();
-      if (!input) return json(res, 400, { ok: false, error: 'tom input' });
+      const last = Array.isArray(body.messages) ? body.messages.filter((m) => m && m.role === 'user').slice(-1)[0] : null;
+      const input = String(body.input || body.text || body.prompt || body.content || (last && last.content) || '').trim();
+      if (!input) return json(res, 400, { ok: false, error: 'empty input', hint: 'send {input:"…"} (or messages:[{role:"user",content:"…"}])' });
       const session = String(body.session || 'desktop');
       const attachments = Array.isArray(body.attachments) ? body.attachments : [];
-      if (body.stream === false) {
+      const noStream = body.stream === false || body.stream === 'false'
+        || ['false', '0'].includes(String(url.searchParams.get('stream') || '').toLowerCase());
+      if (noStream) {
         const r = await agent.turn({ input, session, attachments, source: 'api' });
         return json(res, 200, { ok: !r.error, ...r });
       }
@@ -431,7 +438,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       setTimeout(() => process.emit('SIGTERM', 'SIGTERM'), 120);
       return;
     }
-    return json(res, 404, { ok: false, error: `okänd väg ${p}`, hint: 'se /api/state för allt som finns' });
+    return json(res, 404, { ok: false, error: `unknown route ${p}`, hint: 'see /api/state for everything that exists' });
   }
 
   return server;
@@ -443,7 +450,8 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
  * Local-first: localhost (och sandbox-förhandsvisningen .e2b.app) litar vi på utan
  * token i URL:en — allt annat kräver nyckeln. Stäng av med server.trustLocal:false.
  */
-const TRUSTED = /^(127\.|localhost|\[::1\]|0\.0\.0\.0|\*\.e2b\.app|[\w.-]+\.e2b\.app)$/i;
+// Betrodda värdar utan token: loopback (lokalhost, 127.x, ::1) och sandbox-förhandsvisning.
+const TRUSTED = /^(localhost|127(\.\d{1,3}){3}|\[?::1\]?|0\.0\.0\.0|[\w-]+\.e2b\.app)$/i;
 
 function authOk(req, url, token, cfg) {
   if (!token) return true;
@@ -481,7 +489,7 @@ function sseHead(res) {
     'access-control-allow-origin': '*',
     'x-accel-buffering': 'no',
   });
-  res.write(': majin\n\n');
+  res.write(': majin\n\nretry: 15000\n\n');
 }
 
 function readBody(req, max = MAX_BODY) {
