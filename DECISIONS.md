@@ -141,3 +141,13 @@ A gate is only as good as its word list.
   pulse with no JS state; energy requirement of the spec met by construction.
 - **Skipped for now:** WebGL/Canvas orb (violates the energy rule for v1),
   fake "thinking" shimmer (spec forbids fabricated activity).
+
+## 2026-06-18 (natt) — Phase B implementerad
+- **Onboarding driven av /api/state (needsSetup + presets):** servern vet redan
+  om installationen är o-setupad; wizarden är ett rent presentationslager.
+- **Nyckel/test/katalog via provider-toolen (add/test/models):** duplicerar
+  inget — samma actions agenter använder.
+- **Single-model = skriv samma ref till alla routes + moa.policy 'off':**
+  inget nytt konfig-flagga att hålla synkat; testet bevisar resolution per jobb.
+- **Fix innan leverans:** validatePatch kollade routes mot providers före merge
+  → samma-patch-kombinationer kuggade. Nu mot mergad data.

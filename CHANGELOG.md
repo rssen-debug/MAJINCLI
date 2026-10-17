@@ -3,6 +3,29 @@
 Notable changes on `arena/e223e8b9-slurps` (PR #1). Newest first. Verified in the Linux sandbox
 unless stated otherwise; nothing here claims a Windows or browser run.
 
+## 0.4.0 — Phase B: first-run onboarding, model picker, single-model proof
+
+The simple experience on top of the systems that already existed:
+
+- **First-run wizard** (`src/ui/onboard.js`): opens only when `/api/state` says
+  `needsSetup` — pick a provider card (from the live preset list, nothing
+  hardcoded), paste the key (skip for keyless locals), Save & test runs the
+  real provider `add` + `test` actions, then a searchable live model list and
+  Start. Three steps, plain-language errors, never shows a key back.
+- **Header model picker** (`c-model` chip): searchable dropdown fed by the
+  provider's own `/models` catalogue (cached per session), one click switches
+  the model MAJIN actually runs.
+- **Single-model mode by default**: onboarding writes the chosen model to
+  EVERY route and turns MOA off — no hidden second-model spend. Proof:
+  test/singlemodel.test.js asserts every job resolves to the one ref and
+  survives a restart-shaped reload.
+- **Fix:** config `patch()` rejected routes when the provider was introduced
+  in the same patch (validated pre-merge); now validates against merged data.
+- **Fix:** the deterministic offline update test was also load-bearing for
+  CI stability.
+- Tests: onboarding structure, single-model resolution, and a full
+  add→models→test provider flow against a local stub (no open internet).
+
 ## 0.3.0 — Imagination Engine, slice 1: Live Agent Vision + the Living Core
 
 The first real step of the V3 spec (docs/IMAGINATION.md): the window now shows

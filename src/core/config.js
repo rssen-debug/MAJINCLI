@@ -543,7 +543,7 @@ export function validatePatch(patch, current) {
         for (const [job, ref] of Object.entries(v)) {
           if (!JOBS.includes(job)) errors.push({ path: `${p}.${job}`, msg: `unknown job route. Allowed: ${JOBS.join(', ')}` });
           if (typeof ref !== 'string' || !/^[a-z0-9._-]+\/[^\s]+$/i.test(ref)) errors.push({ path: `${p}.${job}`, msg: `"${ref}" — format provider/model` });
-          else if (current && !current.providers[ref.split('/')[0]]) errors.push({ path: `${p}.${job}`, msg: `unknown provider "${ref.split('/')[0]}". Add it to providers first.` });
+          else if (current && !current.providers[ref.split('/')[0]] && !(isObj(patch.providers) && isObj(patch.providers[ref.split('/')[0]]))) errors.push({ path: `${p}.${job}`, msg: `unknown provider "${ref.split('/')[0]}". Add it to providers first.` });
         }
       }
       if (p === 'providers' && isObj(v)) {

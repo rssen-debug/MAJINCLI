@@ -577,6 +577,7 @@ async function refresh(quiet) {
     const st = await api('/state?tools=0');
     S.st = st;
     paintHeader(st);
+    if (window.MAJIN_ONBOARD) window.MAJIN_ONBOARD.maybe(S.st); // first-run wizard + model chip
     if (window.paintPanel) window.paintPanel(st);
     paintRail(st);
     if (!quiet) {
@@ -603,6 +604,7 @@ $('input').addEventListener('keydown', (e) => {
 $('send').onclick = () => (S.busy ? stop() : send($('input').value));
 $('input').addEventListener('input', autoGrow);
 $('b-rail').onclick = () => document.body.classList.toggle('rail-off');
+$('c-model').onclick = () => window.MAJIN_ONBOARD && window.MAJIN_ONBOARD.togglePicker();
 $('b-expert').onclick = () => {
   const simple = document.body.classList.toggle('simple');
   $('b-expert').classList.toggle('on', !simple);
@@ -688,3 +690,4 @@ window.addEventListener('load', async () => {
   if (window.paintPanelExtras) window.paintPanelExtras();
   $('input').focus();
 });
+window.refresh = refresh; // onboarding + model picker repaint through the same funnel

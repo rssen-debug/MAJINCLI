@@ -129,17 +129,17 @@ Everything here is *not* done — verified against the code, not against memory.
 
 ## VNEXT plan (governing order, spec: docs/VNEXT.md, audit: docs/AUDIT.md)
 - [x] **Phase A** — audit & preserve (docs/AUDIT.md)
-- [ ] **Phase B1 — first-run onboarding wizard**: if no provider has a key and
+- [x] **Phase B1 — first-run onboarding wizard** (v0.4.0): if no provider has a key and
   no model route is set, the window opens a 3-step flow: pick provider card
   (presets) → paste key (link to where to get one) → Verify (calls the real
   provider, plain-language error) → searchable model list (existing
   /api/provider action=models) → Start writes single-model to ALL routes.
   Skipped entirely when config already works.
-- [ ] **Phase B2 — live model selector in the chat header**: [Model ▼] opens
+- [x] **Phase B2 — live model selector in the chat header** (v0.4.0): [Model ▼] opens
   search + filters (free/cheap/fast/smart), price/context/tool-calling flags
   from the live catalog; one click repoints all routes; fallback to dated
   preset data when the provider has no catalog.
-- [ ] **Phase B3 — single-model proof test**: with all routes = one model,
+- [x] **Phase B3 — single-model proof test** (v0.4.0): with all routes = one model,
   spy provider sees exactly that model on every call; MOA off has no calls.
 - [ ] **Phase B4 — cost chip + budget cap**: per-task $/tokens visible in the
   canvas; guard stops at cap with a clear message.

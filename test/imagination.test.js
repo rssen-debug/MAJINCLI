@@ -10,7 +10,7 @@ const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
 test('Live Agent Vision is mounted in the window and served from the real UI dir', () => {
   const html = read('src/ui/index.html');
   assert.match(html, /id="imagine" hidden/, 'the canvas mount point exists, hidden until a real run');
-  assert.match(html, /<script src="\/imagine\.js"><\/script>\s*<script src="\/app\.js">/, 'imagine.js loads before app.js so early events are never lost');
+  assert.ok(html.indexOf('/imagine.js') > 0 && html.indexOf('/imagine.js') < html.indexOf('/app.js'), 'imagine.js loads before app.js so early events are never lost');
   assert.ok(fs.existsSync(path.join(ROOT, 'src/ui/imagine.js')), 'the module ships in the UI bundle');
 });
 

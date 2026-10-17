@@ -115,6 +115,28 @@ body.simple #panel{display:none}
 #imagine .step-detail pre{ font-size:10.5px; max-height:140px; overflow:auto; padding:6px; background:rgba(0,0,0,.3); border-radius:6px; white-space:pre-wrap; word-break:break-word; }
 @keyframes imPulse{ 0%,100%{ transform:scale(1); opacity:.85; } 50%{ transform:scale(1.35); opacity:1; } }
 @media (prefers-reduced-motion: reduce){ #imagine .core{ animation:none !important; } }
+
+#c-model{ cursor:pointer; }
+#modeldrop{ position:absolute; top:44px; right:120px; z-index:60; width:300px; max-height:60vh; overflow:auto; padding:10px; border:1px solid var(--bd,#2a1620); border-radius:12px; background:var(--bg2,#0e0710); box-shadow:0 12px 40px rgba(0,0,0,.5); }
+#modeldrop .md-list{ margin-top:8px; }
+#onboard{ position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center; background:rgba(5,2,4,.82); }
+#ob-card{ width:520px; max-width:92vw; max-height:86vh; overflow:auto; padding:22px 24px; border:1px solid var(--bd,#2a1620); border-radius:18px; background:var(--bg2,#0e0710); box-shadow:0 24px 80px rgba(0,0,0,.6); }
+.ob-title{ margin:0 0 4px; font-size:18px; }
+.ob-sub{ margin:0 0 14px; font-size:13px; color:var(--dim,#a98); }
+.ob-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+.ob-card{ display:flex; flex-direction:column; gap:4px; padding:12px; text-align:left; border:1px solid var(--bd,#2a1620); border-radius:12px; background:transparent; color:inherit; cursor:pointer; }
+.ob-card:hover{ border-color:var(--pk,#e0457b); }
+.ob-card-desc{ font-size:11px; color:var(--dim,#a98); }
+.ob-label{ display:block; margin:10px 0 4px; font-size:12.5px; color:var(--dim,#a98); }
+.ob-input{ width:100%; margin-top:4px; padding:8px 10px; border:1px solid var(--bd,#2a1620); border-radius:9px; background:var(--bg,#0b0509); color:inherit; font:inherit; box-sizing:border-box; }
+.ob-link{ display:inline-block; margin-top:6px; font-size:12px; color:var(--cy,#5fd4d0); background:none; border:0; padding:0; cursor:pointer; text-decoration:none; }
+.ob-go{ margin-top:14px; padding:10px 18px; border:0; border-radius:10px; background:var(--pk,#e0457b); color:#fff; font-weight:600; cursor:pointer; }
+.ob-go:disabled{ opacity:.45; cursor:default; }
+.ob-msg{ margin-top:10px; font-size:12.5px; color:var(--dim,#a98); min-height:1.2em; }
+.ob-models{ margin-top:10px; max-height:300px; overflow:auto; display:flex; flex-direction:column; gap:3px; }
+.ob-model{ padding:7px 10px; text-align:left; border:1px solid transparent; border-radius:8px; background:rgba(255,255,255,.03); color:inherit; font-size:12.5px; cursor:pointer; }
+.ob-model:hover{ border-color:var(--pk,#e0457b); }
+.ob-model.on{ border-color:var(--pk,#e0457b); background:rgba(224,69,123,.12); }
 </style>
 </head>
 <body class="simple">
@@ -123,6 +145,7 @@ body.simple #panel{display:none}
   <h1 id="brand">MAJIN</h1>
   <span class="sub" id="tagline"></span>
   <span class="chip" id="c-route">route <b>–</b></span>
+  <button class="chip" id="c-model" hidden title="the one model that runs everything — click to change"></button>
   <span class="chip" id="c-moa">MOA <b>–</b></span>
   <span class="chip" id="c-tools">tools <b>–</b></span>
   <span class="chip" id="c-cost">$<b>0</b></span>
@@ -172,9 +195,12 @@ body.simple #panel{display:none}
     <span id="drop" class="drop">drop a file → RE analysis</span>
   </div>
 </footer>
+<div id="modeldrop" hidden></div>
+<div id="onboard" hidden role="dialog" aria-modal="true" aria-label="MAJIN setup"><div id="ob-card"><div id="ob-body"></div></div></div>
 <div id="toast"></div>
 <script>window.__MAJIN_TOKEN__='__MAJIN_TOKEN__';window.__MAJIN_VERSION__='__MAJIN_VERSION__';</script>
 <script src="/imagine.js"></script>
+<script src="/onboard.js"></script>
 <script src="/app.js"></script>
 <script src="/panels.js"></script>
 </body>
