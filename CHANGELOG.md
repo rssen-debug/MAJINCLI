@@ -3,6 +3,15 @@
 Notable changes on `arena/e223e8b9-slurps` (PR #1). Newest first. Verified in the Linux sandbox
 unless stated otherwise; nothing here claims a Windows or browser run.
 
+## 0.4.3 — the wizard actually saves your key + custom endpoints
+
+Root cause of "could not save": the server looks a provider up by the
+`preset` field, the wizard sent only `name` — no preset found, no baseUrl,
+a 422, and the UI swallowed the server's own helpful message. The wizard now
+posts `preset`, surfaces errors+hints verbatim, and gained a first-class
+**Custom endpoint** card (any OpenAI-compatible URL + key, saved through the
+same provider tool — no parallel system).
+
 ## 0.4.2 — never upgrade into your own running ghost
 
 - The header now always shows the running version (`v-tag`, filled from the

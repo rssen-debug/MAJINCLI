@@ -19,7 +19,7 @@ test('first-run onboarding is mounted and only appears when setup is missing', (
 
 test('the wizard writes through the EXISTING systems only', () => {
   const src = read('src/ui/onboard.js');
-  assert.match(src, /apiLocal\('\/provider', \{ method: 'POST', body: \{ action: 'add'/, 'keys are saved via the existing provider tool');
+  assert.match(src, /action: 'add', preset: p\.name/, 'the server looks presets up by `preset` — the bug that said "could not save" for a pasted key');
   assert.match(src, /action: 'test'/, 'connectivity is proven by the existing test action');
   assert.match(src, /action: 'models'/, 'the catalogue comes from the existing models action');
   assert.match(src, /apiLocal\('\/config', \{ method: 'PATCH'/, 'model choice is written via the config patch path');
@@ -43,4 +43,13 @@ test('the header model chip reuses the same patch path and hides when unset', ()
   assert.match(app, /\$\('c-model'\)\.onclick/, 'the chip is clickable');
   const src = read('src/ui/onboard.js');
   assert.match(src, /window\.refresh/, 'a successful switch repaints through the normal funnel');
+});
+
+test('a custom endpoint is a first-class choice, and errors speak plainly', () => {
+  const src = read('src/ui/onboard.js');
+  assert.match(src, /Custom endpoint/, 'the grid offers a custom OpenAI-compatible endpoint');
+  assert.match(src, /action: 'add', name: 'custom', kind: 'openai', baseUrl/, 'custom posts its own baseUrl to the same provider tool');
+  assert.match(src, /function tellErr/, 'server errors are shown verbatim');
+  assert.match(src, /resp\.hint/, 'and so are the provider\u2019s hints');
+  assert.doesNotMatch(src, /err\.message \|\| 'could not save'/, 'the old string-shaped error trap is gone');
 });

@@ -32,6 +32,18 @@
 
   const OB = { st: null, provider: null, model: null, shown: false };
 
+  /* /api/provider answers errors as plain strings + optional hint — surface
+   * them exactly, a nontechnical user should read the provider's own words. */
+  function tellErr(resp, fallback) {
+    if (!resp) return 'no answer from MAJIN — is it still running?';
+    if (resp.ok) return null;
+    const bits = [];
+    if (resp.error) bits.push(resp.error);
+    if (resp.hint) bits.push(resp.hint);
+    if (resp.errors) bits.push(resp.errors.map((e) => (e.path ? e.path + ': ' : '') + e.msg).join('; '));
+    return bits.join(' — ') || fallback || 'that did not work — no idea why';
+  }
+
   /* ---------------------------- onboarding ---------------------------- */
 
   function open(st) {
@@ -65,6 +77,14 @@
       card.onclick = () => { OB.provider = p; render(); };
       grid.append(card);
     });
+    /* VNEXT: a custom endpoint is a first-class choice — the provider tool
+     * already knows how to add one, so this is just a form over it. */
+    const custom = el('button', 'ob-card ob-custom');
+    custom.type = 'button';
+    custom.append(el('b', '', 'Custom endpoint'));
+    custom.append(el('span', 'ob-card-desc', 'any OpenAI-compatible URL + your key'));
+    custom.onclick = () => { OB.provider = { name: 'custom', label: 'Custom endpoint', custom: true }; render(); };
+    grid.append(custom);
     box.append(grid);
   }
 
@@ -76,6 +96,31 @@
     back.onclick = () => { OB.provider = null; render(); };
     box.append(back);
 
+    if (p.custom) {
+      const l1 = el('label', 'ob-label', 'Endpoint URL (OpenAI-compatible)');
+      const urlIn = el('input', 'ob-input');
+      urlIn.placeholder = 'https://your-host/v1';
+      l1.append(urlIn);
+      const l2 = el('label', 'ob-label', 'API key (leave empty if the endpoint needs none)');
+      const keyIn = el('input', 'ob-input');
+      keyIn.type = 'password';
+      keyIn.autocomplete = 'off';
+      l2.append(keyIn);
+      const msg = el('div', 'ob-msg');
+      const btn = el('button', 'ob-go', 'Save & test connection');
+      btn.type = 'button';
+      btn.onclick = async () => {
+        if (!urlIn.value.trim()) { msg.textContent = 'the endpoint URL is missing — something like https://your-host/v1'; return; }
+        btn.disabled = true;
+        msg.textContent = 'saving…';
+        const add = await apiLocal('/provider', { method: 'POST', body: { action: 'add', name: 'custom', kind: 'openai', baseUrl: urlIn.value.trim(), apiKey: keyIn.value.trim() } }).catch(() => null);
+        const err = tellErr(add, 'could not save');
+        if (err) { msg.textContent = err; btn.disabled = false; return; }
+        await testThenModels(box, msg, btn, 'custom');
+      };
+      box.append(l1, l2, btn, msg);
+      return;
+    }
     if (p.needsKey) {
       const label = el('label', 'ob-label', 'Paste your API key');
       const input = el('input', 'ob-input');
@@ -97,29 +142,31 @@
       btn.onclick = async () => {
         btn.disabled = true;
         msg.textContent = 'saving…';
-        const add = await apiLocal('/provider', { method: 'POST', body: { action: 'add', name: p.name, apiKey: input.value.trim() } }).catch(() => null);
-        const err = add && add.output && add.output.error ? add.output.error : (add && add.error) || (!add || !add.ok ? { message: 'save failed' } : null);
-        if (err) {
-          msg.textContent = (err.message || 'could not save') + (err.hint ? ' — ' + err.hint : '');
-          btn.disabled = false;
-          return;
-        }
-        msg.textContent = 'testing the connection…';
-        const test = await apiLocal('/provider', { method: 'POST', body: { action: 'test', name: p.name } }).catch(() => null);
-        if (test && test.output && test.output.ok === false) {
-          msg.textContent = (test.output.error && test.output.error.message) || 'the provider did not answer — check the key';
-          btn.disabled = false;
-          return;
-        }
-        OB.keyOk = true;
-        renderModels(box);
+        /* the server looks the preset up by `preset`, not `name` */
+        const add = await apiLocal('/provider', { method: 'POST', body: { action: 'add', preset: p.name, name: p.name, apiKey: input.value.trim() } }).catch(() => null);
+        const err = tellErr(add, 'could not save');
+        if (err) { msg.textContent = err; btn.disabled = false; return; }
+        await testThenModels(box, msg, btn, p.name);
       };
       box.append(btn, msg);
     } else {
       const note = el('div', 'ob-msg', 'No key needed for this one — saving it and loading models…');
       box.append(note);
-      apiLocal('/provider', { method: 'POST', body: { action: 'add', name: p.name } }).then(() => renderModels(box)).catch(() => { note.textContent = 'could not save — try again'; });
+      apiLocal('/provider', { method: 'POST', body: { action: 'add', preset: p.name, name: p.name } }).then((r) => { const e = tellErr(r, 'could not save — try again'); if (e) note.textContent = e; else renderModels(box); }).catch(() => { note.textContent = 'could not save — try again'; });
     }
+  }
+
+  async function testThenModels(box, msg, btn, name) {
+    msg.textContent = 'testing the connection…';
+    const test = await apiLocal('/provider', { method: 'POST', body: { action: 'test', name } }).catch(() => null);
+    const terr = tellErr(test, 'the provider did not answer — check the key');
+    if (terr) {
+      msg.textContent = terr;
+      btn.disabled = false;
+      return;
+    }
+    OB.keyOk = true;
+    renderModels(box);
   }
 
   async function renderModels(box) {
