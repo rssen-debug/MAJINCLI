@@ -128,7 +128,7 @@
   }
 
   function previewHtml(path, size, row) {
-    if (!/\\.html?$/i.test(path) || (Number(size) || 0) > PREVIEW_LIMIT) return;
+    if (!/\.html?$/i.test(path) || (Number(size) || 0) > PREVIEW_LIMIT) return;
     const btn = el('button', 'preview-action', '👁 Preview HTML');
     btn.type = 'button';
     btn.title = 'Preview a local HTML file without running scripts';
