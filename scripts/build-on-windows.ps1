@@ -243,7 +243,7 @@ if (-not $state) {
   if (-not $state.version) { Fail '/api/state came back without a version' }
   try {
     $html = (Invoke-WebRequest -Uri "http://127.0.0.1:$Port/" -UseBasicParsing).Content
-    if ($html -notmatch 'id="chat"') { Fail 'the served page is not the MAJIN window (no #chat element)' }
+    if ($html -notmatch 'id="composer"') { Fail 'the served page is not the MAJIN window (no #composer chat input)' }
     elseif ($html -notmatch 'c-update') { Fail 'the served window is missing the update chip' }
     else { Ok "window served: $($html.Length) bytes, header chips present" }
     $logo = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/logo.png" -UseBasicParsing
