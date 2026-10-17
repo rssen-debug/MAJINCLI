@@ -187,7 +187,7 @@ export const majinTools = [
         const t0 = Date.now();
         try {
           const r = await complete({ route, job: 'test', stream: false, maxTokens: 16, temperature: 0, messages: [{ role: 'user', content: 'Reply with exactly: OK' }] });
-          return { result: `${name} OK (${Date.now() - t0}ms): ${(r.text || '').trim().slice(0, 40)}`, summary: `${name} svarar` };
+          return { result: `${name} OK (${Date.now() - t0}ms): ${(r.text || '').trim().slice(0, 40)}`, summary: `${name} answers` };
         } catch (err) {
           return { ok: false, error: { code: 'provider_failed', message: err.majin?.human || err.message, hint: err.hint, kind: err.majin?.kind }, summary: `${name} does not answer` };
         }

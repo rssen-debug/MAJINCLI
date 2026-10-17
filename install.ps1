@@ -29,12 +29,12 @@ function Write-Bad([string]$m) { Write-Host "✖ $m" -ForegroundColor Red }
 if ($Uninstall) {
   Write-Host "removing MAJIN (data in $Home is left alone)" -ForegroundColor Cyan
   Get-ScheduledTask -TaskName 'MAJIN' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
-  Write-Step 'schematisk start uppgift borta'
+  Write-Step 'login task removed'
   $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
   if ($userPath -and $userPath -like "*$Bin*") {
     $new = ($userPath -split ';' | Where-Object { $_ -ne $Bin }) -join ';'
     [Environment]::SetEnvironmentVariable('Path', $new, 'User')
-    Write-Step "PATH: $Bin borttagen"
+    Write-Step "PATH: $Bin removed"
   }
   foreach ($s in @("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\MAJIN", "$env:USERPROFILE\Desktop\MAJIN.lnk")) {
     if (Test-Path $s) { Remove-Item $s -Recurse -Force; Write-Step "removed $s" }

@@ -44,8 +44,12 @@ test first (`test/onboarding.test.js`, 10 tests, red before green) and stayed un
   approval prompt sent to Telegram/WhatsApp users (`Svara: /ja 12 · /nej 12` → "Reply with /ja 12 to
   allow it · /nej to refuse"), `majin.provider` results (`ange name`, `Testa:`, `tog bort … Kvar:`,
   the `svara OK` probe, `svarar inte`), `majin.schedule/skill` removal lines, `scripts/clean.js`, the
-  Node check inside `install.ps1` (now names nodejs.org) and its `tog bort` step. `scripts/i18n-check.mjs`
-  learned the words that caught them (`Notera Testa Kvar ange svara bort`).
+  Node check inside `install.ps1` (now names nodejs.org) and its uninstall steps.
+- The gate itself got inflected forms (`borta/borttagen`, `svarar/svarade/svaret`, `kvarvarande`,
+  `testar/testade`, `notera`), which then caught the TCP timeout text in `tools/net.js`
+  (`… svarade inte inom 5000ms` → "did not answer within 5000ms", the string a user reads when a port
+  is closed) and the provider-test summary in `majin.provider`. A word list only matches what it
+  knows: without inflections it quietly approves half the language.
 
 ### Verified
 - `node --test test/*.test.js` **97/97** (was 87), `npm run check` 67/67, `npm run i18n` 0 in 57

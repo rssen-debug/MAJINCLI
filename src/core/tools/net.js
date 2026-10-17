@@ -72,7 +72,7 @@ export const netTools = [
         };
         sock.setTimeout(Number(timeoutMs) || 1500);
         sock.once('connect', () => finish({ result: `${host}:${port} open`, summary: `${port} open` }));
-        sock.once('timeout', () => finish({ ok: false, error: { code: 'timeout', message: `${host}:${port} svarade inte inom ${timeoutMs}ms` } }));
+        sock.once('timeout', () => finish({ ok: false, error: { code: 'timeout', message: `${host}:${port} did not answer within ${timeoutMs}ms` } }));
         sock.once('error', (e) => finish({ ok: false, error: { code: 'tcp_error', message: `${host}:${port}: ${e.code || e.message}` } }));
         sock.connect(Number(port), String(host));
       });

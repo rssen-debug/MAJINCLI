@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const WORDS = `Notera Testa Kvar ange svara bort fil filer filsnack filnamn mapp mappar katalog sökväg sökvägar sida sidor rad rader
+const WORDS = `Notera notera Testa testar Testa Kvar kvarvarande ange svara svarar svarade svaret bort borta borttagen fil filer filsnack filnamn mapp mappar katalog sökväg sökvägar sida sidor rad rader
 antal namn namnen beskrivning användare använd används använda välj visa göm skapa ta_bort lägga
 uppdatera hämta skicka skickas kör köra körning körningar svar svaret fråga frågor fel försök
 resultat sparade sparas spara verktyg inställning inställningar begränsa tillåten tillåtet
