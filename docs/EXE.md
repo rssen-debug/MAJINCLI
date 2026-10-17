@@ -96,3 +96,14 @@ curl.exe -L -o majin-win-x64.exe https://github.com/rssen-debug/slurps/releases/
 If the repository is private, `curl` gets a 404 — download it in the browser while logged in, or use
 `gh release download --pattern '*.exe'`. SmartScreen warns once because the binary is unsigned; nothing
 is installed system-wide and `majin-win-x64.exe` writes only inside its data folder.
+
+## Why the CI runner pins Node 22.23.2
+
+`@yao-pkg/pkg` does not compile MAJIN, it concatenates your bundle onto a prebuilt **node host
+binary** published by `pkg-fetch`. Those prebuilts exist for specific Node versions only, so the
+workflow pins the runner to `22.23.2` — the newest minor `pkg-fetch` publishes for win-x64. On a
+floating `node-version: 22` the runner gets whatever is current (it was 22.23.3 when this was
+measured), `pkg-fetch` finds no prebuilt, tries to build Node from source on Windows, and the step
+fails with `... node.exe exit 2`. If you bump Node here, check
+[`pkg-fetch` releases](https://github.com/yao-pkg/pkg-fetch/releases) for a matching host binary
+first; otherwise `majin.cjs` (the bundle, needs Node) stays the fallback: `npm run exe:bundle`.

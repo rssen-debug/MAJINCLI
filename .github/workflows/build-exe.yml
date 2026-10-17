@@ -19,7 +19,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Pinned, not "22": @yao-pkg/pkg needs a prebuilt node host binary from
+          # pkg-fetch for the exact runner version. The runner's floating 22.x (we
+          # hit 22.23.3) has none, and then pkg tries to compile Node from source
+          # on Windows and dies. 22.23.2 is the newest minor pkg-fetch ships.
+          node-version: 22.23.2
       - name: install (esbuild + pkg)
         run: npm ci
       - name: bundle and package
