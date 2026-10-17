@@ -48,9 +48,9 @@ export class Agent {
     this.abort.get(session)?.abort();
   }
 
-  systemPrompt({ session, decision, turnPlan, attachments }) {
+  systemPrompt({ session, decision, turnPlan, attachments, readOnly = false }) {
     const cfg = this.cfg;
-    const tools = this.registry.list();
+    const tools = this.registry.list({ readOnly: Boolean(readOnly) });
     const groups = [...new Set(tools.map((t) => t.group))];
     const guard = cfg.get('guard.mode');
     const now = new Date();
@@ -62,7 +62,9 @@ export class Agent {
       cfg.get('persona.style'),
       cfg.get('persona.safety'),
       '',
-      `TOOLS: all ${tools.length} are always on — there is nothing to enable. Groups: ${groups.join(', ')}.`,
+      readOnly
+        ? 'THIS TURN IS READ-ONLY: you may inspect anything, but every tool that changes state is refused. Say so plainly if the task actually needs a write.'
+        : `TOOLS: all ${tools.length} are always on — there is nothing to enable. Groups: ${groups.join(', ')}.`,
       'Use tools instead of guessing. Independent calls in one answer run in parallel — batch them. On error: read the message, fix the arguments, run again (after two failures in a row the model escalates automatically).',
       'Paths: absolute or workspace-relative. Never overwrite something you have not read, and never delete something you did not create.',
       'RE: re.analyze = headers, sections+entropy, imports with risk flags, YARA, IOC strings, opcode patterns and "next steps". re.strings/re.search/re.yara/re.diff are the microscope. re.tool hooks up ghidra/rizin/objdump when they are installed on the machine.',
@@ -101,7 +103,7 @@ export class Agent {
     return { text, rating: good ? 1 : -1, id: r.id };
   }
 
-  async turn({ input, session = 'desktop', attachments = [], onEvent = () => {}, history = [], source = null }) {
+  async turn({ input, session = 'desktop', attachments = [], onEvent = () => {}, history = [], source = null, readOnly = false, model = null }) {
     const cfg = this.cfg;
     const ctrl = new AbortController();
     this.abort.set(session, ctrl);
@@ -154,15 +156,21 @@ export class Agent {
         const llm = await llmClassify(input, { cfg });
         if (llm && llm !== decision.job) decision = { ...decision, job: llm, llmTiebreak: true };
       }
-      const turnPlan = planTurn(cfg, decision);
+      let turnPlan = planTurn(cfg, decision);
+      /* ett modelsvar från t.ex. ett schemalagt jobb måste faktiskt gälla — annars är fältet dekorering */
+      if (model && /\S+\/\S+/.test(String(model))) {
+        turnPlan = { ...turnPlan, route: cfg.resolveModel(String(model), decision.job), modelOverride: String(model) };
+        decision = { ...decision, modelOverride: String(model) };
+      }
       emit({ type: 'route', job: decision.job, confidence: decision.confidence, model: turnPlan.route?.ref, moa: turnPlan.moa, reasons: decision.reasons, alt: decision.alt, tiebreak: Boolean(decision.llmTiebreak) });
 
       /* 3) verktygsslingan */
-      const sys = this.systemPrompt({ session, decision, turnPlan, attachments });
+      const sys = this.systemPrompt({ session, decision, turnPlan, attachments, readOnly });
       const ctx = {
         ...this.shared,
         cfg,
         session,
+        readOnly: Boolean(readOnly),
         agent: this,
         emit,
         bus: this.bus,
@@ -237,7 +245,8 @@ export class Agent {
       }
 
       const out = {
-        text: finalText,
+        // en patch från naturspråk måste synas även där det bara finns text (telegram/whatsapp)
+        text: intentNote && finalText && !finalText.includes(intentNote) ? `${finalText}\n\n(config: ${intentNote})` : finalText,
         steps: res.steps,
         tools: res.toolLog,
         usage: res.usage,

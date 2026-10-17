@@ -59,12 +59,14 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
     chans.start().catch((err) => bus.warn('channels.start', { error: err.message }));
   }
 
-  async function runTask({ input, session = 'desktop', source = 'schedule', deliver = 'auto', model = null } = {}) {
+  async function runTask({ input, session = 'desktop', source = 'schedule', deliver = 'auto', model = null, readOnly = false } = {}) {
     try {
       const res = await agent.turn({
         input,
         session,
         source,
+        model,
+        readOnly,
         history: readHistory(session, 30),
         onEvent: (ev) => bus.emit(`turn.${ev.type}`, { session, ...ev }),
       });

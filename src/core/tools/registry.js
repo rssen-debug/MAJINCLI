@@ -145,22 +145,28 @@ export class Registry {
     return a === '*' || !Array.isArray(a) ? null : a;
   }
 
-  visible() {
+  /**
+   * readOnly är för bakgrundsturer: en schemalagd uppgift som bara ska titta kan också
+   * vägras skriva, så att ett löpande jobb aldrig ändrar något ingen godkänt.
+   */
+  visible({ readOnly = false } = {}) {
     const allow = this.allow;
-    return allow ? this.tools.filter((t) => allow.includes(t.name) || allow.includes(t.group)) : this.tools;
+    let out = allow ? this.tools.filter((t) => allow.includes(t.name) || allow.includes(t.group)) : this.tools;
+    if (readOnly) out = out.filter((t) => t.risk === 'read');
+    return out;
   }
 
-  schemas() {
-    return this.visible().map((t) => ({ name: t.name, description: `${t.desc}${t.examples.length ? `  Exempel: ${t.examples.join(' | ')}` : ''}`, parameters: t.parameters }));
+  schemas(opts = {}) {
+    return this.visible(opts).map((t) => ({ name: t.name, description: `${t.desc}${t.examples.length ? `  Example: ${t.examples.join(' | ')}` : ''}`, parameters: t.parameters }));
   }
 
-  list() {
-    return this.visible().map((t) => ({ name: t.name, group: t.group, risk: t.risk, desc: t.desc }));
+  list(opts = {}) {
+    return this.visible(opts).map((t) => ({ name: t.name, group: t.group, risk: t.risk, desc: t.desc }));
   }
 
-  groups() {
+  groups(opts = {}) {
     const out = {};
-    for (const t of this.visible()) (out[t.group] ||= []).push({ name: t.name, risk: t.risk, desc: t.desc });
+    for (const t of this.visible(opts)) (out[t.group] ||= []).push({ name: t.name, risk: t.risk, desc: t.desc });
     return out;
   }
 
@@ -168,14 +174,16 @@ export class Registry {
     return this.byName.has(name);
   }
 
-  async exec(name, args = {}, { session = 'desktop', step = 0 } = {}) {
+  async exec(name, args = {}, { session = 'desktop', step = 0, readOnly = false } = {}) {
     const t = this.byName.get(name);
     if (!t) {
       const near = fuzzy(name, [...this.byName.keys()])[0];
-      return { ok: false, tool: name, error: { code: 'unknown_tool', message: `tool "${name}" does not exist`, hint: near ? `menade du ${near}?` : `available: ${[...this.byName.keys()].slice(0, 12).join(', ')}…` } };
+      return { ok: false, tool: name, error: { code: 'unknown_tool', message: `tool "${name}" does not exist`, hint: near ? `did you mean ${near}?` : `available: ${[...this.byName.keys()].slice(0, 12).join(', ')}…` } };
     }
+    if (readOnly && t.risk !== 'read')
+      return { ok: false, tool: name, error: { code: 'read_only', message: `this turn is read-only, so ${name} is refused`, hint: 'the job was scheduled with readOnly:true — set readOnly:false on the job to let it write' } };
     const parsed = coerce(t, args);
-    if (parsed.error) return { ok: false, tool: name, error: { code: 'bad_args', message: parsed.error, hint: `parametrar: ${Object.keys(t.raw).join(', ')}` } };
+    if (parsed.error) return { ok: false, tool: name, error: { code: 'bad_args', message: parsed.error, hint: `parameters: ${Object.keys(t.raw).join(', ')}` } };
     const verdict = await check(name, parsed.args, this.ctx.cfg, { session, defRisk: t.risk, timeoutMs: this.ctx.cfg.get('tasks.approvalTimeoutMs') || 0 });
     if (verdict.wait) {
       const decision = await verdict.wait;

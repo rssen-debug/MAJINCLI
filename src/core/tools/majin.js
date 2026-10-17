@@ -27,7 +27,7 @@ export const majinTools = [
     params: {
       patch: 'object: JSON patch of the config tree, e.g. {"models":{"routes":{"code":"deepseek/deepseek-v4-pro"}}}',
       intent: 'string: an instruction in plain language that is translated into a patch, e.g. "use deepseek pro for code always"',
-      dry: 'boolean: visa diff utan att spara',
+      dry: 'boolean: show the diff without saving',
       note: 'string: why the change is made (goes into the log)',
     },
     examples: ['majin.configure({intent:"use deepseek flash for tasks always"})', 'majin.configure({patch:{moa:{policy:"hard"}}})'],
@@ -318,20 +318,21 @@ export const majinTools = [
       id: 'string: job id (for remove/pause/run)',
       when: 'string: "07:30 daily" | "every 30m" | "*/15 * * * *" | "2026-01-01T09:00"',
       task: 'string: what to run (the whole prompt)',
-      deliver: 'string: telegram | whatsapp | silent (var svaret skickas)',
+      readOnly: 'boolean: the job may only read; every tool that changes state is refused',
+      deliver: 'string: telegram | whatsapp | silent (where the answer goes)',
       model: 'string: optional route for the job',
     },
     examples: ['majin.schedule({action:"add",when:"07:30 daily",task:"Short morning report: weather, my tickets, new security advisories. Deliver to telegram"})'],
-    async run({ action = 'list', id = '', when = '', task = '', deliver = 'silent', model = '' }, ctx) {
+    async run({ action = 'list', id = '', when = '', task = '', deliver = 'silent', model = '', readOnly = null }, ctx) {
       const sch = ctx.scheduler;
       if (!sch) return { ok: false, error: { code: 'no_scheduler', message: 'the scheduler is not running (server mode required)' } };
       if (action === 'add') {
         if (!when || !task) return { ok: false, error: { code: 'incomplete', message: 'when + task required' } };
         try {
-          const job = sch.add({ when, task, deliver, model, name: id });
+          const job = sch.add({ when, task, deliver, model, name: id, readOnly });
           return { result: `schemalade "${job.name}" (${job.when}) → ${job.nextRun} (next: ${job.nextRunHuman})\nid=${job.id} deliver=${job.deliver}`, meta: job, summary: `jobb ${job.name} schemalagt` };
         } catch (err) {
-          return { ok: false, error: { code: 'bad_schedule', message: err.message, hint: 'exempel: "07:30 daily", "every 30m", "*/15 * * * *"' } };
+          return { ok: false, error: { code: 'bad_schedule', message: err.message, hint: 'example: "07:30 daily", "every 30m", "*/15 * * * *"' } };
         }
       }
       if (action === 'remove') return { result: sch.remove(id) ? `tog bort ${id}` : `did not find ${id}`, summary: 'jobb bort' };
@@ -360,7 +361,7 @@ export const majinTools = [
       to: 'string: dit (chat-id eller telefonnummer)',
       text: 'string: the message body',
       channel: 'string: telegram | whatsapp',
-      enable: 'boolean: starta/stoppa kanalen',
+      enable: 'boolean: start/stop the channel',
     },
     examples: ['majin.channel({action:"telegram",token:"123:ABC",enable:true})'],
     async run({ action = 'status', token = '', transport = '', phoneNumberId = '', accessToken = '', verifyToken = '', to = '', text = '', channel = '', enable = null }, ctx) {
@@ -368,7 +369,7 @@ export const majinTools = [
       if (action === 'status') {
         const s = ch?.status?.() || {};
         return {
-          result: `channels\n${Object.entries(s).map(([k, v]) => `${v.online ? '✓' : '·'} ${k}: ${v.state}${v.detail ? ` — ${v.detail}` : ''}`).join('\n') || '(none)'}\n\nwhatsapp transport: ${ctx.cfg.get('channels.whatsapp.transport')}\ntelegram allowed chats: ${(ctx.cfg.get('channels.telegram.allowedChatIds') || []).join(', ') || '(inga — para ihop först)'}\nwebhook for WhatsApp Cloud: http://<your-ip>:${ctx.cfg.get('server.port')}/whatsapp (verify-token = ${ctx.cfg.get('channels.whatsapp.cloud.verifyToken') || 'inte satt'})`,
+          result: `channels\n${Object.entries(s).map(([k, v]) => `${v.online ? '✓' : '·'} ${k}: ${v.state}${v.detail ? ` — ${v.detail}` : ''}`).join('\n') || '(none)'}\n\nwhatsapp transport: ${ctx.cfg.get('channels.whatsapp.transport')}\ntelegram allowed chats: ${(ctx.cfg.get('channels.telegram.allowedChatIds') || []).join(', ') || '(none — pair first)'}\nwebhook for WhatsApp Cloud: http://<your-ip>:${ctx.cfg.get('server.port')}/whatsapp (verify-token = ${ctx.cfg.get('channels.whatsapp.cloud.verifyToken') || 'inte satt'})`,
           meta: s,
           summary: Object.entries(s).map(([k, v]) => `${k}:${v.state}`).join(' ') || 'inga kanaler',
         };
@@ -380,7 +381,7 @@ export const majinTools = [
         if (!res.ok) return { ok: false, error: { code: 'invalid', message: res.errors.map((e) => `${e.path}: ${e.msg}`).join('; ') } };
         const ok = await ch?.telegram?.start?.();
         const me = await ch?.telegram?.getMe?.();
-        return { result: ok ? `telegram went down (@${me?.username || me?.first_name}) — skicka "/start ${ch?.telegram?.pairingCode || ''}" to the bot to pair this chat` : `saved, but polling could not start: ${ch?.telegram?.lastError || 'unknown error'}`, summary: ok ? 'telegram connected' : 'telegram error' };
+        return { result: ok ? `telegram went down (@${me?.username || me?.first_name}) — send "/start ${ch?.telegram?.pairingCode || ''}" to the bot to pair this chat` : `saved, but polling could not start: ${ch?.telegram?.lastError || 'unknown error'}`, summary: ok ? 'telegram connected' : 'telegram error' };
       }
       if (action === 'whatsapp') {
         const patch = { channels: { whatsapp: { enabled: enable !== false, transport: transport || ctx.cfg.get('channels.whatsapp.transport') || 'baileys' } } };
@@ -550,7 +551,7 @@ export const majinTools = [
         .filter(([g]) => !group || g.includes(group))
         .map(([g, list]) => `${g} (${list.length}):\n${list.map((t) => `  ${t.name.padEnd(18)} ${t.risk.padEnd(12)} ${t.desc.split('. ')[0].slice(0, 110)}`).join('\n')}`)
         .join('\n\n');
-      return { result: `${ctx.registry.tools.length} tools, all enabled:\n\n${body}`, meta: { total: ctx.registry.tools.length, groups: Object.keys(groups).length }, summary: `${ctx.registry.tools.length} verktyg` };
+      return { result: `${ctx.registry.tools.length} tools, all enabled:\n\n${body}`, meta: { total: ctx.registry.tools.length, groups: Object.keys(groups).length }, summary: `${ctx.registry.tools.length} tools` };
     },
   }),
 

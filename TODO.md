@@ -12,9 +12,14 @@ Everything here is *not* done — verified against the code, not against memory.
   `node --check`, the HTTP suite and status/type assertions — never rendered. Needs a human (or a
   headless browser) to click through: composer + SSE stream, panel edits, approval prompt, RE drop
   zone, theme toggle, voice button.
-- **`re.disasm` quality.** objdump is available on Linux but not on a stock Windows box, and the
-  built-in fallback decoder is a subset. Either ship a pure-JS decoder worth its name or make
-  `re.disasm` state plainly which engine answered.
+- **`re.disasm` quality.** It now says which engine answered (`meta.engine`: `rizin` | `objdump` |
+  `none`), so a silent fallback is impossible — but the decoder itself is still a subset and objdump
+  is missing on a stock Windows box. Ship a pure-JS x64 decoder worth its name, or bundle `rizin`
+  with the `.exe`.
+- **Kilo Gateway against the real endpoint.** The provider is wired and covered against the
+  documented contract (local stand-in that validates the Bearer JWT, 401/402, `:free` ids, `/models`),
+  but this sandbox has no egress to `ai-gateway.kilo.ai`, so nobody has seen a byte from Kilo itself.
+  Needs one `majin doctor --full` on a machine with internet.
 
 ## P1
 
@@ -33,26 +38,35 @@ Everything here is *not* done — verified against the code, not against memory.
   unit-covered for config/allow-lists; `whatsapp` now backs off and gives up instead of reconnecting
   forever, but no real bot token / QR pairing has been exercised from here (no egress). Needs a live
   run with a throwaway bot.
+- **`readOnly` switch in the schedule card.** The flag works (`majin.schedule add … readOnly:true`,
+  `schedule.readOnlyDefault`) and `POST /api/schedule` accepts it, but the panel's schedule form has
+  no checkbox, so today it is a CLI/agent-only feature. Same commit as the dataset panel.
 - **Cost truth.** `pricing` only has DeepSeek entries. Every other provider reports `$0` by design
   (we refuse to guess). Ship a small, curated price table + `majin config` guidance for the
-  common ones, and surface "no price known" in the UI chip instead of silently showing $0.
+  common ones, and surface "no price known" in the UI chip instead of silently showing $0. The Kilo
+  and OpenRouter-style `/models` responses already carry per-model `pricing` — import it while
+  discovering models (`majin provider models <name>`) instead of curating a table by hand.
 - **Long-file RE.** `re.analyze` reads the whole file into memory (`tools.re.maxFileBytes` =
   256 MB). A 2 GB sample OOMs the process. Needs streaming/sampled reads for strings+entropy and a
   guard that says "too big, use re.scan windows".
 
 ## P2
 
-- **Swedish in internals only.** Comments (and a handful of test titles). Three sweeps
-  were needed because the first two only looked for `åäö`; the check now also matches plain Swedish
-  words, and live output is the tie-breaker. (`src/core/binary/*.js`,
-  `tools/*.js`, `core/agent.js`, `scripts/bench.mjs`) are still Swedish, and some test titles.
-  The Swedish that remains on purpose lives in the *input* matchers (`routes.js` job keywords,
-  `agent.js` `JOBS_SV`, `schedule.js` weekday abbreviations, the `glöm`/`ja`/`nej` aliases) so a
-  Swedish sentence still routes, parses and approves. Translate comments only when touching the file
-  for another reason.
+- **Swedish in comments and test titles only.** Strings are gated now: `npm run i18n`
+  (`scripts/i18n-check.mjs`) fails on any Swedish literal in `src/`, `scripts/`, `install.ps1`,
+  `start-majin.cmd` — word list *and* `åäö` — with an allowlist for the lines that are Swedish on
+  purpose (`routes.js` job keywords, `agent.js` `JOBS_SV`, `schedule.js` weekday abbreviations, the
+  `glöm`/`ja`/`nej` and `godkänn/avslå` chat aliases) so Swedish still works as *input*.
+  `test/i18n.test.js` asserts both directions, including that the input matchers are not
+  "translated away". Comments in `binary/*.js`, `tools/*.js`, `agent.js`, `scripts/bench.mjs` are
+  still Swedish: translate them while touching the file, never as a sweep.
 - **`serveFlags` deserves a unit test.** The `majin start` → `_serve` flag forwarding bug (dropped
   `--host`, ignored `--no-channels`) was only findable by spawning a real server. Extract the
   flag→runtime-options mapping into a pure function and test it; keep one spawn test as a smoke test.
+- **Cost history before the streaming fix is understated.** `openaiStream` returned raw
+  `{prompt_tokens,completion_tokens}` where the tally reads `input`/`output`, so every streamed turn
+  recorded 0 tokens. Fixed, but old `usage.json` months are wrong and cannot be rebuilt — a
+  `majin usage --explain` note, or just let them age out at month boundaries.
 - **`--json` for every CLI command** (`majin status --json`, `config get --json` is already JSON) so
   the CLI composes in scripts, and `majin dataset --json` for the same reason.
 - **Session management UI.** `/api/sessions` + `/api/session/clear` exist; the rail lists sessions but

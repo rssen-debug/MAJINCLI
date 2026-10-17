@@ -103,7 +103,7 @@ export const fileTools = [
         const text = buf.toString('utf8');
         const lines = text.split('\n');
         const numbered = lines.map((l, i) => `${String(i + 1).padStart(5)} | ${l}`).join('\n');
-        return { result: `${abs} (rad 1-${lines.length}${size > n ? ` av ${size} byte` : ''})\n${numbered}`, meta: { lines: lines.length, size, truncated: size > n }, summary: `${path.basename(abs)} ${lines.length} rader` };
+        return { result: `${abs} (lines 1-${lines.length}${size > n ? ` of ${size} bytes` : ''})\n${numbered}`, meta: { lines: lines.length, size, truncated: size > n }, summary: `${path.basename(abs)} ${lines.length} lines` };
       } finally {
         await fd.close();
       }
@@ -300,7 +300,7 @@ export const fileTools = [
       const { abs } = resolveIn(ctx, p, { never: [ctx.cfg.get('workspace'), dirs.root, dirs.memory, dirs.sessions] });
       const st = await fsp.stat(abs);
       if (String(p ?? '').trim() === '' || String(p).trim() === '.' || String(p).trim() === '*') {
-        const err = new Error(`vigrar radera "${p}" — ange en specifik fil eller mapp, inte en rot`);
+        const err = new Error(`refusing to delete "${p}" — name a specific file or folder, not a root`);
         err.code = 'protected';
         throw err;
       }
@@ -310,7 +310,7 @@ export const fileTools = [
         ctx.bus?.warn?.('trash.unavailable', { why: trash.error, hint: 'use permanent:true (or install the `trash` package)' });
       }
       await fsp.rm(abs, { recursive: true, force: true });
-      return { result: `raderade permanent ${abs}`, summary: `raderade ${path.basename(abs)} (permanent)` };
+      return { result: `deleted permanently ${abs}`, summary: `deleted ${path.basename(abs)} (permanent)` };
     },
   }),
 

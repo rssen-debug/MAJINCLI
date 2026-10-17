@@ -168,7 +168,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           note = '(kunde inte parsa som json)';
         }
       }
-      const clipped = text.length > maxChars ? `${text.slice(0, maxChars)}\n…[${text.length - maxChars} tecken klippt]` : text;
+      const clipped = text.length > maxChars ? `${text.slice(0, maxChars)}\n…[${text.length - maxChars} chars clipped]` : text;
       ctx.emit?.({ type: 'web', url, status: r.status, chars: text.length });
       if (!r.ok) return { ok: false, error: { code: `http_${r.status}`, message: `${r.status} for ${r.url}`, hint: r.status === 403 ? 'blocked (bot protection). Try another source or web.download.' : null } };
       return {

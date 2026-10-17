@@ -106,7 +106,7 @@ export class Scheduler {
     return this.jobs.map((j) => ({ ...j, nextRunHuman: j.nextRun ? new Date(j.nextRun).toLocaleString('sv-SE') : null }));
   }
 
-  add({ name, when, task, deliver = 'silent', model = null }) {
+  add({ name, when, task, deliver = 'silent', model = null, readOnly = null }) {
     const spec = parseWhen(when);
     const job = {
       id: `j-${Math.random().toString(36).slice(2, 8)}`,
@@ -115,6 +115,7 @@ export class Scheduler {
       spec,
       task,
       deliver,
+      readOnly: readOnly == null ? Boolean(this.cfg.get('schedule.readOnlyDefault')) : Boolean(readOnly),
       model,
       createdAt: new Date().toISOString(),
       lastRun: null,
@@ -183,7 +184,7 @@ export class Scheduler {
     this.running.add(j.id);
     j.lastRun = new Date().toISOString();
     try {
-      const res = await this.runTask({ input: j.task, session: `schedule:${j.id}`, source: { type: 'schedule', job: j.name }, deliver: j.deliver, model: j.model });
+      const res = await this.runTask({ input: j.task, session: `schedule:${j.id}`, source: { type: 'schedule', job: j.name }, deliver: j.deliver, model: j.model, readOnly: Boolean(j.readOnly) });
       j.lastStatus = res.error ? `error: ${res.error}` : 'ok';
       j.lastSummary = String(res.text || '').slice(0, 400);
       bus.info('schedule.done', { id: j.id, status: j.lastStatus, chars: (res.text || '').length });

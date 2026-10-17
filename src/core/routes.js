@@ -142,12 +142,14 @@ export function parseIntent(text, cfg) {
      användare som klistrar in en logg eller frågar om en fil som råkar nämna en nyckel får
      inte sin config överskriven. */
   const keyHit =
-    /(?:nyckel|key|token|apikey|api_key)[\s,:=-]{0,8}(?:är|is|:|=)[\s,:=-]{0,8}[`'"]?((?:sk|pk|ghp|xoxb|nanogpt|AIza)[-\w]{16,})[`'"]?/i.exec(s) ||
-    /\b(?:set|sätt|use|använd|byta?ter|here|här|save|spara)\b[^.\n]{0,40}?((?:sk|pk)-[A-Za-z0-9_-]{20,})/i.exec(s) ||
+    /(?:nyckel|key|token|apikey|api_key)[\s,:=-]{0,8}(?:är|is|:|=)[\s,:=-]{0,8}[`'"]?((?:sk|pk|ghp|xoxb|nanogpt|AIza)[-\w]{16,}|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,})[`'"]?/i.exec(s) ||
+    /\b(?:set|sätt|use|använd|byta?ter|here|här|save|spara)\b[^.\n]{0,40}?((?:sk|pk)-[A-Za-z0-9_-]{20,}|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,})/i.exec(s) ||
     /* bara nyckeln i meddelandet = entydig avsikt, inget att misstolka */
-    /^\s*[`'"]?((?:sk|pk)-[A-Za-z0-9_-]{20,})[`'"]?\s*$/.exec(s);  // a message that is only a key
+    /^\s*[`'"]?((?:sk|pk)-[A-Za-z0-9_-]{20,}|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,})[`'"]?\s*$/.exec(s);  // a message that is only a key
   if (keyHit) {
-    const provider = /(deepseek|openrouter|groq|anthropic|openai|gemini|nous|ollama|lmstudio|portal)[^\w]?/i.exec(s)?.[1] || cfg.get('models.provider') || 'deepseek';
+    const hit = /(kilo(?:code)?|deepseek|openrouter|groq|anthropic|openai|gemini|nous|ollama|lmstudio|portal)[^\w]?/i.exec(s)?.[1];
+    // "kilo" is how people write it; the preset is named kilocode
+    const provider = (hit ? (hit.toLowerCase() === 'kilo' ? 'kilocode' : hit.toLowerCase()) : null) || cfg.get('models.provider') || 'deepseek';
     patch.providers = patch.providers || {};
     patch.providers[provider] = { apiKey: keyHit[1] };
     notes.push(`saved the key as provider "${provider}"`);

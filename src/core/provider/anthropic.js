@@ -70,7 +70,7 @@ async function fail(res) {
   } catch {
     /* keep raw */
   }
-  throw new ProviderError(`${res.status}: ${msg}`, { status: res.status, retryable: res.status === 429 || res.status >= 500, hint: res.status === 401 ? 'Fel Anthropic-nyckel.' : null });
+  throw new ProviderError(`${res.status}: ${msg}`, { status: res.status, retryable: res.status === 429 || res.status >= 500, hint: res.status === 401 ? 'Wrong Anthropic key.' : null });
 }
 
 function payload(o, stream) {

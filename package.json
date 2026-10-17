@@ -24,6 +24,7 @@
     "doctor:full": "node ./src/cli/majin.js doctor --full",
     "test": "node --test test/*.test.js",
     "check": "node ./scripts/parse-all.js",
+    "i18n": "node ./scripts/i18n-check.mjs",
     "pair": "node ./src/cli/majin.js pair",
     "ui": "node ./src/cli/majin.js window",
     "setup": "powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1",

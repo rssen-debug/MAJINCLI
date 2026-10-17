@@ -37,7 +37,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         route,
         job: `${label}:${stepJob}`,
         messages,
-        tools: allowTools ? registry.schemas() : [],
+        tools: allowTools ? registry.schemas({ readOnly: Boolean(ctx?.readOnly) }) : [],
         toolChoice: allowTools ? undefined : 'none',
         stream: true,
         maxTokens: agent.maxTokens || 6000,
@@ -77,7 +77,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
 
     const runOne = async (c) => {
       const args = safeParse(c.argsJson);
-      const out = await registry.exec(c.name, args, { ...ctx, session: ctx?.session ?? 'desktop', step: steps });
+      const out = await registry.exec(c.name, args, { ...ctx, session: ctx?.session ?? 'desktop', step: steps, readOnly: Boolean(ctx?.readOnly) });
       // args följer med i loggen: utan dem är en spårning värdelös som träningsdata
       // (och trådhistoriken kan inte återskapa *varför* verktyget kördes).
       return { id: c.id, name: c.name, args, out };
@@ -100,7 +100,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     const escalateAfter = Number(cfg.get('routing.escalateAfterErrors')) || 2;
     if (!escalated && errors >= escalateAfter) {
       escalated = true;
-      onEvent({ type: 'escalate', label, step: steps, to: cfg.get('routing.escalateJob') || 'analysis', why: `${errors} verktygsfel i rad` });
+      onEvent({ type: 'escalate', label, step: steps, to: cfg.get('routing.escalateJob') || 'analysis', why: `${errors} tool errors in a row` });
       bus.info('loop.escalate', { label, step: steps, errors });
     }
 
@@ -155,5 +155,5 @@ export function safeParse(s) {
 function summarize(out) {
   if (out?.summary) return out.summary;
   const t = String(out?.result ?? '');
-  return t.length ? t.split('\n')[0].slice(0, 160) : 'klart';
+  return t.length ? t.split('\n')[0].slice(0, 160) : 'done';
 }

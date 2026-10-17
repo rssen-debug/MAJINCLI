@@ -86,7 +86,7 @@ export class Channels {
       await msg.reply(
         [
           `MAJIN · ${st.telegram.online ? '🟢 telegram' : '⚪️ telegram'} · ${st.whatsapp.online ? '🟢 whatsapp' : st.whatsapp.state === 'pairing' ? '🟡 para mig' : '⚪️ whatsapp'}`,
-          `modell ${this.cfg.get('models.provider')} · rutter ${this.cfg.routeTable().length} · verktyg ${this.registry?.list?.().length ?? '?'}`,
+          `model ${this.cfg.get('models.provider')} · routes ${this.cfg.routeTable().length} · tools ${this.registry?.list?.().length ?? '?'}`,
           `MOA ${moa.policy} (${moa.width} referenser → ${moa.aggregator}) · guard ${this.cfg.get('guard.mode')}`,
           this.scheduler ? schemText(this.scheduler) : '',
         ]
@@ -128,7 +128,7 @@ export class Channels {
       const t0 = Date.now();
       const nudge = setInterval(() => {
         const busy = this.busyInfo(session);
-        msg.reply(`⏳ jobbar fortfarande (${busy.steps} steg, ${busy.tools} verktyg)…`).catch(() => {});
+        msg.reply(`⏳ still working (${busy.steps} steps, ${busy.tools} tools)…`).catch(() => {});
       }, 90000);
       nudge.unref?.();
       const res = await this.agent.turn({
@@ -148,9 +148,9 @@ export class Channels {
       clearInterval(nudge);
       const prefix = this.cfg.get('channels.whatsapp.replyPrefix') || '';
       const tail = this.cfg.get('channels.shared.forwardToChat') === false ? '' : footer(res, Date.now() - t0);
-      await msg.reply(`${prefix}${res.text || '(tomt svar)'}${tail}`);
+      await msg.reply(`${prefix}${res.text || '(empty answer)'}${tail}`);
     } catch (err) {
-      await msg.reply(`Fel: ${err.message}${err.hint ? `\n${err.hint}` : ''}`);
+      await msg.reply(`Error: ${err.message}${err.hint ? `\n${err.hint}` : ''}`);
     } finally {
       if (typeof stopTyping === 'function') stopTyping();
       this.active.delete(session);
@@ -205,7 +205,7 @@ function footer(res, ms) {
   if (!res || res.fastPath) return '';
   const bits = [];
   if (res.steps) bits.push(`${res.steps} steg`);
-  if (res.tools?.length) bits.push(`${res.tools.length} verktyg`);
+  if (res.tools?.length) bits.push(`${res.tools.length} tools`);
   if (res.moa?.agreement != null) bits.push(`MOA ${(res.moa.agreement * 100).toFixed(0)}%`);
   if (res.usage?.costUsd) bits.push(`$${res.usage.costUsd.toFixed(4)}`);
   bits.push(`${(ms / 1000).toFixed(1)}s`);

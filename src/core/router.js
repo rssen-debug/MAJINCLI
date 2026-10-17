@@ -77,7 +77,7 @@ export function classify(text, opts = {}) {
     }
     if (binaryish || extHit || magic) bump('re', 2.4, `bilaga:${magic || kind || path.extname(name) || 'bin'}`);
     if (/\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(name) || /^image\//i.test(kind)) bump('vision', 0.8, 'bild');
-    if (a.size > 2000000 && !magic && !extHit) bump('analysis', 0.3, 'stor bilaga');
+    if (a.size > 2000000 && !magic && !extHit) bump('analysis', 0.3, 'large attachment');
   }
 
   const hadToolResult = history.some((m) => m.role === 'tool');

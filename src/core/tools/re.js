@@ -98,7 +98,7 @@ export const reTools = [
     risk: 'read',
     desc: 'Extract strings (ascii + utf16) with offsets. Filter with a regex. Used to find URLs, paths, mutexes and important API names.',
     params: {
-      path: 'string: fil',
+      path: 'string: file',
       min: 'number: minimum length (default 5)',
       filter: 'string: regex the string must match',
       encoding: 'string: ascii | utf16 | both [ascii|utf16|both]',
@@ -125,7 +125,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Hex dump at an offset. Used for headers, the overlay, packer signatures and raw comparison.',
-    params: { path: 'string: fil', offset: 'string: 0x40 eller 64', length: 'number: bytes to read (default 512, max 8192)' },
+    params: { path: 'string: file', offset: 'string: 0x40 or 64', length: 'number: bytes to read (default 512, max 8192)' },
     async run({ path: p, offset = '0', length = 512 }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const off = typeof offset === 'number' ? offset : parseInt(String(offset).replace(/^0x/i, ''), 16) || 0;
@@ -182,7 +182,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Section table with flags, entropy and deviation (name/size/perm). The deviations are what to look at.',
-    params: { path: 'string: fil' },
+    params: { path: 'string: file' },
     async run({ path: p }, ctx) {
       const { abs, buf } = await load(ctx, p);
       let pe;
@@ -238,7 +238,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Export table (for DLLs) + forwarded exports. Used to list hook and backend functions.',
-    params: { path: 'string: fil', limit: 'number: max count (default 200)' },
+    params: { path: 'string: file', limit: 'number: max count (default 200)' },
     async run({ path: p, limit = 200 }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const pe = parsePe(buf);
@@ -308,7 +308,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Read (and optionally extract) the data after the last section — where packers and self-extractors hide.',
-    params: { path: 'string: fil', extract: 'boolean: skriv overlayen till workspace/re/<namn>.overlay', maxPeek: 'number: byte att visa (default 256)' },
+    params: { path: 'string: file to inspect', extract: 'boolean: write the overlay to workspace/re/<name>.overlay', maxPeek: 'number: bytes to show (default 256)' },
     async run({ path: p, extract = false, maxPeek = 256 }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const pe = parsePe(buf);
@@ -474,7 +474,7 @@ export const reTools = [
     desc: 'Hook up external RE tools when you need real power: ghidra (decompile), rizin, objdump, binwalk, upx, yara, jadx, apktool, ilspycmd. Auto-detects what is installed.',
     params: {
       tool: 'string: ghidra | rizin | objdump | binwalk | upx | yara | jadx | apktool | ilspycmd | nm',
-      path: 'string: filen som behandlas',
+      path: 'string: file to process',
       commands: 'string: rizin-kommandon (semikollon) eller objdump-flaggor',
       args: 'array: extra CLI-argument',
       extract: 'boolean: binwalk -e',
@@ -490,15 +490,15 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
         const spec = TOOL_SPECS.find((s) => s.id === tool);
         return {
           ok: false,
-          error: { code: 'tool_missing', message: `${tool} is not installed on this machine`, hint: `${spec?.hint || 'install the tool'}\navailabliga nu: ${Object.values(avail).filter((v) => v.available).map((v) => v.label).join(', ') || 'inga'}` },
+          error: { code: 'tool_missing', message: `${tool} is not installed on this machine`, hint: `${spec?.hint || 'install the tool'}\navailabliga nu: ${Object.values(avail).filter((v) => v.available).map((v) => v.label).join(', ') || 'none'}` },
         };
       }
       const res = await callTool(tool, { file: abs, commands: commands ? String(commands).split(';') : undefined, args, extract, out: out ? resolveIn(ctx, out).abs : undefined, timeoutMs: timeoutSec ? Number(timeoutSec) * 1000 : undefined }, ctx.cfg);
-      if (!res.ok) return { ok: false, error: { code: 'tool_failed', message: res.error || res.stderr || `exit ${res.exitCode}`, hint: res.cmd ? `kommando: ${res.cmd}` : null, ...{ stdout: res.stdout?.slice(0, 3000) } } };
+      if (!res.ok) return { ok: false, error: { code: 'tool_failed', message: res.error || res.stderr || `exit ${res.exitCode}`, hint: res.cmd ? `command: ${res.cmd}` : null, ...{ stdout: res.stdout?.slice(0, 3000) } } };
       const file = path.join(dirs.out, `re-tool-${tool}-${Date.now().toString(36)}.txt`);
       await fs.mkdir(dirs.out, { recursive: true });
       await fs.writeFile(file, `${res.cmd}\n\n${res.stdout || ''}${res.stderr ? `\n--stderr--\n${res.stderr}` : ''}`);
-      return { result: `${tool} ran (${fmt((res.stdout || '').length)}, ${res.ms}ms) → full output: ${file}\n\n${clipText(res.stdout || '', 6000)}${res.stderr ? `\n--stderr--\n${clipText(res.stderr, 1200)}` : ''}`, meta: { file, tool }, summary: `${tool} klart (${res.ms}ms)` };
+      return { result: `${tool} ran (${fmt((res.stdout || '').length)}, ${res.ms}ms) → full output: ${file}\n\n${clipText(res.stdout || '', 6000)}${res.stderr ? `\n--stderr--\n${clipText(res.stderr, 1200)}` : ''}`, meta: { file, tool }, summary: `${tool} done (${res.ms}ms)` };
     },
   }),
 
@@ -510,8 +510,8 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     params: { refresh: 'boolean: look it up in PATH again' },
     async run({ refresh = false }) {
       const d = await detectTools({ refresh: Boolean(refresh) });
-      const rows = Object.entries(d).map(([id, v]) => `${v.available ? '✓' : '·'} ${id.padEnd(9)} ${v.label}${v.available ? ` — ${v.path}` : ` — ${v.hint || 'inte installerad'}`}`);
-      return { result: `externa RE-verktyg:\n${rows.join('\n')}\n\nInbyggt (ingen installation): PE/ELF/Mach-O-parser, entropi, strings, mini-YARA, opcode-skanning, ZIP/APK, pcap, diff.`, summary: `${Object.values(d).filter((v) => v.available).length}/${rows.length} verktyg hittade` };
+      const rows = Object.entries(d).map(([id, v]) => `${v.available ? '✓' : '·'} ${id.padEnd(9)} ${v.label}${v.available ? ` — ${v.path}` : ` — ${v.hint || 'not installed'}`}`);
+      return { result: `external RE tools:\n${rows.join('\n')}\n\nBuilt-in (no install needed): PE/ELF/Mach-O parsers, entropy, strings, mini-YARA, opcode scan, ZIP/APK, pcap, diff.`, summary: `${Object.values(d).filter((v) => v.available).length}/${rows.length} tools found` };
     },
   }),
 
@@ -580,7 +580,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     group: 'reverse',
     risk: 'read',
     desc: 'MD5/SHA1/SHA256 + imphash for one or more files. Used to look up known samples.',
-    params: { path: 'string: fil, eller mapp med glob', glob: 'string: bara vid mapp (default *)' },
+    params: { path: 'string: file, or a folder with a glob', glob: 'string: only for folders (default *)' },
     async run({ path: p, glob = '*' }, ctx) {
       const { abs } = resolveIn(ctx, p);
       const st = await fs.stat(abs);
@@ -605,6 +605,96 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
   }),
 
   def({
+    name: 're.spec',
+    group: 'reverse',
+    risk: 'write',
+    desc: 'Turn a finished investigation into SPEC.md: observable behaviour, inputs/outputs, formats, error handling and open questions — every claim carrying the file offset it came from, and everything not proven listed under Uncertain. This is the step between "I understood it" and "now build it". Use it before writing a replacement; never copy source out of the analysed file.',
+    params: {
+      path: 'string: analysed file',
+      feature: 'string: what you are specifying (e.g. "notes export") — steers which evidence is kept',
+      report: 'string: re.analyze json to reuse instead of re-reading the file',
+      max: 'number: max evidence lines per section (default 25)',
+    },
+    async run({ path: file = '', feature = '', report = '', max = 25 }, ctx) {
+      let r = null;
+      const rep = report ? resolveIn(ctx, report) : null;
+      if (rep && fss.existsSync(rep) && rep.endsWith('.json')) {
+        try { r = JSON.parse(fss.readFileSync(rep, 'utf8')); } catch { r = null; }
+        if (!r) return { ok: false, error: { code: 'bad_report', message: `could not read the report: ${report}`, hint: 'pass the re.analyze report path (out/meta.report)' } };
+      } else {
+        const { abs, buf } = await load(ctx, file);
+        r = analyze(buf, { name: abs, rules: parseRules(userRules(ctx)), maxStrings: 2000 });
+      }
+      const f = r.file || file || report;
+      const n = Math.max(1, Number(max) || 25);
+      const off = (x) => (x == null ? '' : ` @${typeof x === 'number' ? `0x${x.toString(16)}` : x}`);
+      const lines = [];
+      const push = (t) => lines.push(t);
+
+      push(`# SPEC — ${feature || path.basename(f)}`);
+      push('');
+      push(`> Behavioural specification derived from \`${path.basename(f)}\` (${r.kind || r.detected || 'unknown'}, ${r.size != null ? `${r.size} bytes` : 'size unknown'}).`);
+      push('> Re-implement what is described here. Do not copy code, strings or assets out of the analysed file.');
+      push('');
+      push('## Observable behaviour');
+      const beh = (r.strings?.sample || []).filter((x) => /export|save|open|import|share|copy|send|click|error|failed|confirm/i.test(x.value)).slice(0, n);
+      if (beh.length) for (const x of beh) push(`- "${x.value.slice(0, 120)}"${off(x.offset)}`);
+      else push('- No user-facing strings matched. Treat this section as empty until the feature is traced at runtime.');
+      push('');
+      push('## Inputs and outputs');
+      push(`- Format: ${r.kind || '?'} ${r.arch || ''} ${r.bits ? `${r.bits}-bit` : ''}`.trim());
+      const io_ = (r.imports || []).slice(0, n);
+      if (io_.length) {
+        push(`- Imports (${r.importCount ?? io_.length} total): ${io_.map((i) => i.dll ? `${i.dll}(${i.count ?? i.functions?.length ?? '?'})` : i.name).join(', ')}`);
+      }
+      const urls = (r.iocs?.urls || []).slice(0, n), files = (r.iocs?.files || []).slice(0, n), keys = (r.iocs?.keys || []).slice(0, n);
+      if (urls.length) push(`- Endpoints seen: ${urls.join(', ')}`);
+      if (files.length) push(`- Files/paths seen: ${files.slice(0, 12).join(', ')}`);
+      if (keys.length) push(`- Key-shaped strings present: ${keys.length} (values withheld — they are not part of a behaviour spec)`);
+      push('');
+      push('## Formats and invariants');
+      const secs = (r.sections || []).slice(0, n);
+      if (secs.length) for (const x of secs) push(`- \`${x.name}\` size ${x.rawSize ?? x.size ?? '?'}${x.entropy != null ? ` entropy ${Number(x.entropy).toFixed(2)}` : ''}${x.executable ? ' executable' : ''}${x.writable ? ' writable' : ''}`);
+      if (r.overlay?.size) push(`- Overlay: ${r.overlay.size} bytes${off(r.overlay.offset)} — a container or signature is appended, do not assume the file ends at the last section.`);
+      const cont = (r.containers || []).slice(0, 6);
+      if (cont.length) for (const c of cont) push(`- Embedded ${c.kind}${c.entries ? ` with ${c.entries} entries` : ''}${c.offset != null ? off(c.offset) : ''}`);
+      push('');
+      push('## Error handling');
+      const errs = (r.strings?.sample || []).filter((x) => /error|fail|invalid|missing|denied|corrupt|not found|crash/i.test(x.value)).slice(0, Math.max(5, n / 2) | 0);
+      if (errs.length) for (const x of errs) push(`- "${x.value.slice(0, 120)}"${off(x.offset)}`);
+      else push('- No error strings found. Either the feature never fails, or the messages are built at runtime — verify by tracing.');
+      push('');
+      push('## Uncertain — needs a runtime answer');
+      const un = [];
+      if (r.packers?.length) un.push(`Packer detected (${r.packers.map((x) => x.packer).join(', ')}): the static picture may be a stub.`);
+      if ((r.entropy?.overall ?? 0) > 7) un.push(`Overall entropy ${Number(r.entropy.overall).toFixed(2)}: content is likely encrypted or compressed, so strings above may be coincidental.`);
+      if (!beh.length) un.push('No behaviour strings matched — the feature may live in another module or in a resource.');
+      if (r.dotnet?.managed) un.push('.NET: the IL is readable, so decompile before guessing at all.');
+      if ((r.opcodes?.hits || []).length) un.push(`Code islands found (${r.opcodes.hits.map((h) => h.name).join(', ')}) — the entry point may not be where the header says.`);
+      un.push('Nothing here proves control flow. Trace the call, or read the disassembly around the offsets above, before implementing.');
+      for (const u of un) push(`- ${u}`);
+      push('');
+      push('## Evidence index');
+      push(`- analysed: \`${f}\``);
+      if (r.hashes?.sha256) push(`- sha256: \`${r.hashes.sha256}\``);
+      if (r.risk) push(`- risk: ${r.risk.score}/100 (${r.risk.level})${(r.risk.reasons || []).length ? ` — ${r.risk.reasons.map((x) => x.why).join('; ')}` : ''}`);
+      if ((r.recommendations || []).length) push(`- next steps from re.analyze: ${r.recommendations.slice(0, 3).join(' | ')}`);
+      push(`- generated by MAJIN ${r.kind || '?'} triage; every bullet above carries its offset so a claim can be re-checked against the file`);
+
+      const text = lines.join('\n');
+      const outDir = path.join(dirs.out, 'spec');
+      const out = path.join(outDir, `${path.basename(f).replace(/[^\w.-]/g, '_')}.${(feature || 'spec').replace(/[^\w-]/g, '_').slice(0, 30)}.SPEC.md`);
+      await fs.mkdir(outDir, { recursive: true });
+      await fs.writeFile(out, `${text}\n`, 'utf8');
+      return {
+        result: `SPEC written: ${out}\n${text.length} chars · ${lines.length} lines · uncertainty ${un.length} item(s)`,
+        meta: { spec: out, evidence: lines.filter((l) => /@0x/.test(l)).length, uncertain: un.length, risk: r.risk?.score ?? null },
+        summary: `SPEC.md for ${path.basename(f)}${feature ? ` (${feature})` : ''}`,
+      };
+    },
+  }),
+
+  def({
     name: 're.rules',
     group: 'reverse',
     risk: 'read',
@@ -623,13 +713,13 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
       if (action === 'delete') {
         const kept = parseRules(cur).filter((r) => r.name !== name);
         await fs.writeFile(rulesFile, kept.length ? `${rulesToText(kept)}\n` : '');
-        return { result: kept.length ? `removed ${name}, ${kept.length} rules left in ${rulesFile}` : `tog bort ${name} (the file is now empty)`, summary: `regel ${name} bort` };
+        return { result: kept.length ? `removed ${name}, ${kept.length} rules left in ${rulesFile}` : `removed ${name} (the file is now empty)`, summary: `rule ${name} removed` };
       }
       const parsed = parseRules(text || '');
-      if (!parsed.length) return { ok: false, error: { code: 'bad_rule', message: 'could not parse the rule text', hint: 'format: rule Namn { strings: $a = "x" } condition: any of them }' } };
+      if (!parsed.length) return { ok: false, error: { code: 'bad_rule', message: 'could not parse the rule text', hint: 'format: rule RuleName { strings: $a = "x" } condition: any of them }' } };
       await fs.appendFile(rulesFile, `\n${(text || '').trim()}\n`);
       bus.info('yara.add', { name: parsed[0].name, file: rulesFile });
-      return { result: `saved ${parsed.length} rule(s) in ${rulesFile}. They now run automatically in re.analyze and re.yara.`, summary: `${parsed.length} rules sparade` };
+      return { result: `saved ${parsed.length} rule(s) in ${rulesFile}. They now run automatically in re.analyze and re.yara.`, summary: `${parsed.length} rules saved` };
     },
   }),
 ];
@@ -643,7 +733,7 @@ function tryParse(buf) {
 }
 
 function clipText(s, n) {
-  return s.length > n ? `${s.slice(0, n)}\n…[${s.length - n} tecken klippt — se filen]` : s;
+  return s.length > n ? `${s.slice(0, n)}\n…[${s.length - n} chars clipped — see the file]` : s;
 }
 
 void shingles;

@@ -4,7 +4,7 @@
 runs its own configuration, and answers to you — in the browser window, from Telegram, or from
 WhatsApp on your phone. No subscription, no hosted runtime: your keys, your models, your files.
 
-MAJIN is a single Node.js process (or a single `.exe`) with a built-in web UI, 76 tools, a
+MAJIN is a single Node.js process (or a single `.exe`) with a built-in web UI, 77 tools, a
 tool-calling agent loop, Mixture-of-Agents answering, persistent memory and self-modifying
 config. It ships with a real reverse-engineering stack (PE/ELF/APK/pcap parsers, a mini-YARA
 engine, entropy and string analysis) because "read this file and tell me what it is" should not
@@ -90,9 +90,9 @@ majin config set models.provider deepseek
 
 …or type the key in the UI's provider card, or from your phone with `majin pair telegram`.
 
-Supported presets: OpenRouter, Nous, Groq, OpenAI, Anthropic, Gemini, Ollama, LM Studio,
-DeepSeek, plus a `demo` mock provider that answers offline so you can try the loop with no key
-at all.
+Supported presets: OpenRouter, Kilo Gateway, Nous, Groq, OpenAI, Anthropic, Gemini, Ollama,
+LM Studio, DeepSeek, plus a `demo` mock provider that answers offline so you can try the loop
+with no key at all. A gateway (OpenRouter, Kilo) is just `baseUrl` + `vendor/model` as the id.
 
 ## The CLI
 
@@ -130,7 +130,7 @@ the browser's Web Speech API and off until you turn it on.
 
 ## Tools
 
-76 tools, always all on. Risk is per tool, not per group — that is what the guard reads.
+77 tools, always all on. Risk is per tool, not per group — that is what the guard reads.
 
 | prefix | count | tools |
 |---|---|---|
@@ -140,8 +140,8 @@ the browser's Web Speech API and off until you turn it on.
 | `net` | 5 | dns, tcp, http, serve, serve_stop |
 | `screen` | 2 | capture, claim |
 | `web` | 3 | search, fetch, download |
-| `re` | 22 | analyze, strings, hexdump, search, entropy, sections, imports, exports, yara, iocs, overlay, extract, apk, pcap, diff, modules, tool, tools, disasm, unpack, hash, rules |
-| `majin` | 15 | configure, routes, provider, moa, guard, memory, skill, schedule, channel, status, selftest, tools, backup, ui, control |
+| `re` | 23 | analyze, strings, hexdump, search, entropy, sections, imports, exports, yara, iocs, overlay, extract, apk, pcap, diff, modules, tool, tools, disasm, unpack, hash, rules, spec |
+| `majin` | 16 | configure, routes, provider, moa, guard, memory, skill, schedule, channel, status, selftest, tools, backup, ui, control, dataset |
 | `agent` | 4 | plan, delegate, moa, approve |
 
 Every tool's parameters and examples: `GET /api/tools` (or the Tools card in the panel), and
@@ -187,6 +187,10 @@ your app secret.
 optional model route and a target channel. Jobs run in the same loop, isolated sessions, and post
 the answer wherever you asked. `GET /api/schedule` shows the next run; `POST /api/schedule/run`
 runs one now.
+
+A job can be `readOnly: true` — it may then look at anything but change nothing, which is
+what you want for the morning sweep you never watch. `schedule.readOnlyDefault: true` makes
+that the default for every new job.
 
 ## HTTP API
 
@@ -239,7 +243,7 @@ src/core/routes.js      job classification
 src/core/moa.js         Mixture-of-Agents
 src/core/guard.js       modes, askOn/neverOn, approvals
 src/core/server/        HTTP + SSE + static UI, token auth
-src/core/tools/         the 76 tools, nine groups
+src/core/tools/         the 77 tools, nine groups
 src/core/binary/        PE, ELF, Mach-O, containers, entropy, strings, YARA subset
 src/core/channels/      telegram (long poll), whatsapp (baileys)
 src/core/provider/      openai-compat, anthropic, gemini, mock/demo

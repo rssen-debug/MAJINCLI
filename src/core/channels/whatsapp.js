@@ -103,7 +103,7 @@ export class WhatsApp {
   verifyWebhook(query) {
     const c = this.cfg.get('channels.whatsapp.cloud') || {};
     if (!c.verifyToken) return { ok: false, error: 'channels.whatsapp.cloud.verifyToken is not set' };
-    if (query['hub.mode'] !== 'subscribe' || query['hub.verify_token'] !== c.verifyToken) return { ok: false, error: 'verify_token matchar inte' };
+    if (query['hub.mode'] !== 'subscribe' || query['hub.verify_token'] !== c.verifyToken) return { ok: false, error: 'verify_token mismatch' };
     return { ok: true, challenge: query['hub.challenge'] };
   }
 
@@ -220,7 +220,7 @@ export class WhatsApp {
         const from = m.key.remoteJid;
         const allowed = this.cfg.get('channels.whatsapp.allowedJids') || [];
         if (allowed.length && !allowed.map(String).includes(String(from))) {
-          this.bus.warn('whatsapp.blocked', { from, code: `skicka "pair ${from.split('@')[0]}" to grant access` });
+          this.bus.warn('whatsapp.blocked', { from, code: `send "pair ${from.split('@')[0]}" to grant access` });
           continue;
         }
         this.received += 1;

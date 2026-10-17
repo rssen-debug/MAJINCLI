@@ -215,7 +215,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
       if (IS_WIN) {
         const cmd = `[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime] | Out-Null; $t=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent(2); $x=$t.GetElementsByTagName('text'); $x[0].AppendChild($t.CreateTextNode('${t}'))|Out-Null; if ($x.Count -gt 1) { $x[1].AppendChild($t.CreateTextNode('${b}'))|Out-Null }; $n=[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('MAJIN'); $n.Show([Windows.UI.Notifications.ToastNotification]::new($t)); 'ok'`;
         const r = await runShell(cmd, { timeoutSec: 20 });
-        if (!/ok/.test(r.stdout || '')) return { result: `notis kunde inte visas (${(r.stderr || '').slice(0, 120)})`, summary: 'notis misslyckades' };
+        if (!/ok/.test(r.stdout || '')) return { result: `the notification could not be shown (${(r.stderr || '').slice(0, 120)})`, summary: 'notification failed' };
       }
       if (speak) {
         await runShell(`Add-Type -AssemblyName System.Speech; $s=New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Rate=1; $s.Speak('${b.replace(/'/g, "''") || t}')`, { timeoutSec: 60 });

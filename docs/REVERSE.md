@@ -16,6 +16,7 @@ required install. External tools are an upgrade, never a dependency.
 | `re.imports` | import table grouped per dll, flagged by behaviour (inject, keylog, creds, ransom, anti-debug, downloader) |
 | `re.exports` | export list (ordinal + name), useful for DLL triage |
 | `re.yara` | run YARA rules — built-in mini engine, or the real `yara` binary if installed |
+| `re.spec` | turn the investigation into `SPEC.md`: behaviour, inputs/outputs, formats, error handling, plus an `Uncertain` list — every claim carries the offset it came from, so a rebuild has evidence instead of a story |
 | `re.rules` | `list` / `save` / `delete` YARA rules in `<home>/rules/majin.yar`, built-ins counted separately |
 | `re.iocs` | extract URLs, IPs, registry keys, paths, e-mails, filenames, mutex-like strings |
 | `re.overlay` | data after the last section, and carve it out if you want |

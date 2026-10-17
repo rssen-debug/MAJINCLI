@@ -113,7 +113,7 @@ function finishTool(chip, trace, ok, text, ms, spilled) {
   chip.classList.add(ok ? 'good' : 'bad');
   chip.innerHTML = esc(chip.textContent.replace(/\d+(\.\d+)?s$/, '').trim()) + '<span class="ms">' + ms + '</span>';
   if (text) {
-    trace.textContent = String(text).slice(0, 6000) + (spilled ? `\n\n… helt resultat: ${spilled}` : '');
+    trace.textContent = String(text).slice(0, 6000) + (spilled ? `\n\n… full result: ${spilled}` : '');
   }
 }
 function moaGauge(ev) {
@@ -123,10 +123,10 @@ function moaGauge(ev) {
     a.m.append(a.moa);
   }
   if (ev.type === 'moa:start') a.moa.innerHTML = '<span class="gauge">MOA ' + ev.width + ' references ▸ '.repeat(Math.min(3, ev.width)) + '</span>';
-  if (ev.type === 'moa:ref') a.moa.innerHTML += '<span class="kv">· ' + esc(ev.ref) + ' ' + (ev.ok ? (ev.ms || '') + 'ms' : 'fel') + '</span>';
+  if (ev.type === 'moa:ref') a.moa.innerHTML += '<span class="kv">· ' + esc(ev.ref) + ' ' + (ev.ok ? (ev.ms || '') + 'ms' : 'error') + '</span>';
   if (ev.type === 'moa:done') {
     const score = Math.round((ev.score || 0) * 100);
-    a.moa.innerHTML = `<span class="gauge">MOA ${ev.refs} svar · agreement ${score}%</span><span class="bar"><i style="width:${score}%"></i></span> <span class="kv">aggregator ${(ev.ms || 0)}ms${ev.escalated ? '  · escalated' : ''}</span>`;
+    a.moa.innerHTML = `<span class="gauge">MOA ${ev.refs} refs · agreement ${score}%</span><span class="bar"><i style="width:${score}%"></i></span> <span class="kv">aggregator ${(ev.ms || 0)}ms${ev.escalated ? '  · escalated' : ''}</span>`;
   }
   if (ev.type === 'moa:degraded') a.moa.innerHTML = '<span class="kv" style="color:var(--warn)">MOA degraded: ' + esc(ev.reason || '') + '</span>';
   scroll();
@@ -532,7 +532,7 @@ async function command(line) {
   }
   if (c === 'pair') {
     const st = await api('/channels');
-    note(arg === 'whatsapp' ? 'WhatsApp: ' + (st.whatsapp.state || '') + (st.whatsapp.qr ? ' — visa QR i panelen' : '') : 'Telegram: pairing code ' + (st.telegram.pairingCode || '?') + ' — send /pair <code> to the bot');
+    note(arg === 'whatsapp' ? 'WhatsApp: ' + (st.whatsapp.state || '') + (st.whatsapp.qr ? ' — show the QR in the panel' : '') : 'Telegram: pairing code ' + (st.telegram.pairingCode || '?') + ' — send /pair <code> to the bot');
     return true;
   }
   if (c === 'provider') {

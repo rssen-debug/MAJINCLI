@@ -4,12 +4,14 @@
 
     powershell -ExecutionPolicy Bypass -File .\install.ps1              # install (PATH + shortcuts + start menu)
     powershell -ExecutionPolicy Bypass -File .\install.ps1 -WhatsApp   # + Baileys for a personal WhatsApp number
+    powershell -ExecutionPolicy Bypass -File .\install.ps1 -Dataset    # + let MAJIN keep redacted logs of your turns (opt-in, local only)
     powershell -ExecutionPolicy Bypass -File .\install.ps1 -NoPath     # do not touch PATH
     powershell -ExecutionPolicy Bypass -File .\install.ps1 -Uninstall  # pilla bort det igen
 #>
 [CmdletBinding()]
 param(
   [switch]$WhatsApp,
+  [switch]$Dataset,
   [switch]$NoPath,
   [switch]$NoTask,
   [switch]$Uninstall,
@@ -66,7 +68,7 @@ foreach ($d in @('', 'workspace', 'memory', 'sessions', 'skills', 'rules', 'logs
   $p = Join-Path $Home $d
   if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
 }
-Write-Step "datakataloger redo i $Home"
+Write-Step "data directories ready in $Home"
 
 # --- 3. start-skript + PATH -------------------------------------------------
 if (-not $NoPath) {
@@ -154,6 +156,21 @@ if ($WhatsApp) {
     Write-Bad "npm error: $($_.Exception.Message)"
   }
   Pop-Location
+}
+
+# --- 6.5 Learning from your own runs (opt-in) --------------------------------
+if ($Dataset) {
+  Write-Host "`nenabling the local dataset …" -ForegroundColor Cyan
+  Push-Location $Repo
+  $env:MAJIN_HOME = $Home
+  try {
+    & node 'src\cli\majin.js' config set dataset.capture true | Out-Host
+    if ($LASTEXITCODE -eq 0) { Write-Ok 'dataset on — redacted turns in the data folder, nothing ever leaves this machine' }
+    else { Write-Bad 'could not set dataset.capture — run: majin config set dataset.capture true' }
+  } catch { Write-Bad "dataset: $($_.Exception.Message)" }
+  Pop-Location
+} else {
+  Write-Step 'dataset left off (it is opt-in: install.ps1 -Dataset, or "majin dataset on")'
 }
 
 # --- 7. Verify --------------------------------------------------------------

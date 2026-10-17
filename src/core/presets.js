@@ -14,7 +14,7 @@ export const PRESETS = {
     keyEnv: 'DEEPSEEK_API_KEY',
     keyUrl: 'https://platform.deepseek.com/api_keys',
     models: ['deepseek-flash', 'deepseek-v4-pro', 'deepseek-reasoner'],
-    notes: 'deepseek-flash = V4.1 Flash (billig/snabb). deepseek-v4-pro = tung reasoning, 1M context.',
+    notes: 'deepseek-flash = V4.1 Flash (cheap/fast). deepseek-v4-pro = heavy reasoning, 1M context.',
   },
   openrouter: {
     label: 'OpenRouter',
@@ -24,6 +24,22 @@ export const PRESETS = {
     keyUrl: 'https://openrouter.ai/settings/keys',
     models: ['deepseek/deepseek-flash', 'anthropic/claude-sonnet-5', 'openai/gpt-5.2', 'x-ai/grok-4-fast'],
     notes: '200+ models, one key. Good for MOA references.',
+  },
+  kilocode: {
+    label: 'Kilo Gateway',
+    kind: 'openai',
+    baseUrl: 'https://ai-gateway.kilo.ai/api/v1',
+    keyEnv: 'KILO_API_KEY',
+    keyUrl: 'https://app.kilo.ai',
+    models: [
+      'anthropic/claude-sonnet-4.5',
+      'openai/gpt-5.2',
+      'google/gemini-3-pro',
+      'mistralai/codestral-2508',
+      'poolside/laguna-xs.2:free',
+    ],
+    notes:
+      'One JWT key, ~400 models, OpenAI-compatible. Model ids keep the vendor prefix: kilocode/anthropic/claude-sonnet-4.5. Ids ending in :free cost nothing. GET /models needs no key.',
   },
   nous: {
     label: 'Nous Portal',
@@ -69,7 +85,7 @@ export const PRESETS = {
     models: ['gemini-3-pro', 'gemini-3-flash'],
   },
   ollama: {
-    label: 'Ollama (lokalt)',
+    label: 'Ollama (local)',
     kind: 'openai',
     baseUrl: 'http://127.0.0.1:11434/v1',
     keyEnv: null,
@@ -78,7 +94,7 @@ export const PRESETS = {
     notes: 'No key needed. Costs nothing — used as a fallback when the cloud misbehaves.',
   },
   lmstudio: {
-    label: 'LM Studio (lokalt)',
+    label: 'LM Studio (local)',
     kind: 'openai',
     baseUrl: 'http://127.0.0.1:1234/v1',
     keyEnv: null,
@@ -86,7 +102,7 @@ export const PRESETS = {
     models: ['local-model'],
   },
   mock: {
-    label: 'Demo (ingen nyckel)',
+    label: 'Demo (no key)',
     kind: 'mock',
     baseUrl: 'mock://local',
     keyEnv: null,

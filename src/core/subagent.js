@@ -13,7 +13,7 @@ export async function run({ cfg, task, job = 'tasks', maxSteps = 10, registry, s
       role: 'system',
       content: [
         `You are a subagent inside ${cfg.get('name')}. You get one bounded task and deliver a compressed factual answer — no conversation, no self-narratelse.`,
-        `Verktyg: ${registry.list().length} available, all on. Job: ${job}, modell: ${route?.ref || 'default'}.`,
+        `Tools: ${registry.list().length} available, all on. Job: ${job}, model: ${route?.ref || 'default'}.`,
         'Work quietly: run tools, gather evidence, then answer with 3-12 lines: what you found, paths/values, uncertainties.',
         memory?.digest?.() ? `Context from memory:\n${memory.digest().slice(0, 900)}` : '',
       ]

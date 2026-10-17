@@ -234,5 +234,5 @@ function addUsage(u, usage, route) {
 
 export function clip(s, n) {
   const str = String(s ?? '');
-  return str.length <= n ? str : `${str.slice(0, n)}\n…[${str.length - n} tecken klippt]`;
+  return str.length <= n ? str : `${str.slice(0, n)}\n…[${str.length - n} chars clipped]`;
 }

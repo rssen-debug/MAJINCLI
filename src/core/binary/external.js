@@ -31,7 +31,7 @@ export const TOOL_SPECS = [
   },
   {
     id: 'rizin',
-    label: 'rizin (analys + disasm)',
+    label: 'rizin (analysis + disasm)',
     bins: ['rizin', 'r2'],
     winPaths: ['C:\\rizin\\bin\\rizin.exe'],
     hint: 'winget install rizin.rizin  ·  or pacman -S rizin',
@@ -195,7 +195,7 @@ export async function run(cmd, args, { cwd, timeoutMs = 120000, env = {}, maxCha
     });
     child.on('close', (code) => {
       clearTimeout(timer);
-      const clipped = out.length > maxChars ? `${out.slice(0, maxChars)}\n…[klippt ${out.length - maxChars} tecken]` : out;
+      const clipped = out.length > maxChars ? `${out.slice(0, maxChars)}\n…[clipped ${out.length - maxChars} chars]` : out;
       bus.debug('external.done', { cmd, code, chars: out.length });
       resolve({ ok: code === 0, exitCode: code, stdout: clipped, stderr: err.slice(0, 4000), ms: Date.now() - t0, cmd: `${cmd} ${args.join(' ')}`.trim() });
     });

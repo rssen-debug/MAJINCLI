@@ -107,7 +107,9 @@ async function fail(res) {
     status: res.status,
     code: parsed?.error?.code || `http_${res.status}`,
     retryable: res.status === 429 || res.status >= 500,
-    hint: res.status === 401 ? 'Fel eller borttagen API-nyckel.' : res.status === 429 ? 'Rate limited — MAJIN backs off and retries.' : res.status === 404 ? 'wrong baseUrl or model name.' : null,
+    hint: res.status === 401 ? 'Wrong or deleted API key.' : res.status === 402
+          ? 'the provider account is out of credit (a gateway 402) — top it up or pick another model'
+          : res.status === 429 ? 'Rate limited — MAJIN backs off and retries.' : res.status === 404 ? 'wrong baseUrl or model name.' : null,
   });
 }
 
@@ -138,6 +140,22 @@ export async function openaiStream(o) {
   const { route, tools = [], messages, signal, maxTokens, temperature, onEvent } = o;
   const res = await send(route, body(route, { messages, tools, maxTokens, temperature, stream: true, extra: o.extra }), { signal });
   if (!res.ok) await fail(res);
+  const ctype = String(res.headers.get('content-type') || '');
+  if (res.ok && !/event-stream/i.test(ctype)) {
+    /* Some gateways answer a stream:true request with plain JSON. Treat it as a
+       normal completion instead of parsing nothing and answering empty. */
+    const json = await res.json().catch(() => null);
+    if (!json) await fail(res);
+    const choice = json.choices?.[0] || {};
+    const msg = choice.message || {};
+    const toolCalls = (msg.tool_calls || []).map((tc) => ({
+      id: tc.id || `call_${Math.random().toString(36).slice(2, 8)}`,
+      name: tc.function?.name,
+      argsJson: tc.function?.arguments || '{}',
+    }));
+    if (msg.content) onEvent?.({ type: 'delta', text: msg.content });
+    return { text: msg.content || '', reasoning: msg.reasoning_content || msg.reasoning || null, toolCalls, usage: usage(json.usage, msg.content, toolCalls), stopReason: choice.finish_reason || 'stop', raw: { id: json.id, model: json.model }, fallback: 'json' };
+  }
   let text = '';
   let reasoning = '';
   const calls = new Map();
@@ -190,18 +208,33 @@ export async function openaiStream(o) {
   }
   if (text.length > 6000) bus.warn('stream.truncated', { chars: text.length });
   const toolCalls = [...calls.values()].filter((c) => c.name).map((c) => ({ id: c.id || `call_${Math.random().toString(36).slice(2, 8)}`, name: c.name, argsJson: c.args || '{}' }));
+  if (!text && !toolCalls.length && !reasoning) {
+    bus.error('stream.empty', { endpoint: route.endpoint || route.baseUrl });
+    throw new ProviderError(`${route.providerName || 'the provider'} sent an empty stream`, {
+      status: 502,
+      retryable: true,
+      hint: 'the endpoint answered 200 but carried no text and no tool call — check the model id (a gateway needs vendor/model, e.g. kilocode/anthropic/claude-sonnet-4.5) or the baseUrl dialect',
+    });
+  }
   return {
     text,
     reasoning: reasoning || null,
     toolCalls,
-    usage: usageObj || usage(null, text, toolCalls),
+    usage: usage(usageObj, text, toolCalls),
     stopReason: finish,
     raw: {},
   };
 }
 
 function usage(u, text, toolCalls) {
-  if (u) return { input: u.prompt_tokens || 0, output: u.completion_tokens || 0, cached: u.prompt_tokens_details?.cached_tokens || 0, reported: true };
+  if (u)
+    return {
+      input: u.prompt_tokens ?? u.input ?? 0,
+      output: u.completion_tokens ?? u.output ?? 0,
+      cached: u.prompt_tokens_details?.cached_tokens || 0,
+      reported: true,
+      total: u.total_tokens ?? (u.prompt_tokens ?? u.input ?? 0) + (u.completion_tokens ?? u.output ?? 0),
+    };
   const approx = Math.ceil((String(text).length + JSON.stringify(toolCalls || []).length) / 4);
   return { input: 0, output: approx, reported: false };
 }

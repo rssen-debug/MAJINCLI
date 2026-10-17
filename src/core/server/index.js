@@ -268,7 +268,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     }
     if (p === '/api/config' && (req.method === 'PATCH' || req.method === 'POST')) {
       const patch = await readJson(req);
-      if (!Object.keys(patch || {}).length) return json(res, 400, { ok: false, error: 'tom patch — skicka JSON' });
+      if (!Object.keys(patch || {}).length) return json(res, 400, { ok: false, error: 'empty patch — send JSON' });
       const r = cfg.patch(patch, { source: 'ui' });
       return json(res, r.ok ? 200 : 422, { ok: r.ok, diff: r.diff || [], errors: r.errors || [], config: cfg.redacted() });
     }
@@ -286,6 +286,13 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     }
     if (p === '/api/provider' && req.method === 'POST') {
       const body = await readJson(req);
+      /* list | models | delete går genom samma verktyg som agenten har, så att
+         UI och agent aldrig kan få olika uppfattning om vad en provider är. */
+      if (body.action && body.action !== 'add' && body.action !== 'save') {
+        const out = await registry.exec('majin.provider', { action: body.action, ...((body.name || body.preset) ? { name: body.name || body.preset } : {}), ...(body.preset ? { preset: body.preset } : {}), ...(body.baseUrl ? { baseUrl: body.baseUrl } : {}), ...(body.apiKey ? { apiKey: body.apiKey } : {}), ...(body.env ? { env: body.env } : {}), ...(body.models ? { models: Array.isArray(body.models) ? body.models.join(',') : body.models } : {}), ...(body.kind ? { kind: body.kind } : {}) }, { ...rt.ctx, session: 'ui-provider', step: 1 });
+        if (out.ok === false) return json(res, 422, { ok: false, error: out.error?.message || 'provider action failed', hint: out.error?.hint || null });
+        return json(res, 200, { ok: true, action: body.action, result: out.result, meta: out.meta || null, providers: cfg.providerStatus() });
+      }
       const { PRESETS } = await import('../presets.js');
       const preset = PRESETS[body.preset];
       const name = String(body.name || (preset ? body.preset : 'custom')).replace(/[^a-z0-9_-]/gi, '').toLowerCase().slice(0, 24);
@@ -304,12 +311,16 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     }
     if (p === '/api/provider/test' && req.method === 'POST') {
       const body = await readJson(req);
-      const ref = String(body.ref || `${body.provider || cfg.get('models.provider')}/`);
+      /* "testa provider X" utan modellnamn måste välja någon — annars skickas "x/" och
+         gatewayen svarar 400 okänd modell, vilket ser ut som att MAJIN är trasigt */
+      const want = String(body.ref || '').trim();
+      const named = String(body.provider || cfg.get('models.provider') || '');
+      const ref = want.includes('/') ? want : want || `${named}/${(cfg.get(`providers.${named}.models`) || [])[0] || 'default'}`;
       const { complete } = await import('../provider/chat.js');
-      const route = cfg.resolveModel(ref.includes('/') ? ref : `${body.provider}/`, 'router');
+      const route = cfg.resolveModel(ref, 'router');
       const t0 = Date.now();
       try {
-        const r = await complete({ route, job: 'test', messages: [{ role: 'user', content: 'Svara med exakt: OK' }], maxTokens: 16, temperature: 0, retries: 0 });
+        const r = await complete({ route, job: 'test', messages: [{ role: 'user', content: 'Answer with exactly: OK' }], maxTokens: 16, temperature: 0, retries: 0 });
         return json(res, 200, { ok: true, ms: Date.now() - t0, text: String(r.text).slice(0, 60), usage: r.usage });
       } catch (err) {
         return json(res, 200, { ok: false, error: err.message, code: err.code || null, hint: err.hint || null, ms: Date.now() - t0 });

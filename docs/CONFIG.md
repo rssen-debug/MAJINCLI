@@ -25,7 +25,7 @@ validation returns per-field errors instead of half-applying the change.
   "name": "MAJIN",                 // shown everywhere, including the window title
   "workspace": "<home>/workspace", // default root for fs.* and shell.* cwd
   "persona": { "identity": "…", "tone": "…", "style": "…", "rules": [ "…" ], "extra": "" },
-  "providers": { … },              // 10 presets, apiKey lives here
+  "providers": { … },              // 11 presets, apiKey lives here
   "models":  { "provider": "deepseek", "routes": { …13… } },
   "pricing": { "deepseek/deepseek-flash": { "in": 0.14, "out": 0.28 } },
   "routing": { … },                // auto-route, escalation, rules[]
@@ -45,12 +45,20 @@ the key and lists what is close to it, so a typo never becomes silent config.
 
 `providers.<name>` = `{ label, kind, baseUrl, model, apiKey, models[] }`, where `kind` is
 `openai` (any OpenAI-compatible endpoint), `anthropic`, `gemini` or `mock`. Presets:
-`openrouter`, `nous`, `groq`, `openai`, `anthropic`, `gemini`, `ollama`, `lmstudio`, `deepseek`,
-`demo`.
+`openrouter`, `kilocode`, `nous`, `groq`, `openai`, `anthropic`, `gemini`, `ollama`, `lmstudio`,
+`deepseek`, `demo`.
 
 * `apiKey` may be a literal, `{env:MY_VAR}` (resolved per read, never stored resolved) or `null`.
 * `baseUrl` is the only thing you need to change for a proxy or a self-hosted gateway; e.g.
   OpenRouter is `https://openrouter.ai/api/v1` + model `deepseek/deepseek-chat-v3.1`.
+* **Kilo Gateway** (`kilocode`) is the same shape: `https://ai-gateway.kilo.ai/api/v1`,
+  `Authorization: Bearer <JWT>` — the API key from the Kilo dashboard *is* a JWT, so paste the
+  whole thing. Model ids keep the vendor prefix, so a route is `kilocode/anthropic/claude-sonnet-4.5`
+  and free tiers are real ids (`poolside/laguna-xs.2:free`). `majin provider models kilocode`
+  pulls the catalog from `GET /models` (no key needed) and saves it in config. A 401 means the key,
+  a 402 means the account is out of credit — MAJIN says which.
+* The gateway answers a `stream:true` request with either SSE or plain JSON; both work. If it
+  answers with nothing at all you get `sent an empty stream` with a hint, never a silent blank.
 * `demo` is the offline mock: it answers without a key so the loop, the UI and the tests work on
   a plane. It is deliberately **not** counted as setup: `needsSetup` stays true until a real
   provider has a key.
@@ -155,9 +163,15 @@ is the job used when the classifier did not pick one.
   "webhook":  { "enabled": false, "host": "0.0.0.0", "port": 8788, "path": "/whatsapp",
                 "tunnel": "none" }
 },
-"schedule": { "enabled": true, "timezone": "local", "maxConcurrent": 2, "tickMs": 20000 },
+"schedule": { "enabled": true, "timezone": "local", "maxConcurrent": 2, "tickMs": 20000,
+             "readOnlyDefault": false },
 "budget":   { "mode": "track", "monthlyUsd": 0, "warnAt": 0.8 }
 ```
+
+`schedule.readOnlyDefault: true` makes every *new* job read-only: it may run any `read` tool and
+every tool that changes state is refused with `read_only` (and the answer says so). Per job it is
+`majin.schedule add … readOnly:true|false`; the default is `false` so nothing changes underneath
+you. A job's `model` field is honoured too — it overrides the route for that turn only.
 
 `enabled` on a channel means "start it if a token/creds exist" — nothing dials a tool off. With
 `transport: "baileys"` and no session on disk, MAJIN shows a QR in the window; a QR nobody scans

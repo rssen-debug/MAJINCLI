@@ -89,9 +89,9 @@ export const DEFAULTS = {
     escalateOnErrors: true,
     rules: [
       { id: 're', match: '/(reverse|ghidra|ida|rizin|binary|binär|exe|dll|malware|virus|packer|unpack|dump|disassembl|reversing|apk|firmware)/i', job: 're', note: 'reverse engineer-jobb → tung modell' },
-      { id: 'code', match: '/(\\bcode\\b|kod(a|e)?\\b|bugg|bug|error|exception|typescript|python|js|refactor|test|build|compile)/i', job: 'code', note: 'kod → tung modell' },
-      { id: 'research', match: '/(sök|search|hitta|research|vad är|latest|nyaste|källa|webb)/i', job: 'research', note: 'webbresearch' },
-      { id: 'tasks', match: '/(fil|mapp|copy|flytta|sortera|batch|rename|döp om|rens(a|a)|zip|packa)/i', job: 'tasks', note: 'filsnack → billig snabb modell' },
+      { id: 'code', match: '/(\\bcode\\b|kod(a|e)?\\b|bugg|bug|error|exception|typescript|python|js|refactor|test|build|compile)/i', job: 'code', note: 'code → heavy model' },
+      { id: 'research', match: '/(sök|search|hitta|research|vad är|latest|nyaste|källa|webb)/i', job: 'research', note: 'web research' },
+      { id: 'tasks', match: '/(fil|mapp|copy|flytta|sortera|batch|rename|döp om|rens(a|a)|zip|packa)/i', job: 'tasks', note: 'file chat → cheap fast model' },
       { id: 'chat', match: '/^(tack|okej|ok|ja|nej|hej|hmm|vet inte)\\b.{0,25}$/i', job: 'chat', note: 'prat → billigast' },
     ],
   },
@@ -146,7 +146,7 @@ export const DEFAULTS = {
     ],
   },
   skills: { dir: 'skills', auto: true, maxInPrompt: 12 },
-  schedule: { enabled: true, timezone: 'local', maxConcurrent: 2, tickMs: 20000 },
+  schedule: { enabled: true, timezone: 'local', maxConcurrent: 2, tickMs: 20000, readOnlyDefault: false },
   tasks: { concurrency: 3, approvalTimeoutMs: 180000 },
   channels: {
     telegram: { enabled: true, botToken: null, apiBase: 'https://api.telegram.org', allowedChatIds: [], pairingCode: null, pollTimeoutSec: 30, parseMode: 'HTML', proxy: null, reactions: true },
@@ -525,7 +525,7 @@ export function validatePatch(patch, current) {
         for (const [job, ref] of Object.entries(v)) {
           if (!JOBS.includes(job)) errors.push({ path: `${p}.${job}`, msg: `unknown job route. Allowed: ${JOBS.join(', ')}` });
           if (typeof ref !== 'string' || !/^[a-z0-9._-]+\/[^\s]+$/i.test(ref)) errors.push({ path: `${p}.${job}`, msg: `"${ref}" — format provider/model` });
-          else if (current && !current.providers[ref.split('/')[0]]) errors.push({ path: `${p}.${job}`, msg: `unknown provider "${ref.split('/')[0]}". Lägg till i providers först.` });
+          else if (current && !current.providers[ref.split('/')[0]]) errors.push({ path: `${p}.${job}`, msg: `unknown provider "${ref.split('/')[0]}". Add it to providers first.` });
         }
       }
       if (p === 'providers' && isObj(v)) {
@@ -554,7 +554,7 @@ export function validatePatch(patch, current) {
         v.forEach((r, i) => {
           if (!isObj(r) || typeof r.match !== 'string' || !r.job) errors.push({ path: `${p}[${i}]`, msg: '{ match, job } required' });
           else {
-            if (!toRegex(r.match)) errors.push({ path: `${p}[${i}].match`, msg: 'unhappy regex (invalid pattern)' });
+            if (!toRegex(r.match)) errors.push({ path: `${p}[${i}].match`, msg: 'invalid regex pattern' });
             if (!JOBS.includes(r.job)) errors.push({ path: `${p}[${i}].job`, msg: `unknown job "${r.job}"` });
           }
         });
@@ -563,8 +563,8 @@ export function validatePatch(patch, current) {
       if (p === 'channels.telegram.enabled' || p === 'channels.whatsapp.enabled') {
         if (typeof v !== 'boolean') errors.push({ path: p, msg: 'boolean expected' });
       }
-      if (p === 'channels.telegram.botToken' && v && !/^\d+:[\w-]{30,}$/.test(String(v))) errors.push({ path: p, msg: 'ser inte ut som en Telegram bot-token (123456:ABC-DEF…)' });
-      if (p === 'tools.allow' && v !== '*' && !Array.isArray(v)) errors.push({ path: p, msg: 'tools.allow: "*" or an array av verktygsnamn' });
+      if (p === 'channels.telegram.botToken' && v && !/^\d+:[\w-]{30,}$/.test(String(v))) errors.push({ path: p, msg: 'does not look like a Telegram bot token (123456:ABC-DEF…)' });
+      if (p === 'tools.allow' && v !== '*' && !Array.isArray(v)) errors.push({ path: p, msg: 'tools.allow: "*" or an array of tool names' });
       if (isPlain(v)) walk(v, p);
     }
   };

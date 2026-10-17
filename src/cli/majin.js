@@ -470,9 +470,14 @@ async function dataset() {
 }
 
 async function test() {
-  const dir = path.resolve(SELF_DIR, '../../test');
-  if (!fs.existsSync(dir)) return process.stderr.write('no test directory\n');
-  const child = spawn(process.execPath, ['--test', ...(flags.experimental ? [flags.experimental] : []), dir], { stdio: 'inherit' });
+  const root = path.resolve(SELF_DIR, '../..');
+  const dir = path.join(root, 'test');
+  if (!fs.existsSync(dir)) return process.stderr.write('majin test: the test folder is not part of the single-file build \u2014 run it from a checkout\n');
+  /* node 22 vill ha filer, inte en mapp, till --test; att skicka dir gav MODULE_NOT_FOUND */
+  const files = fs.readdirSync(dir).filter((f) => /\.test\.(js|mjs|cjs)$/.test(f)).sort().map((f) => path.join(dir, f));
+  if (!files.length) return process.stderr.write(`majin test: no *.test.js found in ${dir}\n`);
+  const extra = typeof flags.experimental === 'string' && flags.experimental.startsWith('-') ? [flags.experimental] : [];
+  const child = spawn(process.execPath, ['--test', ...extra, ...files], { stdio: 'inherit', cwd: root });
   await new Promise((r) => child.on('exit', r));
   process.exitCode = child.exitCode || 0;
 }

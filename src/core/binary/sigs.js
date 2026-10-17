@@ -78,7 +78,7 @@ export const LINKER_STAMPS = [
   { re: /rustc/, name: 'Rust', sev: 1 },
   { re: /PythonRuntime|python3\d\d\.dll|\bPyInstaller\b/, name: 'PyInstaller/Python', sev: 1 },
   { re: /electron\.dll|chrome_100_percent\.pak|\.asar/i, name: 'Electron', sev: 1 },
-  { re: /node_modules/, name: 'Node-app (packad)', sev: 1 },
+  { re: /node_modules/, name: 'Node app (packed)', sev: 1 },
   { re: /AutoIt|_AutoitVersion/i, name: 'AutoIt', sev: 2 },
   { re: /NSIS|Nullsoft/i, name: 'NSIS-installer', sev: 1 },
   { re: /Inno Setup/i, name: 'Inno Setup', sev: 1 },

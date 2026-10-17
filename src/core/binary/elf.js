@@ -23,7 +23,7 @@ const ETYPE = { 0: 'NONE', 1: 'REL', 2: 'EXEC', 3: 'DYN (shared/pie)', 4: 'CORE'
 export function parseElf(buf) {
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   if (buf.length < 64 || buf[0] !== 0x7f || buf[1] !== 0x45 || buf[2] !== 0x4c || buf[3] !== 0x46) {
-    throw new BinError('Saknar ELF-magi (\\x7fELF)', { code: 'elf_parse' });
+    throw new BinError('missing ELF magic (\\x7fELF)', { code: 'elf_parse' });
   }
   const cl = buf[4];
   const is64 = cl === 2;

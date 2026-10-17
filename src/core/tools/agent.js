@@ -37,7 +37,7 @@ export const agentTools = [
     name: 'agent.delegate',
     group: 'agent',
     risk: 'read',
-    desc: 'Send a sub-problem to a subagent with its own step budget (it sees your tools but not your history). Use it for parallel digging — t.ex. "analysera dessa 3 filer".',
+    desc: 'Send a sub-problem to a subagent with its own step budget (it sees your tools but not your history). Use it for parallel digging — e.g. "analyse these 3 files".',
     params: {
       tasks: 'array: [{"task":"beskriv uppgiften","job":"code|re|tasks|research","maxSteps":12}]',
       parallel: 'boolean: run them all at once (default true)',
@@ -75,7 +75,7 @@ export const agentTools = [
       return {
         result: `MOA (enighet ${res.agreement?.score ?? '-'}${res.escalated ? ', eskalerade' : ''}):\n${res.answer}\n\nReferenser: ${res.refs.map((r) => `${r.ref}${r.error ? ' ✗' : ` ${r.text.length}t`}`).join(', ')}`,
         meta: { agreement: res.agreement, escalated: res.escalated, ms: res.elapsedMs },
-        summary: `MOA-svar (enighet ${res.agreement?.score ?? '?'})`,
+        summary: `MOA answer (agreement ${res.agreement?.score ?? '?'})`,
       };
     },
   }),

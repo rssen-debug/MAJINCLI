@@ -32,5 +32,5 @@ export async function analyzeImage({ cfg, imagePath, question = 'What is in the 
       },
     ],
   });
-  return res.text || '(tomt svar)';
+  return res.text || '(empty answer)';
 }

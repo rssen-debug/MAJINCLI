@@ -177,7 +177,7 @@ export class Skills {
       .replace(/[^\p{L}\p{N}]+/gu, '-')
       .replace(/^-|-$/g, '')
       .slice(0, 48);
-    if (!slug) return { ok: false, why: 'namnet gick inte att skriva till filnamn' };
+    if (!slug) return { ok: false, why: 'the name could not be written as a filename' };
     const file = path.join(this.dir, `${slug}.md`);
     const body = `---\nname: ${name}\nwhen: ${when || ''}\ntools: ${Array.isArray(tools) ? tools.join(', ') : tools || ''}\nupdated: ${new Date().toISOString()}\n---\n${(steps || '').trim()}\n`;
     fs.writeFileSync(file, body);

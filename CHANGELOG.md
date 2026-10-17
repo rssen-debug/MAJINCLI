@@ -3,6 +3,95 @@
 Notable changes on `arena/e223e8b9-slurps` (PR #1). Newest first. Verified in the Linux sandbox
 unless stated otherwise; nothing here claims a Windows or browser run.
 
+## Unreleased — 2026-10-17 (later)
+
+Run-driven again: wired **Kilo Gateway** as a provider and tried to run it for real, which exposed
+three bugs in code that had never been looked at that way. Also the read-only background turn and
+`re.spec`, both taken from how Dots/Muse/REA/Grok Bot are used: a background agent that may look but
+not touch, and an investigation that ends in a spec with evidence instead of a story.
+
+### Added
+- **`kilocode` provider preset** (11 presets now). `https://ai-gateway.kilo.ai/api/v1`, Bearer **JWT**
+  key (the dashboard key *is* a JWT, so `parseIntent` now accepts `eyJ….….…` in natural language and
+  maps "my kilo key is …" to the `kilocode` provider), `:free` model ids pass through untouched, and
+  `majin provider models kilocode` / `POST /api/provider {action:"models"}` pulls the catalog from
+  `GET /models` and saves it in config. Gateway model ids keep the vendor prefix
+  (`kilocode/anthropic/claude-sonnet-4.5`) because `splitModel` only consumes the first segment.
+- **Read-only turns.** `registry.visible/schemas/list/groups({readOnly})` show only `risk:'read'`
+  tools, `registry.exec` refuses everything else with `read_only` + a hint saying how to allow it,
+  and the system prompt states the constraint instead of promising every tool. Exposed per job
+  (`majin.schedule add … readOnly:true`) and as a default (`schedule.readOnlyDefault`, **false** so
+  no existing job changes behaviour). This is the Dots/Muse pattern: background work is read-only
+  unless you say otherwise.
+- **`re.spec`** (77 tools now) — turns a finished RE investigation into
+  `out/spec/<file>.<feature>.SPEC.md`: observable behaviour, inputs/outputs, formats/invariants,
+  error handling, an `Uncertain` list of what static analysis could not prove, and an evidence index
+  where every claim keeps its `@0x…` offset. `risk:'write'` on purpose (it writes a file) so a
+  read-only job cannot emit one. The rule "re-implement, do not copy" is in the document, not just
+  the docs.
+- `test/i18n.test.js` + `scripts/i18n-check.mjs` — a Swedish gate that scans *string literals* in
+  `src/`, `scripts/`, `install.ps1` and `start-majin.cmd`, skips regex literals (input matchers) and
+  an allowlist of deliberate Swedish-for-input lines, and fails on both word matches and `åäö`.
+  Third translation pass was needed because a diacritic-only detector cannot see `fil`, `klippt`,
+  `svar`, `ingen`, `redan` — the gate is the fix, not another sweep.
+- `test/kilo.test.js` (8) and `test/readonly.test.js` (6): the gateway contract is asserted against
+  a local stand-in that validates the Bearer JWT, so path, header, body, `:free` id, tool round-trip,
+  401/402 mapping and `/models` discovery are covered without network; read-only covers refusal, the
+  shrunken menu, a surviving turn, the schedule flag and the model override.
+
+### Fixed
+- **Streaming turns recorded no usage.** `openaiStream` returned the provider's raw
+  `{prompt_tokens, completion_tokens}` object where the tally reads `input`/`output`, so every
+  streamed answer counted `0` in `majin usage` and in the budget check (non-streaming calls were
+  fine, which is why tests never saw it). Normalised through `usage()`, which now also accepts
+  `{input,output}` and reports `total`. Costs recorded before this are understated.
+- **A `stream:true` request answered with plain JSON produced a blank reply.** The SSE parser found
+  no `data:` lines and the turn "finished" with empty text and no tools. Now: a non-`event-stream`
+  content type is read as a normal completion, and a stream that carries nothing at all raises
+  `sent an empty stream` with the model-id/baseUrl hint instead of answering nothing.
+- **`majin test` was broken on Node 22** — it passed the `test/` *directory* to `node --test`, which
+  wants files, so the shipped CLI's own test command died with `MODULE_NOT_FOUND`. It now enumerates
+  `*.test.js` and, in a single-file build where no test folder ships, says so in one line.
+- **A job's `model` field was decoration** — `runTask` accepted it and `agent.turn` ignored it, so a
+  scheduled job could never pin a model. `turn({model})` now overrides the route and the `route`
+  event shows it (test asserts both).
+- **`POST /api/provider` ignored `action`** — `list|models|delete` only existed on the tool, so the
+  UI panel could not discover models for a gateway. It delegates to `majin.provider` now, so UI and
+  agent cannot disagree about what a provider is.
+- **`POST /api/provider/test` sent an empty model id** when only a provider was given
+  (`kilocode/` → gateway 400, looking like a broken install); it defaults to the provider's first
+  model. Its probe prompt was Swedish (`Svara med exakt: OK`) — English now.
+- **Self-config was silent outside the window.** A patch applied from natural language only emitted a
+  `config` event, so a Telegram/WhatsApp user got an unrelated answer; the answer now ends with
+  `(config: saved the key as provider kilocode)`.
+- `install.ps1 -Dataset` — opt-in dataset capture at install time (the flag was documented nowhere and
+  did not exist); without it the installer says the dataset stays off and how to turn it on.
+
+### Verified
+- `node --test test/*.test.js` → **87/87 pass** (kilo 8, readonly 6, i18n 3, dataset 10, selfconfig 8,
+  config 10, router-moa 10, tools 7, re 8, agent 9, server 8, exe/build 0 skips), `npm run check` →
+  **66/66 parse cleanly**, `npm run bench` → 7/7 **VERDICT: pass**, `node scripts/i18n-check.mjs` →
+  **0 Swedish string literals**, `majin test` through the CLI → 87/87.
+- Live against a faithful local Kilo stand-in (config written to a temp `MAJIN_HOME`, real `start`,
+  real HTTP): `/api/provider {action:models}` → `5 models … saved in config`; `/api/chat` tool turn →
+  route `kilocode/poolside/laguna-xs.2:free`, `fs.write` executed, file on disk, answer quoting the
+  tool result; SSE turn → 15 `data:` events with route/step/tool/usage; usage `280/70` and
+  `costUsd 0.00189` for a priced model, `tokensIn 280 · tokensOut 71 · costUsd 0.00189` in
+  `usage.json`; wrong JWT → `401: invalid or missing API key` + `Wrong or deleted API key.`; the
+  pasted key landed in `config.json` and appears in `trajectories.jsonl` as `my kilo key is <JWT>`
+  with zero hits for the key itself; `/api/selftest full` → 10 rows, `✓ call
+  kilocode/anthropic/claude-sonnet-4.5 — 2ms`.
+
+### Not verified (still)
+- **A real request to `api.kilo.ai` / `ai-gateway.kilo.ai`.** This sandbox has egress to github/npm/pypi
+  only, so every attempt failed at connect (`SSL_ERROR_SYSCALL`, HTTP 000) while github returned 200.
+  The provider is proven against the documented contract, not against Kilo's servers. Run on your own
+  machine: `majin config set providers.kilocode.apiKey <jwt>` then `majin doctor --full` (or
+  `curl -H "authorization: Bearer <jwt>" https://ai-gateway.kilo.ai/api/v1/models`).
+- Windows `.exe` bytes, `install.ps1` (including the new `-Dataset`), and the browser rendering of the
+  UI are still sandbox-unverifiable; nothing in the read-only or `re.spec` path needs them, but the
+  `readOnly` toggle in the schedule card is not built yet (see TODO).
+
 ## Unreleased — 2026-10-17 (late)
 
 Run-driven work: the agent was started for real (temp `MAJIN_HOME`s, demo provider,
