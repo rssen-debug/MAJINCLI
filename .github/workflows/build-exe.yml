@@ -10,7 +10,9 @@ on:
       - 'v*'
 
 permissions:
-  contents: write   # behövs för att softprops/action-gh-release ska kunna skapa releasen med .exe:n
+  contents: write
+  issues: write     # bara säreporteringen behover detta: ett issue med loggen, sa att
+                     # ett fel ga att lasa aven nar logg-slutpunkten ar otillganglig   # behövs för att softprops/action-gh-release ska kunna skapa releasen med .exe:n
 
 jobs:
   windows:
@@ -61,6 +63,18 @@ jobs:
           $c = & ./dist/majin-win-x64.exe config get name 2>&1
           "config get name (exit $LASTEXITCODE): $c"
           exit 0
+      - name: report the failure log as an issue
+        # Logg-endpointen for actions ar inte alltid naabar; ett issue med de sista
+        # raderna kan lasas med 'gh issue view' och gor blindfelsokning omoglig.
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $f = [char]96 * 3
+          if (Test-Path build.log) { $log = (Get-Content build.log -Tail 60) -join "`n" } else { $log = "(no build.log)" }
+          $body = "run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID`n`n$f`n$log`n$f`n"
+          $payload = @{ title = "build-exe failed on $($env:GITHUB_SHA.Substring(0,7))"; body = $body; labels = @('ci') } | ConvertTo-Json -Compress
+          Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/issues" -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" } -Body $payload | ForEach-Object { "opened $($_.html_url)" }
       - uses: actions/upload-artifact@v4
         with:
           name: majin-win-x64

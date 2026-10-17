@@ -101,7 +101,9 @@ fs.writeFileSync(
         assets: ['ui/**/*', 'rules/**/*', 'assets/**/*', 'package.json'],
         scripts: [],
         targets,
-        bytecode: false,
+        // pkg's own default for bytecode: `bytecode:false` becomes --no-bytecode, which
+        // is what pkg's Windows run died on ("Please run with -d and without
+        // --no-bytecode"). The default path is the supported one; size is not the goal.
       },
     },
     null,
