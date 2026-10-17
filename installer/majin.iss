@@ -75,7 +75,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameter
 [Registry]
 ; Only ever the per-user PATH, and only the bin folder: no file associations, no
 ; Run-key write by default (autostart below owns that, and only when asked for).
-Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: NeedsAddPath(ExpandConstant('{app}')); Tasks: cmdline; Flags: dontclosekey
+Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: NeedsAddPath(ExpandConstant('{app}')); Tasks: cmdline
 
 [Registry]
 ; The autostart task, and only that one: no Run-key write when it is not ticked.
