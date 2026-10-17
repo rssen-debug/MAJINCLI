@@ -28,7 +28,11 @@ jobs:
         run: |
           node scripts/build-exe.mjs 2>&1 | Tee-Object -FilePath build.log | Out-String -Stream | Write-Host
           if ($LASTEXITCODE -ne 0) {
-            Get-Content build.log -Tail 6 | ForEach-Object { Write-Output "::error::$_" }
+            Get-Content build.log -Tail 8 | ForEach-Object { Write-Output "::error::$_" }
+            exit 1
+          }
+          if (-not (Test-Path dist/majin-win-x64.exe)) {
+            Get-Content build.log -Tail 14 | ForEach-Object { Write-Output "::error::no exe: $_" }
             exit 1
           }
       - name: smoke test the built binary
