@@ -9,7 +9,20 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+/* Locate the app root: works as plain ESM, as an esbuild CJS bundle and inside a pkg snapshot. */
+const selfDir = (() => {
+  try {
+    if (typeof __dirname !== 'undefined') return __dirname;
+  } catch {
+    /* ESM */
+  }
+  try {
+    return path.dirname(fileURLToPath(import.meta.url));
+  } catch {
+    return process.cwd();
+  }
+})();
+export const repoRoot = process.pkg || path.basename(selfDir) === 'dist' ? selfDir : path.resolve(selfDir, '..', '..');
 
 export function expand(p) {
   if (!p) return p;

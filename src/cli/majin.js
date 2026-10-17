@@ -22,7 +22,18 @@ import { dirs, ensureDirs, expand } from '../core/paths.js';
 import { bus } from '../core/log.js';
 import { VERSION, createRuntime } from '../core/runtime.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SELF_DIR = (() => {
+  try {
+    if (typeof __dirname !== 'undefined') return __dirname;
+  } catch {
+    /* bundlad CJS */
+  }
+  try {
+    return path.dirname(fileURLToPath(import.meta.url));
+  } catch {
+    return process.cwd();
+  }
+})();
 const argv = process.argv.slice(2);
 const cmd = (argv[0] && !argv[0].startsWith('-') ? argv.shift() : 'start').toLowerCase();
 const flags = parseFlags(argv);
@@ -93,7 +104,15 @@ async function start() {
     if (flags.window !== false) openWindow(alive.url);
     return;
   }
-  const child = spawn(process.execPath, [path.join(__dirname, 'majin.js'), '_serve', ...(flags.json ? ['--json'] : []), ...(flags.port ? [`--port=${flags.port}`] : []), ...(flags.noChannels || flags.channels === false ? ['--no-channels'] : [])], {
+  const self = (() => {
+    if (process.pkg) return process.execPath; // bundlad exe: kör sig själv med _serve
+    for (const ext of ['.js', '.cjs', '.mjs']) {
+      const cand = path.join(SELF_DIR, `majin${ext}`);
+      if (fs.existsSync(cand)) return cand;
+    }
+    return process.argv[1];
+  })();
+  const child = spawn(process.execPath === self ? self : process.execPath, [self, '_serve', ...(flags.json ? ['--json'] : []), ...(flags.port ? [`--port=${flags.port}`] : []), ...(flags.noChannels || flags.channels === false ? ['--no-channels'] : [])], {
     stdio: 'inherit',
     env: { ...process.env, MAJIN_PORT: String(port) },
   });
@@ -397,7 +416,7 @@ async function re() {
 }
 
 async function test() {
-  const dir = path.resolve(__dirname, '../../test');
+  const dir = path.resolve(SELF_DIR, '../../test');
   if (!fs.existsSync(dir)) return process.stderr.write('ingen test-mapp\n');
   const child = spawn(process.execPath, ['--test', ...(flags.experimental ? [flags.experimental] : []), dir], { stdio: 'inherit' });
   await new Promise((r) => child.on('exit', r));

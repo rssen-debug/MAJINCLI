@@ -1,10 +1,10 @@
 <#
-  MAJIN — installation på Windows.
-  Kräver inga admin-rättigheter, ingen byggradie, ingen npm-rotation för kärnan.
+  MAJIN — installation on Windows.
+  Needs no admin rights, no build toolchain, no npm churn for the core.
 
-    powershell -ExecutionPolicy Bypass -File .\install.ps1              # installera (PATH + genväg + start-menyn)
-    powershell -ExecutionPolicy Bypass -File .\install.ps1 -WhatsApp   # + Baileys för personligt WhatsApp-nummer
-    powershell -ExecutionPolicy Bypass -File .\install.ps1 -NoPath     # rör inte PATH
+    powershell -ExecutionPolicy Bypass -File .\install.ps1              # install (PATH + shortcuts + start menu)
+    powershell -ExecutionPolicy Bypass -File .\install.ps1 -WhatsApp   # + Baileys for a personal WhatsApp number
+    powershell -ExecutionPolicy Bypass -File .\install.ps1 -NoPath     # do not touch PATH
     powershell -ExecutionPolicy Bypass -File .\install.ps1 -Uninstall  # pilla bort det igen
 #>
 [CmdletBinding()]
@@ -25,7 +25,7 @@ function Write-Ok([string]$m) { Write-Host "✔ $m" -ForegroundColor Green }
 function Write-Bad([string]$m) { Write-Host "✖ $m" -ForegroundColor Red }
 
 if ($Uninstall) {
-  Write-Host "avlägsnar MAJIN (data i $Home lämnas orörda)" -ForegroundColor Cyan
+  Write-Host "removing MAJIN (data in $Home is left alone)" -ForegroundColor Cyan
   Get-ScheduledTask -TaskName 'MAJIN' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
   Write-Step 'schematisk start uppgift borta'
   $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -37,26 +37,26 @@ if ($Uninstall) {
   foreach ($s in @("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\MAJIN", "$env:USERPROFILE\Desktop\MAJIN.lnk")) {
     if (Test-Path $s) { Remove-Item $s -Recurse -Force; Write-Step "tog bort $s" }
   }
-  Write-Ok 'MAJIN avinstallerat. Config/nycklar ligger kvar i' $Home
+  Write-Ok 'MAJIN uninstalled. Config/keys remain in' $Home
   exit 0
 }
 
-Write-Host "MAJIN installeras från $Repo" -ForegroundColor Cyan
+Write-Host "Installing MAJIN from $Repo" -ForegroundColor Cyan
 Write-Host "data + config: $Home`n" -ForegroundColor DarkCyan
 
 # --- 1. Node ---------------------------------------------------------------
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) {
-  Write-Bad 'Node hittades inte i PATH.'
-  Write-Host '  Installera LTS (>= 20.11): winget install OpenJS.NodeJS.LTS' -ForegroundColor Yellow
-  Write-Host '  Starta om PowerShell och kör install.ps1 igen.' -ForegroundColor Yellow
+  Write-Bad 'Node was not found in PATH.'
+  Write-Host '  Install the LTS (>= 20.11): winget install OpenJS.NodeJS.LTS' -ForegroundColor Yellow
+  Write-Host '  Restart PowerShell and run install.ps1 again.' -ForegroundColor Yellow
   exit 1
 }
 $ver = (& node -v) -replace '^v', ''
 $parts = $ver.Split('.')
 $okNode = ([int]$parts[0] -gt 20) -or ([int]$parts[0] -eq 20 -and ([int]$parts[1] -gt 11 -or ([int]$parts[1] -eq 11 -and [int]$parts[2] -ge 0)))
 if (-not $okNode) {
-  Write-Bad "Node $ver är för gammal — MAJIN behöver 20.11 eller senare (fetch, structuredClone, --test)."
+  Write-Bad "Node $ver is too old — MAJIN needs 20.11 or later (fetch, structuredClone, --test)."
   exit 1
 }
 Write-Ok "Node $ver ($($node.Source))"
@@ -73,12 +73,12 @@ if (-not $NoPath) {
   $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
   if ($userPath -notlike "*$Bin*") {
     [Environment]::SetEnvironmentVariable('Path', "$Bin;$userPath", 'User')
-    Write-Step "PATH (användare): $Bin lagts först"
+    Write-Step "PATH (user): prepended $Bin"
   } else { Write-Step 'PATH: redan installerad' }
 }
 $cmd = @"
 @echo off
-rem MAJIN — starta agenten (server + fönster)
+rem MAJIN — start the agent (server + window)
 setlocal
 if "%MAJIN_HOME%"=="" set "MAJIN_HOME=$Home"
 where node >nul 2>nul || (echo Node saknas - installera Node LTS 20.11+ & exit /b 1)
@@ -105,53 +105,59 @@ node "src\cli\majin.js" %*
 popd
 "@
 Set-Content -Path (Join-Path $Bin 'majin.cmd') -Value $wrapper -Encoding ASCII
-Write-Ok 'majin.cmd / majin-start.cmd / majin-serve.cmd i' $Bin
+Write-Ok 'majin.cmd / majin-start.cmd / majin-serve.cmd written to' $Bin
 
-# --- 4. Genvägar ------------------------------------------------------------
+# --- 4. Icon + shortcuts ----------------------------------------------------
+if (Test-Path (Join-Path $Repo 'assets\majin.ico')) {
+  Copy-Item (Join-Path $Repo 'assets\majin.ico') (Join-Path $Home 'majin.ico') -Force
+  Write-Ok 'MAJIN icon installed'
+}
 $startMenu = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\MAJIN"
 if (-not (Test-Path $startMenu)) { New-Item -ItemType Directory -Path $startMenu -Force | Out-Null }
 $ws = New-Object -ComObject WScript.Shell
 $lnk = $ws.CreateShortcut((Join-Path $startMenu 'MAJIN.lnk'))
 $lnk.TargetPath = Join-Path $Bin 'majin-start.cmd'
 $lnk.WorkingDirectory = $Repo
-$lnk.Description = 'Startar MAJIN-agenten och öppnar fönstret'
+$lnk.Description = 'Starts the MAJIN agent and opens the window'
+$lnk.IconLocation = (Join-Path $Home 'majin.ico') + ',0'
 $lnk.Save()
 $desk = $ws.CreateShortcut("$env:USERPROFILE\Desktop\MAJIN.lnk")
 $desk.TargetPath = Join-Path $Bin 'majin-start.cmd'
 $desk.WorkingDirectory = $Repo
-$desk.Description = 'MAJIN — agenten på din egen maskin'
+$desk.Description = 'MAJIN — the agent on your own machine'
+$desk.IconLocation = (Join-Path $Home 'majin.ico') + ',0'
 $desk.Save()
-Write-Ok 'genväg på skrivbordet + startmenyn'
+Write-Ok 'desktop shortcut + start menu entry'
 
-# --- 5. Autostart (valfritt) -----------------------------------------------
+# --- 5. Autostart (optional) ------------------------------------------------
 if (-not $NoTask) {
   try {
     $action = New-ScheduledTaskAction -Execute (Join-Path $Bin 'majin-serve.cmd')
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
-    Register-ScheduledTask -TaskName 'MAJIN' -Action $action -Trigger $trigger -Settings $settings -Description 'Startar MAJIN-agenten i bakgrunden' -Force | Out-Null
-    Write-Ok 'MAJIN startar vid inloggning (Task Scheduler)'
+    Register-ScheduledTask -TaskName 'MAJIN' -Action $action -Trigger $trigger -Settings $settings -Description 'Starts the MAJIN agent in the background' -Force | Out-Null
+    Write-Ok 'MAJIN starts at logon (Task Scheduler)'
   } catch {
-    Write-Step "hoppar över autostart: $($_.Exception.Message)"
+    Write-Step "skipping autostart: $($_.Exception.Message)"
   }
-} else { Write-Step 'autostart utelämnat (-NoTask)' }
+} else { Write-Step 'autostart skipped (-NoTask)' }
 
-# --- 6. Valfria beroenden ---------------------------------------------------
+# --- 6. Optional dependencies -----------------------------------------------
 if ($WhatsApp) {
-  Write-Host "`ninstallerar WhatsApp-stöd (Baileys) …" -ForegroundColor Cyan
+  Write-Host "`ninstalling WhatsApp support (Baileys) …" -ForegroundColor Cyan
   Push-Location $Repo
   try {
     & npm install --no-audit --no-fund @whiskeysockets/baileys@7.0.0-rc14 qrcode@1.5.4
-    if ($LASTEXITCODE -eq 0) { Write-Ok 'Baileys på plats — kör: majin pair whatsapp' }
-    else { Write-Bad 'npm install misslyckades — WhatsApp-cloud-transporten fungerar ändå (ingen dep)' }
+    if ($LASTEXITCODE -eq 0) { Write-Ok 'Baileys installed — run: majin pair whatsapp' }
+    else { Write-Bad 'npm install failed — the WhatsApp cloud transport still works (no dependency)' }
   } catch {
-    Write-Bad "npm felade: $($_.Exception.Message)"
+    Write-Bad "npm error: $($_.Exception.Message)"
   }
   Pop-Location
 }
 
-# --- 7. Verifiera ------------------------------------------------------------
-Write-Host "`nkontrollerar …" -ForegroundColor Cyan
+# --- 7. Verify --------------------------------------------------------------
+Write-Host "`nverifying …" -ForegroundColor Cyan
 Push-Location $Repo
 $env:MAJIN_HOME = $Home
 & node 'src\cli\majin.js' doctor
@@ -160,6 +166,6 @@ Write-Host ''
 & node 'src\cli\majin.js' url
 Pop-Location
 Write-Host ''
-if ($doctorExit -ne 0) { Write-Host 'doctor hade anmärkningar — åtgärda punkterna ovan (API-nyckel är det vanliga).' -ForegroundColor Yellow }
-Write-Host 'KLART. Öppna ett nytt fönster och kör:  majin' -ForegroundColor Green
-Write-Host '   (eller dubbelklicka MAJIN på skrivbordet. Tryck Ctrl+C för att stoppa.)' -ForegroundColor DarkGray
+if ($doctorExit -ne 0) { Write-Host 'doctor reported issues — fix the lines above (an API key is the usual one).' -ForegroundColor Yellow }
+Write-Host 'DONE. Open a new terminal and run:  majin' -ForegroundColor Green
+Write-Host '   (or double-click MAJIN on the desktop. Ctrl+C stops it.)' -ForegroundColor DarkGray

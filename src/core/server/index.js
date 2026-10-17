@@ -11,8 +11,19 @@ import { bus } from '../log.js';
 import { dirs, safeJoin } from '../paths.js';
 import { readHistory } from '../context.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UI_CANDIDATES = [path.resolve(__dirname, '../../ui'), path.join(path.dirname(process.execPath), 'ui'), path.resolve(process.cwd(), 'src/ui')];
+const SELF_DIR = (() => {
+  try {
+    if (typeof __dirname !== 'undefined') return __dirname;
+  } catch {
+    /* bundlad CJS */
+  }
+  try {
+    return path.dirname(fileURLToPath(import.meta.url));
+  } catch {
+    return process.cwd();
+  }
+})();
+const UI_CANDIDATES = [path.resolve(SELF_DIR, 'ui'), path.resolve(SELF_DIR, '../../ui'), path.join(path.dirname(process.execPath), 'ui'), path.resolve(process.cwd(), 'src/ui')];
 const UI_DIR = UI_CANDIDATES.find((d) => fs.existsSync(path.join(d, 'index.html'))) || UI_CANDIDATES[0];
 const MAX_BODY = 64 * 1024 * 1024;
 const VERSION = '0.1.0';

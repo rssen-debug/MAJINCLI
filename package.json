@@ -1,7 +1,7 @@
 {
   "name": "majin",
   "version": "0.1.0",
-  "description": "MAJIN — a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
+  "description": "MAJIN \u2014 a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -29,7 +29,10 @@
     "setup": "powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1",
     "setup:whatsapp": "powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1 -WhatsApp",
     "uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1 -Uninstall",
-    "clean": "node ./scripts/clean.js"
+    "clean": "node ./scripts/clean.js",
+    "exe": "node scripts/build-exe.mjs",
+    "exe:all": "node scripts/build-exe.mjs --all",
+    "exe:bundle": "node scripts/build-exe.mjs --no-pkg"
   },
   "optionalDependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
@@ -55,5 +58,9 @@
     "telegram",
     "whatsapp",
     "jarvis"
-  ]
+  ],
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.23.0",
+    "esbuild": "^0.24.0"
+  }
 }

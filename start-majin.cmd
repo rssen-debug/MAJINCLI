@@ -1,7 +1,7 @@
 @echo off
 rem ============================================================
-rem  MAJIN — starta agenten på Windows (dubbelklicka den här)
-rem  Agenten körs i Node; fönstret är ett Edge-app-fönster.
+rem  MAJIN — start the agent on Windows (double-click this file)
+rem  The agent runs in Node; the window is an Edge app window.
 rem ============================================================
 setlocal EnableExtensions
 title MAJIN
