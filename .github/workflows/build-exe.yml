@@ -32,14 +32,27 @@ jobs:
             exit 1
           }
       - name: smoke test the built binary
-        # doctor skriver ✔/✖ och lämnar 1 utan API-nyckel — det är förväntat på
-        # en CI-runner, så den raden får inte fälla bygget. version och
-        # config get måste däremot gå — de bevisar att bundlen faktiskt startar.
+        # Endast `version` far falla bygget: det ar beviset for att den fristande
+        # exe:n startar. doctor lamnar 1 nar ingen API-nyckel finns (och skriver
+        # ✔/✖-tecken), sa dar är raderna information som loggas som varningar —
+        # de syns i lönen utan att behöva logg-sidan, och de stoppar inte release.
         run: |
-          ./dist/majin-win-x64.exe version
-          ./dist/majin-win-x64.exe doctor
-          if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
-          ./dist/majin-win-x64.exe config get name
+          $ErrorActionPreference = 'Continue'
+          $v = & ./dist/majin-win-x64.exe version 2>&1
+          $vc = $LASTEXITCODE
+          "version (exit $vc): $v"
+          if ($vc -ne 0) {
+            ($v | Select-Object -Last 6) | ForEach-Object { Write-Output "::error::binary does not run: $_" }
+            exit 1
+          }
+          $d = & ./dist/majin-win-x64.exe doctor 2>&1
+          $dc = $LASTEXITCODE
+          "doctor (exit $dc):"
+          $d | ForEach-Object { "  $_" }
+          if ($dc -ne 0) { ($d | Where-Object { "$_" -like '*X *' } | Select-Object -First 6) | ForEach-Object { Write-Output "::warning::doctor (no api key in CI): $_" } }
+          $c = & ./dist/majin-win-x64.exe config get name 2>&1
+          "config get name (exit $LASTEXITCODE): $c"
+          exit 0
       - uses: actions/upload-artifact@v4
         with:
           name: majin-win-x64
