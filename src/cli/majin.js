@@ -132,7 +132,9 @@ async function start() {
   })();
   // Skicka vidare allt användaren faktiskt skrev — annars tappas --host/--no-browser/--no-channels
   // och barnet kör på standarderna (0.0.0.0, webbbläsare, whatsapp-försök).
-  const pass = argv.filter((a) => !/^--(no-window|window)$/.test(a) && a !== 'start');
+  // 'start' and --window belong to the parent (it is the one that opens the window); --no-window
+  // must survive so the child honors 'run headless' too (window open + first-run shortcut).
+  const pass = argv.filter((a) => a !== 'start' && a !== '--window');
   const child = spawn(process.execPath === self ? self : process.execPath, [self, '_serve', ...pass], {
     stdio: 'inherit',
     env: { ...process.env, MAJIN_PORT: String(port) },
@@ -180,7 +182,7 @@ async function serve() {
     ...(shortcutLine ? [shortcutLine] : []),
     '',
   ].join('\n'));
-  if (rt.cfg.get('server.openBrowser') !== false && !flags.noBrowser && flags.browser !== false && !flags.noWindow) openWindow(url);
+  // No window opening here: _serve is spawned by 'start', whose parent owns the single openWindow call.
   const bye = async (sig) => {
     process.stdout.write(`\nshutting down (${sig})\n`);
     try {
@@ -214,7 +216,9 @@ function openWindow(url) {
   });
   if (!bin) {
     if (win) {
-      spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref();
+      const sh = spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' });
+      sh.on('error', () => {});
+      sh.unref();
       return `opened in your default browser: ${url}`;
     }
     process.stdout.write(`no Edge/Chrome found — open ${url} yourself\n`);

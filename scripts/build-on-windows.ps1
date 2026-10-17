@@ -218,7 +218,10 @@ Ok "installed version: $ver"
 # ------------------------------------------------------------------ 6. verify it
 Step 'start the installed program and talk to it'
 $env:MAJIN_WORKSPACE = Join-Path $env:LOCALAPPDATA 'MAJIN-setup-verify-ws'
-Start-Process -FilePath (Join-Path $appDir $exeName) -ArgumentList 'start', '--no-window' | Out-Null
+$appOut = Join-Path (Get-Location) 'majin-app-out.log'
+$appErr = Join-Path (Get-Location) 'majin-app-err.log'
+Remove-Item $appOut, $appErr -Force -ErrorAction SilentlyContinue
+$appProc = Start-Process -FilePath (Join-Path $appDir $exeName) -ArgumentList 'start', '--no-window' -RedirectStandardOutput $appOut -RedirectStandardError $appErr -PassThru
 $state = $null
 for ($i = 0; $i -lt 40; $i++) {
   Start-Sleep -Seconds 2
@@ -229,6 +232,11 @@ for ($i = 0; $i -lt 40; $i++) {
 }
 if (-not $state) {
   Fail "the installed program never answered on :$Port within 80s"
+  if ($appProc.HasExited) { Write-Host ("  app process exited early, exit code: " + $appProc.ExitCode) }
+  Write-Host '--- majin-app-out.log (tail) ---'
+  Get-Content $appOut -Tail 30 -ErrorAction SilentlyContinue
+  Write-Host '--- majin-app-err.log (tail) ---'
+  Get-Content $appErr -Tail 30 -ErrorAction SilentlyContinue
 } else {
   $installState.served = $true
   Ok "state: version=$($state.version) up=$($state.up)s needsSetup=$($state.needsSetup) presets=$($state.presets.Count) tools=$($state.tools.count)"
