@@ -33,4 +33,4 @@ for (const t of targets) {
     if (err.code !== 'ENOENT') console.log(`  (skipping ${t}: ${err.code || err.message})`);
   }
 }
-console.log(`\nLENT: ${n} poster borttagna. Config + minne + sessioner finns kvar i ${dirs.root}`);
+console.log(`\nDONE: ${n} record(s) removed. Config + memory + sessions stay in ${dirs.root}`);

@@ -362,6 +362,9 @@ export class Config {
     return {
       ref: `${name}/${parsed.model}`,
       providerName: name,
+      // etiketten med (DeepSeek, inte deepseek) sa att felmeddelanden namner
+      // leverantoren pa samma sat som mannen kan lasa den i panelen
+      label: provider.label || name,
       model: parsed.model,
       kind: provider.kind || PRESETS[provider.preset]?.kind || 'openai',
       baseUrl: provider.baseUrl,

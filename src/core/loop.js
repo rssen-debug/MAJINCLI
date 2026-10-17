@@ -4,7 +4,7 @@
  *   kör → om fel ≥2: eskalera till tyngre modell → komprimera kontext → upprepa.
  * Inget tröskel-jagar: modellen får alla verktyg, alltid.
  */
-import { complete } from './provider/chat.js';
+import { complete, explainError } from './provider/chat.js';
 import { routeFor } from './router.js';
 import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
@@ -16,6 +16,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
   let steps = 0;
   let errors = 0;
   let escalated = false;
+  const whoIs = (r) => r?.label || r?.providerName || 'The provider';
   let answer = '';
   let brief = messages.find((m) => m.role === 'system' && String(m.content).startsWith('ARBETSMINNESBRIEF'))?.content || '';
   const tally = { input: 0, output: 0, costUsd: 0 };
@@ -28,7 +29,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     steps += 1;
     const stepJob = escalated ? cfg.get('routing.escalateJob') || 'analysis' : steps === 1 ? job : agent.stepJob || 'tasks';
     const route = routeFor(cfg, stepJob);
-    if (!route) throw new Error('no provider with an API key — add one (Settings -> Providers)');
+    if (!route) throw new Error('no provider with an API key yet — open the Providers card, pick one and paste the key');
     onEvent({ type: 'step', label, step: steps, of: limit, job: stepJob, model: route.ref, escalated });
 
     let res;
@@ -52,10 +53,20 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       });
     } catch (err) {
       errors += 1;
-      bus.error('loop.provider', { label, step: steps, error: err.message, code: err.code });
-      onEvent({ type: 'error', label, where: 'provider', message: err.message, hint: err.hint || null });
+      const info = err.majin || explainError(err, route);
+      bus.error('loop.provider', { label, step: steps, error: err.message, code: err.code, kind: info.kind });
+      onEvent({ type: 'error', label, where: 'provider', message: info.human || err.message, hint: err.hint || null, kind: info.kind });
+      // fel som aldrig lost sig (nyckel, krediter, modellnamn, for langt) far
+      // inte kosta fyra steg till — anvandaren ska fa svaret direkt
+      if (info.stop) {
+        return {
+          text: answer || info.human || `${whoIs(route)} could not answer: ${err.message}`,
+          steps, toolLog, usage: tally, error: err.message,
+          errorKind: info.kind, errorHint: err.hint || info.human || null, needsKey: info.needsKey || undefined, fatal: true,
+        };
+      }
       if (errors >= 2) escalated = true;
-      if (errors >= 4) return { text: answer || `Provider error after ${errors} failures: ${err.message}`, steps, toolLog, usage: tally, error: err.message, escalated };
+      if (errors >= 4) return { text: answer || `${whoIs(route)} did not answer after ${errors} tries: ${info.human || err.message}`, steps, toolLog, usage: tally, error: err.message, errorKind: info.kind, errorHint: err.hint || null, escalated };
       messages.push({ role: 'user', content: `The previous call failed (${err.code || 'error'}: ${String(err.message).slice(0, 200)}). Try again, simpler.` });
       continue;
     }

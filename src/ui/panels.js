@@ -195,33 +195,60 @@ async function paintPanel(st) {
     pr.append(row);
   }
   const add = el('div', 'row');
+  const presets = (st.presets || []).length ? st.presets : [{ name: 'deepseek', label: 'DeepSeek', needsKey: true }];
   const preset = el('select');
-  preset.innerHTML = ['deepseek', 'openrouter', 'groq', 'openai', 'anthropic', 'gemini', 'ollama', 'lmstudio', 'mock']
-    .map((x) => `<option>${x}</option>`)
-    .join('');
+  preset.innerHTML = presets.map((x) => `<option value="${x.name}">${x.label}</option>`).join('');
+  preset.title = 'Who runs the model. Every one of these is built in - pick it, paste a key, done. No files to edit.';
   const key = el('input');
-  key.placeholder = 'sk-…';
+  key.type = 'password';
+  key.placeholder = 'paste the key';
   key.style.flex = '1';
+  const url = el('input');
+  url.placeholder = 'address - only for your own server';
+  url.style.flex = '1';
+  url.title = 'Leave empty for the big providers. For Ollama, LM Studio or a machine on your network, type the address here (e.g. http://192.168.0.9:11434/v1).';
+  const get = el('a', 'kv', 'get a key \u2197');
+  get.target = '_blank';
+  get.rel = 'noopener';
+  get.style.cssText = 'color:var(--cy);text-decoration:none;white-space:nowrap';
   const go = el('button', '', 'save');
   go.title = 'Saves the key and points every route at this provider. Nothing else to configure.';
+  const pick = () => presets.find((x) => x.name === preset.value) || {};
+  const sync = () => {
+    const p = pick();
+    get.href = p.keyUrl || '#';
+    get.style.display = p.keyUrl ? '' : 'none';
+    key.placeholder = p.needsKey === false ? 'no key needed here' : 'paste the key';
+  };
+  preset.onchange = sync;
+  sync();
   go.onclick = async () => {
-    setStatus('saving provider…');
+    const p = pick();
+    if (p.needsKey !== false && !key.value.trim() && !url.value.trim()) {
+      err('paste the key first - ' + p.label + ' needs one. ' + (p.keyUrl ? 'The "get a key" link opens the page where you make it.' : 'Or point at your own server in the address box.'));
+      key.focus();
+      return;
+    }
+    setStatus('saving provider\u2026');
     try {
-      const r2 = await api('/provider', { method: 'POST', body: { preset: preset.value, apiKey: key.value.trim() || undefined } });
+      const body = { preset: preset.value, apiKey: key.value.trim() || undefined };
+      if (url.value.trim()) body.baseUrl = url.value.trim();
+      const r2 = await api('/provider', { method: 'POST', body });
+      if (!r2 || r2.ok === false) throw new Error([r2 && r2.error, r2 && r2.hint].filter(Boolean).join(' - ') || 'the provider was not saved');
       const routes = {};
       const st2 = await api('/state&tools=0');
       for (const row2 of st2.routes || []) routes[row2.job] = `${r2.provider}/${(r2.status?.models || [''])[0]}`;
       await api('/config', { method: 'PATCH', body: { models: { provider: r2.provider, routes } } });
-      toast('provider ' + r2.provider + ' saved, all routes point there');
+      toast(p.needsKey === false ? `${p.label} saved - press test on its row to check that it answers` : `${p.label} saved. Say something and I will answer for real.`);
       refresh();
     } catch (e) {
       err(e.message);
     }
     setStatus('ready');
   };
-  add.append(preset, key, go);
+  add.append(preset, key, url, get, go);
   pr.append(add);
-  pr.append(el('div', 'kv', 'Own base URL: write it in the config or tell MAJIN: <i>"add provider mine with baseUrl http://192.168.0.9:8000/v1 and key abc"</i>'));
+  pr.append(el('div', 'kv', 'No config files anywhere: pick a provider, paste the key, press save. The address box is only for your own machine (Ollama, LM Studio, a box on the network).'));
 
   /* ---- channels ---- */
   const c = $('chan');

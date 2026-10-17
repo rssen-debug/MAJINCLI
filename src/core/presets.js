@@ -112,6 +112,32 @@ export const PRESETS = {
   },
 };
 
+/**
+ * Behover den har leverantoren en nyckel, eller pratar den med en lokal server
+ * utan? Anvands bade av verktyget och UI-rutinen, sa att "spara" aldrig kan
+ * lycka med ett tomt falt men aldrig krava en nyckel for Ollama pa burken.
+ */
+export function keylessUrl(baseUrl) {
+  return /:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(String(baseUrl || ''));
+}
+
+export function needsKeyFor(entry = {}, preset = null) {
+  if ((entry.kind || preset?.kind || 'openai') === 'mock') return false;
+  if (entry.apiKey || (preset && preset.apiKey)) return false;
+  return !keylessUrl(entry.baseUrl || preset?.baseUrl || '');
+}
+
+export function presetCard(name, p) {
+  return {
+    name,
+    label: p.label || name,
+    baseUrl: p.baseUrl || '',
+    keyUrl: p.keyUrl || null,
+    needsKey: (p.kind || 'openai') !== 'mock' && !p.apiKey,
+    models: p.models || [],
+  };
+}
+
 export function presetNames() {
   return Object.keys(PRESETS);
 }

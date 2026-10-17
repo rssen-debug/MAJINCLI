@@ -37,7 +37,7 @@ if ($Uninstall) {
     Write-Step "PATH: $Bin borttagen"
   }
   foreach ($s in @("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\MAJIN", "$env:USERPROFILE\Desktop\MAJIN.lnk")) {
-    if (Test-Path $s) { Remove-Item $s -Recurse -Force; Write-Step "tog bort $s" }
+    if (Test-Path $s) { Remove-Item $s -Recurse -Force; Write-Step "removed $s" }
   }
   Write-Ok 'MAJIN uninstalled. Config/keys remain in' $Home
   exit 0
@@ -83,7 +83,7 @@ $cmd = @"
 rem MAJIN — start the agent (server + window)
 setlocal
 if "%MAJIN_HOME%"=="" set "MAJIN_HOME=$Home"
-where node >nul 2>nul || (echo Node saknas - installera Node LTS 20.11+ & exit /b 1)
+where node >nul 2>nul || (echo Node is missing - install Node LTS 20.11+ from nodejs.org & exit /b 1)
 pushd "$Repo"
 node "src\cli\majin.js" start %*
 popd

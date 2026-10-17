@@ -80,15 +80,29 @@ Flags: `-WhatsApp` (installs the Baileys optional deps), `-NoPath`, `-NoTask`,
 
 ### First run
 
-Open the window (it opens itself). The UI shows a **key required** card until a provider key
-exists. Any of these works:
+Double-clicking starts the server and opens a window. There is no second step: with no key
+anywhere, the first message still gets an answer — MAJIN says plainly that it is in demo mode and
+points at the card that fixes it. A wrong or empty key never turns into a silent failure either.
+
+**No terminal, no config file.** In the window: the **Providers** card on the right → pick the
+provider → paste the key → **save**. Every route then points at that provider and the next message
+is answered for real. The little *get a key ↗* link opens the provider's own key page, and the
+address box is only for your own machine (Ollama, LM Studio, a box on the network) — that is the
+whole setup. An empty box is refused with a sentence instead of a fake "saved".
+
+The four things that actually go wrong each get one plain sentence with a next action, and MAJIN
+does not spend four retries on a failure that cannot fix itself: wrong or deleted key, account out
+of credit, model name the provider does not know, address it cannot reach.
+
+Same thing from the terminal, for the people who like it:
 
 ```powershell
 majin config set providers.deepseek.apiKey sk-...
 majin config set models.provider deepseek
 ```
 
-…or type the key in the UI's provider card, or from your phone with `majin pair telegram`.
+…or say it in chat: *"use the key sk-… for deepseek"*, or from your phone with
+`majin pair telegram`.
 
 Supported presets: OpenRouter, Kilo Gateway, Nous, Groq, OpenAI, Anthropic, Gemini, Ollama,
 LM Studio, DeepSeek, plus a `demo` mock provider that answers offline so you can try the loop

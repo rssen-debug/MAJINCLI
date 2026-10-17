@@ -19,6 +19,9 @@ rt.cfg.patch({
   workspace: path.join(home, 'workspace'),
   models: { provider: 'demo', routes: Object.fromEntries(['chat', 'tasks', 'tools', 'code', 're', 'analysis', 'final', 'plan', 'research', 'summarize', 'router', 'aggregator', 'vision'].map((j) => [j, 'demo/demo-fast'])) },
   moa: { policy: 'always', width: 2 },
+  // en nyckel som inte anvands (rutterna pekar kvar pa demo) haller igang MOA:
+  // utan en enda riktig nyckel hoppar agenten over MOA-motet med flit
+  providers: { openai: { apiKey: 'test-key-not-used', kind: 'openai', baseUrl: 'http://127.0.0.1:1' } },
   guard: { mode: 'off' },
   agent: { maxSteps: 6 },
 });

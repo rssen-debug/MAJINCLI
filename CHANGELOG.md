@@ -3,6 +3,64 @@
 Notable changes on `arena/e223e8b9-slurps` (PR #1). Newest first. Verified in the Linux sandbox
 unless stated otherwise; nothing here claims a Windows or browser run.
 
+## Unreleased — 2026-10-17 (onboarding)
+
+Run as a beginner, not as a developer: an empty data home, a local stand-in gateway that counts every
+request, and the four failures an ordinary person actually meets. Each fix was written as a failing
+test first (`test/onboarding.test.js`, 10 tests, red before green) and stayed under five files.
+
+### Changed
+- **Every provider failure is one sentence with a next action.** New `explainError()` in
+  `src/core/provider/chat.js` classifies `no_key | auth | billing | model | toobig | rate |
+  unreachable | upstream | provider` and is the only place that wording lives. Measured before → after
+  against the same gateway: rejected key `Provider error after 4 failures: 401: invalid or missing API
+  key` (4 steps, 4 gateway calls, the retry count printed in the user's face) → "DeepSeek rejected the
+  API key — it is wrong, deleted, or from another account. Open the Providers card (right side), paste
+  the key and press test." (1 step, 1 call, 33 ms); `402` → out of credit, with the other providers offered; `fetch failed` → "I cannot
+  reach DeepSeek. Check that this machine has internet"; an unknown model name names the model; an
+  over-long thread says start a new chat or ask for a summary. `errorKind` and `errorHint` ride along
+  on the turn result, the SSE `error` event carries `kind`, and `/api/provider/test` returns it too.
+- **Permanent failures stop instead of being retried.** 401/402/403/404, a missing key and an
+  over-long context end the turn at once (`stop`); 429/5xx and network errors keep the backoff.
+- **The first answer on a fresh install is an answer** (127 ms, one step): demo mode says so plainly
+  and points at the Providers card. Gone: `Demo answer (mock):`, `QUESTION:`, and the MOA scaffolding
+  (`EVIDENCE FROM THIS TURN`, `ANSWERS FROM 3 REFERENCES`) that used to be what a new user read.
+- **No model chain while setup is unfinished** — `needsSetup` turns MOA off for the turn
+  (`moa.skipped: 'setup'`), so a demo never spends five calls on echoes of itself. `test/agent.test.js`
+  seeds a dummy key so the MOA path stays covered by tests.
+- **The Providers card now carries all eleven presets and an address box.** `GET /api/state` gained
+  `presets` (`presetCard()` in `presets.js`) and `src/ui/panels.js` builds the dropdown from it — the
+  old hardcoded list of nine made `kilocode` and `nous` unreachable from the browser. Each preset
+  brings a *get a key ↗* link, and the address field covers Ollama, LM Studio and your own machine,
+  which previously meant "write it in the config".
+- **An empty key box is refused, not reported as saved.** `needsKeyFor()` is the single rule behind
+  both `majin.provider add` and `POST /api/provider`: the demo needs no key, `ollama`/`lmstudio` ship
+  a dummy, and any loopback or RFC1918 address counts as yours; everything else gets
+  `no key pasted — Groq needs one` plus where to get it, and nothing is written.
+- `resolveModel()` carries `label`, so a message names DeepSeek rather than `deepseek`.
+
+### Fixed
+- A dozen Swedish strings in shipped output that the i18n list had walked past, now including the
+  approval prompt sent to Telegram/WhatsApp users (`Svara: /ja 12 · /nej 12` → "Reply with /ja 12 to
+  allow it · /nej to refuse"), `majin.provider` results (`ange name`, `Testa:`, `tog bort … Kvar:`,
+  the `svara OK` probe, `svarar inte`), `majin.schedule/skill` removal lines, `scripts/clean.js`, the
+  Node check inside `install.ps1` (now names nodejs.org) and its `tog bort` step. `scripts/i18n-check.mjs`
+  learned the words that caught them (`Notera Testa Kvar ange svara bort`).
+
+### Verified
+- `node --test test/*.test.js` **97/97** (was 87), `npm run check` 67/67, `npm run i18n` 0 in 57
+  files, `npm run bench` 7/7 `VERDICT: pass`. `dist/majin.cjs` rebuilt (576,208 B) and re-run on a
+  second fresh home: 11 presets incl. `kilocode`, the new first answer, empty-key refusal,
+  `majin doctor` green with 77 tools. Still unverified: Windows, browser rendering, live providers,
+  live channels.
+
+### Docs
+- README "First run" rewritten — it described a **key required** card that is not a setup card at
+  all; the section now is the measured browser path. `docs/CONFIG.md` gained three bullets (state
+  carries `presets`, `needsKeyFor`, `explainError` as the one home of failure wording). **`DECISIONS.md`
+  added**: the product, measurement, failure-wording, setup and language decisions, with the numbers
+  that justified them and a list of what is deliberately left undone.
+
 ## Unreleased — 2026-10-17 (later)
 
 Run-driven again: wired **Kilo Gateway** as a provider and tried to run it for real, which exposed

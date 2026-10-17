@@ -10,7 +10,7 @@ import path from 'node:path';
 import { def } from './registry.js';
 import { validatePatch, JOBS } from '../config.js';
 import { parseIntent } from '../routes.js';
-import { PRESETS, listModelsUrl } from '../presets.js';
+import { PRESETS, listModelsUrl, needsKeyFor } from '../presets.js';
 import { complete } from '../provider/chat.js';
 import { dirs } from '../paths.js';
 import { bus } from '../log.js';
@@ -142,7 +142,7 @@ export const majinTools = [
         return { result: `${name}: ${ids.length} models (saved ${Math.min(400, ids.length)} in config)\n${ids.slice(0, 120).join('\n')}`, summary: `${ids.length} models` };
       }
       if (action === 'add') {
-        if (!name) return { ok: false, error: { code: 'no_name', message: 'ange name' } };
+        if (!name) return { ok: false, error: { code: 'no_name', message: 'give a provider name (or pick a preset)', hint: 'majin.provider({action:"add",name:"deepseek",apiKey:"sk-…"})' } };
         const base = PRESETS[preset || name] || {};
         const entry = {
           label: base.label || name,
@@ -152,6 +152,16 @@ export const majinTools = [
           models: models ? String(models).split(',').map((x) => x.trim()).filter(Boolean) : base.models || [],
         };
         if (entry.kind !== 'mock' && !entry.baseUrl) return { ok: false, error: { code: 'no_url', message: 'baseUrl is required (or pick a preset)' } };
+        // ett tomt nyckelfalt far inte kunna rapporteras som "sparat": en vanlig
+        // manniska trycker spara for att det ska bli klart. Lokala servrar
+        // (ollama, lmstudio, egen maskin) har ingen nyckel alls.
+        if (needsKeyFor(entry, PRESETS[preset || name])) {
+          const ku = PRESETS[preset || name]?.keyUrl;
+          return {
+            ok: false,
+            error: { code: 'no_key', message: `no key pasted - ${entry.label || name} needs one`, hint: `${ku ? `Get one at ${ku} and paste it again.` : 'Paste the key from the provider page and try again.'} Nothing was changed.`, needsKey: true },
+          };
+        }
         const res = ctx.cfg.patch({ providers: { [name]: entry } }, { source: 'provider.add' });
         if (!res.ok) return { ok: false, error: { code: 'invalid', message: res.errors.map((e) => `${e.path}: ${e.msg}`).join('; ') } };
         const routes = { ...(ctx.cfg.get('models.routes') || {}) };
@@ -163,23 +173,23 @@ export const majinTools = [
           await ctx.cfg.patch({ models: { routes, provider: name } });
         }
         bus.info('provider.add', { name, kind: entry.kind, baseUrl: entry.baseUrl });
-        return { result: `added ${name} (${entry.kind} ${entry.baseUrl}) and routed ${first ? `${entry.models.length} suggestions` : 'no model'} →\n${routeLines(ctx)}\n\nTesta: majin.routes({action:"test",model:"${name}/${first || '?'}"})`, summary: `provider ${name} tillagd` };
+        return { result: `added ${name} (${entry.kind} ${entry.baseUrl}) and routed ${first ? `${entry.models.length} suggestions` : 'no model'} →\n${routeLines(ctx)}\n\nTest it: majin.routes({action:"test",model:"${name}/${first || '?'}"})`, summary: `provider ${name} tillagd` };
       }
       if (action === 'remove') {
         const { [name]: gone, ...rest } = providers;
         void gone;
         ctx.cfg.patch({ providers: rest });
-        return { result: `tog bort ${name}. Kvar: ${Object.keys(rest).join(', ')}`, summary: `provider ${name} bort` };
+        return { result: `removed ${name}. Left: ${Object.keys(rest).join(', ')}`, summary: `provider ${name} removed` };
       }
       if (action === 'test') {
         const p = providers[name] || {};
         const route = ctx.cfg.resolveModel(`${name}/${(p.models || ['x'])[0]}`, 'test');
         const t0 = Date.now();
         try {
-          const r = await complete({ route, job: 'test', stream: false, maxTokens: 16, temperature: 0, messages: [{ role: 'user', content: 'svara OK' }] });
+          const r = await complete({ route, job: 'test', stream: false, maxTokens: 16, temperature: 0, messages: [{ role: 'user', content: 'Reply with exactly: OK' }] });
           return { result: `${name} OK (${Date.now() - t0}ms): ${(r.text || '').trim().slice(0, 40)}`, summary: `${name} svarar` };
         } catch (err) {
-          return { ok: false, error: { code: 'provider_failed', message: err.message, hint: err.hint }, summary: `${name} svarar inte` };
+          return { ok: false, error: { code: 'provider_failed', message: err.majin?.human || err.message, hint: err.hint, kind: err.majin?.kind }, summary: `${name} does not answer` };
         }
       }
       return { ok: false, error: { code: 'bad_action', message: action } };
@@ -287,7 +297,7 @@ export const majinTools = [
       if (action === 'delete') {
         try {
           await fsp.unlink(path.join(s.dir, `${name}.md`));
-          return { result: `tog bort ${name}`, summary: `skill ${name} bort` };
+          return { result: `removed ${name}`, summary: `skill ${name} removed` };
         } catch (err) {
           return { ok: false, error: { code: 'delete_failed', message: err.message } };
         }
@@ -335,7 +345,7 @@ export const majinTools = [
           return { ok: false, error: { code: 'bad_schedule', message: err.message, hint: 'example: "07:30 daily", "every 30m", "*/15 * * * *"' } };
         }
       }
-      if (action === 'remove') return { result: sch.remove(id) ? `tog bort ${id}` : `did not find ${id}`, summary: 'jobb bort' };
+      if (action === 'remove') return { result: sch.remove(id) ? `removed ${id}` : `did not find ${id}`, summary: 'job removed' };
       if (action === 'pause' || action === 'resume') return { result: sch.setPaused(id, action === 'pause') ? `${action}d ${id}` : `did not find ${id}` };
       if (action === 'run') {
         const r = await sch.runNow(id);
@@ -401,7 +411,7 @@ export const majinTools = [
       if (action === 'send') {
         const target = to || (channel === 'whatsapp' ? undefined : ctx.cfg.get('channels.telegram.allowedChatIds')?.[0]);
         if (!text) return { ok: false, error: { code: 'no_text', message: 'text missing' } };
-        if (!target) return { ok: false, error: { code: 'no_target', message: 'ange to (chat-id eller tel.nr)' } };
+        if (!target) return { ok: false, error: { code: 'no_target', message: 'set a target (chat id or phone number)' } };
         const r = await ch?.send?.(channel || 'telegram', target, text);
         return r?.ok ? { result: `sent to ${channel || 'telegram'}:${target}`, summary: 'message sent' } : { ok: false, error: { code: 'send_failed', message: r?.error || 'no channel active' } };
       }

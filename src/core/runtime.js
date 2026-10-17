@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { load } from './config.js';
+import { PRESETS, presetCard } from './presets.js';
 import { bus } from './log.js';
 import { dirs, ensureDirs } from './paths.js';
 import { Memory, Skills } from './memory.js';
@@ -112,6 +113,8 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
       providers: cfg.providerStatus(),
       routes: cfg.routeTable(),
       needsSetup: cfg.needsSetup?.() ?? !cfg.providerStatus().some((p) => p.ready),
+      // hela presetlistan, sa att valjaren aldrig hardkodar en leverantor
+      presets: Object.entries(PRESETS).map(([name, p]) => presetCard(name, p)),
       moa: { policy: moa.policy, enabled: moa.enabled, width: moa.width, refs: moa.references.map((r) => r.model), aggregator: moa.aggregator, disagreementFloor: moa.disagreementFloor },
       guard: { mode: cfg.get('guard.mode'), pending: approvals.list().length, recent: approvals.recent(8) },
       tools: includeTools ? registry.list().map((t) => ({ name: t.name, group: t.group, risk: t.risk, desc: t.desc })) : { count: ALL_TOOLS.length },

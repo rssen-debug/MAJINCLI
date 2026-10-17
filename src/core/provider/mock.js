@@ -30,7 +30,9 @@ export async function mockComplete(o) {
       stopReason: 'tool_calls',
     });
   }
-  return emit(o, { text: `Demo answer (mock): ${q.slice(0, 240) || 'nothing to do'}\n\nAdd a real API key in the panel to connect a brain.` });
+  return emit(o, {
+    text: `I am in demo mode, so nothing real has happened yet - there is no model behind me.\n\nOpen the Providers card on the right, pick your provider, paste the key and press save. After that I can touch files, the terminal, the browser and your messages.\n\nYou wrote: "${(q || 'nothing').slice(0, 200)}"`,
+  });
 }
 
 function textOf(c) {

@@ -162,6 +162,11 @@ export class Agent {
         turnPlan = { ...turnPlan, route: cfg.resolveModel(String(model), decision.job), modelOverride: String(model) };
         decision = { ...decision, modelOverride: String(model) };
       }
+      // inget MOA-brak mot en demo-hjarna: utan riktig nyckel ar de extra
+      // samtalen bara spegelningar av samma mock, och svaret blir byggstallning
+      if (cfg.needsSetup?.() && turnPlan.moa?.enabled) {
+        turnPlan = { ...turnPlan, moa: { ...turnPlan.moa, enabled: false, skipped: 'setup' } };
+      }
       emit({ type: 'route', job: decision.job, confidence: decision.confidence, model: turnPlan.route?.ref, moa: turnPlan.moa, reasons: decision.reasons, alt: decision.alt, tiebreak: Boolean(decision.llmTiebreak) });
 
       /* 3) verktygsslingan */
@@ -256,6 +261,9 @@ export class Agent {
         escalated: res.escalated,
         incomplete: res.incomplete,
         error: res.error,
+        errorKind: res.errorKind,
+        errorHint: res.errorHint,
+        needsKey: res.needsKey,
         contextTokens: estimateTokens(messages),
         aborted: res.aborted,
       };

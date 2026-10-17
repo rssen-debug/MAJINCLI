@@ -57,6 +57,22 @@ the key and lists what is close to it, so a typo never becomes silent config.
   and free tiers are real ids (`poolside/laguna-xs.2:free`). `majin provider models kilocode`
   pulls the catalog from `GET /models` (no key needed) and saves it in config. A 401 means the key,
   a 402 means the account is out of credit — MAJIN says which.
+* **The Providers card is the primary way in** — no config file: pick a preset, paste the key, press
+  save. `GET /api/state` returns `presets: [{ name, label, baseUrl, keyUrl, needsKey, models }]`
+  built from `PRESETS` via `presetCard()`, so the UI never keeps its own provider list (it used to,
+  and two presets were unreachable from the browser because of it).
+* **A key is required unless the endpoint has none.** `needsKeyFor()` (in `presets.js`) is the single
+  rule: the demo needs nothing, `ollama`/`lmstudio` ship a dummy key, and any loopback or RFC1918
+  `baseUrl` counts as yours. Everything else refuses an empty box — in `majin.provider add` *and* in
+  `POST /api/provider`, which is what the save button calls. Nothing is written when it refuses.
+* **Provider failures are one sentence with a next action**, produced in exactly one place:
+  `explainError()` in `provider/chat.js` (`auth`, `billing`, `model`, `toobig`, `rate`, `unreachable`,
+  `upstream`, `no_key`, `provider`). `complete()` attaches the verdict as `err.majin`, and the loop
+  ends the turn at once for every `stop` kind — a rejected key costs one call and about 30 ms, not
+  four steps and 12 seconds. The turn result carries `errorKind` and `errorHint`; the SSE `error`
+  event carries `kind`; `/api/provider/test` returns `kind` too. Wording changes go in `explainError`,
+  never in a caller — `test/onboarding.test.js` pins both the sentences and the call count.
+
 * The gateway answers a `stream:true` request with either SSE or plain JSON; both work. If it
   answers with nothing at all you get `sent an empty stream` with a hint, never a silent blank.
 * `demo` is the offline mock: it answers without a key so the loop, the UI and the tests work on

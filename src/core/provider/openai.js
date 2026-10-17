@@ -108,7 +108,7 @@ async function fail(res) {
     code: parsed?.error?.code || `http_${res.status}`,
     retryable: res.status === 429 || res.status >= 500,
     hint: res.status === 401 ? 'Wrong or deleted API key.' : res.status === 402
-          ? 'the provider account is out of credit (a gateway 402) — top it up or pick another model'
+          ? 'the account is out of credit — add credit at the provider, or pick another provider in the Providers card'
           : res.status === 429 ? 'Rate limited — MAJIN backs off and retries.' : res.status === 404 ? 'wrong baseUrl or model name.' : null,
   });
 }

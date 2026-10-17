@@ -293,7 +293,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
         if (out.ok === false) return json(res, 422, { ok: false, error: out.error?.message || 'provider action failed', hint: out.error?.hint || null });
         return json(res, 200, { ok: true, action: body.action, result: out.result, meta: out.meta || null, providers: cfg.providerStatus() });
       }
-      const { PRESETS } = await import('../presets.js');
+      const { PRESETS, needsKeyFor } = await import('../presets.js');
       const preset = PRESETS[body.preset];
       const name = String(body.name || (preset ? body.preset : 'custom')).replace(/[^a-z0-9_-]/gi, '').toLowerCase().slice(0, 24);
       if (!name) return json(res, 400, { ok: false, error: 'the provider-specific name is missing' });
@@ -305,6 +305,16 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
         models: Array.isArray(body.models) && body.models.length ? body.models : preset?.models || [],
       };
       if (!entry.baseUrl && entry.kind !== 'mock') return json(res, 422, { ok: false, error: 'baseUrl is required for a custom provider' });
+      /* ett tomt nyckelfalt ar inte "spara" — en vanlig manniska trycker pa
+         spara for att det ska vara klart, sa losen ska vara en mening */
+      if (needsKeyFor(entry, preset)) {
+        return json(res, 422, {
+          ok: false,
+          error: `no key pasted — ${entry.label} needs one`,
+          hint: `${preset?.keyUrl ? `Get a key at ${preset.keyUrl}, copy the whole line, and paste it in the box. ` : 'Paste the key from the provider page into the box. '}Nothing was changed — the old setup still works.`,
+          needsKey: true,
+        });
+      }
       const r = cfg.patch({ providers: { [name]: entry } }, { source: 'ui' });
       if (!r.ok) return json(res, 422, { ok: false, errors: r.errors });
       return json(res, 200, { ok: true, provider: name, status: cfg.providerStatus().find((p2) => p2.name === name) });
@@ -323,7 +333,11 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
         const r = await complete({ route, job: 'test', messages: [{ role: 'user', content: 'Answer with exactly: OK' }], maxTokens: 16, temperature: 0, retries: 0 });
         return json(res, 200, { ok: true, ms: Date.now() - t0, text: String(r.text).slice(0, 60), usage: r.usage });
       } catch (err) {
-        return json(res, 200, { ok: false, error: err.message, code: err.code || null, hint: err.hint || null, ms: Date.now() - t0 });
+        const info = err.majin || (await import('../provider/chat.js')).explainError(err, route);
+        return json(res, 200, {
+          ok: false, error: info.human || err.message, code: err.code || null, kind: info.kind,
+          hint: err.hint || null, ms: Date.now() - t0,
+        });
       }
     }
     if (p === '/api/models' && req.method === 'GET') {

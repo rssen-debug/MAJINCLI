@@ -55,7 +55,7 @@ export class Channels {
       `⚠️ ${ev.reason || 'Confirmation required'}`,
       ev.detail ? `\`${String(ev.detail).slice(0, 300)}\`` : '',
       '',
-      `Svara: /ja ${ev.id}  ·  /nej ${ev.id}`,
+      `Reply with /ja ${ev.id} to allow it  ·  /nej to refuse`,
     ]
       .filter(Boolean)
       .join('\n');

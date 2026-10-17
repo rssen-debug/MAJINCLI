@@ -11,7 +11,9 @@ Everything here is *not* done — verified against the code, not against memory.
 - **Browser verification of the UI.** `src/ui/{index.html,app.js,panels.js}` is validated by
   `node --check`, the HTTP suite and status/type assertions — never rendered. Needs a human (or a
   headless browser) to click through: composer + SSE stream, panel edits, approval prompt, RE drop
-  zone, theme toggle, voice button.
+  zone, theme toggle, voice button — and since 2026-10-17 the new provider picker: the preset list from
+  `state.presets`, the key box (refused when empty), the address box, the *get a key ↗* link, and the
+  one-sentence provider errors arriving as a toast instead of a stack of codes.
 - **`re.disasm` quality.** It now says which engine answered (`meta.engine`: `rizin` | `objdump` |
   `none`), so a silent fallback is impossible — but the decoder itself is still a subset and objdump
   is missing on a stock Windows box. Ship a pure-JS x64 decoder worth its name, or bundle `rizin`
@@ -23,6 +25,13 @@ Everything here is *not* done — verified against the code, not against memory.
 
 ## P1
 
+- **The provider card cannot edit a model list or `kind`.** Picking a preset is enough for the big
+  providers, but a wrong or empty `models[]` still means the config file or a chat instruction. The
+  card has a preset, a key and an address — the row's own model list is the missing piece.
+- **`presets[].notes` is written but never shown.** Every preset has a one-line hint ("deepseek-flash
+  = V4.1 Flash (cheap/fast)…", "200+ models, one key. Good for MOA references.") and the card ignores
+  it, so the choice of model is a guess for someone who does not know the brands. One `kv` line under
+  the picker would use text that already exists.
 - **Dataset panel in the UI.** Recording is done (off by default, redacted, `majin dataset` +
   `majin.dataset` + `GET/POST /api/dataset`), but the window has no block for it: a capture switch,
   `N records · file`, export and purge buttons. Do it together with the browser verification above so
