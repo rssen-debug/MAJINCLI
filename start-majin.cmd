@@ -14,7 +14,7 @@ if errorlevel 1 (
   echo.
   echo   MAJIN behover Node 20.11 eller senare.
   echo   Installera med:  winget install OpenJS.NodeJS.LTS
-  echo   Stang detta fonster, oppna ett nytt och kora igen.
+  echo   Close this window, open a new one and run it again.
   echo.
   pause
   exit /b 1

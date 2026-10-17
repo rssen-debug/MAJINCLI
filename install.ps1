@@ -74,7 +74,7 @@ if (-not $NoPath) {
   if ($userPath -notlike "*$Bin*") {
     [Environment]::SetEnvironmentVariable('Path', "$Bin;$userPath", 'User')
     Write-Step "PATH (user): prepended $Bin"
-  } else { Write-Step 'PATH: redan installerad' }
+  } else { Write-Step 'PATH: already installed' }
 }
 $cmd = @"
 @echo off

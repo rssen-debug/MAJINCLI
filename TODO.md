@@ -42,12 +42,14 @@ Everything here is *not* done — verified against the code, not against memory.
 
 ## P2
 
-- **Swedish in internals only.** Comments and a few `bus` debug labels (`src/core/binary/*.js`,
+- **Swedish in internals only.** Comments (and a handful of test titles). Three sweeps
+  were needed because the first two only looked for `åäö`; the check now also matches plain Swedish
+  words, and live output is the tie-breaker. (`src/core/binary/*.js`,
   `tools/*.js`, `core/agent.js`, `scripts/bench.mjs`) are still Swedish, and some test titles.
-  Every user- and model-visible string is English now; the Swedish that remains on purpose lives in
-  the *input* matchers (`routes.js` job keywords, `agent.js` `JOBS_SV`, `schedule.js` weekday
-  abbreviations) so a Swedish sentence still routes and still parses. Translate comments only when
-  touching the file for another reason.
+  The Swedish that remains on purpose lives in the *input* matchers (`routes.js` job keywords,
+  `agent.js` `JOBS_SV`, `schedule.js` weekday abbreviations, the `glöm`/`ja`/`nej` aliases) so a
+  Swedish sentence still routes, parses and approves. Translate comments only when touching the file
+  for another reason.
 - **`serveFlags` deserves a unit test.** The `majin start` → `_serve` flag forwarding bug (dropped
   `--host`, ignored `--no-channels`) was only findable by spawning a real server. Extract the
   flag→runtime-options mapping into a pure function and test it; keep one spawn test as a smoke test.

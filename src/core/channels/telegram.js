@@ -209,7 +209,7 @@ export class Telegram {
         const res = await fetch(`${base}/file/bot${this.token}/${j.result.file_path}`);
         if (!res.ok) continue;
         const buf = Buffer.from(await res.arrayBuffer());
-        const safe = path.basename(String(f.file_name || j.result.file_path || 'fil.bin')).replace(/[^\w.\-]/g, '_').slice(0, 120);
+        const safe = path.basename(String(f.file_name || j.result.file_path || 'file.bin')).replace(/[^\w.\-]/g, '_').slice(0, 120);
         const dest = path.join(dirs.uploads, `tg-${Date.now()}-${safe}`);
         fs.mkdirSync(dirs.uploads, { recursive: true });
         fs.writeFileSync(dest, buf);
@@ -248,7 +248,7 @@ export class Telegram {
   }
 
   async sendDocument(chatId, filePath, caption = '') {
-    if (!fs.existsSync(filePath)) return { ok: false, error: `ingen fil ${filePath}` };
+    if (!fs.existsSync(filePath)) return { ok: false, error: `no file ${filePath}` };
     const buf = fs.readFileSync(filePath);
     const fd = new FormData();
     fd.append('chat_id', String(chatId));

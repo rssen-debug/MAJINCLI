@@ -67,6 +67,19 @@ Run-driven work: the agent was started for real (temp `MAJIN_HOME`s, demo provid
   Swedish sentence still routes and still parses.
 - Two mangled strings from an earlier replace are gone (`MOA: hard jobsb`, `majin start —window`).
 
+### Fixed (third pass — Swedish without diacritics)
+The first two sweeps keyed on `åäö`, so plain Swedish words survived. Caught by reading live
+output: `majin re` printed "hel rapport", `majin send` "svar kunde inte tolkas", the self-config
+answer began "Klart.", the attachment header said "bilaga/sökvägar", the compaction prompt
+("Sammanfatta konversationen…"), the tool-error prompt (`FEL [..] HJÄLP:`), `majin.channel`
+("KANALER"), `binary/pe` ("Saknar PE-signatur"), `binary/sigs` ("stor overlay", "varnar"),
+`binary/external` hints ("eller installera…"), every `why:`/`what:` note in the RE tables, plus
+`install.ps1` ("PATH: redan installerad") and `start-majin.cmd`. All English now; the only Swedish
+left in `src/` is comments and the deliberate input matchers (routes/router job keywords, `JOBS_SV`,
+schedule weekday abbreviations, the `glöm`/`ja`/`nej` aliases) so Swedish still works as input.
+`re.disasm` also returns `meta.engine` (`rizin` | `objdump` | `none`) so a caller can tell which
+engine answered instead of trusting the name of the tool.
+
 ### Verified
 - `node --test test/*.test.js` → **70/70 pass** (was 60; +10 dataset cases).
 - `npm run check` → `62/62 files parse cleanly`; `node --check` on every file touched this turn.

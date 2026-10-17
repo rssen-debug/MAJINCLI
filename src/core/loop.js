@@ -93,7 +93,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       messages.push({
         role: 'tool',
         tool_call_id: r.id,
-        content: ok ? String(r.out.result ?? '(ok)') : `FEL [${r.out.error?.code || 'error'}]: ${r.out.error?.message}\n${r.out.error?.hint ? `HJÄLP: ${r.out.error.hint}` : ''}`,
+        content: ok ? String(r.out.result ?? '(ok)') : `ERROR [${r.out.error?.code || 'error'}]: ${r.out.error?.message}\n${r.out.error?.hint ? `HINT: ${r.out.error.hint}` : ''}`,
       });
     }
 

@@ -92,7 +92,7 @@ export function parsePe(buf) {
 
   const e_lfanew = view.getUint32(0x3c, true);
   if (e_lfanew <= 0 || e_lfanew + 24 > size) throw bad(`Ogiltig e_lfanew (0x${e_lfanew.toString(16)})`, { offset: 0x3c });
-  if (view.getUint32(e_lfanew, true) !== 0x00004550) throw bad('Saknar PE\\0\\0-signatur efter DOS-huvudet', { offset: e_lfanew });
+  if (view.getUint32(e_lfanew, true) !== 0x00004550) throw bad('missing the PE\\0\\0 signature after the DOS header', { offset: e_lfanew });
 
   const coff = e_lfanew + 4;
   const machineId = view.getUint16(coff, true);

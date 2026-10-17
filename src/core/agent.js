@@ -130,7 +130,7 @@ export class Agent {
           if (onlyConfig(input, intent)) {
             const changed = cfg.routeTable().filter((r) => intent.notes.some((n) => n.startsWith(`${r.job} →`)));
             const text = [
-              `Klart. ${intent.notes.join(', ')}.`,
+              `Done. ${intent.notes.join(', ')}.`,
               changed.length ? changed.map((r) => `${r.job} → ${r.ref}${r.ready ? '' : '  (no key yet)'}`).join('\n') : '',
               cfg.get('moa.policy') === 'always' ? 'MOA: on — every answer goes through references + aggregator.' : '',
               'Saved in config, applies from now on.',
@@ -304,13 +304,13 @@ export class Agent {
 
 function formatUser(input, attachments) {
   if (!attachments?.length) return input;
-  const head = attachments.map((a) => `[bilaga ${a.name} · ${a.kind} · ${a.size}${a.path ? ` · sökväg ${a.path}` : ''}]`).join('\n');
+  const head = attachments.map((a) => `[attachment ${a.name} · ${a.kind} · ${a.size}${a.path ? ` · path ${a.path}` : ''}]`).join('\n');
   return `${head}\n\n${input}`.trim();
 }
 
 function summarizeRun(res, messages) {
   const lines = [];
-  for (const t of res.toolLog.slice(-14)) lines.push(`- ${t.tool}: ${t.ok ? 'ok' : 'FEL'} — ${String(t.summary || '').slice(0, 220)}`);
+  for (const t of res.toolLog.slice(-14)) lines.push(`- ${t.tool}: ${t.ok ? 'ok' : 'FAILED'} — ${String(t.summary || '').slice(0, 220)}`);
   const last = [...messages].reverse().find((m) => m.role === 'assistant')?.content;
   if (last) lines.push(`- draft answer: ${String(last).slice(0, 1200)}`);
   return lines.join('\n') || '(no tools run)';

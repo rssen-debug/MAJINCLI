@@ -544,7 +544,7 @@ function get(port, p) {
         try {
           resolve(JSON.parse(b));
         } catch {
-          reject(new Error('svar kunde inte tolkas: ' + b.slice(0, 120)));
+          reject(new Error('the answer could not be parsed: ' + b.slice(0, 120)));
         }
       });
     });

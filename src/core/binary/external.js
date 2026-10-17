@@ -34,16 +34,16 @@ export const TOOL_SPECS = [
     label: 'rizin (analys + disasm)',
     bins: ['rizin', 'r2'],
     winPaths: ['C:\\rizin\\bin\\rizin.exe'],
-    hint: 'winget install rizin.rizin  ·  eller pacman -S rizin',
-    use: 'snabb disassembler, afl, pdf, aaa',
+    hint: 'winget install rizin.rizin  ·  or pacman -S rizin',
+    use: 'fast disassembler: afl, pdf, aaa',
     build: ({ file, commands }) => ({ cmd: 'rizin', args: ['-q', '-c', (commands || 'e bin.baddr; aa; afl; s entry0; pdf').join(';'), file] }),
   },
   {
     id: 'objdump',
     label: 'objdump (GNU binutils)',
     bins: ['objdump', 'llvm-objdump', 'x86_64-w64-mingw32-objdump'],
-    hint: 'winget install binutils · eller installera MSYS2/LLVM',
-    use: '-d disassemblering, -p PE-header, -T dynamiska symboler',
+    hint: 'winget install binutils · or install MSYS2/LLVM',
+    use: '-d disassembly, -p PE header, -T dynamic symbols',
     build: ({ file, flags = ['-d', '--no-show-raw-insn'] }) => ({ cmd: 'objdump', args: [...flags, file] }),
   },
   {
@@ -51,7 +51,7 @@ export const TOOL_SPECS = [
     label: 'binwalk (embedded files)',
     bins: ['binwalk'],
     hint: 'pip install binwalk',
-    use: 'hitta arkiv/firmware/bootloader inuti en fil',
+    use: 'find archives/firmware/bootloaders inside a file',
     build: ({ file, extract }) => ({ cmd: 'binwalk', args: extract ? ['-e', '-q', file] : ['--signatures', file] }),
   },
   {
@@ -83,7 +83,7 @@ export const TOOL_SPECS = [
     label: 'apktool (Android-resurser)',
     bins: ['apktool'],
     hint: 'https://apktool.org (needs Java)',
-    use: 'avpacka resurser + AndroidManifest.xml',
+    use: 'unpack resources + AndroidManifest.xml',
     build: ({ file, out }) => ({ cmd: 'apktool', args: ['d', '-f', ...(out ? ['-o', out] : []), file] }),
   },
   {
@@ -91,7 +91,7 @@ export const TOOL_SPECS = [
     label: 'ilspycmd (.NET → C#)',
     bins: ['ilspycmd'],
     hint: 'dotnet tool install -g ilspycmd',
-    use: 'decompilera .NET-assembly till C#',
+    use: 'decompile .NET assemblies to C#',
     build: ({ file, out }) => ({ cmd: 'ilspycmd', args: ['-p', ...(out ? ['-o', out] : []), file] }),
   },
   {
@@ -163,7 +163,7 @@ export async function run(cmd, args, { cwd, timeoutMs = 120000, env = {}, maxCha
     try {
       child = spawn(cmd, args, { cwd, env: { ...process.env, ...env }, windowsHide: true, shell: false });
     } catch (err) {
-      resolve({ ok: false, error: `kunde inte starta ${cmd}: ${err.message}`, exitCode: -1, ms: 0 });
+      resolve({ ok: false, error: `could not start ${cmd}: ${err.message}`, exitCode: -1, ms: 0 });
       return;
     }
     let out = '';

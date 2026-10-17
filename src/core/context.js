@@ -53,9 +53,9 @@ export function capText(text, max) {
   };
 }
 
-const SUMMER = `Sammanfatta konversationen nedan till en kompakt "arbetsminnes"-block på max {max} ord.
-Behåll: aktiva mål, beslut, löften till användaren, filvägar, kommandon som körts och deras effekt, öppna fel.
-Kasta: artigheter, upprepningar, allt som redan är klart.
+const SUMMER = `Summarise the conversation below into one compact "working memory" block of at most {max} words.
+Keep: active goals, decisions, promises made to the user, file paths, commands that ran and what they did, open errors.
+Drop: pleasantries, repetition, anything already finished.
 Svara bar med punkterna, ingen rubrik.`;
 
 /**
@@ -85,7 +85,7 @@ export async function compact({ cfg, messages, brief }) {
       maxTokens: 800,
       messages: [
         { role: 'system', content: SUMMER.replace('{max}', '320') },
-        { role: 'user', content: `${brief ? `TIDIGARE BRIEF (slå ihop, inte ersätta):\n${brief}\n\n` : ''}NY DIALOG:\n${dialog}` },
+        { role: 'user', content: `${brief ? `EARLIER BRIEF (merge, do not replace):\n${brief}\n\n` : ''}NEW DIALOG:\n${dialog}` },
       ],
     });
     const nextBrief = (res.text || '').trim();

@@ -239,7 +239,7 @@ export class WhatsApp {
   }
 
   async baileysSend(jid, text) {
-    if (!this.sock) return { ok: false, error: 'ingen baileys-session' };
+    if (!this.sock) return { ok: false, error: 'no baileys session' };
     const parts = chunkText(waOut(text));
     let last;
     for (const p of parts) {
@@ -251,7 +251,7 @@ export class WhatsApp {
 
   async sendDocument(jid, filePath, caption = '') {
     if (!fs.existsSync(filePath)) return { ok: false, error: 'the file is missing' };
-    if (!this.sock) return { ok: false, error: 'ingen whatsapp-session' };
+    if (!this.sock) return { ok: false, error: 'no whatsapp session' };
     const res = await this.sock.sendMessage(jid, { document: { url: filePath }, caption: waOut(caption) }).catch((e) => ({ error: e.message }));
     return res?.error ? { ok: false, error: res.error } : { ok: true };
   }

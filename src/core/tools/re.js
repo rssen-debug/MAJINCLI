@@ -75,7 +75,7 @@ export const reTools = [
         yara: (r.yara || []).map((y) => `${y.rule}${y.meta?.severity ? `/${y.meta.severity}` : ''}`),
         opcodes: (r.opcodes?.hits || []).slice(0, 8).map((h) => `${h.name} x${h.count}`),
         embedded: (r.embedded || []).slice(0, 8).map((e) => `${e.name}@${e.offset}`),
-        containers: (r.containers || []).map((c) => `${c.kind}${c.entries ? ` (${c.entries} poster)` : ''}`),
+        containers: (r.containers || []).map((c) => `${c.kind}${c.entries ? ` (${c.entries} entries)` : ''}`),
         strings: (r.strings?.sample || []).slice(0, 25).map((s) => s.value),
         iocs: Object.fromEntries(Object.entries(r.iocs || {}).filter(([, v]) => Array.isArray(v) && v.length).map(([k, v]) => [k, v.slice(0, 8)])),
         security: r.security,
@@ -85,7 +85,7 @@ export const reTools = [
         next: r.recommendations,
       };
       return {
-        result: `RE ${path.basename(abs)} — hel rapport: ${file}\n${JSON.stringify(compact, null, 1)}`,
+        result: `RE ${path.basename(abs)} — full report: ${file}\n${JSON.stringify(compact, null, 1)}`,
         meta: { report: file, risk: r.risk?.score, format: r.kind, path: abs },
         summary: `${path.basename(abs)}: ${r.kind}, risk ${r.risk?.score}/100 (${r.risk?.level})`,
       };
@@ -520,7 +520,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     group: 'reverse',
     risk: 'read',
     desc: 'Disassemble at an address/offset. Uses rizin/objdump when present — otherwise bytes + pattern analysis, never guesses.',
-    params: { path: 'string: fil', address: 'string: 0x401000 eller offset', count: 'number: antal instruktioner (default 80)', mode: 'string: auto | rizin | objdump | bytes' },
+    params: { path: 'string: file', address: 'string: 0x401000 or an offset', count: 'number: how many instructions (default 80)', mode: 'string: auto | rizin | objdump | bytes' },
     async run({ path: p, address = '0', count = 80, mode = 'auto' }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const avail = await detectTools({});
@@ -528,18 +528,18 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
       if (mode !== 'bytes' && avail.rizin?.available) {
         const cmd = mode === 'objdump' && avail.objdump ? null : `s 0x${off.toString(16)};pd ${Math.min(400, Number(count))}`;
         const res = await callTool('rizin', { file: abs, commands: [cmd] }, ctx.cfg);
-        if (res.ok) return { result: `rizin @0x${off.toString(16)}\n${clipText(res.stdout || '', 6000)}`, summary: `disasm ${count} instruktioner` };
+        if (res.ok) return { result: `rizin @0x${off.toString(16)}\n${clipText(res.stdout || '', 6000)}`, meta: { engine: 'rizin', offset: off }, summary: `disasm ${count} instructions` };
       }
       if (mode !== 'bytes' && avail.objdump?.available) {
         const res = await callTool('objdump', { file: abs, flags: ['-d', '--start-address', `0x${off.toString(16)}`, '--stop-address', `0x${(off + Number(count) * 8).toString(16)}`] }, ctx.cfg);
-        if (res.ok) return { result: `objdump @0x${off.toString(16)}\n${clipText(res.stdout || '', 6000)}`, summary: 'disasm via objdump' };
+        if (res.ok) return { result: `objdump @0x${off.toString(16)}\n${clipText(res.stdout || '', 6000)}`, meta: { engine: 'objdump', offset: off }, summary: 'disasm via objdump' };
       }
       const slice = buf.subarray(off, Math.min(buf.length, off + Number(count) * 4));
       const hits = opcodeScan(buf, { sections: [{ name: 'slice', rawPointer: off, rawSize: buf.length, executable: true }] }, 'pe');
       return {
         result: `NO disassembler installed — raw bytes @0x${off.toString(16)}:\n${hexdump(slice, { width: 16 })}\n\nPatterns in the whole file: ${hits.hits.map((h) => `${h.name} x${h.count}`).join(', ') || 'none'}\nInstall one for real coverage: winget install rizin.rizin  (or binutils for objdump)`,
-        meta: { raw: true },
-        summary: `bytes @0x${off.toString(16)} (ingen disassembler)`,
+        meta: { raw: true, engine: 'none' },
+        summary: `bytes @0x${off.toString(16)} (no disassembler)`,
       };
     },
   }),

@@ -368,7 +368,7 @@ export const majinTools = [
       if (action === 'status') {
         const s = ch?.status?.() || {};
         return {
-          result: `KANALER\n${Object.entries(s).map(([k, v]) => `${v.online ? '✓' : '·'} ${k}: ${v.state}${v.detail ? ` — ${v.detail}` : ''}`).join('\n') || '(none)'}\n\nwhatsapp transport: ${ctx.cfg.get('channels.whatsapp.transport')}\ntelegram allowed chats: ${(ctx.cfg.get('channels.telegram.allowedChatIds') || []).join(', ') || '(inga — para ihop först)'}\nwebhook for WhatsApp Cloud: http://<your-ip>:${ctx.cfg.get('server.port')}/whatsapp (verify-token = ${ctx.cfg.get('channels.whatsapp.cloud.verifyToken') || 'inte satt'})`,
+          result: `channels\n${Object.entries(s).map(([k, v]) => `${v.online ? '✓' : '·'} ${k}: ${v.state}${v.detail ? ` — ${v.detail}` : ''}`).join('\n') || '(none)'}\n\nwhatsapp transport: ${ctx.cfg.get('channels.whatsapp.transport')}\ntelegram allowed chats: ${(ctx.cfg.get('channels.telegram.allowedChatIds') || []).join(', ') || '(inga — para ihop först)'}\nwebhook for WhatsApp Cloud: http://<your-ip>:${ctx.cfg.get('server.port')}/whatsapp (verify-token = ${ctx.cfg.get('channels.whatsapp.cloud.verifyToken') || 'inte satt'})`,
           meta: s,
           summary: Object.entries(s).map(([k, v]) => `${k}:${v.state}`).join(' ') || 'inga kanaler',
         };
