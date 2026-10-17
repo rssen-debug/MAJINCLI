@@ -147,7 +147,12 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     }
     if (p === '/api/update' && req.method === 'POST') {
       const body = await readJson(req);
-      const action = body.action === 'download' ? 'download' : 'check';
+      const action = ['download', 'install'].includes(body.action) ? body.action : 'check';
+      if (action === 'install') {
+        const r = await rt.update.install({ dir: body.dir || undefined, url: body.url || undefined });
+        if (r.ok) setTimeout(() => rt.shutdown('update'), 1200);
+        return json(res, r.ok ? 200 : 502, { ok: r.ok, action, ...r, restarting: Boolean(r.ok) });
+      }
       if (action === 'download') {
         const r = await rt.update.download({ dir: body.dir || undefined, url: body.url || undefined });
         return json(res, r.ok ? 200 : 502, { ok: r.ok, action, ...r });

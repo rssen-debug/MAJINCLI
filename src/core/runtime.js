@@ -9,7 +9,7 @@ import path from 'node:path';
 import { load } from './config.js';
 import { PRESETS, presetCard } from './presets.js';
 import { bus } from './log.js';
-import { checkForUpdate, downloadSetup, notice, scheduleUpdateCheck } from './update.js';
+import { checkForUpdate, downloadSetup, installSetup, notice, scheduleUpdateCheck } from './update.js';
 import { dirs, ensureDirs } from './paths.js';
 import { Memory, Skills } from './memory.js';
 import { Usage } from './usage.js';
@@ -146,6 +146,7 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
     download(o = {}) {
       return downloadSetup({ cfg, ...o });
     },
+    install: (o = {}) => installSetup({ cfg, ...o }),
   };
   scheduleUpdateCheck({
     cfg,

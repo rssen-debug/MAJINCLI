@@ -537,7 +537,7 @@ async function command(line) {
   }
   if (c === 'provider') {
     if (!arg) {
-      const s = await api('/state&tools=0');
+      const s = await api('/state?tools=0');
       note(s.providers.map((p) => p.name + ' ' + (p.ready ? '🟢' : '⚪') + ' ' + (p.models || []).join(',')).join('\n'));
       return true;
     }
@@ -570,7 +570,7 @@ async function analyzePath(p) {
 /* --------------------------------- boot --------------------------------- */
 async function refresh(quiet) {
   try {
-    const st = await api('/state&tools=0');
+    const st = await api('/state?tools=0');
     S.st = st;
     paintHeader(st);
     if (window.paintPanel) window.paintPanel(st);
@@ -599,6 +599,12 @@ $('input').addEventListener('keydown', (e) => {
 $('send').onclick = () => (S.busy ? stop() : send($('input').value));
 $('input').addEventListener('input', autoGrow);
 $('b-rail').onclick = () => document.body.classList.toggle('rail-off');
+$('b-expert').onclick = () => {
+  const simple = document.body.classList.toggle('simple');
+  $('b-expert').classList.toggle('on', !simple);
+  try { localStorage.setItem('majin.expert', simple ? '0' : '1'); } catch { /* private mode */ }
+};
+try { if (localStorage.getItem('majin.expert') === '1') { document.body.classList.remove('simple'); $('b-expert').classList.add('on'); } } catch { /* private mode */ }
 $('b-panel').onclick = () => {
   document.body.classList.toggle('pan-off');
   $('b-panel').classList.toggle('on');

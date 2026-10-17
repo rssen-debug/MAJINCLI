@@ -22,17 +22,32 @@ async function paintHeader(st) {
     cu.hidden = !show;
     if (show) {
       cu.innerHTML = 'update <b>' + String(upd.latest || '?').replace(/[<>&]/g, '') + '</b>';
-      cu.title = (upd.notice || '') + (upd.url ? ' · ' + upd.url : '') + ' · click to download the installer';
+      cu.title = (upd.notice || '') + (upd.url ? ' · ' + upd.url : '') + ' · click to update in place';
       cu.style.cursor = 'pointer';
       cu.onclick = async () => {
-        cu.innerHTML = 'update <b>…</b>';
+        if (!cu.dataset.arm) {
+          cu.dataset.arm = '1';
+          cu.innerHTML = 'install <b>' + String(upd.latest || '?').replace(/[<>&]/g, '') + '</b>?';
+          cu.title = 'click again: MAJIN downloads the installer, closes, updates itself and comes back. Your keys and memory stay.';
+          return;
+        }
+        cu.dataset.arm = '';
+        cu.innerHTML = 'update <b>installing…</b>';
         try {
-          const r = await api('/update', { method: 'POST', body: { action: 'download' } });
-          note('MAJIN-Setup.exe is in ' + (r.file || 'your Downloads folder') + ' — run it to update. Nothing else changed.');
-          cu.innerHTML = 'update <b>ready</b>';
+          const r = await api('/update', { method: 'POST', body: { action: 'install' } });
+          if (r && r.ok) {
+            note('updating now — MAJIN installs the new version and restarts itself. Keys, memory and settings carry over.');
+            cu.innerHTML = 'update <b>restarting…</b>';
+          } else if (r && r.error === 'windows_only') {
+            const d = await api('/update', { method: 'POST', body: { action: 'download' } });
+            note('MAJIN-Setup.exe is in ' + (d.file || 'your Downloads folder') + ' — run it to update.');
+            cu.innerHTML = 'update <b>ready</b>';
+          } else {
+            throw new Error((r && r.error) || 'install failed');
+          }
         } catch (e) {
           cu.innerHTML = 'update <b>failed</b>';
-          note('the update download did not work: ' + e.message + ' — the release page has it: ' + ((upd && upd.url) || 'github'));
+          note('the update did not work: ' + e.message + ' — the release page has it: ' + ((upd && upd.url) || 'github'));
         }
       };
     }
@@ -259,7 +274,7 @@ async function paintPanel(st) {
       const r2 = await api('/provider', { method: 'POST', body });
       if (!r2 || r2.ok === false) throw new Error([r2 && r2.error, r2 && r2.hint].filter(Boolean).join(' - ') || 'the provider was not saved');
       const routes = {};
-      const st2 = await api('/state&tools=0');
+      const st2 = await api('/state?tools=0');
       for (const row2 of st2.routes || []) routes[row2.job] = `${r2.provider}/${(r2.status?.models || [''])[0]}`;
       await api('/config', { method: 'PATCH', body: { models: { provider: r2.provider, routes } } });
       toast(p.needsKey === false ? `${p.label} saved - press test on its row to check that it answers` : `${p.label} saved. Say something and I will answer for real.`);

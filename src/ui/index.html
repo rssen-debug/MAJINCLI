@@ -86,9 +86,11 @@ footer{border-top:1px solid var(--line);background:var(--bg2);padding:8px 14px 1
 #toast div{border:1px solid var(--line);background:var(--bg3);border-radius:8px;padding:7px 10px;font-size:11.5px;box-shadow:0 6px 24px #000a;animation:fade 5s forwards}
 @keyframes fade{0%,72%{opacity:1}100%{opacity:0}}
 ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:9px}
+body.simple #panel{display:none}
+#b-expert.on{color:var(--cy)}
 </style>
 </head>
-<body>
+<body class="simple">
 <header>
   <img class="logo" src="/logo.png" alt="MAJIN" width="22" height="22">
   <h1 id="brand">MAJIN</h1>
@@ -102,7 +104,7 @@ footer{border-top:1px solid var(--line);background:var(--bg2);padding:8px 14px 1
   <span class="chip" id="c-tg"><i class="led" id="led-tg"></i>telegram</span>
   <span class="chip" id="c-wa"><i class="led" id="led-wa"></i>whatsapp</span>
   <button id="b-mode" title="Permission mode — Assist: ask before every write. Approval: ask before risky work. Full auto: never ask.">approval</button>
-  <button id="b-panel" class="on" title="Side panel">⌗</button>
+  <button id="b-expert" title="expert panel — routing, MOA, providers and the other engine details">expert</button> <button id="b-panel" class="on" title="Side panel">⌗</button>
   <button id="b-rail" title="Sidebar">☰</button>
   <button id="b-theme" title="Light / dark">◐</button>
   <button id="b-voice" title="Read answers aloud">🔊</button>

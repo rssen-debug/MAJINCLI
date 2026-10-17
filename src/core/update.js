@@ -174,6 +174,24 @@ export function parseManifestLine(text) {
  * missing asset sometimes, and "your installer is 512 bytes" is not something to
  * discover at double-click time.
  */
+/**
+ * One-click update: fetch the signed-off installer and hand it to Windows silently.
+ * The running exe never replaces itself -- Inno upgrades by AppId, config and data
+ * live outside {app}, and the caller shuts the app down right after this resolves.
+ */
+export async function installSetup(o = {}) {
+  if (process.platform !== 'win32') {
+    return { ok: false, error: 'windows_only', hint: 'one-click install needs Windows; download MAJIN-Setup.exe by hand' };
+  }
+  const dl = await downloadSetup(o);
+  if (!dl.ok) return dl;
+  const { spawn } = await import('node:child_process');
+  const child = spawn(dl.file, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'], { detached: true, stdio: 'ignore' });
+  child.on('error', () => {});
+  child.unref();
+  return { ok: true, file: dl.file };
+}
+
 export async function downloadSetup(o = {}) {
   const cfg = o.cfg || load();
   const conf = cfg.get('updates') || {};
