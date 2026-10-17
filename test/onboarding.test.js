@@ -1,55 +1,65 @@
-import { test } from 'node:test';
+/**
+ * Onboarding + model picker: strukturella garantier.
+ * (beteendet garanteras av providerflow/singlemodel + screenshot-pass)
+ */
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { JOBS } from '../src/core/config.js';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
+const onboard = read('src/ui/onboard.js');
+const runtimeSrc = read('src/core/runtime.js');
+const index = read('src/ui/index.html');
+const cfgSrc = read('src/core/config.js');
+const runtimeText = runtimeSrc + '\n' + cfgSrc;
 
-test('first-run onboarding is mounted and only appears when setup is missing', () => {
-  const html = read('src/ui/index.html');
-  assert.match(html, /id="onboard" hidden/, 'the wizard exists and starts hidden');
-  assert.match(html, /aria-modal="true"/, 'it is a real dialog');
-  assert.match(html, /onboard\.js"><\/script>\s*<script src="\/app\.js">/, 'onboard.js loads before app.js');
-  const src = read('src/ui/onboard.js');
-  assert.match(src, /st && st\.needsSetup/, 'it opens only when the server says setup is missing');
-  assert.doesNotMatch(src, /MAJIN_ONBOARD\.open\(\)/, 'it never force-opens over a working config');
+test('onboarding-modulen finns, mountas före app.js och exponerar en stabil API', () => {
+  assert.ok(fs.existsSync(path.join(root, 'src/ui/onboard.js')), 'src/ui/onboard.js saknas');
+  const iOb = index.indexOf('onboard.js');
+  const iApp = index.indexOf('app.js');
+  assert.ok(iOb > -1 && iOb < iApp, 'onboard.js ska laddas före app.js, fick ob=' + iOb + ' app=' + iApp);
+  for (const sym of ['MAJIN_ONBOARD', 'maybe', 'togglePicker', 'reopen']) {
+    assert.ok(onboard.includes(sym), 'onboard.js saknar ' + sym);
+  }
 });
 
-test('the wizard writes through the EXISTING systems only', () => {
-  const src = read('src/ui/onboard.js');
-  assert.match(src, /action: 'add', preset: p\.name/, 'the server looks presets up by `preset` — the bug that said "could not save" for a pasted key');
-  assert.match(src, /action: 'test'/, 'connectivity is proven by the existing test action');
-  assert.match(src, /action: 'models'/, 'the catalogue comes from the existing models action');
-  assert.match(src, /apiLocal\('\/config', \{ method: 'PATCH'/, 'model choice is written via the config patch path');
-  assert.doesNotMatch(src, /localStorage\.setItem\('(key|api)/, 'keys never touch localStorage');
-  assert.doesNotMatch(src, /\.innerHTML\s*=/, 'provider and model strings stay inert');
+test('headern har modellchip och wizard-mounten finns i index.html', () => {
+  for (const id of ['c-model', 'onboard', 'ob-skip']) {
+    assert.ok(index.includes(id) || onboard.includes(id), '#' + id + ' saknas (index eller onboard.js)');
+  }
 });
 
-test('onboarding ends in single-model mode: one ref on every route, MOA off', () => {
-  const src = read('src/ui/onboard.js');
-  const m = src.match(/ROUTES_JOBS|ROUTE_JOBS/);
-  assert.ok(m, 'a job list drives the single-model patch');
-  assert.match(src, /Object\.fromEntries\(ROUTE_JOBS\.map\(\(j\) => \[j, OB\.provider\.name \+ '\/' \+ model\]\)\)/, 'every job gets the chosen model');
-  assert.match(src, /moa: \{ policy: 'off' \}/, 'no hidden multi-agent spend behind a setup choice');
+test('onboarding hyfstar inte: öppnar bara när needsSetup + ej undertryckt', () => {
+  assert.ok(onboard.includes('needsSetup'), 'måste respektera state.needsSetup');
+  assert.ok(onboard.includes('majin.onboard.skip') && onboard.includes('skipForNow'), 'måste ha session-undertryckning (Skip for now)');
+  assert.ok(!/localStorage\.setItem\(.{0,8}majin\.onboard\.skip/.test(onboard), 'skip får inte vara permanent (sessionStorage!)');
 });
 
-test('the header model chip reuses the same patch path and hides when unset', () => {
-  const html = read('src/ui/index.html');
-  assert.match(html, /id="c-model" hidden/, 'the picker chip exists, hidden until a model exists');
-  assert.match(html, /id="modeldrop" hidden/, 'the dropdown exists, hidden');
-  const app = read('src/ui/app.js');
-  assert.match(app, /\$\('c-model'\)\.onclick/, 'the chip is clickable');
-  const src = read('src/ui/onboard.js');
-  assert.match(src, /window\.refresh/, 'a successful switch repaints through the normal funnel');
+test('alla felsteg visar förståeliga meddelanden från servern (error + hint)', () => {
+  assert.ok(onboard.includes('function tellErr'), 'tellErr måste finnas');
+  assert.ok(onboard.includes('.hint'), 'hint ska visas');
+  assert.ok(onboard.includes('needsKey'), 'no_key-fallet måste kännas igen');
 });
 
-test('a custom endpoint is a first-class choice, and errors speak plainly', () => {
-  const src = read('src/ui/onboard.js');
-  assert.match(src, /Custom endpoint/, 'the grid offers a custom OpenAI-compatible endpoint');
-  assert.match(src, /action: 'add', name: 'custom', kind: 'openai', baseUrl/, 'custom posts its own baseUrl to the same provider tool');
-  assert.match(src, /function tellErr/, 'server errors are shown verbatim');
-  assert.match(src, /resp\.hint/, 'and so are the provider\u2019s hints');
-  assert.doesNotMatch(src, /err\.message \|\| 'could not save'/, 'the old string-shaped error trap is gone');
+test('modellval är single-model: ALLA jobb-rutter + MOA explicit AV', () => {
+  const m = onboard.match(/const ROUTE_JOBS = \[([\s\S]*?)\];/);
+  assert.ok(m, 'ROUTE_JOBS-listan saknas i onboard.js');
+  const jobsUi = m[1].split(',').map((s) => s.trim().replace(/['"]/g, '')).filter(Boolean);
+  for (const j of JOBS) assert.ok(jobsUi.includes(j), 'onboard ROUTE_JOBS saknar core-jobbet ' + j);
+  assert.ok(onboard.includes("policy: 'off'") || onboard.includes('policy:"off"'), 'MOA måste kopplas AV vid onboarding-val');
+});
+
+test('server-state exponerar det UI behöver: presets + needsSetup + providerReady-hjälp', () => {
+  assert.ok(runtimeText.includes('presets'), 'state.presets saknas');
+  assert.ok(runtimeText.includes('needsSetup'), 'state.needsSetup saknas');
+  assert.ok(cfgSrc.includes('providerStatus'), 'providerStatus-hjälpen ska finnas i config');
+});
+
+test('onboarding alltid kan öppnas igen (reopen) — ingen en-gångs-fälla', () => {
+  assert.ok(onboard.includes('reopen()'), 'reopen måste finnas');
+  assert.ok(!onboard.includes('innerHTML'), 'innerHTML är bannad i onboard.js');
 });

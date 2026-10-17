@@ -150,6 +150,8 @@ body.simple #b-stop{display:none}
 .preview-action:focus-visible,.preview-close:focus-visible{outline:2px solid var(--pk,#e0457b);outline-offset:2px}
 .preview-frame{display:block;width:100%;height:min(54vh,510px);border:0;background:white;color:#111}
 @media (max-width:600px){.preview-frame{height:360px}.preview-panel{margin:8px 0}}
+.ob-rm{ margin-top:4px; font-size:10.5px; color:var(--err,#e05555); background:none; border:0; cursor:pointer; text-align:left; padding:0 }
+.ob-price{ font-size:10px; color:var(--dim,#a98); margin-left:8px }
 </style>
 </head>
 <body class="simple">
@@ -167,7 +169,7 @@ body.simple #b-stop{display:none}
   <span class="chip" id="c-tg"><i class="led" id="led-tg"></i>telegram</span>
   <span class="chip" id="c-wa"><i class="led" id="led-wa"></i>whatsapp</span>
   <button id="b-mode" title="Permission mode — Assist: ask before every write. Approval: ask before risky work. Full auto: never ask.">approval</button>
-  <button id="b-expert" title="expert panel — routing, MOA, providers and the other engine details">expert</button> <button id="b-panel" class="on" title="Side panel">⌗</button>
+  <button id="b-expert" title="expert panel — routing, MOA, providers and the other engine details">expert</button> <button id="b-panel" class="on" title="Side panel">⌗</button> <button id="b-quit" title="Quit MAJIN — stops the agent, closes everything (your keys and memory stay)">⏻</button>
   <button id="b-rail" title="Sidebar">☰</button>
   <button id="b-theme" title="Light / dark">◐</button>
   <button id="b-voice" title="Read answers aloud">🔊</button>

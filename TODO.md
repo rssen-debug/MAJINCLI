@@ -141,8 +141,22 @@ Everything here is *not* done — verified against the code, not against memory.
   preset data when the provider has no catalog.
 - [x] **Phase B3 — single-model proof test** (v0.4.0): with all routes = one model,
   spy provider sees exactly that model on every call; MOA off has no calls.
+- [x] **v0.5.0 Trust & Flow**: cfg.get()-läcka (live-data-mutation) stängd,
+  deep-merge kan nu radera providers (undefined-sentinel + validator), remove
+  repointar rutterna, MOA-default 'off', per-session serialize (5 meddelanden
+  aldrig i brak), ikon-hårdning i build (refuse-default), VBS-launcher inget
+  konsolfönster, ⏻-Quit, installer-checksum sha256 (bytes, inte gammal fil),
+  onboarding skip/återöppna/remove, toolRows-Map för parallella verktyg.
+  173 tester, 158 gröna.
 - [ ] **Phase B4 — cost chip + budget cap**: per-task $/tokens visible in the
   canvas; guard stops at cap with a clear message.
+- [ ] **Inspirerat av Agent-Reach (loxholm, 98k★ MIT, ej importerat — bara idéer)**:
+  - [ ] `majin doctor` — per-kapacitet hälsostatus (vilka backends är redo/varför inte)
+  - [ ] zero-key läs-backends (Jina-reader-stil url→text, RSS) som verktyg
+  - [ ] YouTube-caption-verktyg (yt-dlp-mönstret)
+  - [ ] job-scenario-referens från MadsLorentzen/ai-job-search för Phase D
+- [ ] **Manuell real-Windows-runda** (install, ikon, wizard, update, quit)
+- [ ] **LICENSE-fil** + code-signing (SmartScreen)
 - [ ] **Phase C — computer/browser-use verification + gap fill** (Windows)
 - [ ] **Phase D slice 2+** — canvas previews, Preview/Working/Verified
 - [ ] **Phase E — Smart Setup dialog** (Main/Worker/Verifier over existing MOA)

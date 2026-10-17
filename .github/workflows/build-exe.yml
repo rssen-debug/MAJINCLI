@@ -155,6 +155,17 @@ jobs:
       # run dies with "Artifact storage quota has been hit" -- an infrastructure
       # failure that would otherwise look like a build failure. Release assets are
       # not counted against that quota, so the file goes there instead.
+      - name: hash the artifacts
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.keep_exe || github.event_name == 'push' }}
+        shell: pwsh
+        run: |
+          foreach ($f in @('dist/installer/MAJIN-Setup.exe', 'dist/majin-win-x64.exe')) {
+            if (Test-Path $f) {
+              $h = (Get-FileHash -Algorithm SHA256 $f).Hash.ToLower()
+              Set-Content -NoNewline "$f.sha256" "$h  $(Split-Path $f -Leaf)"
+              Write-Output "sha256 $f = $h"
+            }
+          }
       - name: release the exe
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.keep_exe || github.event_name == 'push' }}
         uses: softprops/action-gh-release@v2
@@ -183,8 +194,10 @@ jobs:
                 curl.exe -L -o majin-win-x64.exe https://github.com/rssen-debug/MAJINCLI/releases/latest/download/majin-win-x64.exe
           files: |
             dist/installer/MAJIN-Setup.exe
+            dist/installer/MAJIN-Setup.exe.sha256
             dist/setup/majin-setup.exe
             dist/majin-win-x64.exe
+            dist/majin-win-x64.exe.sha256
           # the installer is always there; the single-file exe only when pkg worked
           fail_on_unmatched_files: false
           generate_release_notes: true

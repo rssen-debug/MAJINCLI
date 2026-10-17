@@ -52,6 +52,10 @@
     render();
     $('onboard').hidden = false;
   }
+  function skipForNow() {
+    try { sessionStorage.setItem('majin.onboard.skip', '1'); } catch { /* private mode */ }
+    close();
+  }
   function close() {
     $('onboard').hidden = true;
     OB.shown = false;
@@ -69,12 +73,31 @@
     box.append(el('h2', 'ob-title', 'Welcome to MAJIN'));
     box.append(el('p', 'ob-sub', 'Three steps and you are running: pick a provider, paste its key, choose a model.'));
     const grid = el('div', 'ob-grid');
+    const readyNames = new Set((OB.st.providers || []).filter((x) => x && x.ready && x.name !== 'demo').map((x) => x.name));
     (OB.st.presets || []).forEach((p) => {
       const card = el('button', 'ob-card');
       card.type = 'button';
       card.append(el('b', '', p.label));
-      card.append(el('span', 'ob-card-desc', p.needsKey ? 'needs an API key' : 'no key needed'));
+      card.append(el('span', 'ob-card-desc', readyNames.has(p.name) ? 'configured ✓ — click to change the key' : p.needsKey ? 'needs an API key' : 'no key needed'));
       card.onclick = () => { OB.provider = p; render(); };
+      if (readyNames.has(p.name)) {
+        const rm = el('button', 'ob-rm', 'remove');
+        rm.type = 'button';
+        rm.onclick = async (e2) => {
+          e2.stopPropagation();
+          rm.disabled = true;
+          rm.textContent = 'removing…';
+          const r2 = await apiLocal('/provider', { method: 'POST', body: { action: 'remove', name: p.name } }).catch(() => null);
+          if (r2 && r2.ok) {
+            if (typeof window.refresh === 'function') await window.refresh();
+            OB.st = (window.S && window.S.st) || OB.st;
+            render();
+          } else {
+            rm.textContent = (r2 && r2.error) || 'failed';
+          }
+        };
+        card.append(rm);
+      }
       grid.append(card);
     });
     /* VNEXT: a custom endpoint is a first-class choice — the provider tool
@@ -85,6 +108,11 @@
     custom.append(el('span', 'ob-card-desc', 'any OpenAI-compatible URL + your key'));
     custom.onclick = () => { OB.provider = { name: 'custom', label: 'Custom endpoint', custom: true }; render(); };
     grid.append(custom);
+    const skip = el('button', 'ob-link', 'Skip for now');
+    skip.id = 'ob-skip';
+    skip.type = 'button';
+    skip.onclick = skipForNow;
+    box.append(skip);
     box.append(grid);
   }
 
@@ -256,12 +284,15 @@
 
   async function fillPicker(pane) {
     pane.textContent = '';
+    const manage = el('button', 'ob-link', '⚙ providers: add, change key or remove →');
+    manage.type = 'button';
+    manage.onclick = () => { pane.hidden = true; PICKER.openFlag = false; window.MAJIN_ONBOARD.reopen(); };
     const st = OB.st || (window.S && window.S.st);
     const provName = (st && st.routes && st.routes.find((r) => r.job === 'chat') || {}).provider || (st && st.config && st.config.models && st.config.models.provider) || '';
     const search = el('input', 'ob-input');
     search.placeholder = 'filter models…';
     const list = el('div', 'ob-models md-list');
-    pane.append(search, el('div', 'ob-msg', provName ? 'loading ' + provName + ' models…' : 'no provider set'), list);
+    pane.append(manage, search, el('div', 'ob-msg', provName ? 'loading ' + provName + ' models…' : 'no provider set'), list);
     search.focus();
 
     let ids = PICKER.cache[provName];
@@ -289,9 +320,15 @@
     const paintSearch = () => {
       list.textContent = '';
       const q = search.value.trim().toLowerCase();
+      const pricing = (window.S && window.S.st && window.S.st.config && window.S.st.config.pricing) || {};
       (ids || []).filter((id) => !q || id.toLowerCase().includes(q)).slice(0, 40).forEach((id) => {
         const row = el('button', 'ob-model' + (provName + '/' + id === PICKER.current ? ' on' : ''), id);
         row.type = 'button';
+        const pr = pricing[provName + '/' + id];
+        if (pr && (pr.input || pr.output)) {
+          const tag = el('span', 'ob-price', ` $${pr.input || '?'}/$${pr.output || '?'} per Mtok`);
+          row.append(tag);
+        }
         row.onclick = () => accept(id);
         list.append(row);
       });
@@ -300,9 +337,16 @@
   }
 
   window.MAJIN_ONBOARD = {
+    reopen() {
+      const st = OB.st || (window.S && window.S.st);
+      if (st) open(st);
+    },
     maybe(st) {
       if (OB.shown) return;
-      if (st && st.needsSetup) open(st);
+      /* a dismissed wizard must not trap the user: Skip for now suppresses
+         the auto-open for THIS session only — it always comes back on a
+         fresh start (or via the providers link) */
+      if (st && st.needsSetup && !sessionStorage.getItem('majin.onboard.skip')) open(st);
       else paintChip();
     },
     togglePicker,

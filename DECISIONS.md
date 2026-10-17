@@ -151,3 +151,23 @@ A gate is only as good as its word list.
   inget nytt konfig-flagga att hålla synkat; testet bevisar resolution per jobb.
 - **Fix innan leverans:** validatePatch kollade routes mot providers före merge
   → samma-patch-kombinationer kuggade. Nu mot mergad data.
+
+## 2025-11 (v0.5.0) — Trust & Flow
+
+1. **`Config.get()` returnerar ALLTID en klon av objekt.** Anropare fick
+   lev referenser; mutationer gick förbi validering och skapade skillnader
+   minne↔disk. `raw()` är den enda medvetna live-byn.
+2. **Radering via undefined-sentinelen.** `merge()` är avsiktligt en ren
+   djup-merge (load-tiden ska defaults+människofil flätas per-provider).
+   All "ta bort"-logik SKA använda `{ key: undefined }`, aldrig en ny hel-
+   karta. Validatorn har en explicit regel för detta.
+3. **MOA 'off' by default.** Multi-modell-spend är opt-in — punkt.
+4. **Per-session serialisering.** `agent.turn()` köar på sessionsnyckel;
+   olika sessioner är parallella. Ingen lås-hierarki behövs eftersom kön
+   är per nyckel.
+5. **Bygget får aldrig skeppa default-ikon.** Tyst resedit-fail = hårt fel.
+6. **Uppdaterings-installer hashas:** bytes-över-tråden mot releasens
+   publicerade `.sha256`. Misslyckad match = filen sparas aldrig.
+7. **Agent-Reach utvärderat, ej importerat.** Bra mönster (doctor-health,
+   zero-key-backends) loggat i TODO; ingen Python-dependency introduceras
+   (VNEXT §13 står fast).

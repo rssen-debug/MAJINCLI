@@ -4,6 +4,7 @@
  * 4) MOA-final  5) minne + färdighet + historik. Overskott är bortskuret; allt körs på samma loop.
  */
 import os from 'node:os';
+import { serial } from './serialize.js';
 import { bus as globalBus } from './log.js';
 import { classify, llmClassify, plan as planTurn } from './router.js';
 import { parseIntent } from './routes.js';
@@ -103,7 +104,14 @@ export class Agent {
     return { text, rating: good ? 1 : -1, id: r.id };
   }
 
-  async turn({ input, session = 'desktop', attachments = [], onEvent = () => {}, history = [], source = null, readOnly = false, model = null }) {
+  async turn(opts = {}) {
+    /* two turns on the SAME session would split each other's context and
+       half-write shared history — serialize per session, run different
+       sessions freely (the reviewer's "5 messages at once" case). */
+    return serial(opts.session || 'desktop', () => this._turnOnce(opts));
+  }
+
+  async _turnOnce({ input, session = 'desktop', attachments = [], onEvent = () => {}, history = [], source = null, readOnly = false, model = null }) {
     const cfg = this.cfg;
     const ctrl = new AbortController();
     this.abort.set(session, ctrl);

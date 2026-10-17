@@ -177,11 +177,49 @@ export const majinTools = [
         return { result: `added ${name} (${entry.kind} ${entry.baseUrl}) and routed ${first ? `${entry.models.length} suggestions` : 'no model'} →\n${routeLines(ctx)}\n\nTest it: majin.routes({action:"test",model:"${name}/${first || '?'}"})`, summary: `provider ${name} tillagd` };
       }
       if (action === 'remove') {
-        const { [name]: gone, ...rest } = providers;
-        void gone;
-        ctx.cfg.patch({ providers: rest });
-        return { result: `removed ${name}. Left: ${Object.keys(rest).join(', ')}`, summary: `provider ${name} removed` };
+        if (!providers[name]) return { ok: false, error: { code: 'no_provider', message: `unknown provider ${name}` } };
+        /* merge() is a DEEP merge — it can never drop a nested key by itself.
+           The only truthful way to remove a provider is the undefined sentinel,
+           which config.merge honours with delete (src/core/config.js). Sending
+           "the remaining map" merges straight back over the old data and the
+           removed provider silently survives — exactly the bug this fixes. */
+        const presets = PRESETS;
+        const rest = Object.fromEntries(Object.entries(providers).filter(([n]) => n !== name));
+        const isUser = (n) => !(n in presets);
+        const hasKey = (pv) => pv.apiKey && !String(pv.apiKey).startsWith('{env:');
+        const isLocal = (pv) => /127\.0\.0\.1|localhost|mock:/.test(pv.baseUrl || '');
+        const candidates = Object.entries(rest).filter(([n, pv]) => n !== 'demo' && (pv.models || []).length && (isUser(n) || hasKey(pv) || isLocal(pv)));
+        const patch = { providers: { [name]: undefined } };
+        /* never leave routes pointing at a ghost: repoint to something that
+           can actually answer (user provider with a key first, then keyed
+           presets, then user/preset locals), or say clearly that setup must
+           run again */
+        const routes = { ...(ctx.cfg.get('models.routes') || {}) };
+        const dangling = Object.entries(routes).filter(([, ref]) => String(ref).startsWith(name + '/'));
+        let note = '';
+        if (dangling.length) {
+          const next = (candidates.find(([n, pv]) => isUser(n) && hasKey(pv))
+            || candidates.find(([, pv]) => hasKey(pv))
+            || candidates.find(([n, pv]) => isUser(n) && isLocal(pv))
+            || candidates.find(([, pv]) => isLocal(pv))
+            || [null])[0];
+          if (next) {
+            const model = rest[next].models[0];
+            for (const [j] of dangling) routes[j] = `${next}/${model}`;
+            patch.models = { provider: next, routes };
+            note = `\nrepointed ${dangling.length} route(s) to ${next}/${model}`;
+          } else {
+            note = '\nWARNING: your routes pointed at it and nothing is left to fall back to — run the setup wizard again';
+          }
+        }
+        const rr = ctx.cfg.patch(patch, { source: 'provider.remove' });
+        if (rr && rr.ok === false) {
+          return { ok: false, error: { code: 'config', message: `could not finish removal safely: ${(rr.errors || []).map((e) => e.path + ' ' + e.msg).join('; ') || 'validation failed'} — nothing was changed` } };
+        }
+        const leftKeys = candidates.map(([n]) => n);
+        return { result: 'removed ' + name + '. Providers with keys left: ' + (leftKeys.join(', ') || 'none') + note, summary: 'provider ' + name + ' removed' };
       }
+
       if (action === 'test') {
         const p = providers[name] || {};
         const route = ctx.cfg.resolveModel(`${name}/${(p.models || ['x'])[0]}`, 'test');

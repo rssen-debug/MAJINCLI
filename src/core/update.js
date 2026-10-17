@@ -23,6 +23,36 @@ const TIMEOUT_MS = 8000;
 
 export const SETUP_ASSET = ASSET;
 
+import crypto from 'node:crypto';
+
+/** sha256 of a file, lowercase hex — never trusts, always computes. */
+export async function sha256File(abs) {
+  return await new Promise((resolve, reject) => {
+    const h = crypto.createHash('sha256');
+    const rs = fs.createReadStream(abs);
+    rs.on('error', reject);
+    rs.on('data', (d) => h.update(d));
+    rs.on('end', () => resolve(h.digest('hex')));
+  });
+}
+
+/** the release's own promise: fetch "<asset>.sha256" published by CI. */
+async function releaseSha256(slug, assetName, { token, fetchImpl } = {}) {
+  try {
+    const url = `https://github.com/${slug.owner}/${slug.repo}/releases/latest/download/${assetName}.sha256`;
+    const headers = { 'user-agent': 'majin-updater' };
+    if (token) headers.authorization = `Bearer ${token}`;
+    const impl = fetchImpl || globalThis.fetch;
+    const r = await impl(url, { headers });
+    if (!r.ok) return null; // older releases have none — soft pass
+    const text = await r.text();
+    const m = /^([a-f0-9]{64})/i.exec(text.trim());
+    return m ? m[1].toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
 export function repoSlug(cfg) {
   let raw = (cfg && cfg.get && cfg.get('updates.repo')) || DEFAULT_REPO;
   raw = String(raw).trim();
@@ -206,6 +236,9 @@ export async function installSetup(o = {}) {
 export async function downloadSetup(o = {}) {
   const cfg = o.cfg || load();
   const conf = cfg.get('updates') || {};
+  /* checksum trust chain: the repo CI knows, the file proves */
+  const slug = { ...repoSlug(cfg), pre: conf.channel === 'latest' ? '' : conf.channel || '' };
+  const token = conf.token || '';
   const url = o.url || (conf.asset && conf.asset.url);
   if (!url) return { ok: false, error: `no download url yet -- run: majin update --check` };
   const dir = o.dir || path.join(process.env.USERPROFILE || process.env.HOME || '.', 'Downloads');
@@ -221,6 +254,16 @@ export async function downloadSetup(o = {}) {
     }
     if (buf.slice(0, 2).toString('latin1') !== 'MZ') {
       return { ok: false, error: 'the downloaded file is not a Windows executable (no MZ header)' };
+    }
+    const trusted = await releaseSha256(slug, ASSET, { token, fetchImpl: impl });
+    if (trusted) {
+      /* hash the BYTES THAT JUST CAME OVER THE WIRE — hashing whatever old
+         file happens to sit at the target path would either pass tampered
+         downloads or delete the user's last good installer */
+      const actual = await sha256Of(buf);
+      if (actual !== trusted) {
+        return { ok: false, error: { code: 'checksum', message: 'downloaded installer does not match the release\'s published hash — refused to save it' } };
+      }
     }
     const tmp = out + '.part';
     fs.writeFileSync(tmp, buf);

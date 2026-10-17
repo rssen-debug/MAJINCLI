@@ -5,11 +5,11 @@
   rather than leaving an empty release behind.
 
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\publish.ps1
-    ... -Version 0.4.3 -Branch main
+    ... -Version 0.5.0 -Branch main
     ... -CheckOnly        # just report what is on GitHub right now
 #>
 param(
-  [string]$Version = '0.4.3',
+  [string]$Version = '0.5.0',
   [string]$Branch = 'main',
   [string]$Repo = 'rssen-debug/MAJINCLI',
   [switch]$CheckOnly,

@@ -30,9 +30,9 @@ test('DEFAULTS är ren JSON (inget RegExp/funktioner)', () => {
   assert.doesNotThrow(() => structuredClone(DEFAULTS));
 });
 
-test('MOA är på från start och refs har aggreggator', () => {
+test('MOA behaviour is wired: opt-in policy, references + aggregator present', () => {
   assert.equal(DEFAULTS.moa.enabled, true);
-  assert.equal(DEFAULTS.moa.policy, 'always');
+  assert.equal(DEFAULTS.moa.policy, 'off', 'simple mode promise: multi-model spend is opt-in, always');
   assert.ok(DEFAULTS.moa.references.length >= 2);
   assert.ok(JOBS.includes('aggregator'));
   assert.ok(DEFAULTS.models.routes.aggregator);

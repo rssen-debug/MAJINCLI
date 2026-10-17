@@ -19,7 +19,7 @@
 #define MyAppName "MAJIN"
 ; the build passes /DMyAppVersion=<package.json version>; keep a fallback for hand runs
 #ifndef MyAppVersion
-  #define MyAppVersion "0.4.3"
+  #define MyAppVersion "0.5.0"
 #endif
 #define MyAppPublisher "rssen-debug"
 #define MyAppURL "https://github.com/rssen-debug/MAJINCLI"
@@ -63,15 +63,16 @@ Name: "cmdline"; Description: "Add the {#MyAppName} command to my user PATH"; Gr
 [Files]
 Source: "majin-win-x64.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "majin.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "MAJIN.vbs"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 ; The window itself is opened by the program (its own app window, not a browser
 ; tab), so the icon only has to start it.
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "start"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "MAJIN — your own agent"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\MAJIN.vbs"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "MAJIN — your own agent, no console attached"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "start"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\MAJIN.vbs"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
 ; Only ever the per-user PATH, and only the bin folder: no file associations, no
@@ -83,7 +84,7 @@ Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; Value
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "MAJIN"; ValueData: """{app}\{#MyAppExeName}"" start --no-window"; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Parameters: "start"; Description: "Start {#MyAppName} now"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\MAJIN.vbs"; Description: "Start {#MyAppName} now"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 ; Stop the running program before its files go, instead of leaving an orphan

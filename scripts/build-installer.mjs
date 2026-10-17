@@ -61,6 +61,8 @@ if (!fs.existsSync(ico)) fail('assets/majin.ico is missing -- the installer woul
 fs.mkdirSync(outDir, { recursive: true });
 fs.copyFileSync(exe, path.join(inst, 'majin-win-x64.exe'));
 fs.copyFileSync(ico, path.join(inst, 'majin.ico'));
+fs.copyFileSync(path.join(root, 'installer', 'MAJIN.vbs'), path.join(inst, 'MAJIN.vbs'));
+note('stage   installer/MAJIN.vbs -> installer staging');
 fs.writeFileSync(path.join(inst, 'majin.cmd'), cmd);
 note(`staged  installer/{majin-win-x64.exe,majin.ico,majin.cmd} for ${pkg.version}`);
 if (has('--stage')) process.exit(0);

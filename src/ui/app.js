@@ -605,6 +605,12 @@ $('send').onclick = () => (S.busy ? stop() : send($('input').value));
 $('input').addEventListener('input', autoGrow);
 $('b-rail').onclick = () => document.body.classList.toggle('rail-off');
 $('c-model').onclick = () => window.MAJIN_ONBOARD && window.MAJIN_ONBOARD.togglePicker();
+$('b-quit').onclick = async () => {
+  if ($('b-quit').dataset.arm !== '1') { $('b-quit').dataset.arm = '1'; $('b-quit').textContent = 'quit?'; setTimeout(() => { $('b-quit').dataset.arm = ''; $('b-quit').textContent = '⏻'; }, 3000); return; }
+  $('b-quit').textContent = 'closing…';
+  try { await fetch('/api/shutdown?t=' + encodeURIComponent(TOKEN), { method: 'POST' }); } catch { /* it goes away either way */ }
+  try { window.close(); } catch { /* browsers may refuse */ }
+};
 $('b-expert').onclick = () => {
   const simple = document.body.classList.toggle('simple');
   $('b-expert').classList.toggle('on', !simple);

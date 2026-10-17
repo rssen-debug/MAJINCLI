@@ -144,7 +144,13 @@ function embedExeIcon(exe) {
   });
   const line = String(r.stdout || r.stderr || 'icon: no output').trim().split('\n').pop();
   console.log('  ' + line);
-  if (r.status !== 0) console.log('  icon      left alone -- the exe is still the untouched, working one');
+  if (r.error) console.log('  icon      spawn error: ' + r.error.message);
+  /* a release with the default icon has shipped looking "old" before —
+     never again: unless explicitly skipped, a failed embed FAILS the build. */
+  if (!/now carries/.test(line) && !process.env.MAJIN_NO_ICON) {
+    console.log('  icon      FAILED -- refusing to ship an exe with the default icon (MAJIN_NO_ICON=1 skips this)');
+    process.exit(1);
+  }
 }
 
 const pkgBin = ['node_modules/@yao-pkg/pkg/lib-es5/bin.js', 'node_modules/@yao-pkg/pkg/lib-es/bin.js', 'node_modules/@yao-pkg/pkg/lib/bin.js']

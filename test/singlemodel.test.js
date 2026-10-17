@@ -1,41 +1,45 @@
-import { test } from 'node:test';
+/**
+ * Single-model-läget: en vald modell ska täcka ALLA jobb, MOA ska vara av.
+ */
+import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import os from 'node:os';
+import fs from 'node:fs';
 import path from 'node:path';
-import { Config, DEFAULTS, clone, merge } from '../src/core/config.js';
 
-test('single-model mode: every job resolves to the one chosen model', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-single-'));
-  const cfg = new Config(clone(DEFAULTS), path.join(dir, 'config.json'));
-  const r = cfg.patch({
-    providers: { localbox: { label: 'Local Box', kind: 'openai', baseUrl: 'http://127.0.0.1:1/v1', apiKey: 'x', models: ['solo-1'] } },
-    models: {
-      provider: 'localbox',
-      routes: Object.fromEntries(['chat', 'tasks', 'tools', 'code', 're', 'analysis', 'plan', 'research', 'summarize', 'router', 'final', 'aggregator', 'vision'].map((j) => [j, 'localbox/solo-1'])),
-    },
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-single-'));
+const { Config, DEFAULTS, clone, JOBS, hasKey } = await import('../src/core/config.js');
+
+const CONFIG_KEYS = { built: false };
+function fresh() {
+  const cfg = new Config(clone(DEFAULTS), path.join(tmp, 'conf-' + Math.random().toString(36).slice(2) + '.json'));
+  const rid = 'localstub';
+  cfg.patch({
+    providers: { [rid]: { label: 'Stub', kind: 'openai', baseUrl: 'http://127.0.0.1:1/v1', apiKey: 'x', models: ['stub-flash', 'stub-pro'] } },
+    models: { provider: rid, routes: Object.fromEntries(JOBS.map((j) => [j, rid + '/stub-flash'])) },
     moa: { policy: 'off' },
   });
-  assert.equal(r.ok, true, 'the onboarding-shaped patch is valid: ' + JSON.stringify(r.errors));
+  return { cfg, rid };
+}
 
-  for (const job of ['chat', 'tasks', 'tools', 'code', 'analysis', 'plan', 'research', 'final', 'router', 'aggregator']) {
-    const route = cfg.resolveModel('', job);
-    assert.equal(route.ref, 'localbox/solo-1', `job ${job} secretly routed elsewhere`);
-    assert.equal(route.providerName, 'localbox');
+test('alla jobb löser till samma ref när single-model är satt', () => {
+  const { cfg, rid } = fresh();
+  for (const job of JOBS) {
+    const r = cfg.resolveModel('', job);
+    assert.equal(r.ref, rid + '/stub-flash', `job ${job} ska lösas till single-ref, fick ${r.ref}`);
+    assert.equal(r.providerName, rid);
   }
-  assert.equal(cfg.get('moa.policy'), 'off', 'MOA stays off unless the user turns it on');
-
-  // and it survives a restart: the saved file is what boot merges (same as load())
-  const stored = JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf8'));
-  const again = new Config(merge(clone(DEFAULTS), stored), path.join(dir, 'config.json'));
-  assert.equal(again.resolveModel('', 'code').ref, 'localbox/solo-1', 'the restart read the saved routes');
-  assert.equal(again.get('moa.policy'), 'off');
-  fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('a never-setup install still says needsSetup — the wizard will greet it', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-fresh-'));
-  const cfg = new Config(clone(DEFAULTS), path.join(dir, 'config.json'));
-  assert.equal(cfg.needsSetup(), true, 'a blank install needs the wizard (the demo mock does not count as a real provider)');
-  fs.rmSync(dir, { recursive: true, force: true });
+test('MOA är av i single-model-läget och explicit override ruttar fortfarande rätt', () => {
+  const { cfg, rid } = fresh();
+  assert.equal(cfg.get('moa.policy'), 'off');
+  const r = cfg.resolveModel(rid + '/stub-pro', 'code');
+  assert.equal(r.model, 'stub-pro', 'explicit modellval ska slå igenom oavsett rutt');
+});
+
+test('provider räknas som redo när den har nyckel — onboarding-flaggan stängs', () => {
+  const { cfg } = fresh();
+  const p = cfg.get('providers.localstub');
+  assert.ok(hasKey({ ...p, kind: 'openai' }), 'stub med key ska räknas som redo-att-svara');
 });

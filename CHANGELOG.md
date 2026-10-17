@@ -3,6 +3,65 @@
 Notable changes on `arena/e223e8b9-slurps` (PR #1). Newest first. Verified in the Linux sandbox
 unless stated otherwise; nothing here claims a Windows or browser run.
 
+## 0.5.0 — "Trust & Flow": provider-hantering som aldrig ljuger, ikonen på plats, inget konsolfönster
+
+Den här versionen tog varje granskningsfynd och dina egna bugrapporter och
+slog dem i stål — med tester som låser beteendet, inte bara kod.
+
+**Allvarligaste buggen någonsin hittad: `cfg.get()` läckte LEV CONFIG-DATA.**
+Varje kodrad som gjorde `const p = cfg.get('providers'); p[x] = y` muterade
+konfigen BAKOM validering och säkerhetssparning. Till råga på allt är
+`merge()` en djup-merge som aldrig kan radera en nästlad nyckel — så
+"ta bort provider" skickade en ren karta som sedan mergades rakt tillbaka
+över gamla datan. Resultatet: borttagna providers överlevde i minnet, add
+"lyckades" i minnet men skrevs aldrig till disk, och remove loggade stolt
+"removed provA" fast inget ändrats. Nu: `get()` returnerar en klon,
+provider-remove använder den enda sanna raderingsmekanismen
+(undefined-sentinelen, som validatorn nu förstår), och gemini-kind validerar.
+
+**Provider-livscykeln är komplett:** lägg till flera, byt nyckel (samma add
+skriver över — gamla nyckeln försvinner), ta bort. Tar du bort providern som
+rutterna pekade på repointas de automatiskt till något som faktiskt kan
+svara (din egen provider med nyckel först, sedan keyed presets, sedan
+lokala) — eller så säger appen rent UT att du måste köra setup igen. Aldrig
+mer tysta spökrutter. Allt testat end-to-end mot en riktig Config+fil.
+
+**Fem meddelanden samtidigt:** samma session köas nu genom en per-nyckel
+promise-kedja (`src/core/serialize.js`) — fem snabba meddelanden på desktop
+kan ALDRIG flätas in i varandra, medan telegram/desktop/vision fortfarande
+kör parallellt. Racefönstret är stängt.
+
+**MOA är opt-in, som utlovat.** `moa.policy` defaultade till `'always'` —
+en färsk installation brände 3x tokens utan att någon bad om det. Nu `'off'`.
+ChatGPT-auditingen hade rätt.
+
+**Installern bär ÄNTLIGEN ikonen.** CI-loggen visade bokstavligen
+`icon: no output` — exen skeppades med standardikon ("gamla ikonen" du såg).
+Bygget vägrar nu skeppa en exe utan vår rosa M (hårt fel om resedit inte
+bekräftar "now carries"). Din skrivbordsikon blir rosa nästa install.
+
+**Inget konsolfönster, och Quit dödar verkligen servern.** Shortcuts +
+Run-post går nu via en dold `MAJIN.vbs`-launcher (wscript, fönsterstil 0) —
+svart cmd-ruta borta. Huvudfönstret har en ⏻-knapp (arm → POST /api/shutdown
+→ stäng) så node-processen dör när du tror att appen stängts.
+
+**Nedladdade installrar verifieras på riktigt.** CI publicerar
+`MAJIN-Setup.exe.sha256`; uppdateringsflödet hashas BYTES som kom över
+tråden mot releasens hash och vägrar spara vid mismatch. (Kedjan låg död i
+ett trasigt klammerblock fram till nu — hashas dessutom gamla filen på
+disken istället för nedladdningen; båda skroten reparerade.)
+
+**Wizardn är inget fängelse:** Skip for now (session-only, aldrig
+localStorage), återöppningsbar via länken i modellväljaren, konfigurerade
+kort visar "configured ✓ — click to change the key", och varje kort har en
+fungerande remove-knapp.
+
+**Parallella tool-resultatlandningar på rätt rad.** `currentToolRow` var en
+enda pekare — två verktyg samtidigt målade sitt resultat på samma rad. Nu
+ett Map per verktyg.
+
+Tester: 173 (158 pass, 2 skip,+13 nya låsta beteenden), parse-gate, i18n-gate.
+
 ## 0.4.3 — the wizard actually saves your key + custom endpoints
 
 Root cause of "could not save": the server looks a provider up by the

@@ -32,7 +32,7 @@ test('iss: it upgrades in place, needs no admin, and installs a program window',
   assert.match(iss, /^UninstallDisplayName=\{#MyAppName\}$/m, 'Add/Remove programs shows it by name');
   assert.match(iss, /#ifndef MyAppVersion/, 'the version comes from the build, with a fallback for hand runs');
   assert.match(iss, /Name: "\{group\}\\\{#MyAppName\}"/, 'a Start-menu entry');
-  assert.match(iss, /^\[Icons\][\s\S]*Parameters: "start"/m, 'the icon starts the program, not a browser');
+  assert.match(iss, /^\[Icons\][\s\S]*MAJIN\.vbs/m, 'the shortcuts boot the hidden launcher, not a console');
   assert.match(iss, /^\[Run\][\s\S]*postinstall/ms, 'and offers to start it when the wizard finishes');
 });
 

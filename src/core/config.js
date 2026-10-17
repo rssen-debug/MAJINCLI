@@ -97,7 +97,7 @@ export const DEFAULTS = {
   },
   moa: {
     enabled: true,
-    policy: 'always',
+    policy: 'off', /* VNEXT §3: multi-model spend is opt-in, never a default */
     hardJobs: ['re', 'code', 'analysis', 'plan', 'final', 'research'],
     width: 3,
     references: [
@@ -311,7 +311,10 @@ export class Config {
   }
 
   get(key) {
-    return key ? getPath(this.data, key) : this.data;
+    /* callers must never mutate the live config silently past validation —
+       hand out a live view ONLY through raw() */
+    const v = key ? getPath(this.data, key) : this.data;
+    return v && typeof v === 'object' ? structuredClone(v) : v;
   }
 
   raw() {
@@ -548,13 +551,17 @@ export function validatePatch(patch, current) {
       }
       if (p === 'providers' && isObj(v)) {
         for (const [name, prov] of Object.entries(v)) {
-          if (!isObj(prov)) errors.push({ path: p, msg: 'the provider must be an object' });
+          /* undefined = explicit DELETE sentinel: the only way to actually
+             remove a provider, since merge() deep-merges ordinary objects and
+             could otherwise never drop a nested key (see merge()). */
+          if (prov === undefined) continue;
+          if (!isObj(prov)) errors.push({ path: `${p}.${name}`, msg: `provider "${name}" must be an object (or undefined to remove it)` });
           else {
             const cur = (current && current.providers && current.providers[name]) || {};
             const kind = prov.kind || cur.kind || PRESETS[prov.preset || cur.preset]?.kind || 'openai';
             const base = prov.baseUrl || cur.baseUrl || PRESETS[prov.preset]?.baseUrl || PRESETS[cur.preset]?.baseUrl;
             if (kind !== 'mock' && !base) errors.push({ path: `${p}.${name}.baseUrl`, msg: 'missing baseUrl (or pick a preset that has one)' });
-            if (prov.kind && !['openai', 'anthropic', 'mock'].includes(prov.kind)) errors.push({ path: `${p}.${name}.kind`, msg: 'kind: openai | anthropic | mock' });
+            if (prov.kind && !['openai', 'anthropic', 'gemini', 'mock'].includes(prov.kind)) errors.push({ path: `${p}.${name}.kind`, msg: 'kind: openai | anthropic | gemini | mock' });
             if (prov.preset && !presetNames().includes(prov.preset)) errors.push({ path: `${p}.${name}.preset`, msg: `unknown preset "${prov.preset}" — use one of: ${presetNames().join(', ')}` });
             if (prov.models && !Array.isArray(prov.models)) errors.push({ path: `${p}.${name}.models`, msg: 'models must be an array' });
           }
