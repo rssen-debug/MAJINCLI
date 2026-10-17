@@ -127,7 +127,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $f = [char]96 * 3
+          $f = [string][char]96 * 3
           if (Test-Path build.log) { $log = (Get-Content build.log -Tail 60) -join "`n" } else { $log = "(no build.log)" }
           $body = "run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID`n`n$f`n$log`n$f`n"
           $payload = @{ title = "build-exe failed on $($env:GITHUB_SHA.Substring(0,7))"; body = $body; labels = @('ci') } | ConvertTo-Json -Compress
