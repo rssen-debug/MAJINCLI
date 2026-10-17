@@ -1,5 +1,5 @@
 /**
- * LENT — guard.
+ * MAJIN — guard.
  * Alla verktyg är alltid på. Det enda som finns är ett glass för det som är
  * irreversibelt: skyddade sökvägar + destruktiva mönster, ett enda "OK"-klick.
  * guard.mode = "off" stänger även det (användarens val, agenten kan sätta det).
@@ -19,14 +19,14 @@ const RISK = {
   'shell.stop': 'exec',
   'net.serve': 'exec',
   're.tool': 'exec',
-  'lent.configure': 'write',
-  'lent.routes': 'write',
-  'lent.provider': 'write',
-  'lent.channel': 'write',
-  'lent.schedule': 'write',
-  'lent.guard': 'destructive',
-  'lent.control': 'exec',
-  'lent.backup': 'write',
+  'majin.configure': 'write',
+  'majin.routes': 'write',
+  'majin.provider': 'write',
+  'majin.channel': 'write',
+  'majin.schedule': 'write',
+  'majin.guard': 'destructive',
+  'majin.control': 'exec',
+  'majin.backup': 'write',
 };
 
 export const FROM_DEF = { read: 'safe', write: 'write', exec: 'exec', dangerous: 'destructive', destructive: 'destructive' };

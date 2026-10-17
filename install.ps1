@@ -1,5 +1,5 @@
 <#
-  LENT — installation på Windows.
+  MAJIN — installation på Windows.
   Kräver inga admin-rättigheter, ingen byggradie, ingen npm-rotation för kärnan.
 
     powershell -ExecutionPolicy Bypass -File .\install.ps1              # installera (PATH + genväg + start-menyn)
@@ -13,7 +13,7 @@ param(
   [switch]$NoPath,
   [switch]$NoTask,
   [switch]$Uninstall,
-  [string]$Home = "$env:LOCALAPPDATA\LENT"
+  [string]$Home = "$env:LOCALAPPDATA\MAJIN"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,8 +25,8 @@ function Write-Ok([string]$m) { Write-Host "✔ $m" -ForegroundColor Green }
 function Write-Bad([string]$m) { Write-Host "✖ $m" -ForegroundColor Red }
 
 if ($Uninstall) {
-  Write-Host "avlägsnar LENT (data i $Home lämnas orörda)" -ForegroundColor Cyan
-  Get-ScheduledTask -TaskName 'LENT' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
+  Write-Host "avlägsnar MAJIN (data i $Home lämnas orörda)" -ForegroundColor Cyan
+  Get-ScheduledTask -TaskName 'MAJIN' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
   Write-Step 'schematisk start uppgift borta'
   $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
   if ($userPath -and $userPath -like "*$Bin*") {
@@ -34,14 +34,14 @@ if ($Uninstall) {
     [Environment]::SetEnvironmentVariable('Path', $new, 'User')
     Write-Step "PATH: $Bin borttagen"
   }
-  foreach ($s in @("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\LENT", "$env:USERPROFILE\Desktop\LENT.lnk")) {
+  foreach ($s in @("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\MAJIN", "$env:USERPROFILE\Desktop\MAJIN.lnk")) {
     if (Test-Path $s) { Remove-Item $s -Recurse -Force; Write-Step "tog bort $s" }
   }
-  Write-Ok 'LENT avinstallerat. Config/nycklar ligger kvar i' $Home
+  Write-Ok 'MAJIN avinstallerat. Config/nycklar ligger kvar i' $Home
   exit 0
 }
 
-Write-Host "LENT installeras från $Repo" -ForegroundColor Cyan
+Write-Host "MAJIN installeras från $Repo" -ForegroundColor Cyan
 Write-Host "data + config: $Home`n" -ForegroundColor DarkCyan
 
 # --- 1. Node ---------------------------------------------------------------
@@ -56,7 +56,7 @@ $ver = (& node -v) -replace '^v', ''
 $parts = $ver.Split('.')
 $okNode = ([int]$parts[0] -gt 20) -or ([int]$parts[0] -eq 20 -and ([int]$parts[1] -gt 11 -or ([int]$parts[1] -eq 11 -and [int]$parts[2] -ge 0)))
 if (-not $okNode) {
-  Write-Bad "Node $ver är för gammal — LENT behöver 20.11 eller senare (fetch, structuredClone, --test)."
+  Write-Bad "Node $ver är för gammal — MAJIN behöver 20.11 eller senare (fetch, structuredClone, --test)."
   exit 1
 }
 Write-Ok "Node $ver ($($node.Source))"
@@ -78,59 +78,59 @@ if (-not $NoPath) {
 }
 $cmd = @"
 @echo off
-rem LENT — starta agenten (server + fönster)
+rem MAJIN — starta agenten (server + fönster)
 setlocal
-if "%LENT_HOME%"=="" set "LENT_HOME=$Home"
+if "%MAJIN_HOME%"=="" set "MAJIN_HOME=$Home"
 where node >nul 2>nul || (echo Node saknas - installera Node LTS 20.11+ & exit /b 1)
 pushd "$Repo"
-node "src\cli\lent.js" start %*
+node "src\cli\majin.js" start %*
 popd
 "@
-Set-Content -Path (Join-Path $Bin 'lent-start.cmd') -Value $cmd -Encoding ASCII
+Set-Content -Path (Join-Path $Bin 'majin-start.cmd') -Value $cmd -Encoding ASCII
 $shellRc = @"
 @echo off
 setlocal
-if "%LENT_HOME%"=="" set "LENT_HOME=$Home"
+if "%MAJIN_HOME%"=="" set "MAJIN_HOME=$Home"
 pushd "$Repo"
-node "src\cli\lent.js" start --no-window %*
+node "src\cli\majin.js" start --no-window %*
 popd
 "@
-Set-Content -Path (Join-Path $Bin 'lent-serve.cmd') -Value $shellRc -Encoding ASCII
+Set-Content -Path (Join-Path $Bin 'majin-serve.cmd') -Value $shellRc -Encoding ASCII
 $wrapper = @"
 @echo off
 setlocal
-if "%LENT_HOME%"=="" set "LENT_HOME=$Home"
+if "%MAJIN_HOME%"=="" set "MAJIN_HOME=$Home"
 pushd "$Repo"
-node "src\cli\lent.js" %*
+node "src\cli\majin.js" %*
 popd
 "@
-Set-Content -Path (Join-Path $Bin 'lent.cmd') -Value $wrapper -Encoding ASCII
-Write-Ok 'lent.cmd / lent-start.cmd / lent-serve.cmd i' $Bin
+Set-Content -Path (Join-Path $Bin 'majin.cmd') -Value $wrapper -Encoding ASCII
+Write-Ok 'majin.cmd / majin-start.cmd / majin-serve.cmd i' $Bin
 
 # --- 4. Genvägar ------------------------------------------------------------
-$startMenu = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\LENT"
+$startMenu = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\MAJIN"
 if (-not (Test-Path $startMenu)) { New-Item -ItemType Directory -Path $startMenu -Force | Out-Null }
 $ws = New-Object -ComObject WScript.Shell
-$lnk = $ws.CreateShortcut((Join-Path $startMenu 'LENT.lnk'))
-$lnk.TargetPath = Join-Path $Bin 'lent-start.cmd'
+$lnk = $ws.CreateShortcut((Join-Path $startMenu 'MAJIN.lnk'))
+$lnk.TargetPath = Join-Path $Bin 'majin-start.cmd'
 $lnk.WorkingDirectory = $Repo
-$lnk.Description = 'Startar LENT-agenten och öppnar fönstret'
+$lnk.Description = 'Startar MAJIN-agenten och öppnar fönstret'
 $lnk.Save()
-$desk = $ws.CreateShortcut("$env:USERPROFILE\Desktop\LENT.lnk")
-$desk.TargetPath = Join-Path $Bin 'lent-start.cmd'
+$desk = $ws.CreateShortcut("$env:USERPROFILE\Desktop\MAJIN.lnk")
+$desk.TargetPath = Join-Path $Bin 'majin-start.cmd'
 $desk.WorkingDirectory = $Repo
-$desk.Description = 'LENT — agenten på din egen maskin'
+$desk.Description = 'MAJIN — agenten på din egen maskin'
 $desk.Save()
 Write-Ok 'genväg på skrivbordet + startmenyn'
 
 # --- 5. Autostart (valfritt) -----------------------------------------------
 if (-not $NoTask) {
   try {
-    $action = New-ScheduledTaskAction -Execute (Join-Path $Bin 'lent-serve.cmd')
+    $action = New-ScheduledTaskAction -Execute (Join-Path $Bin 'majin-serve.cmd')
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
-    Register-ScheduledTask -TaskName 'LENT' -Action $action -Trigger $trigger -Settings $settings -Description 'Startar LENT-agenten i bakgrunden' -Force | Out-Null
-    Write-Ok 'LENT startar vid inloggning (Task Scheduler)'
+    Register-ScheduledTask -TaskName 'MAJIN' -Action $action -Trigger $trigger -Settings $settings -Description 'Startar MAJIN-agenten i bakgrunden' -Force | Out-Null
+    Write-Ok 'MAJIN startar vid inloggning (Task Scheduler)'
   } catch {
     Write-Step "hoppar över autostart: $($_.Exception.Message)"
   }
@@ -142,7 +142,7 @@ if ($WhatsApp) {
   Push-Location $Repo
   try {
     & npm install --no-audit --no-fund @whiskeysockets/baileys@7.0.0-rc14 qrcode@1.5.4
-    if ($LASTEXITCODE -eq 0) { Write-Ok 'Baileys på plats — kör: lent pair whatsapp' }
+    if ($LASTEXITCODE -eq 0) { Write-Ok 'Baileys på plats — kör: majin pair whatsapp' }
     else { Write-Bad 'npm install misslyckades — WhatsApp-cloud-transporten fungerar ändå (ingen dep)' }
   } catch {
     Write-Bad "npm felade: $($_.Exception.Message)"
@@ -153,13 +153,13 @@ if ($WhatsApp) {
 # --- 7. Verifiera ------------------------------------------------------------
 Write-Host "`nkontrollerar …" -ForegroundColor Cyan
 Push-Location $Repo
-$env:LENT_HOME = $Home
-& node 'src\cli\lent.js' doctor
+$env:MAJIN_HOME = $Home
+& node 'src\cli\majin.js' doctor
 $doctorExit = $LASTEXITCODE
 Write-Host ''
-& node 'src\cli\lent.js' url
+& node 'src\cli\majin.js' url
 Pop-Location
 Write-Host ''
 if ($doctorExit -ne 0) { Write-Host 'doctor hade anmärkningar — åtgärda punkterna ovan (API-nyckel är det vanliga).' -ForegroundColor Yellow }
-Write-Host 'KLART. Öppna ett nytt fönster och kör:  lent' -ForegroundColor Green
-Write-Host '   (eller dubbelklicka LENT på skrivbordet. Tryck Ctrl+C för att stoppa.)' -ForegroundColor DarkGray
+Write-Host 'KLART. Öppna ett nytt fönster och kör:  majin' -ForegroundColor Green
+Write-Host '   (eller dubbelklicka MAJIN på skrivbordet. Tryck Ctrl+C för att stoppa.)' -ForegroundColor DarkGray

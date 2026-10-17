@@ -12,7 +12,7 @@ import { agreement, normalize, jaccard, parseAnswers, run as moaRun } from '../s
 import { setScript } from '../src/core/provider/mock.js';
 
 function cfg(t, patch = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lent-router-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-router-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const c = new Config(clone(DEFAULTS), path.join(dir, 'c.json'));
   c.save = () => true;
@@ -115,7 +115,7 @@ test('llmClassify: liten modell får rösta när regex tvekar', async (t) => {
 });
 
 test('llmClassify: tyst när routern är nyckellös', async (t) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lent-router2-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-router2-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const c = new Config(clone(DEFAULTS), path.join(dir, 'c.json'));
   c.save = () => true;

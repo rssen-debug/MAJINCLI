@@ -1,10 +1,10 @@
 /**
- * LENT — Anthropic transport (messages API) with the same internal contract as
+ * MAJIN — Anthropic transport (messages API) with the same internal contract as
  * the OpenAI path, so tools/MOA/agent never know which dialect they are on.
  */
 import { ProviderError } from './chat.js';
 
-const TIMEOUT_MS = Number(process.env.LENT_LLM_TIMEOUT || 180000);
+const TIMEOUT_MS = Number(process.env.MAJIN_LLM_TIMEOUT || 180000);
 
 function toAnthropic(messages) {
   const system = messages.filter((m) => m.role === 'system').map((m) => textOf(m.content)).join('\n\n');

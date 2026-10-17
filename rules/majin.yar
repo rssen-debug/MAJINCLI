@@ -1,16 +1,16 @@
 /*
-  LENT — egna RE-regler.
+  MAJIN — egna RE-regler.
   Filen läses in av re.analyze / re.yara / re.iocs (tillsammans med de inbyggda reglerna).
-  Lägg till en regel via agenten:  lent({"tool":"re.rules","args":{...}})  eller klipp in här.
-  Syntax är en miniature av YARA som LENT tolkar själv (se src/core/binary/yara.js):
+  Lägg till en regel via agenten:  majin({"tool":"re.rules","args":{...}})  eller klipp in här.
+  Syntax är en miniature av YARA som MAJIN tolkar själv (se src/core/binary/yara.js):
     - rule-namn, meta (string-fält), strings ($a = "text" / { 4D 5A 90 00 }), condition med
       any / all / N of / and / or / filesize / entrypoint / §offset.
 */
 
-rule LENT_Suspicious_Packer_Stubs
+rule MAJIN_uspicious_Packer_Stubs
 {
   meta:
-    author = "LENT"
+    author = "MAJIN"
     purpose = "känd packare/crypter-signatur"
     severity = "medium"
   strings:
@@ -23,10 +23,10 @@ rule LENT_Suspicious_Packer_Stubs
     any of them
 }
 
-rule LENT_Malware_Imports
+rule MAJIN_alware_Imports
 {
   meta:
-    author = "LENT"
+    author = "MAJIN"
     purpose = "importer som är ovanliga i vanliga program"
     severity = "high"
   strings:
@@ -44,10 +44,10 @@ rule LENT_Malware_Imports
     uint16be(0) == 0x4D5A and 2 of them
 }
 
-rule LENT_Loader_Dropper_Behaviour
+rule MAJIN_oader_Dropper_Behaviour
 {
   meta:
-    author = "LENT"
+    author = "MAJIN"
     purpose = "typiskt loader-/dropper-beteende"
     severity = "high"
   strings:
@@ -62,10 +62,10 @@ rule LENT_Loader_Dropper_Behaviour
     2 of them
 }
 
-rule LENT_Embedded_PE_Overlay
+rule MAJIN_mbedded_PE_Overlay
 {
   meta:
-    author = "LENT"
+    author = "MAJIN"
     purpose = "PE i overlay:en — ofta inbäddad payload"
     severity = "high"
   strings:
@@ -74,10 +74,10 @@ rule LENT_Embedded_PE_Overlay
     $mz and filesize > 200000
 }
 
-rule LENT_Ransomware_Notes
+rule MAJIN_ansomware_Notes
 {
   meta:
-    author = "LENT"
+    author = "MAJIN"
     purpose = "lossennote-liknande text"
     severity = "critical"
   strings:
@@ -90,10 +90,10 @@ rule LENT_Ransomware_Notes
     2 of them
 }
 
-rule LENT_Installer_Signature
+rule MAJIN_nstaller_Signature
 {
   meta:
-    author = "LENT"
+    author = "MAJIN"
     purpose = "oskyldig: vanliga installers (Inno/NSIS/MSI)"
     severity = "info"
   strings:
@@ -105,10 +105,10 @@ rule LENT_Installer_Signature
     any of them
 }
 
-rule LENT_Android_Suspicious
+rule MAJIN_ndroid_Suspicious
 {
   meta:
-    author = "LENT"
+    author = "MAJIN"
     purpose = "apk med riskfyllda tillstånd/api"
     severity = "medium"
   strings:
@@ -122,10 +122,10 @@ rule LENT_Android_Suspicious
     2 of them
 }
 
-rule LENT_Crypto_Miner
+rule MAJIN_rypto_Miner
 {
   meta:
-    author = "LENT"
+    author = "MAJIN"
     purpose = "miner-strängar/pooler"
     severity = "high"
   strings:

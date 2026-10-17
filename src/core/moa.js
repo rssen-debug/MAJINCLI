@@ -1,5 +1,5 @@
 /**
- * LENT — MOA (Mixture of Agents), always on.
+ * MAJIN — MOA (Mixture of Agents), always on.
  * N referenser svarar parallellt → mejselft {agreement} → aggregator skriver
  * slutgiltigt svar. Låg enighet = eskalera till tyngre modell. Det är hela algoritmen.
  */

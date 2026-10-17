@@ -1,7 +1,7 @@
 /**
- * LENT — config.
+ * MAJIN — config.
  * One JSON file is the whole brain: providers, keys, routes, MOA, channels, guard.
- * The agent can read and write it itself (tool: lent.configure), which is why
+ * The agent can read and write it itself (tool: majin.configure), which is why
  * every value here is plain JSON and every write is validated + backed up.
  */
 import fs from 'node:fs';
@@ -28,11 +28,11 @@ export const JOBS = [
 
 export const DEFAULTS = {
   version: 1,
-  name: 'LENT',
+  name: 'MAJIN',
   workspace: null,
   persona: {
     identity:
-      'Du är LENT — en personlig agent som kör på användarens egen Windows-maskin. Du pratar kort, på användarens språk, utan att förklara vad du ska göra innan du gjort det.',
+      'Du är MAJIN — en personlig agent som kör på användarens egen Windows-maskin. Du pratar kort, på användarens språk, utan att förklara vad du ska göra innan du gjort det.',
     style:
       'Agera först, rapportera sedan. Korta meningar. Ingen fluff, inga ursäkter. Siffror och sökvägar före adjektiv. Om du är osäker: säg exakt vad som är osäkert, inte att du är ledsen.',
     safety: 'Du har tillgång till hela maskinen. Verifiera innan du förstör. Radera aldrig något du inte själv skapat.',
@@ -126,7 +126,7 @@ export const DEFAULTS = {
       ghidraProjectDir: null,
       headlessTimeoutSec: 900,
     },
-    http: { allowPrivate: true, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) LENT/1.0' },
+    http: { allowPrivate: true, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MAJIN/1.0' },
   },
   guard: {
     mode: 'confirm',
@@ -179,10 +179,10 @@ export const DEFAULTS = {
     stepJob: 'tasks',
   },
   ui: {
-    title: 'LENT',
+    title: 'MAJIN',
     tagline: 'allt på — alltid redo',
     theme: 'jarvis',
-    voice: { enabled: true, lang: 'sv-SE', wakeWord: 'lent', tts: true, ttsVoice: null, rate: 1.05, pitch: 0.95 },
+    voice: { enabled: true, lang: 'sv-SE', wakeWord: 'majin', tts: true, ttsVoice: null, rate: 1.05, pitch: 0.95 },
     transparency: { showTools: 'verbose', showThinking: 'summary', showTokens: true },
     density: 'comfortable',
     autoOpen: true,
@@ -578,8 +578,8 @@ export function compileRuntime(cfg) {
 }
 
 export function configFile() {
-  if (process.env.LENT_CONFIG) return path.resolve(expand(process.env.LENT_CONFIG));
-  if (process.env.LENT_HOME) return path.join(path.resolve(expand(process.env.LENT_HOME)), 'config.json');
+  if (process.env.MAJIN_CONFIG) return path.resolve(expand(process.env.MAJIN_CONFIG));
+  if (process.env.MAJIN_HOME) return path.join(path.resolve(expand(process.env.MAJIN_HOME)), 'config.json');
   if (fs.existsSync(dirs.devConfig)) return dirs.devConfig;
   return dirs.config;
 }

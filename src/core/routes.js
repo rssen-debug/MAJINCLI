@@ -1,5 +1,5 @@
 /**
- * LENT — natural-language self-config.
+ * MAJIN — natural-language self-config.
  * "använd deepseek pro för kod alltid och deepseek flash för tasks"
  *  → en riktig config-patch, validerad, med diff. Ingen meny behövs.
  * Det här är genvägen som körs FÖRE modellen: deterministic, gratis, och den

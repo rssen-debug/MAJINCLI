@@ -10,7 +10,7 @@ import { DEFAULTS, Config, clone } from '../src/core/config.js';
 import { parseIntent, findModelRefs } from '../src/core/routes.js';
 
 function cfg0(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lent-intent-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-intent-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const c = new Config(clone(DEFAULTS), path.join(dir, 'c.json'));
   c.save = () => true;

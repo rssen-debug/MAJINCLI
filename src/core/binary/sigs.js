@@ -1,5 +1,5 @@
 /**
- * LENT RE — signaturdatabas + riskpoäng.
+ * MAJIN RE — signaturdatabas + riskpoäng.
  * Målet är inte att vara en antivirus. Målet är att ge en modell en ärlig
  * förstahandsbild: vad filen är, vad den kan göra, och vad som är värt att gräva i.
  */

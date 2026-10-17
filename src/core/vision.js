@@ -1,5 +1,5 @@
 /**
- * LENT — vision.
+ * MAJIN — vision.
  * Bild in, textual analys ut. Endast en fil-läsning + en chat-anrop med image_url,
  * så det fungerar mot alla OpenAI-kompatibla modeller som kan bilder.
  */

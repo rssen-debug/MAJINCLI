@@ -1,5 +1,5 @@
 /**
- * LENT RE — opcode-skanning.
+ * MAJIN RE — opcode-skanning.
  * Ingen disassembler behövs för att hitta det som faktiskt sticker i ögonen:
  * syscall-ställen, shellcode-prolog, API-hashing-loopar, dekoder-loopar,
  * stack-strings och jmp-sleds. Detta är en byte-skanner, ärligt namngiven.

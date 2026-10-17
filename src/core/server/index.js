@@ -1,5 +1,5 @@
 /**
- * LENT — server.
+ * MAJIN — server.
  * Bara node:http. Inget ramverk. Samma port serverar UI:et, API:t, SSE-flödet
  * och WhatsApp-webhooken. Token låser dörren; webbläsarfönstret får den automatiskt.
  */
@@ -50,7 +50,7 @@ export function createServer(rt) {
     const token = String(cfg.get('server.token') || '');
     const authed = authOk(req, url, token, cfg);
 
-    res.setHeader('x-powered-by', 'LENT');
+    res.setHeader('x-powered-by', 'MAJIN');
     if (req.method === 'OPTIONS') {
       res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type,authorization', 'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS' });
       return res.end();
@@ -60,7 +60,7 @@ export function createServer(rt) {
     if (p === '/healthz') return json(res, 200, { ok: true, name: cfg.get('name'), version: VERSION, up: Math.round(process.uptime()) });
     if (p === '/api/hello') return json(res, 200, { ok: true, name: cfg.get('name'), version: VERSION, needToken: !authed, tokenOk: authed });
 
-    /* WhatsApp Cloud-webhook (Meta verifierar med eget token, ingen LENT-token) */
+    /* WhatsApp Cloud-webhook (Meta verifierar med eget token, ingen MAJIN-token) */
     if (p === '/whatsapp' || p === '/api/webhook/whatsapp') {
       if (!channels) return json(res, 503, { ok: false, error: 'kanaler är inte igång' });
       if (req.method === 'GET') {
@@ -97,10 +97,10 @@ export function createServer(rt) {
 
     if (!authed) {
       if (p === '/' || p === '/index.html') {
-        return html(res, 200, `<!doctype html><meta charset=utf-8><title>LENT — nyckel krävs</title>
+        return html(res, 200, `<!doctype html><meta charset=utf-8><title>MAJIN — nyckel krävs</title>
 <style>body{background:#04070a;color:#9fe8ff;font:15px/1.6 ui-monospace,Menlo,Consolas,monospace;display:grid;place-items:center;height:100vh;margin:0}
 a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px solid #14384d;border-radius:8px;color:#c9f5ff}</style>
-<div><b>LENT</b> kräver engångsnyckeln.<br>Kör <pre>lent window</pre> så öppnas fönstret med nyckeln inbakad.<br>Eller öppna <pre>http://${req.headers.host}/?t=${token}</pre> den här gången.</div>`);
+<div><b>MAJIN</b> kräver engångsnyckeln.<br>Kör <pre>majin window</pre> så öppnas fönstret med nyckeln inbakad.<br>Eller öppna <pre>http://${req.headers.host}/?t=${token}</pre> den här gången.</div>`);
       }
       return json(res, 401, { ok: false, error: 'token krävs', hint: `öppna med ?t=${token} eller skicka header \"authorization: Bearer ${token}\"` });
     }
@@ -109,8 +109,8 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     if (p === '/' || p === '/index.html' || p === '/app') {
       const file = path.join(UI_DIR, 'index.html');
       if (!fs.existsSync(file)) return html(res, 200, '<pre>UI saknas — kör npm run ui</pre>');
-      const raw = fs.readFileSync(file, 'utf8').replace(/__LENT_TOKEN__/g, token).replace(/__LENT_VERSION__/g, VERSION).replace(/__LENT_NAME__/g, cfg.get('name') || 'LENT');
-      res.setHeader('set-cookie', `lent=${token}; Path=/; SameSite=Lax`);
+      const raw = fs.readFileSync(file, 'utf8').replace(/__MAJIN_TOKEN__/g, token).replace(/__MAJIN_VERSION__/g, VERSION).replace(/__MAJIN___/g, cfg.get('name') || 'MAJIN');
+      res.setHeader('set-cookie', `majin=${token}; Path=/; SameSite=Lax`);
       return html(res, 200, raw);
     }
     if (!p.startsWith('/api/')) {
@@ -346,7 +346,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     if (p === '/api/channels/telegram' && req.method === 'POST') {
       const body = await readJson(req);
       if (body.botToken) cfg.patch({ channels: { telegram: { botToken: String(body.botToken).trim(), enabled: true } } });
-      if (!channels) return json(res, 503, { ok: false, error: 'kanaler är inte igång (starta om LENT med channels aktiverade)' });
+      if (!channels) return json(res, 503, { ok: false, error: 'kanaler är inte igång (starta om MAJIN med channels aktiverade)' });
       const ok = body.action === 'stop' ? channels.stopTelegram() : await channels.startTelegram();
       return json(res, 200, { ok: Boolean(ok), status: channels.telegram.status(), pairingCode: channels.telegram.status().pairingCode });
     }
@@ -388,7 +388,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     }
     if (p === '/api/selftest' && req.method === 'POST') {
       const body = await readJson(req).catch(() => ({}));
-      const out = await registry.exec('lent.selftest', { level: body.level === 'full' ? 'full' : 'quick' }, { ...rt.ctx, session: 'ui-api', step: 1 });
+      const out = await registry.exec('majin.selftest', { level: body.level === 'full' ? 'full' : 'quick' }, { ...rt.ctx, session: 'ui-api', step: 1 });
       return json(res, 200, { ok: out.ok !== false, text: out.result, meta: out.meta || null, error: out.error?.message || null });
     }
     if (p === '/api/tool' && req.method === 'POST') {
@@ -403,7 +403,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       return json(res, 200, { ok, note: ok ? 'månaden nollställd' : 'usage.reset finns inte i den här bygget' });
     }
     if (p === '/api/restart' && req.method === 'POST') {
-      json(res, 200, { ok: true, restart: true, note: 'stänger med kod 75 — lent start startar om' });
+      json(res, 200, { ok: true, restart: true, note: 'stänger med kod 75 — majin start startar om' });
       setTimeout(() => {
         try {
           server.close();
@@ -437,9 +437,9 @@ function authOk(req, url, token, cfg) {
   if (!token) return true;
   if (url.searchParams.get('t') === token || url.searchParams.get('token') === token) return true;
   const h = req.headers.authorization || '';
-  if (h === `Bearer ${token}` || h === `lent ${token}`) return true;
-  if ((req.headers.cookie || '').split(/;\s*/).includes(`lent=${token}`)) return true;
-  if (req.headers['x-lent-token'] === token) return true;
+  if (h === `Bearer ${token}` || h === `majin ${token}`) return true;
+  if ((req.headers.cookie || '').split(/;\s*/).includes(`majin=${token}`)) return true;
+  if (req.headers['x-majin-token'] === token) return true;
   const host = String(req.headers.host || '').split(':')[0];
   if (cfg?.get?.('server.trustLocal') !== false && TRUSTED.test(host)) return true;
   return false;
@@ -469,7 +469,7 @@ function sseHead(res) {
     'access-control-allow-origin': '*',
     'x-accel-buffering': 'no',
   });
-  res.write(': lent\n\n');
+  res.write(': majin\n\n');
 }
 
 function readBody(req, max = MAX_BODY) {

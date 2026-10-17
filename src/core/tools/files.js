@@ -1,5 +1,5 @@
 /**
- * LENT — filverktyg. Alltid på, ingen rotnödvändighet.
+ * MAJIN — filverktyg. Alltid på, ingen rotnödvändighet.
  */
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';

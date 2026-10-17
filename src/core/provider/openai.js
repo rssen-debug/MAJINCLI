@@ -1,12 +1,12 @@
 /**
- * LENT — OpenAI-compatible transport (works with DeepSeek, OpenRouter, Groq,
+ * MAJIN — OpenAI-compatible transport (works with DeepSeek, OpenRouter, Groq,
  * OpenAI, Ollama, LM Studio, vLLM, llama.cpp server, Nous, Together, xAI…).
  * Handles SSE streaming and incremental tool_call assembly.
  */
 import { ProviderError } from './chat.js';
 import { bus } from '../log.js';
 
-const TIMEOUT_MS = Number(process.env.LENT_LLM_TIMEOUT || 180000);
+const TIMEOUT_MS = Number(process.env.MAJIN_LLM_TIMEOUT || 180000);
 
 function headersFor(route) {
   return {
@@ -107,7 +107,7 @@ async function fail(res) {
     status: res.status,
     code: parsed?.error?.code || `http_${res.status}`,
     retryable: res.status === 429 || res.status >= 500,
-    hint: res.status === 401 ? 'Fel eller borttagen API-nyckel.' : res.status === 429 ? 'Ratelimit — LENT backoffar och försöker igen.' : res.status === 404 ? 'baseUrl eller modellnamn fel.' : null,
+    hint: res.status === 401 ? 'Fel eller borttagen API-nyckel.' : res.status === 429 ? 'Ratelimit — MAJIN backoffar och försöker igen.' : res.status === 404 ? 'baseUrl eller modellnamn fel.' : null,
   });
 }
 

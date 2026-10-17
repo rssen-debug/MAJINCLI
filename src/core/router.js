@@ -1,5 +1,5 @@
 /**
- * LENT — router.
+ * MAJIN — router.
  * Decides which job a turn is, which model handles it, and when to escalate.
  * Rules first (user-authored, free), cheap heuristics second, one tiny LLM call
  * as tiebreak only when the two are close. Never blocks a turn.

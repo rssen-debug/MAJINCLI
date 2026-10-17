@@ -1,5 +1,5 @@
 /**
- * LENT RE — PE/COFF.
+ * MAJIN RE — PE/COFF.
  * Egen parser (ingen pefile, ingen python, ingen build-step). Täckar det som
  * faktiskt används i triage: headers, sektioner, imports/exports, delay imports,
  * TLS-callbacks, load config (CFG/ASLR/DEP), debug (PDB), cert, overlay,

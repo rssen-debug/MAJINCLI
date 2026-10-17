@@ -1,9 +1,9 @@
 /**
- * LENT — WhatsApp.
+ * MAJIN — WhatsApp.
  * Två transports, samma gränssnitt:
  *   baileys  · din personliga nummer via QR, ingen Meta-app, inga avgifter
  *   cloud    · Meta WhatsApp Cloud API (webhook behövs för inkommande)
- * Baileys är en valfri npm-dep — LENT startar utan den och säger till vad som saknas.
+ * Baileys är en valfri npm-dep — MAJIN startar utan den och säger till vad som saknas.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -58,7 +58,7 @@ export class WhatsApp {
       received: this.received,
       sent: this.sent,
       lastError: this.lastError,
-      hint: this.state === 'stopped' ? 'lent.pair whatsapp (baileys) eller fyll i cloud-token i config' : null,
+      hint: this.state === 'stopped' ? 'majin.pair whatsapp (baileys) eller fyll i cloud-token i config' : null,
     };
   }
 
@@ -166,7 +166,7 @@ export class WhatsApp {
       version,
       auth,
       printQRInTerminal: false,
-      browser: ['LENT', 'chrome', '1.0'],
+      browser: ['MAJIN', 'chrome', '1.0'],
       syncFullHistory: false,
       markOnlineOnConnect: false,
     });

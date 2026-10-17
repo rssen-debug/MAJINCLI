@@ -10,8 +10,8 @@ import path from 'node:path';
 import { DEFAULTS, merge, clone, redact, validatePatch, toRegex, Config, isPlain, JOBS } from '../src/core/config.js';
 
 function tmpHome(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lent-cfg-'));
-  process.env.LENT_CONFIG = path.join(dir, 'config.json');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-cfg-'));
+  process.env.MAJIN_CONFIG = path.join(dir, 'config.json');
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
 }

@@ -1,5 +1,5 @@
 /**
- * LENT — kanalbussen.
+ * MAJIN — kanalbussen.
  * Telegram + WhatsApp blir samma samtalsyta som skrivbordet: in → agent.turn(),
  * ut → kanalen. Godkännandefrågor följer med till chatten där du faktiskt är.
  */
@@ -85,7 +85,7 @@ export class Channels {
       const moa = this.cfg.get('moa');
       await msg.reply(
         [
-          `LENT · ${st.telegram.online ? '🟢 telegram' : '⚪️ telegram'} · ${st.whatsapp.online ? '🟢 whatsapp' : st.whatsapp.state === 'pairing' ? '🟡 para mig' : '⚪️ whatsapp'}`,
+          `MAJIN · ${st.telegram.online ? '🟢 telegram' : '⚪️ telegram'} · ${st.whatsapp.online ? '🟢 whatsapp' : st.whatsapp.state === 'pairing' ? '🟡 para mig' : '⚪️ whatsapp'}`,
           `modell ${this.cfg.get('models.provider')} · rutter ${this.cfg.routeTable().length} · verktyg ${this.registry?.list?.().length ?? '?'}`,
           `MOA ${moa.policy} (${moa.width} referenser → ${moa.aggregator}) · guard ${this.cfg.get('guard.mode')}`,
           this.scheduler ? schemText(this.scheduler) : '',

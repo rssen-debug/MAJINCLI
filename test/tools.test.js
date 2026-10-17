@@ -11,8 +11,8 @@ import { ALL_TOOLS, buildRegistry } from '../src/core/tools/index.js';
 import { levelFor, approvals, check } from '../src/core/guard.js';
 import { globToRe, hexdump, resolveIn } from '../src/core/tools/files.js';
 
-const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lent-tools-'));
-process.env.LENT_HOME = home;
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-tools-'));
+process.env.MAJIN_HOME = home;
 const WS = path.join(home, 'workspace');
 fs.mkdirSync(WS, { recursive: true });
 

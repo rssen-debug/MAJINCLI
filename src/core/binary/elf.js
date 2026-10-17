@@ -1,5 +1,5 @@
 /**
- * LENT RE — ELF + Mach-O.
+ * MAJIN RE — ELF + Mach-O.
  * Samma idé som PE-läsaren: headers, segment, imports/exports, entropy, hashes.
  */
 import crypto from 'node:crypto';

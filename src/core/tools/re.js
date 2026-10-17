@@ -1,5 +1,5 @@
 /**
- * LENT RE — verktygen.
+ * MAJIN RE — verktygen.
  * Allt är alltid på. Varje verktyg är medvetet litet och returnerar något en
  * modell kan läsa utan att spränga kontexten: tallrikar, inte råa buffers.
  */
@@ -18,7 +18,7 @@ import { scoreApis } from '../binary/sigs.js';
 import { opcodeScan, findCodeIslands } from '../binary/scan.js';
 import { detect as detectTools, call as callTool, TOOL_SPECS } from '../binary/external.js';
 import { bus } from '../log.js';
-import { dirs } from '../paths.js';
+import { dirs, pkgRules } from '../paths.js';
 import { jaccard, shingles } from '../moa.js';
 
 async function load(ctx, p) {
@@ -35,7 +35,7 @@ const fmt = (n) => (n > 1024 * 1024 ? `${(n / 1048576).toFixed(2)} MB` : n > 102
 function userRules(ctx) {
   const out = [DEFAULT_RULES_TEXT];
   const extra = ctx.cfg.get('tools.re.yaraRules') || [];
-  for (const r of [path.join(dirs.rules, 'lent.yar'), ...(Array.isArray(extra) ? extra : [])]) {
+  for (const r of [path.join(dirs.rules, 'majin.yar'), path.join(pkgRules, 'majin.yar'), ...(Array.isArray(extra) ? extra : [])]) {
     try {
       out.push(fss.readFileSync(r, 'utf8'));
     } catch {
@@ -255,7 +255,7 @@ export const reTools = [
     name: 're.yara',
     group: 'reverse',
     risk: 'read',
-    desc: 'Kör YARA-regler (LENTs inbyggda mini-motor, inget yara-binärt behövs). Egna regler kan läggas till i rules/lent.yar.',
+    desc: 'Kör YARA-regler (MAJINs inbyggda mini-motor, inget yara-binärt behövs). Egna regler kan läggas till i rules/majin.yar.',
     params: { path: 'string: fil', ruleText: 'string: egna regler i YARA-syntax', only: 'string: filtrera på regelnamn (regex)' },
     async run({ path: p, ruleText = '', only = '' }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -506,7 +506,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     name: 're.tools',
     group: 'reverse',
     risk: 'read',
-    desc: 'Vilka externa RE-verktyg som finns och vad som saknas. LENTs egen parser behöver ingenting — detta är för djupare jobb.',
+    desc: 'Vilka externa RE-verktyg som finns och vad som saknas. MAJINs egen parser behöver ingenting — detta är för djupare jobb.',
     params: { refresh: 'boolean: slå i PATH igen' },
     async run({ refresh = false }) {
       const d = await detectTools({ refresh: Boolean(refresh) });
@@ -604,10 +604,10 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     name: 're.rules',
     group: 'reverse',
     risk: 'read',
-    desc: 'Lista och spara YARA-regler i rules/lent.yar (agentens egen regeldatabas).',
+    desc: 'Lista och spara YARA-regler i rules/majin.yar (agentens egen regeldatabas).',
     params: { action: 'string: list | save | delete [list|save|delete]', name: 'string: reglens namn', text: 'string: regeltext (sparas i filen)' },
     async run({ action = 'list', name = '', text = '' }, ctx) {
-      const file = path.join(dirs.rules, 'lent.yar');
+      const file = path.join(dirs.rules, 'majin.yar');
       const cur = fss.existsSync(file) ? fss.readFileSync(file, 'utf8') : '';
       if (action === 'list') {
         const builtin = parseRules(DEFAULT_RULES_TEXT).map((r) => `${r.name} (inbyggd)`);

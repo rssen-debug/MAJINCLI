@@ -1,5 +1,5 @@
 /**
- * LENT — log + event bus.
+ * MAJIN — log + event bus.
  * Everything the agent does is a named event: the UI, the CLI, the log file and
  * every channel are just four different readers of the same stream.
  */
@@ -22,7 +22,7 @@ class Bus {
     try {
       fs.mkdirSync(dir, { recursive: true });
       const stamp = new Date().toISOString().slice(0, 10);
-      this.file = fs.createWriteStream(path.join(dir, `lent-${stamp}.jsonl`), { flags: 'a' });
+      this.file = fs.createWriteStream(path.join(dir, `majin-${stamp}.jsonl`), { flags: 'a' });
     } catch {
       this.file = null;
     }

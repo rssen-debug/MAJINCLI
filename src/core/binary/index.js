@@ -1,5 +1,5 @@
 /**
- * LENT RE — analysmotorn.
+ * MAJIN RE — analysmotorn.
  * En ingång: analyze(buffer) → en strukturerad rapport en modell kan läsa direkt.
  * Inget av stegen kräver extern mjukvara; extern verktyg (ghidra/rizin/objdump)
  * kopplas på automatiskt om de finns, annars fungerar allt ändå.
@@ -19,7 +19,7 @@ export const DEFAULT_RULES_TEXT = `
 rule Packer_UPX : packer {
   meta:
     severity = "low"
-    author = "lent"
+    author = "majin"
   strings:
     $s1 = "UPX0" ascii
     $s2 = "UPX1" ascii wide
@@ -301,7 +301,7 @@ function nextSteps(r, format) {
   if (r.containers?.some((c) => c.kind === 'asar')) out.push('Electron: montera asar-arkivet (npx @electron/asar extract) och läs JS-bundlen — logiken ligger där, inte i exet.');
   if (r.overlay?.size > 100000) out.push(`Overlay på ${Math.round(r.overlay.size / 1024)} kB efter sista sektionen: dumpa offset ${r.overlay.offset} och kör entropi på den delen.`);
   if (r.iocs?.urls?.length) out.push(`${r.iocs.urls.length} URL:er — kontrollera DOMÄN-ålder/ssl-certifikat och hämta med web.fetch i sand-box-läge.`);
-  if (!out.length && format.kind === 'text') out.push('Textfiler: kör den genom lent.syntax / grep för hårdkodade nycklar, endpoint:er och hemliga strängar.');
+  if (!out.length && format.kind === 'text') out.push('Textfiler: kör den genom majin.syntax / grep för hårdkodade nycklar, endpoint:er och hemliga strängar.');
   return out.slice(0, 8);
 }
 

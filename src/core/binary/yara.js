@@ -1,5 +1,5 @@
 /**
- * LENT RE — mini-YARA.
+ * MAJIN RE — mini-YARA.
  * Ett underlag av riktig YARA som väger 0 kB och kräver ingen native-modul:
  * textsträngar (ascii/wide/nocase), hexmönster med ??-wildcards och (aa|bb)-val,
  * regex, samt villkor med any/all/N of them, and/or/not och filesize.

@@ -1,5 +1,5 @@
-/* LENT — UI. Ingen ramverk, ingen CDN. Ett dokument, två skript. */
-const TOKEN = (window.__LENT_TOKEN__ || 'demo');
+/* MAJIN — UI. No framework, no CDN. One document, two scripts. */
+const TOKEN = (window.__MAJIN_TOKEN__ || 'demo');
 const S = { session: 'desktop', busy: false, st: null, voice: false, cur: null, curBody: '', tools: null, gauge: null, t0: 0 };
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, html) => {
@@ -64,12 +64,12 @@ function addMsg(cls, who, text) {
   scroll();
   return { m, b };
 }
-const note = (t) => addMsg('sys', 'LENT · notis', t);
-const err = (t) => addMsg('err', 'LENT · fel', t);
+const note = (t) => addMsg('sys', 'MAJIN · notis', t);
+const err = (t) => addMsg('err', 'MAJIN · fel', t);
 
 function ensureAgent() {
   if (S.cur) return S.cur;
-  const o = addMsg('lent', 'LENT');
+  const o = addMsg('majin', 'MAJIN');
   S.cur = { b: o.b, m: o.m, thinking: null };
   S.curBody = '';
   o.b.classList.add('caret');
@@ -122,11 +122,11 @@ function moaGauge(ev) {
     a.moa = el('div', 'foot');
     a.m.append(a.moa);
   }
-  if (ev.type === 'moa:start') a.moa.innerHTML = '<span class="gauge">MOA ' + ev.width + ' referenser ▸ '.repeat(Math.min(3, ev.width)) + '</span>';
+  if (ev.type === 'moa:start') a.moa.innerHTML = '<span class="gauge">MOA ' + ev.width + ' references ▸ '.repeat(Math.min(3, ev.width)) + '</span>';
   if (ev.type === 'moa:ref') a.moa.innerHTML += '<span class="kv">· ' + esc(ev.ref) + ' ' + (ev.ok ? (ev.ms || '') + 'ms' : 'fel') + '</span>';
   if (ev.type === 'moa:done') {
     const score = Math.round((ev.score || 0) * 100);
-    a.moa.innerHTML = `<span class="gauge">MOA ${ev.refs} svar · enighet ${score}%</span><span class="bar"><i style="width:${score}%"></i></span> <span class="kv">aggregator ${(ev.ms || 0)}ms${ev.escalated ? ' · eskalerad' : ''}</span>`;
+    a.moa.innerHTML = `<span class="gauge">MOA ${ev.refs} svar · agreement ${score}%</span><span class="bar"><i style="width:${score}%"></i></span> <span class="kv">aggregator ${(ev.ms || 0)}ms${ev.escalated ? '  · escalated' : ''}</span>`;
   }
   if (ev.type === 'moa:degraded') a.moa.innerHTML = '<span class="kv" style="color:var(--warn)">MOA degraded: ' + esc(ev.reason || '') + '</span>';
   scroll();
@@ -138,10 +138,10 @@ function onEvent(ev) {
     case 'route':
       $('c-route').innerHTML = 'route <b>' + esc(ev.job) + '</b> → ' + esc((ev.model || '?').split('/').pop()) + (ev.confidence != null && ev.confidence < 0.45 ? ' <span style="color:var(--warn)">?</span>' : '');
       $('c-route').classList.add('live');
-      note('jobb ' + ev.job + ' · ' + (ev.moa && ev.moa.enabled ? 'MOA ' + ev.moa.width + ' → ' + ev.moa.aggregator : 'MOA av') + (ev.tiebreak ? ' · llm-tiebreak' : ''));
+      note('job ' + ev.job + ' · ' + (ev.moa && ev.moa.enabled ? 'MOA ' + ev.moa.width + ' → ' + ev.moa.aggregator : 'MOA off') + (ev.tiebreak ? ' · llm tiebreak' : ''));
       break;
     case 'step':
-      setStatus('steg ' + ev.step + '/' + ev.of + ' · ' + (ev.model || '').split('/').pop() + (ev.escalated ? ' · eskalerad' : ''));
+      setStatus('step ' + ev.step + '/' + ev.of + ' · ' + (ev.model || '').split('/').pop() + (ev.escalated ? '  · escalated' : ''));
       break;
     case 'delta':
       appendDelta(ev.text);
@@ -163,10 +163,10 @@ function onEvent(ev) {
       break;
     }
     case 'escalate':
-      note('eskalerar → ' + ev.to + ' (' + (ev.why || 'fel') + ')');
+      note('escalating → ' + ev.to + ' (' + (ev.why || 'errors') + ')');
       break;
     case 'compact':
-      note('komprimerar kontext (' + ev.tokens + ' tok)');
+      note('compacting context (' + ev.tokens + ' tok)');
       break;
     case 'plan':
       renderPlan(ev.plan);
@@ -180,13 +180,13 @@ function onEvent(ev) {
       err('config nekad: ' + (ev.errors || []).map((e) => e.path + ': ' + e.msg).join(', '));
       break;
     case 'skill_auto':
-      note('ny färdighet sparad: ' + ev.name);
+      note('new skill saved: ' + ev.name);
       break;
     case 'budget':
       toast('budget: ' + ev.used + ' / ' + ev.cap + ' USD');
       break;
     case 'loop.limit':
-      note('steggräns ' + ev.steps + ' nådd');
+      note('step limit ' + ev.steps + ' reached');
       break;
     case 'moa:start':
     case 'moa:ref':
@@ -216,7 +216,7 @@ function closeAnswer(ev) {
     const meta = ev.meta || {};
     const foot = el('div', 'foot');
     const secs = ((Date.now() - S.t0) / 1000).toFixed(1);
-    foot.textContent = [meta.job && 'jobb ' + meta.job, meta.steps && meta.steps + ' steg', meta.tools && meta.tools + ' verktyg', meta.usage && (meta.usage.input + '→' + meta.usage.output + ' tok'), meta.usage && meta.usage.costUsd ? '$' + meta.usage.costUsd.toFixed(4) : null, secs + 's'].filter(Boolean).join(' · ');
+    foot.textContent = [meta.job && 'job ' + meta.job, meta.steps && meta.steps + ' steps', meta.tools && meta.tools + ' tools', meta.usage && (meta.usage.input + '→' + meta.usage.output + ' tok'), meta.usage && meta.usage.costUsd ? '$' + meta.usage.costUsd.toFixed(4) : null, secs + 's'].filter(Boolean).join(' · ');
     a.m.append(foot);
     if (S.voice && ev.text) speak(ev.text);
   }
@@ -239,7 +239,7 @@ async function send(text) {
   S.t0 = Date.now();
   $('send').classList.add('busy');
   $('send').textContent = 'STOP';
-  setStatus('jobbar…');
+  setStatus('working…');
   const ac = new AbortController();
   S.abort = ac;
   try {
@@ -274,14 +274,14 @@ async function send(text) {
     }
     if (S.cur) closeAnswer({ text: S.curBody, meta: {} });
   } catch (e) {
-    if (e.name !== 'AbortError') err('tappade förbindelsen: ' + e.message);
-    else note('avbruten');
+    if (e.name !== 'AbortError') err('connection lost: ' + e.message);
+    else note('cancelled');
   } finally {
     S.busy = false;
     S.abort = null;
     $('send').classList.remove('busy');
-    $('send').textContent = 'KÖR';
-    setStatus('redo');
+    $('send').textContent = 'RUN';
+    setStatus('ready');
     refresh(true);
   }
   return true;
@@ -300,19 +300,19 @@ async function stop() {
 /* ------------------------------- approvals ------------------------------ */
 function approvalCard(ev) {
   const box = el('div', 'appr');
-  box.append(el('h4', '', '◎ ' + esc(ev.tool) + ' vill köra'));
+  box.append(el('h4', '', '◎ ' + esc(ev.tool) +  wants to run'));
   box.append(el('div', 'kv', esc(ev.reason || '')));
   if (ev.detail) box.append(el('pre', '', esc(String(ev.detail).slice(0, 600))));
   const row = el('div', 'row');
-  const yes = el('button', 'on', 'KÖR');
-  const no = el('button', 'danger', 'NEJ');
+  const yes = el('button', 'on', 'ALLOW');
+  const no = el('button', 'danger', 'DENY');
   yes.onclick = () => respond(ev.id, true, box);
   no.onclick = () => respond(ev.id, false, box);
   row.append(yes, no, el('span', 'kv', 'id ' + ev.id + (ev.session ? ' · ' + ev.session : '')));
   box.append(row);
   $('scroller').append(box);
   scroll();
-  toast('godkännande väntar: ' + ev.tool);
+  toast('approval pending: ' + ev.tool);
   return box;
 }
 async function respond(id, approved, box) {
@@ -323,7 +323,7 @@ async function respond(id, approved, box) {
     });
     if (box) box.style.borderColor = approved ? '#2b7c99' : '#4d2430';
   } catch (e) {
-    toast('kunde inte svara: ' + e.message);
+    toast('could not answer: ' + e.message);
   }
 }
 
@@ -344,23 +344,23 @@ function listen() {
       return;
     }
     if (name === 'approval:resolved') {
-      setStatus('godkännande ' + (ev.approved ? 'beviljat' : 'nekad'));
+      setStatus('approval ' + (ev.approved ? 'granted' : 'denied'));
       return;
     }
     if (name === 'log' || !name) return;
     if (S.busy) return;
     if (name === 'answer') {
-      addMsg('lent', 'LENT · ' + (ev.source || 'schemalagt'), ev.text);
+      addMsg('majin', 'MAJIN · ' + (ev.source || 'schemalagt'), ev.text);
       return;
     }
     if (name.startsWith('telegram.') || name.startsWith('whatsapp.')) {
       toast(name.replace('.', ' · ') + (ev.error ? ': ' + ev.error : ''));
     }
-    if (name === 'schedule.done') toast('schema: ' + (ev.status || 'ok'));
+    if (name === 'schedule.done') toast('schedule: ' + (ev.status || 'ok'));
   };
-  ['approval:request', 'approval:resolved', 'answer', 'telegram.up', 'telegram.paired', 'telegram.unpaired', 'whatsapp.qr', 'whatsapp.connected', 'whatsapp.close', 'schedule.done', 'schedule.failed', 'tool.denied', 'lent.ui'].forEach((n) => es.addEventListener(n, handle(n)));
+  ['approval:request', 'approval:resolved', 'answer', 'telegram.up', 'telegram.paired', 'telegram.unpaired', 'whatsapp.qr', 'whatsapp.connected', 'whatsapp.close', 'schedule.done', 'schedule.failed', 'tool.denied', 'majin.ui'].forEach((n) => es.addEventListener(n, handle(n)));
   es.onerror = () => {
-    setStatus('återansluter…');
+    setStatus('reconnecting…');
   };
 }
 
@@ -369,7 +369,7 @@ let recog = null;
 function micToggle() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
-    toast('den här webbläsaren har ingen taleigenkänning');
+    toast('this browser has no speech recognition');
     return;
   }
   if (S.listening) {
@@ -406,13 +406,13 @@ function micToggle() {
     }
   };
   recog.onerror = (e) => {
-    $('mic-state').textContent = e.error === 'not-allowed' ? 'tillåt mikrofon' : '';
+    $('mic-state').textContent = e.error === 'not-allowed' ? 'allow microphone' : '';
     if (e.error === 'not-allowed') S.listening = false;
   };
   recog.start();
   S.listening = true;
   $('mic').classList.add('on');
-  $('mic-state').textContent = 'lyssnar';
+  $('mic-state').textContent = 'listening';
 }
 function speak(t) {
   if (!('speechSynthesis' in window)) return;
@@ -436,7 +436,7 @@ async function command(line) {
   const arg = rest.join(' ');
   const c = cmd.toLowerCase();
   if (c === 'help') {
-    note('kommandon: ' + CMDS.join('  '));
+    note('commands: ' + CMDS.join('  '));
     return true;
   }
   if (c === 'stop') {
@@ -446,7 +446,7 @@ async function command(line) {
   if (c === 'clear') {
     await api('/session/clear', { method: 'POST', body: { session: S.session } });
     $('scroller').innerHTML = '';
-    note('session rensad');
+    note('session cleared');
     return true;
   }
   if (c === 'session') {
@@ -466,7 +466,7 @@ async function command(line) {
   }
   if (c === 'selftest') {
     const r = await api('/selftest', { method: 'POST', body: { level: arg.includes('full') ? 'full' : 'quick' } });
-    addMsg('sys', 'självtest', r.text || r.error || 'klart');
+    addMsg('sys', 'selftest', r.text || r.error || 'done');
     return true;
   }
   if (c === 'analyze') {
@@ -475,15 +475,15 @@ async function command(line) {
   }
   if (c === 'route') {
     const [job, ref] = rest;
-    if (!job || !ref) return (note('route <jobb> <provider/modell>'), true);
+    if (!job || !ref) return (note('usage: /route <job> <provider/model>'), true);
     await api('/config', { method: 'PATCH', body: { models: { routes: { [job]: ref } } } });
     refresh();
     return true;
   }
   if (c === 'model') {
-    if (!arg) return (note('används: /model <provider/modell>'), true);
+    if (!arg) return (note('usage: /model <provider/model>'), true);
     await api('/config', { method: 'PATCH', body: { models: { routes: { chat: arg, tasks: arg, tools: arg, code: arg, re: arg, analysis: arg, final: arg, plan: arg, research: arg, summarize: arg, router: arg, aggregator: arg } } } });
-    note('alla rutter → ' + arg);
+    note('all routes → ' + arg);
     refresh();
     return true;
   }
@@ -494,7 +494,7 @@ async function command(line) {
     else if (arg === 'off') patch.moa.policy = 'off';
     const w = /(\d)/.exec(arg);
     if (w) patch.moa.width = Math.max(2, Math.min(5, Number(w[1])));
-    if (!patch.moa.policy && !patch.moa.width) return (note('/moa on | hard | off [bredd]'), true);
+    if (!patch.moa.policy && !patch.moa.width) return (note('/moa on | hard | off [width]'), true);
     await api('/config', { method: 'PATCH', body: patch });
     refresh();
     return true;
@@ -507,18 +507,18 @@ async function command(line) {
   }
   if (c === 'budget') {
     const n = Number(arg.replace(/[^\d.]/g, ''));
-    if (!n) return (note('/budget <usd per månad>'), true);
+    if (!n) return (note('/budget <usd per month>'), true);
     await api('/config', { method: 'PATCH', body: { budget: { monthlyUsd: n, mode: 'limit' } } });
-    note('budget ' + n + ' USD/mån');
+    note('budget ' + n + ' USD/month');
     refresh();
     return true;
   }
   if (c === 'memory') {
     if (/^spara\s+/i.test(arg)) await api('/memory', { method: 'POST', body: { text: arg.replace(/^spara\s+/i, '') } });
-    else if (/^glöm\s+/i.test(arg)) await api('/memory', { method: 'POST', body: { action: 'forget', query: arg.replace(/^glöm\s+/i, '') } });
+    else if (/^(forget|glöm)\s+/i.test(arg)) await api('/memory', { method: 'POST', body: { action: 'forget', query: arg.replace(/^(forget|glöm)\s+/i, '') } });
     else {
       const m = await api('/memory?q=' + encodeURIComponent(arg || ''));
-      note((m.facts || []).slice(0, 12).map((f) => '· ' + (f.text || f)).join('\n') || 'tomt minne');
+      note((m.facts || []).slice(0, 12).map((f) => '· ' + (f.text || f)).join('\n') || 'memory is empty');
     }
     refresh();
     return true;
@@ -532,7 +532,7 @@ async function command(line) {
   }
   if (c === 'pair') {
     const st = await api('/channels');
-    note(arg === 'whatsapp' ? 'WhatsApp: ' + (st.whatsapp.state || '') + (st.whatsapp.qr ? ' — visa QR i panelen' : '') : 'Telegram: parningskod ' + (st.telegram.pairingCode || '?') + ' — skicka /pair <kod> till botten');
+    note(arg === 'whatsapp' ? 'WhatsApp: ' + (st.whatsapp.state || '') + (st.whatsapp.qr ? ' — visa QR i panelen' : '') : 'Telegram: pairing code ' + (st.telegram.pairingCode || '?') + ' — send /pair <code> to the bot');
     return true;
   }
   if (c === 'provider') {
@@ -547,23 +547,23 @@ async function command(line) {
 }
 
 async function analyzePath(p) {
-  if (!p) return note('ange en sökväg: /analyze <fil>');
-  setStatus('RE-analys…');
+  if (!p) return note('give me a path: /analyze <file>');
+  setStatus('RE analysis…');
   try {
     const r = await api('/re/analyze', { method: 'POST', body: { path: p } });
     const m = addMsg('sys', 'RE · ' + p.split(/[\\/]/).pop());
     m.b.innerHTML = md(String(r.result || '').slice(0, 4000));
     if (r.meta) S.reMeta = r.meta;
     const row = el('div', 'row');
-    const ask = el('button', '', '→ LENT');
-    ask.onclick = () => send('Analysera ' + p + ' djupare. Säg om den är farlig, vad den gör, och vad jag bör kolla härnäst.');
+    const ask = el('button', '', '→ MAJIN');
+    ask.onclick = () => send('Analyze ' + p + ' more deeply. Say whether it is dangerous, what it does, and what I should check next.');
     row.append(ask);
     m.m.append(row);
     $('re-out').innerHTML = '<b>' + esc(p.split(/[\\/]/).pop()) + '</b> · risk ' + esc(r.meta?.risk ?? '?') + (r.meta?.report ? ` <a href="/api/report?file=${encodeURIComponent(r.meta.report.split(/[\\/]/).pop())}&t=${TOKEN}" style="color:var(--cy)">json</a>` : '');
   } catch (e) {
     err('RE: ' + e.message);
   } finally {
-    setStatus('redo');
+    setStatus('ready');
   }
 }
 
@@ -585,8 +585,8 @@ async function refresh(quiet) {
 async function loadHistory() {
   const h = await api('/history?session=' + encodeURIComponent(S.session) + '&n=40').catch(() => ({ messages: [] }));
   $('scroller').innerHTML = '';
-  (h.messages || []).forEach((m) => addMsg(m.role === 'user' ? 'user' : 'lent', m.role === 'user' ? 'DU' : 'LENT', m.content));
-  if (!(h.messages || []).length) note('ny session · ' + S.session);
+  (h.messages || []).forEach((m) => addMsg(m.role === 'user' ? 'user' : 'majin', m.role === 'user' ? 'DU' : 'MAJIN', m.content));
+  if (!(h.messages || []).length) note('new session · ' + S.session);
 }
 
 $('input').addEventListener('keydown', (e) => {
@@ -612,13 +612,32 @@ $('b-test').onclick = async () => {
   setStatus('selftest…');
   try {
     const r = await api('/selftest', { method: 'POST', body: { level: 'full' } });
-    addMsg('sys', 'självtest', r.text || 'klart');
+    addMsg('sys', 'selftest', r.text || 'done');
   } catch (e) {
     err(e.message);
   }
-  setStatus('redo');
+  setStatus('ready');
 };
 $('mic').onclick = micToggle;
+$('b-theme').onclick = () => {
+  const light = document.body.classList.toggle('light');
+  try { localStorage.setItem('majin.theme', light ? 'light' : 'dark'); } catch { /* private mode */ }
+};
+try { if (localStorage.getItem('majin.theme') === 'light') document.body.classList.add('light'); } catch { /* ignorera */ }
+$('b-mode').onclick = async () => {
+  const order = [['assist', 'off'], ['approval', 'confirm'], ['full auto', 'strict']];
+  const i = Math.max(0, order.findIndex(([l]) => $('b-mode').textContent.trim() === l));
+  const [label, mode] = order[(i + 1) % order.length];
+  $('b-mode').textContent = label;
+  $('b-mode').title = 'Permission mode: ' + label + ' (guard.mode=' + mode + ')';
+  try {
+    await api('/config', { method: 'PATCH', body: { guard: { mode } } });
+    note('permission mode → ' + label);
+  } catch (e) {
+    err('could not set mode: ' + e.message);
+  }
+};
+$('b-stop').onclick = () => stop();
 $('re-go').onclick = () => analyzePath($('re-path').value.trim());
 document.addEventListener('dragover', (e) => {
   e.preventDefault();
@@ -633,7 +652,7 @@ document.addEventListener('drop', async (e) => {
   await uploadAndAnalyze(f);
 });
 async function uploadAndAnalyze(f) {
-  setStatus('laddar ' + f.name + '…');
+  setStatus('uploading ' + f.name + '…');
   const buf = await f.arrayBuffer();
   const r = await fetch('/api/re/upload?t=' + encodeURIComponent(TOKEN) + '&name=' + encodeURIComponent(f.name), {
     method: 'POST',
@@ -643,13 +662,13 @@ async function uploadAndAnalyze(f) {
   const j = await r.json().catch(() => ({}));
   if (!j.ok) {
     err('uppladdning: ' + (j.error || r.status));
-    setStatus('redo');
+    setStatus('ready');
     return;
   }
   $('re-path').value = j.path;
-  note(`mottog ${f.name} (${j.size} byte) · sha256 ${String(j.sha256).slice(0, 16)}…`);
+  note(`got ${f.name} (${j.size} bytes) · sha256 ${String(j.sha256).slice(0, 16)}…`);
   await analyzePath(j.path);
-  setStatus('redo');
+  setStatus('ready');
 }
 
 window.addEventListener('load', async () => {

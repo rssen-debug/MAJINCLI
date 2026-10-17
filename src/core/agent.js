@@ -1,5 +1,5 @@
 /**
- * LENT — agentturn.
+ * MAJIN — agentturn.
  * 1) naturallyspråk → config (gratis, ingen LLM)  2) klassa jobb  3) verktygsslinga
  * 4) MOA-final  5) minne + färdighet + historik. Overskott är bortskuret; allt körs på samma loop.
  */
@@ -66,7 +66,7 @@ export class Agent {
       'Använd verktyg i stället för att gissa. Flera oberoende anrop i samma svar körs parallellt — batcha dem. Vid fel: läs felet, rätta argumenten, kör igen (efter två fel i rad eskalerar modellen automatiskt).',
       'Sökvägar: absolut eller relativt workspacet. Skriv aldrig över något du inte läst, och radera inte det du inte skapat.',
       'RE: re.analyze = headers, sektioner+entropi, imports med riskmarkering, YARA, IOC-strängar, opkodsmönster och "nästa steg". re.strings/re.search/re.yara/re.diff är mikrofonen. re.tool kopplar på ghidra/rizin/objdump om de finns på maskinen.',
-      'Om användaren beskriver en inställning på naturligt språk ("använd X för Y alltid", "kör moa på allt", "fråga inte mer") → kör lent.configure med intent, eller säg exakt vad du ändrade.',
+      'Om användaren beskriver en inställning på naturligt språk ("använd X för Y alltid", "kör moa på allt", "fråga inte mer") → kör majin.configure med intent, eller säg exakt vad du ändrade.',
       '',
       `ROUTING (jobb → modell): ${Object.entries(routeSummary(cfg)).map(([k, v]) => `${k}:${v}`).join('  ')}`,
       `Den här turen: jobb=${decision.job} (säkerhet ${decision.confidence}), primär=${turnPlan.route?.ref || '?'}, ${turnPlan.moa?.enabled ? `MOA ${turnPlan.moa.width} referenser → aggregator ${turnPlan.moa.aggregator}` : 'MOA av för den här typen'}.`,
@@ -300,7 +300,7 @@ function suggestSkill(input, res) {
     name: `flöde: ${name}`,
     when: firstLine(input).slice(0, 120),
     tools: uniq.slice(0, 8),
-    steps: `Körd sekvens (${res.steps} steg):\n${uniq.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\nNotera: genererad av LENT efter en lyckad körning — förfina vid behov.`,
+    steps: `Körd sekvens (${res.steps} steg):\n${uniq.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\nNotera: genererad av MAJIN efter en lyckad körning — förfina vid behov.`,
   };
 }
 

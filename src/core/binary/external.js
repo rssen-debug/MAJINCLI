@@ -1,6 +1,6 @@
 /**
- * LENT RE — bro till extern verktyg (valfritt, aldrig ett krav).
- * LENTs egen parser räcker för triage. När man vill ha riktig decompilation
+ * MAJIN RE — bro till extern verktyg (valfritt, aldrig ett krav).
+ * MAJINs egen parser räcker för triage. När man vill ha riktig decompilation
  * hittar agenten ghidra/rizin/objdump av sig själv och kör dem.
  */
 import fs from 'node:fs';
@@ -21,10 +21,10 @@ export const TOOL_SPECS = [
     build: ({ file, cfg, args }) => {
       const home = cfg.get('tools.re.ghidraDir') || process.env.GHIDRA_HOME;
       const bin = home ? path.join(home, 'support', 'analyzeHeadless') : 'analyzeHeadless';
-      const proj = path.join(os.tmpdir(), `lent-ghidra-${Date.now()}`);
+      const proj = path.join(os.tmpdir(), `majin-ghidra-${Date.now()}`);
       return {
         cmd: bin,
-        args: [proj, 'LENT', '-import', file, '-processorPath', '.', ...(args || []), '-scriptPath', path.join(os.tmpdir(), 'lent-ghidra-scripts'), '-postScript', 'LENT-Export.c', '-deleteProject'],
+        args: [proj, 'MAJIN', '-import', file, '-processorPath', '.', ...(args || []), '-scriptPath', path.join(os.tmpdir(), 'majin-ghidra-scripts'), '-postScript', 'MAJIN-Export.c', '-deleteProject'],
         note: `Ghidra-projekt skapas i ${proj} (tar bort efteråt).`,
       };
     },
@@ -67,7 +67,7 @@ export const TOOL_SPECS = [
     label: 'YARA',
     bins: ['yara', 'yara64'],
     hint: 'winget install Yara-Yara',
-    use: 'kör fullständiga YARA-regler (LENT har egen mini-motor för de vanligaste)',
+    use: 'kör fullständiga YARA-regler (MAJIN har egen mini-motor för de vanligaste)',
     build: ({ file, rules, namespace }) => ({ cmd: 'yara', args: ['-r', ...(namespace ? ['-n', namespace] : []), rules, file] }),
   },
   {

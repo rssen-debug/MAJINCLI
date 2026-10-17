@@ -1,5 +1,5 @@
 /**
- * LENT RE — formatdetektering och containrar.
+ * MAJIN RE — formatdetektering och containrar.
  * Ingen `file`-binär behövs. Magi + en aning struktur för att veta vad vi tittar på.
  */
 

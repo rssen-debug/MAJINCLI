@@ -1,5 +1,5 @@
 /**
- * LENT — web.
+ * MAJIN — web.
  * Sök utan API-nyckel (duckduckgo/bing/searxng) och en fetch som ger ren text.
  * `web.download` är RE-genvägen: hämta provet, analysera det, slipp webbläsaren.
  */
@@ -9,7 +9,7 @@ import { def } from './registry.js';
 import { resolveIn } from './files.js';
 import { bus } from '../log.js';
 
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36 LENT/1.0';
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36 MAJIN/1.0';
 
 async function httpGet(url, { headers = {}, timeoutSec = 25, maxBytes = 4_000_000, method = 'GET', body = null } = {}) {
   const ctrl = new AbortController();

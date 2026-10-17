@@ -1,5 +1,5 @@
 /**
- * LENT — verktygsregister.
+ * MAJIN — verktygsregister.
  * Allt på: inga enable/disable-knappar. Varje verktyg har ett riskvärde och
  * guarden avgör om det behöver ett "OK". Resten är bara körning.
  */

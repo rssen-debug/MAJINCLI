@@ -1,5 +1,5 @@
 /**
- * LENT — agentverktyg: plan, delegering, manuell MOA.
+ * MAJIN — agentverktyg: plan, delegering, manuell MOA.
  * Delegering = en isolerad subagent med eget stegbudschet och egen kontext.
  */
 import { def } from './registry.js';

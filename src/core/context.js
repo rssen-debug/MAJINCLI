@@ -1,5 +1,5 @@
 /**
- * LENT — context management.
+ * MAJIN — context management.
  * Tokens are estimated, not tokenised (no 200 MB tokenizer dependency).
  * Tool output never vanishes: oversized results spill to disk and the model
  * gets a head+tail excerpt with the file path so it can re-read exactly what it needs.
@@ -91,7 +91,7 @@ export async function compact({ cfg, messages, brief }) {
     const nextBrief = (res.text || '').trim();
     bus.info('context.compacted', { before: now, headDropped: head.length, briefChars: nextBrief.length });
     return {
-      messages: [{ role: 'system', content: `ARBETSMINNESBRIEF (från LENT, komprimerad historik):\n${nextBrief}` }, ...tail],
+      messages: [{ role: 'system', content: `ARBETSMINNESBRIEF (från MAJIN, komprimerad historik):\n${nextBrief}` }, ...tail],
       brief: nextBrief,
       compacted: true,
       tokens: messagesTokens(tail) + estimateTokens(nextBrief),

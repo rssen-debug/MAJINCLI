@@ -1,21 +1,27 @@
-/* LENT — panel + sidorader. Anropas av app.js (delad global skriptmiljö). */
+/* MAJIN — right panel + rail rows. Called from app.js (shared classic-script scope). */
 async function paintHeader(st) {
   const ui = st.config.ui || {};
-  document.title = (ui.title || st.name || 'LENT') + ' · agent';
-  $('brand').textContent = (ui.title || st.name || 'LENT').toUpperCase();
+  document.title = (ui.title || st.name || 'MAJIN') + ' · agent';
+  $('brand').textContent = (ui.title || st.name || 'MAJIN').toUpperCase();
   $('tagline').textContent = ui.tagline || '';
   $('c-tools').innerHTML = 'tools <b>' + (st.tools.count || (st.tools || []).length) + '</b>';
-  $('c-moa').innerHTML = 'MOA <b>' + (st.moa.policy === 'off' ? 'av' : st.moa.width + '→' + String(st.moa.aggregator || '').split('/').pop()) + '</b>';
+  $('c-moa').innerHTML = 'MOA <b>' + (st.moa.policy === 'off' ? 'off' : st.moa.width + '→' + String(st.moa.aggregator || '').split('/').pop()) + '</b>';
   $('c-moa').classList.toggle('live', st.moa.policy !== 'off');
   const u = st.usage || {};
-  $('c-cost').innerHTML = '$<b>' + (u.costUsd != null ? Number(u.costUsd).toFixed(2) : '0') + '</b>' + (u.budgetUsd ? '/' + u.budgetUsd : '') + '<span class="kv"> · ' + (u.requests || 0) + ' anrop</span>';
+  $('c-cost').innerHTML = '$<b>' + (u.costUsd != null ? Number(u.costUsd).toFixed(2) : '0') + '</b>' + (u.budgetUsd ? '/' + u.budgetUsd : '') + '<span class="kv"> · ' + (u.requests || 0) + ' calls</span>';
   const tg = st.channels.telegram || {};
   const wa = st.channels.whatsapp || {};
   led('led-tg', tg.online ? 'g' : tg.state === 'pairing' || tg.state === 'no-token' ? 'y' : tg.state === 'error' ? 'r' : '');
   led('led-wa', wa.online ? 'g' : wa.state === 'pairing' ? 'y' : wa.state === 'missing-dep' || wa.state === 'error' ? 'r' : '');
-  $('c-tg').title = 'telegram: ' + (tg.state || '?') + (tg.lastError ? ' · ' + tg.lastError : '') + (tg.pairingCode ? ' · kod ' + tg.pairingCode : '');
+  $('c-tg').title = 'telegram: ' + (tg.state || '?') + (tg.lastError ? ' · ' + tg.lastError : '') + (tg.pairingCode ? ' · code ' + tg.pairingCode : '');
   $('c-wa').title = 'whatsapp: ' + (wa.state || '?') + (wa.transport ? ' · ' + wa.transport : '') + (wa.lastError ? ' · ' + wa.lastError : '');
-  if (st.needsSetup) note('Ingen API-nyckel ännu — demo-läget svarar med mock. Skriv nyckeln i paneln Providers, eller be mig: "använd nyckeln sk-… för deepseek".');
+  const mode = MODE_LABEL[st.guard.mode] || 'approval';
+  const bm = $('b-mode');
+  if (bm) {
+    bm.textContent = mode;
+    bm.title = 'Permission mode: ' + mode + ' (guard.mode=' + st.guard.mode + ')';
+  }
+  if (st.needsSetup) note('No API key yet — demo mode answers with a mock. Paste a key in the Providers panel, or just tell me: "use the key sk-… for deepseek".');
 }
 
 function led(id, cls) {
@@ -28,7 +34,7 @@ async function paintRail(st) {
   const s = await api('/sessions').catch(() => ({ sessions: [] }));
   const box = $('sessions');
   box.innerHTML = '';
-  const list = [{ id: 'desktop', messages: 0, lastText: 'den här enheten' }, ...(s.sessions || [])];
+  const list = [{ id: 'desktop', messages: 0, lastText: 'this device' }, ...(s.sessions || [])];
   const seen = new Set();
   for (const it of list) {
     if (seen.has(it.id)) continue;
@@ -45,11 +51,11 @@ async function paintRail(st) {
   }
   if (st.schedule && st.schedule.length) {
     $('sched').innerHTML = st.schedule
-      .map((j) => `<div><b>${esc(j.name || j.id)}</b> · ${esc(j.when || '')}<br><span class="kv">nästa ${esc(j.nextRunHuman || '')}${j.paused ? ' · pausad' : ''}${j.lastStatus ? ' · ' + esc(j.lastStatus) : ''}</span></div>`)
+      .map((j) => `<div><b>${esc(j.name || j.id)}</b> · ${esc(j.when || '')}<br><span class="kv">next ${esc(j.nextRunHuman || '')}${j.paused ? ' · paused' : ''}${j.lastStatus ? ' · ' + esc(j.lastStatus) : ''}</span></div>`)
       .join('');
-  } else $('sched').textContent = 'inga jobb';
+  } else $('sched').textContent = 'no jobs';
   const mem = st.memory || {};
-  $('mem').innerHTML = `<b>${mem.facts ?? mem.count ?? 0}</b> fakta · <b>${mem.events ?? mem.eventCount ?? 0}</b> händelser${mem.file ? '<br><span class="kv">' + esc(String(mem.file).split(/[\\/]/).pop()) + '</span>' : ''}<br><span class="kv">${(st.skills || []).length} färdigheter${(st.skills || []).length ? ': ' + esc((st.skills || []).slice(0, 3).map((k) => k.name).join(', ')) : ''}</span>`;
+  $('mem').innerHTML = `<b>${mem.facts ?? mem.count ?? 0}</b> facts · <b>${mem.events ?? mem.eventCount ?? 0}</b> events${mem.file ? '<br><span class="kv">' + esc(String(mem.file).split(/[\\/]/).pop()) + '</span>' : ''}<br><span class="kv">${(st.skills || []).length} skills${(st.skills || []).length ? ': ' + esc((st.skills || []).slice(0, 3).map((k) => k.name).join(', ')) : ''}</span>`;
 }
 
 function renderPlan(plan) {
@@ -63,6 +69,12 @@ function renderPlan(plan) {
     .map((p) => `<div class="${esc(p.status || '')}">${p.status === 'done' ? '✔' : p.status === 'doing' ? '▸' : p.status === 'blocked' ? '✕' : '○'} ${esc(p.text)}</div>`)
     .join('');
 }
+
+const GUARD_MODES = [
+  ['assist', 'off', 'Never asks. The agent runs every tool directly.'],
+  ['approval', 'confirm', 'Asks before destructive or shell actions only.'],
+  ['full auto', 'strict', 'Asks before every write, exec and deletion.'],
+];
 
 async function paintPanel(st) {
   /* ---- routing ---- */
@@ -79,11 +91,11 @@ async function paintPanel(st) {
     if (!options.includes(row.ref) && row.ref) sel.innerHTML += `<option selected>${esc(row.ref)}</option>`;
     sel.onchange = () => setConfig({ models: { routes: { [row.job]: sel.value } } }, row.job + ' → ' + sel.value);
     div.append(sel);
-    if (!row.ready) div.append(el('span', 'kv', '⚠ ingen nyckel'));
+    if (!row.ready) div.append(el('span', 'kv', '⚠ no key'));
     r.append(div);
   }
 
-  /* ---- MOA ---- */
+  /* ---- MOA (always on by design) ---- */
   const m = $('moactl');
   m.innerHTML = '';
   const pol = el('div', 'row');
@@ -95,32 +107,67 @@ async function paintPanel(st) {
   });
   m.append(pol);
   const w = el('div', 'row');
-  w.append(el('span', '', 'bredd'));
+  w.append(el('span', '', 'width'));
   for (let i = 2; i <= 5; i += 1) {
     const b = el('button', st.moa.width === i ? 'on' : '', String(i));
-    b.onclick = () => setConfig({ moa: { width: i } }, 'MOA bredd ' + i);
+    b.onclick = () => setConfig({ moa: { width: i } }, 'MOA width ' + i);
     w.append(b);
   }
   m.append(w);
-  m.append(el('div', 'kv', 'referenser: ' + (st.moa.refs || []).map((x) => String(x).split('/').pop()).join(', ') + '<br>aggregator: <b>' + esc(String(st.moa.aggregator || '').split('/').pop()) + '</b>'));
+  m.append(el('div', 'kv', 'references: ' + (st.moa.refs || []).map((x) => String(x).split('/').pop()).join(', ') + '<br>aggregator: <b>' + esc(String(st.moa.aggregator || '').split('/').pop()) + '</b>'));
 
-  /* ---- guard ---- */
+  /* ---- permissions ---- */
   const g = $('guardctl');
   g.innerHTML = '';
   const gr = el('div', 'row');
-  gr.append(el('span', '', 'läge'));
-  ['confirm', 'strict', 'off'].forEach((mode) => {
-    const b = el('button', st.guard.mode === mode ? 'on' : '', mode);
-    b.onclick = () => setConfig({ guard: { mode } }, 'guard ' + mode);
+  gr.append(el('span', '', 'mode'));
+  GUARD_MODES.forEach(([label, mode, hint]) => {
+    const b = el('button', st.guard.mode === mode ? 'on' : '', label);
+    b.title = hint;
+    b.onclick = () => setConfig({ guard: { mode } }, 'permission mode → ' + label);
     gr.append(b);
   });
   g.append(gr);
-  if (st.guard.pending) {
-    const p = el('div', 'row');
-    p.append(el('span', 'kv', st.guard.pending + ' väntar'));
-    g.append(p);
-  }
-  g.append(el('div', 'kv', (st.guard.recent || []).slice(-3).map((a) => `${a.tool} ${a.approved ? '✔' : '✕'}`).join(' · ') || 'inga beslut ännu'));
+  if (st.guard.pending) g.append(el('div', 'row', '<span class="kv" style="color:var(--warn)">' + st.guard.pending + ' waiting for you</span>'));
+  const scope = el('div', 'row');
+  const protectedBox = el('input');
+  protectedBox.placeholder = 'never touch (path or /regex/)';
+  protectedBox.style.flex = '1';
+  const saveScope = el('button', '', 'scope');
+  saveScope.title = 'Adds a pattern to guard.protectedPaths — tools refuse these even in full auto.';
+  saveScope.onclick = () => {
+    const v = protectedBox.value.trim();
+    if (!v) return note('give me a path or pattern first');
+    const cur = (st.config.guard && st.config.guard.protectedPaths) || [];
+    setConfig({ guard: { protectedPaths: [...cur, v] } }, 'protected: ' + v);
+    protectedBox.value = '';
+  };
+  scope.append(protectedBox, saveScope);
+  g.append(scope);
+  const cap = el('div', 'row');
+  cap.append(el('span', '', 'spend'));
+  const capInput = el('input');
+  capInput.type = 'number';
+  capInput.step = '1';
+  capInput.min = '0';
+  capInput.value = st.config.budget?.monthlyUsd ?? 0;
+  capInput.style.width = '70px';
+  capInput.title = 'Monthly budget in USD. 0 = no cap. The agent pauses and tells you when it is hit.';
+  const capGo = el('button', '', 'set');
+  capGo.onclick = () => {
+    const n = Number(capInput.value) || 0;
+    setConfig({ budget: { mode: n > 0 ? 'cap' : 'off', monthlyUsd: n } }, n > 0 ? 'budget ' + n + ' USD/month' : 'budget off');
+  };
+  cap.append(capInput, capGo);
+  const stopAll = el('button', 'danger', 'stop everything');
+  stopAll.title = 'Aborts the running task and clears the approval queue.';
+  stopAll.onclick = async () => {
+    await api('/chat/stop', { method: 'POST', body: {} }).catch(() => {});
+    note('emergency stop sent');
+  };
+  cap.append(stopAll);
+  g.append(cap);
+  g.append(el('div', 'kv', (st.guard.recent || []).slice(-3).map((a) => `${a.tool} ${a.approved ? '✔' : '✕'}`).join(' · ') || 'no decisions yet'));
 
   /* ---- providers ---- */
   const pr = $('providers');
@@ -128,18 +175,18 @@ async function paintPanel(st) {
   for (const p of st.providers || []) {
     const row = el('div', 'row');
     row.append(el('span', '', (p.ready ? '🟢 ' : '⚪ ') + p.name));
-    const test = el('button', '', 'testa');
+    const test = el('button', '', 'test');
     test.onclick = async () => {
-      setStatus('testar ' + p.name + '…');
+      setStatus('testing ' + p.name + '…');
       const res = await api('/provider/test', { method: 'POST', body: { provider: p.name, ref: `${p.name}/${(p.models || [''])[0]}` } }).catch((e) => ({ ok: false, error: e.message }));
-      toast(`${p.name}: ${res.ok ? 'ok ' + res.ms + 'ms' : 'fel — ' + (res.error || '') + (res.hint ? ' · ' + res.hint : '')}`);
-      setStatus('redo');
+      toast(`${p.name}: ${res.ok ? 'ok ' + res.ms + 'ms' : 'failed — ' + (res.error || '') + (res.hint ? ' · ' + res.hint : '')}`);
+      setStatus('ready');
     };
-    const use = el('button', '', 'använd');
+    const use = el('button', '', 'use');
     use.onclick = () => {
       const routes = {};
       for (const row2 of st.routes || []) routes[row2.job] = `${p.name}/${(p.models || [''])[0]}`;
-      setConfig({ models: { provider: p.name, routes } }, 'allt → ' + p.name);
+      setConfig({ models: { provider: p.name, routes } }, 'everything → ' + p.name);
     };
     row.append(test, use);
     if ((p.models || []).length) row.append(el('span', 'kv', p.models.slice(0, 3).join(',')));
@@ -153,27 +200,28 @@ async function paintPanel(st) {
   const key = el('input');
   key.placeholder = 'sk-…';
   key.style.flex = '1';
-  const go = el('button', '', 'spara');
+  const go = el('button', '', 'save');
+  go.title = 'Saves the key and points every route at this provider. Nothing else to configure.';
   go.onclick = async () => {
-    setStatus('sparar provider…');
+    setStatus('saving provider…');
     try {
       const r2 = await api('/provider', { method: 'POST', body: { preset: preset.value, apiKey: key.value.trim() || undefined } });
       const routes = {};
       const st2 = await api('/state&tools=0');
       for (const row2 of st2.routes || []) routes[row2.job] = `${r2.provider}/${(r2.status?.models || [''])[0]}`;
       await api('/config', { method: 'PATCH', body: { models: { provider: r2.provider, routes } } });
-      toast('provider ' + r2.provider + ' sparad, alla rutter pekar dit');
+      toast('provider ' + r2.provider + ' saved, all routes point there');
       refresh();
     } catch (e) {
       err(e.message);
     }
-    setStatus('redo');
+    setStatus('ready');
   };
   add.append(preset, key, go);
   pr.append(add);
-  pr.append(el('div', 'kv', 'Egen base-URL: skriv i config eller be LENT: <i>"lägg till provider min med baseUrl http://192.168.0.9:8000/v1 och nyckeln abc"</i>'));
+  pr.append(el('div', 'kv', 'Own base URL: write it in the config or tell MAJIN: <i>"add provider mine with baseUrl http://192.168.0.9:8000/v1 and key abc"</i>'));
 
-  /* ---- kanaler ---- */
+  /* ---- channels ---- */
   const c = $('chan');
   c.innerHTML = '';
   const tg = st.channels.telegram || {};
@@ -183,50 +231,50 @@ async function paintPanel(st) {
   tkey.placeholder = '123456:ABC-DEF…';
   tkey.style.flex = '1';
   tkey.value = '';
-  const tsave = el('button', '', 'spara+start');
+  const tsave = el('button', '', 'save+start');
   tsave.onclick = async () => {
     const r2 = await api('/channels/telegram', { method: 'POST', body: { botToken: tkey.value.trim(), action: 'start' } }).catch((e) => ({ ok: false, error: e.message }));
-    toast(r2.ok ? 'telegram igång · kod ' + (r2.pairingCode || '-') : 'telegram: ' + (r2.error || r2.status?.lastError || 'fel'));
+    toast(r2.ok ? 'telegram running · code ' + (r2.pairingCode || '-') : 'telegram: ' + (r2.error || r2.status?.lastError || 'failed'));
     refresh();
   };
-  const tstop = el('button', 'danger', 'stopp');
+  const tstop = el('button', 'danger', 'stop');
   tstop.onclick = async () => {
     await api('/channels/telegram', { method: 'POST', body: { action: 'stop' } }).catch(() => {});
     refresh();
   };
   trow.append(tkey, tsave, tstop);
   c.append(trow);
-  c.append(el('div', 'kv', tg.state === 'polling' ? `pollar som <b>${esc(tg.bot || '')}</b> · ${tg.chats || 0} chattar · ta emot ${tg.received || 0}/skicka ${tg.sent || 0}<br>parningskod <b>${esc(tg.pairingCode || '-')}</b> — användaren skickar <i>/pair kod</i> till botten` : 'status: ' + (tg.state || 'av') + (tg.lastError ? ' · ' + esc(tg.lastError) : '')));
+  c.append(el('div', 'kv', tg.state === 'polling' ? `polling as <b>${esc(tg.bot || '')}</b> · ${tg.chats || 0} chats · in ${tg.received || 0}/out ${tg.sent || 0}<br>pairing code <b>${esc(tg.pairingCode || '-')}</b> — the user sends <i>/pair code</i> to the bot` : 'status: ' + (tg.state || 'off') + (tg.lastError ? ' · ' + esc(tg.lastError) : '')));
   if (st.channels.whatsapp) {
     const wa = st.channels.whatsapp || {};
     const wrow = el('div', 'row');
     wrow.append(el('span', '', 'whatsapp'));
     const tr = el('select');
     tr.innerHTML = ['baileys', 'cloud'].map((x) => `<option ${wa.transport === x ? 'selected' : ''}>${x}</option>`).join('');
-    const start = el('button', '', wa.online ? 'start om' : 'starta');
+    const start = el('button', '', wa.online ? 'restart' : 'start');
     start.onclick = async () => {
       const r2 = await api('/channels/whatsapp', { method: 'POST', body: { transport: tr.value, action: 'start' } }).catch((e) => ({ ok: false, error: e.message }));
-      toast(r2.ok ? 'whatsapp: ' + (r2.status?.state || 'igång') : 'whatsapp: ' + (r2.error || 'fel') + (r2.status?.hint ? ' · ' + r2.status.hint : ''));
+      toast(r2.ok ? 'whatsapp: ' + (r2.status?.state || 'running') : 'whatsapp: ' + (r2.error || 'failed') + (r2.status?.hint ? ' · ' + r2.status.hint : ''));
       refresh();
     };
-    const stop = el('button', 'danger', 'stopp');
+    const stop = el('button', 'danger', 'stop');
     stop.onclick = async () => {
       await api('/channels/whatsapp', { method: 'POST', body: { action: 'stop' } }).catch(() => {});
       refresh();
     };
     wrow.append(tr, start, stop);
     c.append(wrow);
-    c.append(el('div', 'kv', 'transport <b>' + esc(wa.transport || '?') + '</b> · ' + esc(wa.state || 'av') + (wa.linked ? ' · ' + esc(wa.linked) : '') + (wa.lastError ? '<br>' + esc(wa.lastError) : '')));
+    c.append(el('div', 'kv', 'transport <b>' + esc(wa.transport || '?') + '</b> · ' + esc(wa.state || 'off') + (wa.linked ? ' · ' + esc(wa.linked) : '') + (wa.lastError ? '<br>' + esc(wa.lastError) : '')));
     if (wa.qr) {
       const img = el('img');
       img.src = wa.qr;
       img.style.cssText = 'width:168px;height:168px;background:#fff;padding:6px;border-radius:8px;margin-top:6px';
       c.append(img);
-      c.append(el('div', 'kv', 'WhatsApp → Inställningar → Kopplar en enhet'));
+      c.append(el('div', 'kv', 'WhatsApp → Settings → Linked devices'));
     }
   }
 
-  /* ---- kostnad ---- */
+  /* ---- cost ---- */
   const u = st.usage || {};
   const days = u.days || {};
   const keys = Object.keys(days).sort();
@@ -240,7 +288,7 @@ async function paintPanel(st) {
     spark.append(i);
   }
   $('usage').innerHTML = '';
-  $('usage').append(el('div', '', '<b>' + (u.costUsd || 0).toFixed(4) + '</b> USD · ' + (u.tokens || 0) + ' tok · ' + (u.requests || 0) + ' anrop' + (u.budgetUsed != null ? ' · budget ' + Math.round(u.budgetUsed * 100) + '%' : '')), spark);
+  $('usage').append(el('div', '', '<b>' + (u.costUsd || 0).toFixed(4) + '</b> USD · ' + (u.tokens || 0) + ' tok · ' + (u.requests || 0) + ' calls' + (u.budgetUsed != null ? ' · budget ' + Math.round(u.budgetUsed * 100) + '%' : '')), spark);
   const by = Object.entries(u.byModel || {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   if (by.length) $('usage').append(el('div', 'kv', by.map(([k, v]) => `${esc(k.split('/').pop())} $${Number(v).toFixed(3)}`).join(' · ')));
   const bj = Object.entries(u.byJob || {}).filter(([, v]) => v > 0);
@@ -248,7 +296,7 @@ async function paintPanel(st) {
 }
 
 async function setConfig(patch, msg) {
-  setStatus('sparar…');
+  setStatus('saving…');
   try {
     const r = await api('/config', { method: 'PATCH', body: patch });
     if (!r.ok) err('config: ' + (r.errors || []).map((e) => e.path + ': ' + e.msg).join(', '));
@@ -257,7 +305,7 @@ async function setConfig(patch, msg) {
   } catch (e) {
     err(e.message);
   }
-  setStatus('redo');
+  setStatus('ready');
 }
 
 window.paintPanel = paintPanel;

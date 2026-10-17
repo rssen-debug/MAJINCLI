@@ -1,5 +1,5 @@
 /**
- * LENT RE — extraktion utan externa beroenden.
+ * MAJIN RE — extraktion utan externa beroenden.
  * ZIP-poster (deflate via node:zlib), AndroidManifest AXML-strängpool,
  * PE-overlay/resurser, pcap-sammanfattning. Allt detta är det som gör att
  * "triage" räcker långt innan man väcker ghidra.

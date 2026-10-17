@@ -1,5 +1,5 @@
 /**
- * LENT — mock provider.
+ * MAJIN — mock provider.
  * Lets the whole agent loop run with zero keys: deterministic, offline, used by
  * the test suite and by first-run "copy this demo" mode in the UI.
  */

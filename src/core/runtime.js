@@ -1,5 +1,5 @@
 /**
- * LENT — runtime.
+ * MAJIN — runtime.
  * Ensam monteringspunkt: config → minne → färdigheter → registry → agent →
  * schemaläggare → kanaler. Servern och CLI:n byder båda hit, så det bara finns
  * ett sätt att starta allt.

@@ -1,5 +1,5 @@
 /**
- * LENT — provider transport.
+ * MAJIN — provider transport.
  * One request path, three dialects (OpenAI-compatible, Anthropic, mock).
  * Streaming in, tool calls out, retries with backoff, token+cost accounting.
  */

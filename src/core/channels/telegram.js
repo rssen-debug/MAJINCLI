@@ -1,7 +1,7 @@
 /**
- * LENT — Telegram.
+ * MAJIN — Telegram.
  * Long polling (ingen webhook, ingen publik IP behövs), HTML-formaterat svar,
- * filer fram och tillbaka (ladda ner en misstänkt exe → skicka den till LENT).
+ * filer fram och tillbaka (ladda ner en misstänkt exe → skicka den till MAJIN).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -147,7 +147,7 @@ export class Telegram {
       const code = text.split(/\s+/)[1] || '';
       if (!allowed.includes(Number(chat)) && this.cfg.get('channels.telegram.pairing') !== false) {
         if (code.toUpperCase() !== String(this.pairingCode).toUpperCase()) {
-          await this.send(chat, `Inte para. Skicka <code>pair ${this.pairingCode}</code> för att koppla den här chatten till LENT. (Fullständig access till maskinen — lägg inte till främlingar.)`);
+          await this.send(chat, `Inte para. Skicka <code>pair ${this.pairingCode}</code> för att koppla den här chatten till MAJIN. (Fullständig access till maskinen — lägg inte till främlingar.)`);
           return;
         }
         const list = [...new Set([...allowed, Number(chat)])];
@@ -157,11 +157,11 @@ export class Telegram {
         this.bus.info('telegram.paired', { chat, from });
         return;
       }
-      await this.send(chat, `LENT är redo. <b>${this.registryCount?.() ?? 'Alla'} verktyg på</b>, MOA ${this.cfg.get('moa.policy')}. /status /tools /stop /help`);
+      await this.send(chat, `MAJIN är redo. <b>${this.registryCount?.() ?? 'Alla'} verktyg på</b>, MOA ${this.cfg.get('moa.policy')}. /status /tools /stop /help`);
       return;
     }
     if (/^\/help\b/i.test(text)) {
-      await this.send(chat, '<b>LENT</b>\n/status — vad som är på\n/tools — alla verktyg\n/model — routing\n/stop — avbryt pågående tur\n/pair — ny kod\nSkriv som du vill: "använd deepseek pro för kod alltid", "analysera filen jag skickade", "kollara status".');
+      await this.send(chat, '<b>MAJIN</b>\n/status — vad som är på\n/tools — alla verktyg\n/model — routing\n/stop — avbryt pågående tur\n/pair — ny kod\nSkriv som du vill: "använd deepseek pro för kod alltid", "analysera filen jag skickade", "kollara status".');
       return;
     }
     if (/^\/stop\b/i.test(text)) {

@@ -1,5 +1,5 @@
 /**
- * LENT — subagent.
+ * MAJIN — subagent.
  * Eget huvud, egna verktyg, ingen historik, litet stegbudschet. Används för
  * parallellt gräv (triagea tre filer, kolla två hypoteser) utan att förorena main.
  */

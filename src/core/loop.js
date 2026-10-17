@@ -1,5 +1,5 @@
 /**
- * LENT — verktygsslingan.
+ * MAJIN — verktygsslingan.
  * Samma loop för huvudagenten och subagenter. Stegvisa beslut:
  *   kör → om fel ≥2: eskalera till tyngre modell → komprimera kontext → upprepa.
  * Inget tröskel-jagar: modellen får alla verktyg, alltid.

@@ -1,5 +1,5 @@
 /**
- * LENT RE — byte reader.
+ * MAJIN RE — byte reader.
  * Small, safe, and honest about bounds: it throws a typed error instead of
  * reading garbage past the end (the classic bug in quick PE parsers).
  */

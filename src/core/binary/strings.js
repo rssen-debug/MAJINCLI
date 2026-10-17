@@ -1,5 +1,5 @@
 /**
- * LENT RE — entropi + stränghämtning.
+ * MAJIN RE — entropi + stränghämtning.
  * Shannon-per-sektion är det snabbaste tecken vi har på packad/kryptad data,
  * och strings är den gemensamma nämnaren i all manuell RE.
  */

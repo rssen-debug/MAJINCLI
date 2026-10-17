@@ -1,5 +1,5 @@
 /**
- * LENT — nät- och skärmmaterial.
+ * MAJIN — nät- och skärmmaterial.
  * Forensics-snabbt: vad lyssnar, vad körs, vad startar, vad ser användaren.
  */
 import os from 'node:os';
@@ -207,13 +207,13 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
     name: 'sys.notify',
     group: 'system',
     risk: 'read',
-    desc: 'Pusha en Windows-notis (toast) eller låt LENT prata högt. Används när ett långt jobb blir klart.',
+    desc: 'Pusha en Windows-notis (toast) eller låt MAJIN prata högt. Används när ett långt jobb blir klart.',
     params: { title: 'string: rubrik', body: 'string: brödtext', speak: 'boolean: läs upp också' },
-    async run({ title = 'LENT', body, speak = false }) {
+    async run({ title = 'MAJIN', body, speak = false }) {
       const t = String(title).replace(/'/g, "''").slice(0, 80);
       const b = String(body ?? '').replace(/'/g, "''").slice(0, 300);
       if (IS_WIN) {
-        const cmd = `[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime] | Out-Null; $t=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent(2); $x=$t.GetElementsByTagName('text'); $x[0].AppendChild($t.CreateTextNode('${t}'))|Out-Null; if ($x.Count -gt 1) { $x[1].AppendChild($t.CreateTextNode('${b}'))|Out-Null }; $n=[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('LENT'); $n.Show([Windows.UI.Notifications.ToastNotification]::new($t)); 'ok'`;
+        const cmd = `[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime] | Out-Null; $t=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent(2); $x=$t.GetElementsByTagName('text'); $x[0].AppendChild($t.CreateTextNode('${t}'))|Out-Null; if ($x.Count -gt 1) { $x[1].AppendChild($t.CreateTextNode('${b}'))|Out-Null }; $n=[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('MAJIN'); $n.Show([Windows.UI.Notifications.ToastNotification]::new($t)); 'ok'`;
         const r = await runShell(cmd, { timeoutSec: 20 });
         if (!/ok/.test(r.stdout || '')) return { result: `notis kunde inte visas (${(r.stderr || '').slice(0, 120)})`, summary: 'notis misslyckades' };
       }

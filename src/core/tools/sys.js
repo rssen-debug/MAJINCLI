@@ -1,5 +1,5 @@
 /**
- * LENT — systemverktyg för Windows (och allt annat).
+ * MAJIN — systemverktyg för Windows (och allt annat).
  * Inga native-moduler: PowerShell/.NET och CLI-verktyg räcker.
  */
 import os from 'node:os';
@@ -78,7 +78,7 @@ export const sysTools = [
     name: 'sys.ports',
     group: 'system',
     risk: 'read',
-    desc: 'Lyssnande portar + pid. Används för att se vad som redan kör (t.ex. LENT-ui, frida, ollama).',
+    desc: 'Lyssnande portar + pid. Används för att se vad som redan kör (t.ex. MAJIN-ui, frida, ollama).',
     params: { port: 'number: filtrera på en port' },
     async run({ port }) {
       const cmd = IS_WIN

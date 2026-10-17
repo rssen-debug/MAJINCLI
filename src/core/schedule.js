@@ -1,5 +1,5 @@
 /**
- * LENT — schemaläggning.
+ * MAJIN — schemaläggning.
  * Ett jobb = { when, task, deliver }.  "07:30 daily", "every 30m", "10:00 mån",
  * eller femfältscron (0/15 min m å man). Cron parsas här — ingen dependency.
  */

@@ -1,5 +1,5 @@
 /**
- * LENT — memory + skills.
+ * MAJIN — memory + skills.
  * Plain files in the data dir: facts.md (vem användaren är), events.jsonl (vad som hänt),
  * skills/*.md (hur man gör saker). Agenten skriver i dem själv — det är hela "vuxen"-delen.
  */

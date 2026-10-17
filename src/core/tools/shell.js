@@ -1,5 +1,5 @@
 /**
- * LENT — shell.
+ * MAJIN — shell.
  * Auto-detekterar skallet (pwsh > powershell > cmd på Windows, bash/zsh annars) och
  * kör med tyst timeout + output-cap. Alltid på. Farliga mönster går via guarden.
  */
@@ -14,7 +14,7 @@ let chosen = null;
 
 export function shell() {
   if (chosen) return chosen;
-  const pref = process.env.LENT_SHELL || 'auto';
+  const pref = process.env.MAJIN_SHELL || 'auto';
   const candidates = WIN
     ? pref === 'cmd'
       ? [['cmd.exe', '/d', '/c']]
@@ -39,7 +39,7 @@ function build(command, { cwd, env } = {}) {
   const isPwsh = /pwsh|powershell/i.test(s.cmd);
   const wrapped = isPwsh ? `$ErrorActionPreference='continue'; ${command}` : command;
   const args = isPwsh ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', wrapped] : [...s.args, command];
-  return { cmd: s.cmd, args, cwd: cwd || process.cwd(), env: { ...process.env, ...(env || {}), LENT: '1', TERM: 'dumb', NO_COLOR: '1' } };
+  return { cmd: s.cmd, args, cwd: cwd || process.cwd(), env: { ...process.env, ...(env || {}), MAJIN: '1', TERM: 'dumb', NO_COLOR: '1' } };
 }
 
 export function runShell(command, { cwd, timeoutSec = 150, maxChars = 40000, env, onChunk } = {}) {

@@ -1,5 +1,5 @@
 /**
- * LENT — räkning. Varje anrop skrivs till en månadsfil; budget och UI-läsning
+ * MAJIN — räkning. Varje anrop skrivs till en månadsfil; budget och UI-läsning
  * läser samma fil. Inget DB, ingen server: JSON on disk.
  */
 import fs from 'node:fs';

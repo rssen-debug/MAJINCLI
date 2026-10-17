@@ -1,18 +1,18 @@
 @echo off
 rem ============================================================
-rem  LENT — starta agenten på Windows (dubbelklicka den här)
+rem  MAJIN — starta agenten på Windows (dubbelklicka den här)
 rem  Agenten körs i Node; fönstret är ett Edge-app-fönster.
 rem ============================================================
 setlocal EnableExtensions
-title LENT
-if "%LENT_HOME%"=="" set "LENT_HOME=%LOCALAPPDATA%\LENT"
-set "LENT_CONFIG="
+title MAJIN
+if "%MAJIN_HOME%"=="" set "MAJIN_HOME=%LOCALAPPDATA%\MAJIN"
+set "MAJIN_CONFIG="
 cd /d "%~dp0"
 
 where node >nul 2>nul
 if errorlevel 1 (
   echo.
-  echo   LENT behover Node 20.11 eller senare.
+  echo   MAJIN behover Node 20.11 eller senare.
   echo   Installera med:  winget install OpenJS.NodeJS.LTS
   echo   Stang detta fonster, oppna ett nytt och kora igen.
   echo.
@@ -32,7 +32,7 @@ goto :run
 
 :toogame
 echo.
-echo   Node %NODEV% ar for gammal for LENT (kraver 20.11+).
+echo   Node %NODEV% ar for gammal for MAJIN (kraver 20.11+).
 echo   hamta ny: https://nodejs.org/   eller   winget install OpenJS.NodeJS.LTS
 echo.
 pause
@@ -40,14 +40,14 @@ exit /b 1
 
 :run
 echo.
-echo   LENT 0.1.0 · data: %LENT_HOME%
-echo   (Ctrl+C stoppar agenten. For fonsk utan start: lent start --no-window)
+echo   MAJIN 0.1.0 · data: %MAJIN_HOME%
+echo   (Ctrl+C stoppar agenten. For fonsk utan start: majin start --no-window)
 echo.
-node "src\cli\lent.js" start %*
+node "src\cli\majin.js" start %*
 if errorlevel 1 (
   echo.
-  echo   LENT avslutade med fel. Kor sjalvtest:
-  node "src\cli\lent.js" doctor
+  echo   MAJIN avslutade med fel. Kor sjalvtest:
+  node "src\cli\majin.js" doctor
   echo.
   pause
 )

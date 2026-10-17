@@ -1,7 +1,7 @@
 /**
- * LENT — provider presets.
+ * MAJIN — provider presets.
  * A preset is just a base URL + auth shape. Every model in the universe works
- * because LENT talks OpenAI-compatible chat/completions and rewrites the URL for
+ * because MAJIN talks OpenAI-compatible chat/completions and rewrites the URL for
  * the three providers that insist on their own dialect.
  */
 

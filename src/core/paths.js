@@ -1,8 +1,8 @@
 /**
- * LENT — filesystem layout.
+ * MAJIN — filesystem layout.
  * One data dir holds everything (config, memory, skills, logs, tool output).
- * Windows default: %LOCALAPPDATA%\LENT   ·  elsewhere: ~/.lent
- * LENT_HOME overrides. LENT_CONFIG points straight at a config file.
+ * Windows default: %LOCALAPPDATA%\MAJIN   ·  elsewhere: ~/.majin
+ * MAJIN_HOME overrides. MAJIN_CONFIG points straight at a config file.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -19,12 +19,12 @@ export function expand(p) {
 }
 
 export function dataDir() {
-  if (process.env.LENT_HOME) return path.resolve(expand(process.env.LENT_HOME));
+  if (process.env.MAJIN_HOME) return path.resolve(expand(process.env.MAJIN_HOME));
   if (process.platform === 'win32') {
     const base = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
-    return path.join(base, 'LENT');
+    return path.join(base, 'MAJIN');
   }
-  return path.join(os.homedir(), '.lent');
+  return path.join(os.homedir(), '.majin');
 }
 
 const D = dataDir();
@@ -32,8 +32,8 @@ const D = dataDir();
 export const dirs = {
   root: D,
   config: path.join(D, 'config.json'),
-  devConfig: path.join(repoRoot, 'lent.config.json'),
-  workspace: process.env.LENT_WORKSPACE || path.join(D, 'workspace'),
+  devConfig: path.join(repoRoot, 'majin.config.json'),
+  workspace: process.env.MAJIN_WORKSPACE || path.join(D, 'workspace'),
   memory: path.join(D, 'memory'),
   sessions: path.join(D, 'sessions'),
   skills: path.join(D, 'skills'),
@@ -43,13 +43,27 @@ export const dirs = {
   uploads: path.join(D, 'uploads'),
   cache: path.join(D, 'cache'),
   creds: path.join(D, 'creds'),
-  pid: path.join(D, 'lent.pid'),
+  pid: path.join(D, 'majin.pid'),
 };
+
+/** YARA rules shipped with the app — copied into the data dir on first run so they stay editable. */
+export const pkgRules = path.join(repoRoot, 'rules');
 
 export function ensureDirs() {
   for (const [k, v] of Object.entries(dirs)) {
     if (k === 'config' || k === 'devConfig' || k === 'pid') continue;
     fs.mkdirSync(v, { recursive: true });
+  }
+  try {
+    if (fs.existsSync(pkgRules)) {
+      for (const f of fs.readdirSync(pkgRules)) {
+        if (!f.endsWith('.yar')) continue;
+        const dst = path.join(dirs.rules, f);
+        if (!fs.existsSync(dst)) fs.copyFileSync(path.join(pkgRules, f), dst);
+      }
+    }
+  } catch {
+    /* read-only install: the loader also looks in the package dir */
   }
 }
 

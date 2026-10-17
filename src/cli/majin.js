@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * LENT — kommandorad.
- *   lent                starta server + öppna fönster
- *   lent start|window   samma, explicit
- *   lent doctor [--full]   allt som måste funka, på en gång
- *   lent status|url|logs    kolla vad som kör
- *   lent config get|set     redigera utan UI
- *   lent pair telegram|whatsapp
- *   lent send "text"        en fråga, svar på stdout
- *   lent re <fil> [--json]  RE-analys direkt i terminalen
- *   lent test               testsvit
- *   lent version
+ * MAJIN — kommandorad.
+ *   majin                start the server and open the window
+ *   majin start|window   samma, explicit
+ *   majin doctor [--full]   check everything that has to work
+ *   majin status|url|logs    see what is running
+ *   majin config get|set     redigera utan UI
+ *   majin pair telegram|whatsapp
+ *   majin send "text"        one question, answer on stdout
+ *   majin re <fil> [--json]  RE-analys direkt i terminalen
+ *   majin test               testsvit
+ *   majin version
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,7 +29,7 @@ const flags = parseFlags(argv);
 const json = () => flags.json;
 
 main().catch((err) => {
-  process.stderr.write(`lent: ${err.message}\n${err.hint ? `  → ${err.hint}\n` : ''}`);
+  process.stderr.write(`majin: ${err.message}\n${err.hint ? `  → ${err.hint}\n` : ''}`);
   process.exit(1);
 });
 
@@ -71,13 +71,13 @@ async function main() {
     case 'version':
     case '--version':
     case '-v':
-      return process.stdout.write(`lent ${VERSION} · node ${process.version} · ${process.platform}\n`);
+      return process.stdout.write(`majin ${VERSION} · node ${process.version} · ${process.platform}\n`);
     case 'help':
     case '--help':
     case '-h':
       return help();
     default:
-      process.stderr.write(`okänt kommando "${cmd}" — kör: lent help\n`);
+      process.stderr.write(`unknown command "${cmd}" \u2014 run: majin help\n`);
       process.exit(2);
   }
 }
@@ -89,21 +89,21 @@ async function start() {
   const port = Number(flags.port) || cfg.get('server.port');
   const alive = await ping(port);
   if (alive) {
-    process.stdout.write(`LENT kör redan på :${port} — ${alive.url}\n`);
+    process.stdout.write(`MAJIN already runs on :${port} — ${alive.url}\n`);
     if (flags.window !== false) openWindow(alive.url);
     return;
   }
-  const child = spawn(process.execPath, [path.join(__dirname, 'lent.js'), '_serve', ...(flags.json ? ['--json'] : []), ...(flags.port ? [`--port=${flags.port}`] : []), ...(flags.noChannels || flags.channels === false ? ['--no-channels'] : [])], {
+  const child = spawn(process.execPath, [path.join(__dirname, 'majin.js'), '_serve', ...(flags.json ? ['--json'] : []), ...(flags.port ? [`--port=${flags.port}`] : []), ...(flags.noChannels || flags.channels === false ? ['--no-channels'] : [])], {
     stdio: 'inherit',
-    env: { ...process.env, LENT_PORT: String(port) },
+    env: { ...process.env, MAJIN_PORT: String(port) },
   });
   child.on('exit', (code, sig) => {
     if (code === 75) {
-      process.stdout.write('LENT startar om…\n');
+      process.stdout.write('MAJIN restarting…\n');
       setTimeout(() => start(), 350);
       return;
     }
-    if (code && code !== 0) process.stdout.write(`LENT avslutade (${code}${sig ? ' ' + sig : ''})\n`);
+    if (code && code !== 0) process.stdout.write(`MAJIN exited (${code}${sig ? ' ' + sig : ''})\n`);
   });
   process.on('SIGINT', () => child.kill('SIGINT'));
   process.on('SIGTERM', () => child.kill('SIGTERM'));
@@ -116,24 +116,24 @@ async function serve() {
   if (flags.port) rt.cfg.patch({ server: { port: Number(flags.port) } });
   const { createServer } = await import('../core/server/index.js');
   const server = createServer(rt);
-  const port = Number(process.env.LENT_PORT || rt.cfg.get('server.port') || 8787);
+  const port = Number(process.env.MAJIN_PORT || rt.cfg.get('server.port') || 8787);
   const host = rt.cfg.get('server.host') || '0.0.0.0';
   await new Promise((resolve) => server.listen(port, host, resolve));
   const url = `http://127.0.0.1:${port}/?t=${rt.cfg.get('server.token')}`;
   process.stdout.write([
-    `LENT ${VERSION} lyssnar på http://${host}:${port}`,
+    `MAJIN ${VERSION} listening on http://${host}:${port}`,
     `  konfigur   ${rt.cfg.file}`,
     `  workspace  ${rt.cfg.get('workspace')}`,
-    `  verktyg    ${rt.registry.list().length} (alla på, alltid)`,
-    `  MOA        ${rt.cfg.get('moa.policy')} · bredd ${rt.cfg.get('moa.width')} → ${String(rt.cfg.get('moa.aggregator') || '').split('/').pop()}`,
-    `  provider   ${rt.cfg.get('models.provider')} (${rt.cfg.providerStatus().filter((p) => p.ready).map((p) => p.name).join(', ') || 'ingen nyckel — demo'})`,
-    `  kanaler    telegram ${rt.cfg.get('channels.telegram.botToken') ? 'token ok' : 'saknar token'} · whatsapp ${rt.cfg.get('channels.whatsapp.transport')}`,
-    `  öppna      ${url}`,
+    `  tools      ${rt.registry.list().length} (all on, always)`,
+    `  MOA        ${rt.cfg.get('moa.policy')} · width ${rt.cfg.get('moa.width')} → ${String(rt.cfg.get('moa.aggregator') || '').split('/').pop()}`,
+    `  provider   ${rt.cfg.get('models.provider')} (${rt.cfg.providerStatus().filter((p) => p.ready).map((p) => p.name).join(', ') || 'no key — demo'})`,
+    `  channels   telegram ${rt.cfg.get('channels.telegram.botToken') ? 'token ok' : 'no token'} · whatsapp ${rt.cfg.get('channels.whatsapp.transport')}`,
+    `  open       ${url}`,
     '',
   ].join('\n'));
   if (rt.cfg.get('server.openBrowser') !== false && !flags.noWindow) openWindow(url);
   const bye = async (sig) => {
-    process.stdout.write(`\nstänger ner (${sig})\n`);
+    process.stdout.write(`\nshutting down (${sig})\n`);
     try {
       server.close();
       await rt.shutdown();
@@ -166,13 +166,13 @@ function openWindow(url) {
   if (!bin) {
     if (win) {
       spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref();
-      return `öppnade i standardwebbläsaren: ${url}`;
+      return `opened in your default browser: ${url}`;
     }
-    process.stdout.write(`ingen Edge/Chrome hittades — öppna ${url}\n`);
+    process.stdout.write(`no Edge/Chrome found — open ${url} yourself\n`);
     return null;
   }
   const child = spawn(bin, [`--app=${url}`, '--window-size=1240,820', '--window-position=90,70', '--no-first-run', '--disable-filters'], { detached: true, stdio: 'ignore' });
-  child.on('error', (e) => process.stderr.write(`fönster: ${e.message}\n`));
+  child.on('error', (e) => process.stderr.write(`window: ${e.message}\n`));
   child.unref();
   return url;
 }
@@ -183,7 +183,7 @@ async function window_() {
   const alive = await ping(port);
   const url = (alive?.url || `http://127.0.0.1:${port}/?t=${cfg.get('server.token')}`) + (alive ? `?t=${cfg.get('server.token')}` : '');
   if (!alive) {
-    process.stdout.write('servern kör inte — startar…\n');
+    process.stdout.write('server not running — starting it…\n');
     await start();
     return;
   }
@@ -201,32 +201,32 @@ async function doctor() {
   put(Boolean(rt.cfg.get('workspace')), 'workspace', rt.cfg.get('workspace'));
   try {
     fs.accessSync(rt.cfg.get('workspace'), fs.constants.W_OK);
-    put(true, 'skrivbar', 'ja');
+    put(true, 'writable', 'yes');
   } catch {
-    put(false, 'skrivbar', 'NEJ — välj en annan workspace');
+    put(false, 'writable', 'NO — pick another workspace');
   }
   const ready = st.providers.filter((p) => p.ready);
-  put(ready.length > 0, 'providers', ready.length ? ready.map((p) => `${p.name}(${p.models.length})`).join(' ') : 'ingen nyckel — demo-läge');
-  put(st.routes.every((r) => r.ready), 'rutter', `${st.routes.filter((r) => r.ready).length}/${st.routes.length} redo`);
-  put(st.moa.policy !== 'off', 'MOA', `${st.moa.policy} · bredd ${st.moa.width} → ${String(st.moa.aggregator).split('/').pop()}`);
-  put(rt.registry.list().length > 60, 'verktyg', `${rt.registry.list().length} registrerade, inga avstängda`);
-  put(st.guard.mode !== undefined, 'guard', `${st.guard.mode} · ${st.guard.pending} väntande`);
+  put(ready.length > 0, 'providers', ready.length ? ready.map((p) => `${p.name}(${p.models.length})`).join(' ') : 'no key — demo mode');
+  put(st.routes.filter((r) => r.ready).length > 0 || rt.cfg.needsSetup, 'routes', `ready ${st.routes.filter((r) => r.ready).length}/${st.routes.length}${rt.cfg.needsSetup ? ' (no key yet)' : ''}`);
+  put(st.moa.policy !== 'off', 'MOA', `${st.moa.policy} · width ${st.moa.width} → ${String(st.moa.aggregator).split('/').pop()}`);
+  put(rt.registry.list().length > 60, 'tools', `${rt.registry.list().length} registered, none disabled`);
+  put(st.guard.mode !== undefined, 'guard', `${st.guard.mode} · ${st.guard.pending} waiting`);
   const { detect } = await import('../core/binary/external.js');
   const ext = detect();
-  put(true, 'RE externt', Object.entries(ext).filter(([, v]) => v).length ? Object.entries(ext).filter(([, v]) => v).map(([k]) => k).join(' ') : 'bara inbyggda parser (ghidra/rizin valfritt)');
-  put(fs.existsSync(path.join(dirs.rules, 'lent.yar')), 'RE regler', dirs.rules);
+  put(true, 'RE external', Object.entries(ext).filter(([, v]) => v).length ? Object.entries(ext).filter(([, v]) => v).map(([k]) => k).join(' ') : 'built-in parsers only (ghidra/rizin optional)');
+  put(fs.existsSync(path.join(dirs.rules, 'majin.yar')), 'RE rules', dirs.rules);
   const port = Number(rt.cfg.get('server.port'));
   const taken = await ping(port);
-  put(true, 'port', taken ? `${port} upptagen av LENT (kör bara lent window)` : `${port} ledig`);
+  put(true, 'port', taken ? `${port} taken by MAJIN (just run: majin window)` : `${port} free`);
   if (flags.full) {
-    process.stdout.write('kör självtest (nätverk + modellanrop)…\n');
-    const out = await rt.registry.exec('lent.selftest', { level: 'full' }, { ...rt.ctx, session: 'doctor', step: 1 });
+    process.stdout.write('running self-test (network + model calls)…\n');
+    const out = await rt.registry.exec('majin.selftest', { level: 'full' }, { ...rt.ctx, session: 'doctor', step: 1 });
     lines.push(String(out.result || out.error?.message || '').replace(/^/gm, '   '));
   }
   await rt.shutdown();
   process.stdout.write(lines.join('\n') + '\n');
   const bad = lines.filter((l) => l.startsWith('✖')).length;
-  if (bad) process.stdout.write(`\n${bad} punkt(er) behöver åtgärd.\n`);
+  if (bad) process.stdout.write(`\n${bad} issue(s) need attention.\n`);
   process.exitCode = bad ? 1 : 0;
 }
 
@@ -234,20 +234,20 @@ async function status() {
   const port = Number(flags.port) || load().get('server.port');
   const alive = await ping(port);
   if (!alive) {
-    process.stdout.write('LENT kör inte på :' + port + '\n  starta: lent\n');
+    process.stdout.write('MAJIN is not running on :' + port + '\n  start it: majin\n');
     process.exitCode = 1;
     return;
   }
   const st = await get(port, '/api/state?tools=0&t=' + alive.token);
   process.stdout.write(
     [
-      `LENT ${st.version} · up ${Math.round(st.up / 60)} min · pid ${st.pid}`,
-      `  provider ${st.providers.filter((p) => p.ready).map((p) => p.name).join(', ') || 'demo'} · rutter ${st.routes.length}`,
-      `  MOA ${st.moa.policy} (${st.moa.width}) · guard ${st.guard.mode}${st.guard.pending ? ` (${st.guard.pending} väntar)` : ''}`,
-      `  verktyg ${st.tools.count} · minne ${st.memory?.facts ?? 0} fakta · färdigheter ${(st.skills || []).length}`,
+      `MAJIN ${st.version} · up ${Math.round(st.up / 60)} min · pid ${st.pid}`,
+      `  provider ${st.providers.filter((p) => p.ready).map((p) => p.name).join(', ') || 'demo'} · routes ${st.routes.length}`,
+      `  MOA ${st.moa.policy} (${st.moa.width}) · guard ${st.guard.mode}${st.guard.pending ? ` (${st.guard.pending} waiting)` : ''}`,
+      `  tools ${st.tools.count} · memory ${st.memory?.facts ?? 0} facts · skills ${(st.skills || []).length}`,
       `  telegram ${st.channels.telegram.state} · whatsapp ${st.channels.whatsapp.state}`,
-      `  kostnad ${Number(st.usage.costUsd || 0).toFixed(4)} USD / ${st.usage.requests} anrop${st.usage.budgetUsd ? ` av ${st.usage.budgetUsd}` : ''}`,
-      `  schema ${(st.schedule || []).length} jobb`,
+      `  cost ${Number(st.usage.costUsd || 0).toFixed(4)} USD / ${st.usage.requests} calls${st.usage.budgetUsd ? ` of ${st.usage.budgetUsd}` : ''}`,
+      `  schedule ${(st.schedule || []).length} jobs`,
       `  url     ${alive.url}`,
     ].join('\n') + '\n',
   );
@@ -256,7 +256,7 @@ async function status() {
 async function logs() {
   const port = Number(flags.port) || load().get('server.port');
   const alive = await ping(port);
-  if (!alive) return process.stdout.write('servern kör inte\n');
+  if (!alive) return process.stdout.write('server is not running\n');
   const n = Number(flags.n || 40);
   const r = await get(port, `/api/logs?n=${n}&t=${alive.token}`);
   process.stdout.write((r.events || []).map(formatEvent).join('\n') + '\n');
@@ -274,7 +274,7 @@ async function config() {
   if (sub === 'set') {
     const key = argv.shift();
     const raw = argv.join(' ');
-    if (!key || !raw) return process.stderr.write('config set <nyckel> <värde>\n');
+    if (!key || !raw) return process.stderr.write('config set <key> <value>\n');
     let value = raw;
     if (/^(true|false|null)$/.test(raw)) value = raw === 'true' ? true : raw === 'false' ? false : null;
     else if (!Number.isNaN(Number(raw)) && raw !== '') value = Number(raw);
@@ -282,15 +282,15 @@ async function config() {
       try {
         value = JSON.parse(raw);
       } catch (e) {
-        return process.stderr.write('JSON-fel: ' + e.message + '\n');
+        return process.stderr.write('JSON error: ' + e.message + '\n');
       }
     }
     const { setPath } = await import('../core/config.js');
     const next = cfg.json();
     setPath(next, key, value);
     const r = cfg.patch(topFromPath(key, value), { source: 'cli' });
-    if (!r.ok) return process.stderr.write('nej: ' + r.errors.map((e) => `${e.path}: ${e.msg}`).join('; ') + '\n');
-    process.stdout.write(`sparat ${key} = ${JSON.stringify(value)}\n  i ${cfg.file}\n`);
+    if (!r.ok) return process.stderr.write('rejected: ' + r.errors.map((e) => `${e.path}: ${e.msg}`).join('; ') + '\n');
+    process.stdout.write(`saved ${key} = ${JSON.stringify(value)}\n  in ${cfg.file}\n`);
     return;
   }
   if (sub === 'open') {
@@ -319,27 +319,27 @@ async function pair() {
   const port = Number(flags.port) || cfg.get('server.port');
   const alive = await ping(port);
   if (!alive) {
-    process.stdout.write('starta LENT först (lent), kör sedan lent pair igen\n');
+    process.stdout.write('start MAJIN first (run: majin), then run majin pair again\n');
     process.exitCode = 1;
     return;
   }
   if (what.startsWith('t')) {
     const r = await post(port, '/api/channels/telegram', alive.token, {});
-    process.stdout.write([`telegram: ${r.ok ? 'igång' : 'fel'} · state ${r.status?.state}`, r.pairingCode ? `  parningskod ${r.pairingCode} — skicka "/pair ${r.pairingCode}" till din bot` : '', r.status?.lastError ? `  fel: ${r.status.lastError}` : ''].filter(Boolean).join('\n') + '\n');
+    process.stdout.write([`telegram: ${r.ok ? 'running' : 'failed'} · state ${r.status?.state}`, r.pairingCode ? `  pairing code ${r.pairingCode} — send "/pair ${r.pairingCode}" to your bot` : '', r.status?.lastError ? `  error: ${r.status.lastError}` : ''].filter(Boolean).join('\n') + '\n');
     return;
   }
   const r = await post(port, '/api/channels/whatsapp', alive.token, {});
-  process.stdout.write([`whatsapp: state ${r.status?.state} (${r.status?.transport})`, r.status?.qr ? '  QR finns i UI:t (panel → Kanaler) eller länk nedan' : '', r.status?.lastError ? `  ${r.status.lastError}` : '', r.status?.hint ? `  ${r.status.hint}` : ''].filter(Boolean).join('\n') + '\n');
+  process.stdout.write([`whatsapp: state ${r.status?.state} (${r.status?.transport})`, r.status?.qr ? '  the QR code is in the UI (panel → Channels)' : '', r.status?.lastError ? `  ${r.status.lastError}` : '', r.status?.hint ? `  ${r.status.hint}` : ''].filter(Boolean).join('\n') + '\n');
 }
 
 async function send() {
   const text = argv.join(' ').trim();
-  if (!text) return process.stderr.write('lent send "vad du vill"\n');
+  if (!text) return process.stderr.write('majin send "what you want"\n');
   const cfg = load();
   const port = Number(flags.port) || cfg.get('server.port');
   const alive = await ping(port);
   if (!alive) {
-    process.stdout.write('servern kör inte — kör direkt: ');
+    process.stdout.write('server is not running — running inline: ');
     const rt = await createRuntime({ channels: false, scheduler: false });
     const r = await rt.agent.turn({ input: text, session: flags.session || 'cli', source: 'cli', onEvent: (e) => process.stderr.write(`· ${e.type}${e.tool ? ' ' + e.tool : ''}\n`) });
     process.stdout.write(r.text + '\n');
@@ -373,7 +373,7 @@ async function send() {
         const ev = JSON.parse(dl.slice(6));
         if (ev.type === 'delta') process.stdout.write(ev.text);
         else if (ev.type === 'answer') answer = ev.text;
-        else if (ev.type === 'error') process.stderr.write(`\nfel: ${ev.message}\n`);
+        else if (ev.type === 'error') process.stderr.write(`\nerror: ${ev.message}\n`);
         else if (['tool', 'tool_result', 'route', 'escalate', 'config'].includes(ev.type)) process.stderr.write(`· ${ev.type}${ev.tool || ev.name ? ' ' + (ev.tool || ev.name) : ''}${ev.job ? ' [' + ev.job + ']' : ''}\n`);
       } catch {
         /* */
@@ -385,14 +385,14 @@ async function send() {
 
 async function re() {
   const target = argv.shift();
-  if (!target) return process.stderr.write('lent re <fil> [--json]\n');
+  if (!target) return process.stderr.write('majin re <fil> [--json]\n');
   const abs = path.resolve(expand(target));
-  if (!fs.existsSync(abs)) return process.stderr.write(`hittar inte ${abs}\n`);
+  if (!fs.existsSync(abs)) return process.stderr.write(`cannot find ${abs}\n`);
   const rt = await createRuntime({ channels: false, scheduler: false });
   const out = await rt.registry.exec('re.analyze', { path: abs }, { ...rt.ctx, session: 'cli', step: 1 });
   await rt.shutdown();
   if (json()) return process.stdout.write(JSON.stringify(out.meta || out, null, 2) + '\n');
-  if (!out.ok) return process.stderr.write((out.error?.message || 'fel') + '\n');
+  if (!out.ok) return process.stderr.write((out.error?.message || 'failed') + '\n');
   process.stdout.write(String(out.result) + '\n');
 }
 
@@ -407,21 +407,21 @@ async function test() {
 function help() {
   process.stdout.write(
     [
-      `LENT ${VERSION} — Windows-agent som äger sina egna nycklar.`,
+      `MAJIN ${VERSION} — an autonomous agent that owns its own keys.`,
       '',
-      '  lent                     starta server + fönster (Edge app-läge)',
-      '  lent start [--no-window] [starta utan fönster]',
-      '  lent window              öppna ett till fönster mot den körande servern',
-      '  lent doctor [--full]     provider, nycklar, verktyg, RE, port, workspace',
-      '  lent status | url | logs visa vad som kör',
-      '  lent config [get <nyckel> | set <nyckel> <värde> | path]',
-      '  lent pair telegram|whatsapp   koppla chatt',
-      '  lent send "text"         en fråga genom agenten, svaret på stdout',
-      '  lent re <fil> [--json]   RE-analys (PE/ELF/APK/PCAP) utan server',
-      '  lent test                testsvit',
+      '  majin                      start the server and open the window',
+      '  majin start [--no-window]  run without a window',
+      '  majin window               open another window on the running server',
+      '  majin doctor [--full]      providers, keys, tools, RE, port, workspace',
+      '  majin status | url | logs  show what is running',
+      '  majin config [get <key> | set <key> <value> | path]',
+      '  majin pair telegram|whatsapp   connect a chat',
+      '  majin send "text"            one question through the agent',
+      '  majin re <file> [--json]     RE analysis (PE/ELF/APK/PCAP), no server',
+      '  majin test                 run the test suite',
       '',
       `config: ${dirs.config}   workspace: ${dirs.workspace}   data: ${dirs.root}`,
-      'Alla verktyg är alltid på. MOA körs per inställning, ingen avstängning behövs.',
+      'Every tool is always on. Mixture-of-Agents runs by default — nothing to enable.',
     ].join('\n') + '\n',
   );
 }

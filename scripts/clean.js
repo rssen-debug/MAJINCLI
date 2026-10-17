@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Nollställ LENT:s kördata: loggar, sparade rapporter, cache, uppladdade filer.
+ * Nollställ MAJIN:s kördata: loggar, sparade rapporter, cache, uppladdade filer.
  * Config, minne, skills och sessionar lämnas orörda (där bor ens inställningar).
  *   npm run clean            # töm cache/out/logs/uploads
  *   npm run clean -- --all   + tmp-filer och .bak

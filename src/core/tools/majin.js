@@ -1,7 +1,7 @@
 /**
- * LENT — agentens egen kontrollpanel.
+ * MAJIN — agentens egen kontrollpanel.
  * Allt som finns i config filen kan agenten ändra, med validering + backup.
- * Ett enda verktyg (lent.configure) räcker för resten; de andra är genvägar.
+ * Ett enda verktyg (majin.configure) räcker för resten; de andra är genvägar.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -18,10 +18,10 @@ import { detect as detectRe } from '../binary/external.js';
 
 const mask = (v) => (!v ? '' : v.length <= 6 ? '•••' : `${v.slice(0, 3)}…${v.slice(-2)}`);
 
-export const lentTools = [
+export const majinTools = [
   def({
-    name: 'lent.configure',
-    group: 'lent',
+    name: 'majin.configure',
+    group: 'majin',
     risk: 'write',
     desc: 'Ändra LENTs egen config (routes, moa, providers, channels, guard, agent, tools, ui, budget, persona). Validerad JSON-patch; ogiltig patch avvisas med skäl. Använd intent för naturallyspråk.',
     params: {
@@ -30,7 +30,7 @@ export const lentTools = [
       dry: 'boolean: visa diff utan att spara',
       note: 'string: varför ändringen görs (hamnar i loggen)',
     },
-    examples: ['lent.configure({intent:"använd deepseek flash för tasks alltid"})', 'lent.configure({patch:{moa:{policy:"hard"}}})'],
+    examples: ['majin.configure({intent:"använd deepseek flash för tasks alltid"})', 'majin.configure({patch:{moa:{policy:"hard"}}})'],
     async run({ patch = null, intent = '', dry = false, note = '' }, ctx) {
       let payload = patch;
       let notes = [];
@@ -62,8 +62,8 @@ export const lentTools = [
   }),
 
   def({
-    name: 'lent.routes',
-    group: 'lent',
+    name: 'majin.routes',
+    group: 'majin',
     risk: 'write',
     desc: 'Modellrouting: visa, sätt eller testa jobben (chat, tasks, tools, code, re, research, plan, analysis, final, summarize, aggregator, router, vision).',
     params: {
@@ -73,7 +73,7 @@ export const lentTools = [
       all: 'boolean: sätt samma modell på alla jobb',
       note: 'string: varför',
     },
-    examples: ['lent.routes({action:"set",job:"code",model:"deepseek/deepseek-v4-pro"})'],
+    examples: ['majin.routes({action:"set",job:"code",model:"deepseek/deepseek-v4-pro"})'],
     async run({ action = 'show', job = '', model = '', all = false, note = '' }, ctx) {
       if (action === 'show_all' || action === 'show') {
         const t = ctx.cfg.routeTable();
@@ -82,7 +82,7 @@ export const lentTools = [
       if (action === 'set') {
         if (!model) return { ok: false, error: { code: 'no_model', message: 'ange model som "provider/model"' } };
         const [pname] = String(model).split('/');
-        if (!ctx.cfg.get(`providers.${pname}`)) return { ok: false, error: { code: 'unknown_provider', message: `okänd provider "${pname}"`, hint: `kända: ${Object.keys(ctx.cfg.get('providers') || {}).join(', ')} — lägg till med lent.provider` } };
+        if (!ctx.cfg.get(`providers.${pname}`)) return { ok: false, error: { code: 'unknown_provider', message: `okänd provider "${pname}"`, hint: `kända: ${Object.keys(ctx.cfg.get('providers') || {}).join(', ')} — lägg till med majin.provider` } };
         const routes = {};
         if (all) for (const j of JOBS) routes[j] = model;
         else {
@@ -109,8 +109,8 @@ export const lentTools = [
   }),
 
   def({
-    name: 'lent.provider',
-    group: 'lent',
+    name: 'majin.provider',
+    group: 'majin',
     risk: 'write',
     desc: 'Hantera providers: list | add | remove | test | models (lista tillgängliga modeller från /models).',
     params: {
@@ -123,7 +123,7 @@ export const lentTools = [
       models: 'string: komma-separerade modellnamn',
       kind: 'string: openai | anthropic | mock [openai|anthropic|mock]',
     },
-    examples: ['lent.provider({action:"add",name:"deepseek",apiKey:"sk-…"})'],
+    examples: ['majin.provider({action:"add",name:"deepseek",apiKey:"sk-…"})'],
     async run({ action = 'list', name = '', preset = '', baseUrl = '', apiKey = '', env = '', models = null, kind = '' }, ctx) {
       const providers = { ...ctx.cfg.get('providers') };
       if (action === 'list') {
@@ -163,7 +163,7 @@ export const lentTools = [
           await ctx.cfg.patch({ models: { routes, provider: name } });
         }
         bus.info('provider.add', { name, kind: entry.kind, baseUrl: entry.baseUrl });
-        return { result: `lade till ${name} (${entry.kind} ${entry.baseUrl}) och rutade ${first ? `${entry.models.length} förslag` : 'ingen modell'} →\n${routeLines(ctx)}\n\nTesta: lent.routes({action:"test",model:"${name}/${first || '?'}"})`, summary: `provider ${name} tillagd` };
+        return { result: `lade till ${name} (${entry.kind} ${entry.baseUrl}) och rutade ${first ? `${entry.models.length} förslag` : 'ingen modell'} →\n${routeLines(ctx)}\n\nTesta: majin.routes({action:"test",model:"${name}/${first || '?'}"})`, summary: `provider ${name} tillagd` };
       }
       if (action === 'remove') {
         const { [name]: gone, ...rest } = providers;
@@ -187,8 +187,8 @@ export const lentTools = [
   }),
 
   def({
-    name: 'lent.moa',
-    group: 'lent',
+    name: 'majin.moa',
+    group: 'majin',
     risk: 'write',
     desc: 'Mixture-of-Agents: show | on | off | hard (bara svåra jobb) | set (references/aggregator/width). Alt är på.',
     params: {
@@ -214,8 +214,8 @@ export const lentTools = [
   }),
 
   def({
-    name: 'lent.guard',
-    group: 'lent',
+    name: 'majin.guard',
+    group: 'majin',
     risk: 'write',
     desc: 'Säkerhetsglaset: status | mode(confirm|strict|off) | allow(verktyg) | disallow. Agenten kan INTE godkänna sina egna farliga åtgärder — det gör alltid människan.',
     params: { action: 'string: status | mode | allow | disallow [status|mode|allow|disallow]', mode: 'string: confirm | strict | off', tool: 'string: verktygsnamn' },
@@ -245,8 +245,8 @@ export const lentTools = [
   }),
 
   def({
-    name: 'lent.memory',
-    group: 'lent',
+    name: 'majin.memory',
+    group: 'majin',
     risk: 'write',
     desc: 'Långtidshamnet: remember(text) | recall(query) | forget(query) | list | clear. Agenten sparar preferenser, projekt och lösningar här.',
     params: { action: 'string: remember | recall | forget | list | clear [remember|recall|forget|list|clear]', text: 'string: vad som ska minnas', query: 'string: vad du letar efter', tags: 'array: taggar' },
@@ -272,8 +272,8 @@ export const lentTools = [
   }),
 
   def({
-    name: 'lent.skill',
-    group: 'lent',
+    name: 'majin.skill',
+    group: 'majin',
     risk: 'write',
     desc: 'Inlärda färdigheter (markdown i data/skills): list | save | read | delete | match. En färdighet = hur en typ av uppgift görs, steg för steg.',
     params: { action: 'string: list | save | read | delete | match [list|save|read|delete|match]', name: 'string: namn', when: 'string: när den ska användas', steps: 'string: stegen (markdown)', tools: 'array: verktyg den använder', query: 'string: för match' },
@@ -309,8 +309,8 @@ export const lentTools = [
   }),
 
   def({
-    name: 'lent.schedule',
-    group: 'lent',
+    name: 'majin.schedule',
+    group: 'majin',
     risk: 'write',
     desc: 'Schemalagt arbete: add | list | remove | run | pause | resume. Anrop som "varje morgon 07:30: gör X och skicka till telegram" ska hamna här.',
     params: {
@@ -321,7 +321,7 @@ export const lentTools = [
       deliver: 'string: telegram | whatsapp | silent (var svaret skickas)',
       model: 'string: valfri route/apping för jobbet',
     },
-    examples: ['lent.schedule({action:"add",when:"07:30 daily",task:"Korta morgonrapporten: vädret, mina ärenden, nya security-ADS. Skicka till telegram"})'],
+    examples: ['majin.schedule({action:"add",when:"07:30 daily",task:"Korta morgonrapporten: vädret, mina ärenden, nya security-ADS. Skicka till telegram"})'],
     async run({ action = 'list', id = '', when = '', task = '', deliver = 'silent', model = '' }, ctx) {
       const sch = ctx.scheduler;
       if (!sch) return { ok: false, error: { code: 'no_scheduler', message: 'schemaläggaren kör inte (server-läge krävs)' } };
@@ -346,8 +346,8 @@ export const lentTools = [
   }),
 
   def({
-    name: 'lent.channel',
-    group: 'lent',
+    name: 'majin.channel',
+    group: 'majin',
     risk: 'write',
     desc: 'Kanaler: status | telegram | whatsapp | send | pair. Sätter bot-nycklar, kopplar enheter och skickar meddelanden.',
     params: {
@@ -362,7 +362,7 @@ export const lentTools = [
       channel: 'string: telegram | whatsapp',
       enable: 'boolean: starta/stoppa kanalen',
     },
-    examples: ['lent.channel({action:"telegram",token:"123:ABC",enable:true})'],
+    examples: ['majin.channel({action:"telegram",token:"123:ABC",enable:true})'],
     async run({ action = 'status', token = '', transport = '', phoneNumberId = '', accessToken = '', verifyToken = '', to = '', text = '', channel = '', enable = null }, ctx) {
       const ch = ctx.channels;
       if (action === 'status') {
@@ -418,8 +418,8 @@ export const lentTools = [
   }),
 
   def({
-    name: 'lent.status',
-    group: 'lent',
+    name: 'majin.status',
+    group: 'majin',
     risk: 'read',
     desc: 'Full status: config, routes, MOA, kanaler, externa RE-verktyg, budget, minne, färdigheter, jobb, loggsökväg. Används när användaren frågar "hur mår du?".',
     params: { verbose: 'boolean: med allt' },
@@ -457,8 +457,8 @@ export const lentTools = [
   }),
 
   def({
-    name: 'lent.selftest',
-    group: 'lent',
+    name: 'majin.selftest',
+    group: 'majin',
     risk: 'read',
     desc: 'Diagnostik: provider-nycklar, en verklig minianrop per provider, verktygsregister, RE-kontroll på en egen binär, kanalstatus, port, skrivbarhet. Kör detta när något beter sig konstigt.',
     params: { level: 'string: quick | full [quick|full]' },
@@ -515,8 +515,8 @@ export const lentTools = [
   }),
 
   def({
-    name: 'lent.tools',
-    group: 'lent',
+    name: 'majin.tools',
+    group: 'majin',
     risk: 'read',
     desc: 'Lista alla verktyg med beskrivning och risknivå. Alltid alla på — det finns ingen avstängningsknapp.',
     params: { group: 'string: filtrera på grupp', describe: 'string: skrivverktygsnamn för full beskrivning' },
@@ -536,22 +536,22 @@ export const lentTools = [
   }),
 
   def({
-    name: 'lent.backup',
-    group: 'lent',
+    name: 'majin.backup',
+    group: 'majin',
     risk: 'write',
-    desc: 'Exportera/importera allt LENT vet (config, minne, färdigheter, scheman) som en tar.gz i workspace/backups.',
+    desc: 'Exportera/importera allt MAJIN vet (config, minne, färdigheter, scheman) som en tar.gz i workspace/backups.',
     params: { action: 'string: export | list | restore [export|list|restore]', file: 'string: arkiv för restore' },
     async run({ action = 'list', file }, ctx) {
       const dir = path.join(ctx.cfg.get('workspace'), 'backups');
       await fsp.mkdir(dir, { recursive: true });
       if (action === 'list') {
-        const items = (await fsp.readdir(dir).catch(() => [])).filter((f) => f.startsWith('lent-backup'));
+        const items = (await fsp.readdir(dir).catch(() => [])).filter((f) => f.startsWith('majin-backup'));
         return { result: `${items.length} backuper i ${dir}\n${items.map((i) => `- ${i}`).join('\n') || '(inga)'}`, meta: { dir, items }, summary: `${items.length} backuper` };
       }
       const { spawnSync } = await import('node:child_process');
       const stamp = new Date().toISOString().replace(/[:.]/g, '');
       if (action === 'export') {
-        const out = path.join(dir, `lent-backup-${stamp}.tar.gz`);
+        const out = path.join(dir, `majin-backup-${stamp}.tar.gz`);
         const roots = [ctx.cfg.file, dirs.memory, dirs.skills, dirs.sessions, dirs.rules].filter((p) => fs.existsSync(p));
         const r = spawnSync('tar', ['-czf', out, '-C', dirs.root, ...roots.map((p) => path.relative(dirs.root, p))], { encoding: 'utf8' });
         if (r.status !== 0) return { ok: false, error: { code: 'tar_failed', message: r.stderr || 'tar saknas' } };
@@ -561,13 +561,13 @@ export const lentTools = [
       if (!src || !fs.existsSync(src)) return { ok: false, error: { code: 'no_archive', message: 'ange file som pekar på en backup' } };
       const r = spawnSync('tar', ['-xzf', src, '-C', dirs.root], { encoding: 'utf8' });
       if (r.status !== 0) return { ok: false, error: { code: 'restore_failed', message: r.stderr || 'okänt fel' } };
-      return { result: `återskapade från ${src}. Laddar om config: starta om LENT för full effekt.`, summary: 'restore klar' };
+      return { result: `återskapade från ${src}. Laddar om config: starta om MAJIN för full effekt.`, summary: 'restore klar' };
     },
   }),
 
   def({
-    name: 'lent.ui',
-    group: 'lent',
+    name: 'majin.ui',
+    group: 'majin',
     risk: 'read',
     desc: 'Öppna UI:t: annars ett eget Edge-/Chrome-fönster (UIA app-läge) på Windows. action=open.|theme|voice.',
     params: { action: 'string: open | theme | voice | wake [open|theme|voice|wake]', theme: 'string: jarvis | arc | minimal', voice: 'boolean: tts på/av', wake: 'boolean: wake word på/av' },
@@ -601,8 +601,8 @@ export const lentTools = [
   }),
 
   def({
-    name: 'lent.control',
-    group: 'lent',
+    name: 'majin.control',
+    group: 'majin',
     risk: 'write',
     desc: 'Kontrollera agenten själv: restart | stop | pause | resume | clear (session) | sessions | history.',
     params: { action: 'string: restart | stop | pause | resume | clear | sessions | history [restart|stop|pause|resume|clear|sessions|history]', session: 'string: sessionen (default aktiv)', limit: 'number: rader vid history' },
@@ -638,7 +638,7 @@ export const lentTools = [
       if (action === 'restart' || action === 'stop') {
         bus.warn('agent.self', { action });
         setTimeout(() => process.exit(action === 'restart' ? 75 : 0), 400).unref?.();
-        return { result: action === 'restart' ? 'startar om nu (lent start —window startar igen om det är en launcher)' : 'stänger ner', summary: action };
+        return { result: action === 'restart' ? 'startar om nu (majin start —window startar igen om det är en launcher)' : 'stänger ner', summary: action };
       }
       return { ok: false, error: { code: 'bad_action', message: action } };
     },
