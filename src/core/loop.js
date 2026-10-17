@@ -88,6 +88,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
 
     const runOne = async (c) => {
       const args = safeParse(c.argsJson);
+      onEvent({ type: 'tool_begin', label, step: steps, callId: c.id, name: c.name });
       const out = await registry.exec(c.name, args, { ...ctx, session: ctx?.session ?? 'desktop', step: steps, readOnly: Boolean(ctx?.readOnly) });
       // args följer med i loggen: utan dem är en spårning värdelös som träningsdata
       // (och trådhistoriken kan inte återskapa *varför* verktyget kördes).
@@ -100,7 +101,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       if (!ok) errors += 1;
       else errors = Math.max(0, errors - 1);
       toolLog.push({ tool: r.name, args: r.args ?? {}, ok, error: ok ? null : r.out.error?.message || 'unknown error', ms: r.out.ms, summary: summarize(r.out) });
-      onEvent({ type: 'tool_result', label, tool: r.name, ok, error: r.out.error || null, spilled: r.out.spilled || null, summary: summarize(r.out), meta: r.out.meta || null });
+      onEvent({ type: 'tool_result', label, step: steps, callId: r.id, tool: r.name, ok, error: r.out.error || null, spilled: r.out.spilled || null, summary: summarize(r.out), meta: r.out.meta || null });
       messages.push({
         role: 'tool',
         tool_call_id: r.id,
