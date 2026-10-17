@@ -21,7 +21,7 @@ export function resolveIn(ctx, p, { allowEmpty = false, never = [] } = {}) {
   }
   const raw = String(p ?? '.').trim() || '.';
   const expanded = raw.replace(/^~(?=[/\\]|$)/, os.homedir());
-  const root = path.resolve(ctx.cfg.get('workspace') || process.cwd());
+  const root = path.resolve(ctx.cfg.get?.('workspace') || dirs.workspace || process.cwd());
   const abs = path.isAbsolute(expanded) ? path.normalize(expanded) : path.resolve(root, expanded);
   const rel = path.relative(root, abs);
   const outside = !!rel && (rel.startsWith('..') || path.isAbsolute(rel));
@@ -81,7 +81,11 @@ export const fileTools = [
       const { abs } = resolveIn(ctx, p);
       const cap = ctx.cfg.get('tools.files.maxReadBytes') || 4000000;
       const size = sizeOf(abs);
-      if (size == null) throw new Error(`fanns inte: ${abs}`);
+      if (size == null) {
+        const err = new Error(`fanns inte: ${abs}`);
+        err.code = 'ENOENT';
+        throw err;
+      }
       const fd = await fsp.open(abs, 'r');
       try {
         const n = Math.min(size, maxBytes, cap);
@@ -215,6 +219,34 @@ export const fileTools = [
     params: { path: 'string: fil', pattern: 'string: regex/ord', context: 'number: rader runt träffen (default 2)', limit: 'number: max träffar (default 30)' },
     async run({ path: p, pattern = '', context = 2, limit = 30 }, ctx) {
       const { abs } = resolveIn(ctx, p);
+      if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) {
+        const files = await walk(abs, { glob: '', limit: 4000 });
+        const hits = [];
+        for (const f of files) {
+          let txt = '';
+          try {
+            txt = await fsp.readFile(f, 'utf8');
+          } catch {
+            continue;
+          }
+          if (txt.includes('\0')) continue;
+          const lines = txt.split('\n');
+          const re = safeRe(pattern, 'i');
+          for (let i = 0; i < lines.length; i += 1) {
+            if (!re?.test(lines[i])) continue;
+            const from = Math.max(0, i - context);
+            const to = Math.min(lines.length, i + context + 1);
+            hits.push(`${path.relative(abs, f)}:${i + 1}\n${lines.slice(from, to).map((l, k) => `${from + k + 1}| ${l}`).join('\n')}`);
+            if (hits.length >= limit) break;
+          }
+          if (hits.length >= limit) break;
+        }
+        return {
+          result: hits.length ? `${hits.length} träffar i ${abs}:\n\n${hits.join('\n\n')}` : `inga träffar för ${pattern} (${files.length} filer)`,
+          meta: { hits: hits.length, files: files.length, dir: abs },
+          summary: `${hits.length} träffar i ${path.basename(abs)}/`,
+        };
+      }
       const lines = (await fsp.readFile(abs, 'utf8')).split('\n');
       const re = safeRe(pattern, 'i');
       const out = [];
@@ -325,10 +357,19 @@ export const fileTools = [
       const a = resolveIn(ctx, archive);
       const src = resolveIn(ctx, p);
       const work = cwd ? resolveIn(ctx, cwd).abs : op === 'create' ? src.root : path.dirname(a.abs);
-      const args = op === 'extract' ? ['-xf', a.abs, '-C', src.abs] : ['-czf', a.abs, '-C', work, path.relative(work, src.abs) || '.'];
+      const rel = path.relative(work, src.abs) || '.';
+      const args = op === 'extract' ? ['-xf', a.abs, '-C', src.abs] : ['-czf', a.abs, '-C', work, ...(a.abs.startsWith(work) ? [`--exclude=${path.relative(work, a.abs)}`] : []), rel];
       const r = spawnSync('tar', args, { encoding: 'utf8', windowsHide: true });
       if (r.error) throw new Error(`tar kunde inte köras: ${r.error.message}`);
-      return { ok: r.status === 0, result: `${r.status === 0 ? 'ok' : 'fel'}: tar ${args.join(' ')}\n${(r.stderr || '').slice(0, 2000)}\n${sizeOf(a.abs) || 0} byte i arkiv`, summary: `${op} ${path.basename(a.abs)}` };
+      const warnings = /file changed as we read it|Removing leading/i.test(r.stderr || '');
+      const ok = r.status === 0 || (op === 'create' && r.status === 1 && warnings && (sizeOf(a.abs) || 0) > 0);
+      return {
+        ok,
+        result: `${ok ? 'ok' : 'fel'}: tar ${args.join(' ')}\n${(r.stderr || '').slice(0, 2000)}\n${sizeOf(a.abs) || 0} byte i arkiv`,
+        meta: { archive: a.abs, bytes: sizeOf(a.abs) || 0, op },
+        summary: `${op} ${path.basename(a.abs)} (${sizeOf(a.abs) || 0} byte)`,
+        ...(ok ? {} : { error: { code: 'tar_failed', message: (r.stderr || `tar exit ${r.status}`).slice(0, 400) } }),
+      };
     },
   }),
 ];
@@ -398,8 +439,24 @@ export async function walk(root, { glob = '', limit = 5000, dirs = false } = {})
   return out;
 }
 
-function globToRe(g) {
-  return new RegExp(`^${String(g).replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\u0001').replace(/\*/g, '[^/]*').replace(/\?/g, '.').replace(/\u0001/g, '.*').replace(/\//g, '[\\\\/]')}$`, 'i');
+/**
+ * Glob till RegExp. Stjarnan tacker en niva, dubbel-stjarna godtyckliga mappar,
+ * och fragetecknet ett tecken. Slash och backslash ar likvardiga (Windows + POSIX).
+ */
+export function globToRe(g) {
+  const flat = String(g).trim().replace(/\\/g, '/');
+  const esc = flat.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  const body = esc
+    .replace(/\*\*\//g, '\u0001')
+    .replace(/\*\*/g, '\u0002')
+    .replace(/\*/g, '\u0003')
+    .replace(/\?/g, '\u0004')
+    .replace(/\//g, '[\\\\/]')
+    .replace(/\u0001/g, '(?:.*[\\\\/])?')
+    .replace(/\u0002/g, '.*')
+    .replace(/\u0003/g, '[^\\\\/]*')
+    .replace(/\u0004/g, '[^\\\\/]');
+  return new RegExp(`^${body}$`, 'i');
 }
 
 function escapeRe(s) {

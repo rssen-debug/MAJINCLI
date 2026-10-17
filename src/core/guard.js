@@ -7,6 +7,7 @@
 import path from 'node:path';
 import os from 'node:os';
 import { bus } from './log.js';
+import { dirs } from './paths.js';
 
 /* Verktygens egen `risk`-etikett (från def) är primär. tabellen nedan är
    bara en override-lista för namn som inte bär risk, plus mönster i config. */
@@ -63,7 +64,7 @@ export function protectedPath(p, cfg) {
 }
 
 export function outsideWorkspace(p, cfg) {
-  const root = path.resolve(cfg.get('workspace') || process.cwd());
+  const root = path.resolve(cfg.get('workspace') || dirs.workspace || process.cwd());
   const abs = path.resolve(String(p || '').replace(/^~([/\\]|$)/, os.homedir()));
   const rel = path.relative(root, abs);
   return !rel || rel.startsWith('..') || path.isAbsolute(rel) ? (rel === '' ? false : true) : false;
@@ -85,10 +86,18 @@ class Approvals {
     if (this.log.length > 200) this.log.shift();
     bus.emit('approval:request', { id, tool: req.tool, reason: req.reason, detail: req.detail, args: req.args, session: req.session || null });
     const promise = new Promise((resolve) => {
-      const timer = timeoutMs ? setTimeout(() => resolve({ approved: false, why: 'timeout' }), timeoutMs) : null;
-      timer?.unref?.();
+      /* Timern är avsiktligt ref:ad: väntan på ett mänskligt beslut ska hålla processen
+         vid liv, annars hinner never-timeout-gated aldrig lösa i headless-läge. */
+      const timer = timeoutMs
+        ? setTimeout(() => {
+            this.pending.delete(id);
+            bus.emit('approval:timeout', { id, tool: req.tool, reason: req.reason });
+            resolve({ approved: false, why: 'timeout' });
+          }, timeoutMs)
+        : null;
       entry.resolve = (decision) => {
         if (timer) clearTimeout(timer);
+        this.pending.delete(id);
         resolve(decision);
       };
     });

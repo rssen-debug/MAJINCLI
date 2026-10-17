@@ -147,7 +147,7 @@ export const DEFAULTS = {
   },
   skills: { dir: 'skills', auto: true, maxInPrompt: 12 },
   schedule: { enabled: true, timezone: 'local', maxConcurrent: 2, tickMs: 20000 },
-  tasks: { concurrency: 3, approvalTimeoutMs: 1800000 },
+  tasks: { concurrency: 3, approvalTimeoutMs: 180000 },
   channels: {
     telegram: { enabled: true, botToken: null, apiBase: 'https://api.telegram.org', allowedChatIds: [], pairingCode: null, pollTimeoutSec: 30, parseMode: 'HTML', proxy: null, reactions: true },
     whatsapp: {
@@ -278,6 +278,7 @@ export function redact(v, keyName = '') {
 
 export class Config {
   constructor(data, file) {
+    if (data && !data.workspace) data.workspace = dirs.workspace;
     this.data = data;
     this.file = file;
     this.subs = new Set();
@@ -563,6 +564,9 @@ function flattenDiff(base, patch, prefix = '', out = []) {
 /** Data stays pure JSON; compiled RegExps live beside it, rebuilt on every change. */
 export function compileRuntime(cfg) {
   const data = cfg.data;
+  const MODE = { ask: 'confirm', manual: 'confirm', auto: 'off', none: 'off', every: 'strict', all: 'strict', always: 'strict' };
+  const want = String(data?.guard?.mode || 'confirm').toLowerCase();
+  if (data?.guard) data.guard.mode = MODE[want] || (['confirm', 'strict', 'off'].includes(want) ? want : 'confirm');
   cfg.compiled = {
     rules: (data.routing.rules || [])
       .map((r) => ({ ...r, re: toRegex(r.match) }))
