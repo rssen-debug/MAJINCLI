@@ -114,7 +114,7 @@ test('the Windows script installs, uses, restarts and uninstalls for real', () =
   }
   assert.match(ps, /exit 1/, 'and every miss fails the run');
   // the checks that make "it works" mean something, not just "it installed"
-  assert.match(ps, /id="chat"/, 'it must assert the real window came back, not only a port');
+  assert.match(ps, /id="composer"/, 'it must assert the real window came back, not only a port');
   assert.match(ps, /logo\.png/, 'and that the M is actually served');
   assert.match(ps, /port closed|still answers after stop/, 'a stop that does not stop is a failure');
   assert.match(ps, /Get-FileHash -Algorithm SHA256/, 'it prints the sha256 a user can verify');
