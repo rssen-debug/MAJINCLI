@@ -23,7 +23,14 @@ jobs:
       - name: install (esbuild + pkg)
         run: npm ci
       - name: bundle and package
-        run: node scripts/build-exe.mjs
+        # De sista raderna loggas som annotationer vid fel — utan det ar ett
+        # ront steg hit intet att lasa (loggrarnas vard ar blockad for oss).
+        run: |
+          node scripts/build-exe.mjs 2>&1 | Tee-Object -FilePath build.log | Out-String -Stream | Write-Host
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content build.log -Tail 6 | ForEach-Object { Write-Output "::error::$_" }
+            exit 1
+          }
       - name: smoke test the built binary
         # doctor skriver ✔/✖ och lämnar 1 utan API-nyckel — det är förväntat på
         # en CI-runner, så den raden får inte fälla bygget. version och

@@ -21,9 +21,11 @@ const argv = process.argv.slice(2);
 const all = argv.includes('--all');
 const noPkg = argv.includes('--no-pkg');
 
+/* Aldrig shell:true — på Windows kör cmd.exe och den tolkar `>` i `=>` som omdirigering.
+   Vi anropar bara node med filer, så det behövs inget skal och inga citat. */
 function run(cmd, args, opts = {}) {
   process.stdout.write(`$ ${cmd} ${args.join(' ')}\n`);
-  const r = spawnSync(cmd, args, { cwd: root, stdio: 'inherit', shell: process.platform === 'win32', ...opts });
+  const r = spawnSync(cmd, args, { cwd: root, stdio: 'inherit', shell: false, ...opts });
   if (r.status !== 0) throw new Error(`${cmd} exit ${r.status}`);
 }
 
@@ -41,7 +43,7 @@ function copyDir(from, to) {
 
 fs.mkdirSync(dist, { recursive: true });
 for (const f of fs.readdirSync(dist)) {
-  if (f === 'node-sea') continue;
+  if (f === 'node-sea' || f === 'bundle-step.cjs') continue;
   fs.rmSync(path.join(dist, f), { recursive: true, force: true });
 }
 
@@ -51,28 +53,31 @@ copyDir(path.join(root, 'rules'), path.join(dist, 'rules'));
 copyDir(path.join(root, 'assets'), path.join(dist, 'assets'));
 fs.copyFileSync(path.join(root, 'package.json'), path.join(dist, 'package.json'));
 
-/* 2) esbuild */
+/* 2) esbuild — som en fil i dist/, aldrig som `node -e <manus>`: ett
+   fler-raders-manus med `=>` och citat går inte genom cmd.exe på Windows. */
 const out = path.join(dist, 'majin.cjs');
-run(process.execPath, [
-  '-e',
-  `import('esbuild').then(async (esbuild) => {
-    const r = await esbuild.build({
-      entryPoints: ['src/cli/majin.js'],
-      bundle: true,
-      platform: 'node',
-      format: 'cjs',
-      target: 'node' + process.versions.node.split('.')[0],
-      outfile: '${out.split(path.sep).join('/')}',
-      external: ['@whiskeysockets/baileys', 'qrcode', 'sharp'],
-      keepNames: true,
-      legalComments: 'none',
-      minify: false,
-      logLevel: 'warning',
-    });
-    if (r.errors && r.errors.length) process.exit(1);
-  }).catch((e) => { console.error(String(e.message || e)); process.exit(1); });`,
-]);
+const esbuildScript = path.join(dist, 'bundle-step.cjs');
+fs.writeFileSync(esbuildScript, `const path = require('node:path');
+import('esbuild').then(async (esbuild) => {
+  const r = await esbuild.build({
+    entryPoints: ['src/cli/majin.js'],
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    target: 'node' + process.versions.node.split('.')[0],
+    outfile: ${JSON.stringify(out.split(path.sep).join('/'))},
+    external: ['@whiskeysockets/baileys', 'qrcode', 'sharp'],
+    keepNames: true,
+    legalComments: 'none',
+    minify: false,
+    logLevel: 'warning',
+  });
+  if (r.errors && r.errors.length) process.exit(1);
+}).catch((e) => { console.error(String((e && e.message) || e)); process.exit(1); });
+`);
+run(process.execPath, [esbuildScript]);
 const bundleBytes = fs.statSync(out).size;
+fs.rmSync(esbuildScript, { force: true });
 process.stdout.write(`\nbundle: dist/majin.cjs (${(bundleBytes / 1024).toFixed(0)} kB)\n\n`);
 if (noPkg) {
   process.stdout.write('done (--no-pkg). Try it: node dist/majin.cjs doctor\n');
