@@ -5,13 +5,13 @@
   rather than leaving an empty release behind.
 
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts\publish.ps1
-    ... -Version 0.1.1 -Branch arena/e223e8b9-slurps
+    ... -Version 0.4.3 -Branch main
     ... -CheckOnly        # just report what is on GitHub right now
 #>
 param(
   [string]$Version = '0.4.3',
-  [string]$Branch = 'arena/e223e8b9-slurps',
-  [string]$Repo = 'rssen-debug/slurps',
+  [string]$Branch = 'main',
+  [string]$Repo = 'rssen-debug/MAJINCLI',
   [switch]$CheckOnly,
   [switch]$SkipPush
 )
@@ -42,8 +42,10 @@ if (-not $CheckOnly -and -not $SkipPush) {
   if ((git rev-parse "origin/$Branch").Trim() -ne $head) { Bad 'the push did not land the local head' }
 
   Step "tag $Tag"
-  git tag -f -a $Tag -m "MAJIN $Version" $head
-  try { git push -f origin $Tag } catch { Bad 'git push --tags failed' }
+  git tag -a $Tag -m "MAJIN $Version" $head
+  if ($LASTEXITCODE -ne 0) { Bad "tag $Tag already exists or could not be created — never overwrite a published release" }
+  git push origin $Tag
+  if ($LASTEXITCODE -ne 0) { Bad "failed to publish tag $Tag to $Repo" }
   Ok "tag $Tag -> $head (this triggers build-exe)"
 }
 
@@ -59,7 +61,7 @@ Ok "run $runId"
 
 Step 'watch the build'
 gh run watch $runId --exit-status
-if ($LASTEXITCODE -ne 0) { Bad "run $runId did not succeed -- open: gh run view $run --log-failed or the job annotations" }
+if ($LASTEXITCODE -ne 0) { Bad "run $runId did not succeed -- open: gh run view $runId --log-failed or the job annotations" }
 Ok 'run finished'
 
 Step 'the release must exist and carry the files'

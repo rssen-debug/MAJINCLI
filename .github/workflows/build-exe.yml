@@ -13,6 +13,8 @@ name: build-exe
 on:
   push:
     tags: ['v*']
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       keep_exe:
@@ -25,7 +27,22 @@ permissions:
   issues: write
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run check
+      - run: npm run i18n
+
   exe:
+    needs: check
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -163,7 +180,7 @@ jobs:
             Unsigned, so Windows may warn once (More info -> Run anyway).
             Or download it with curl:
 
-                curl.exe -L -o majin-win-x64.exe https://github.com/rssen-debug/slurps/releases/latest/download/majin-win-x64.exe
+                curl.exe -L -o majin-win-x64.exe https://github.com/rssen-debug/MAJINCLI/releases/latest/download/majin-win-x64.exe
           files: |
             dist/installer/MAJIN-Setup.exe
             dist/setup/majin-setup.exe

@@ -33,7 +33,13 @@
   // core states: idle | thinking | working | waiting | done | error
   let core = 'idle';
   let root = null, orb = null, coreLabel = null, list = null, empty = null;
-  let currentToolRow = null;
+  // Each tool call receives an ID from the existing MAJIN loop. Parallel tool
+  // completions may arrive out of order; a single "current row" corrupts UI.
+  const pendingById = new Map();
+  const pendingByName = new Map();
+  let preview = null;
+  const PREVIEW_LIMIT = 400000;
+  const BYTES = new TextEncoder();
 
   const CORE_TEXT = {
     idle: 'ready',
@@ -114,6 +120,61 @@
     return d;
   }
 
+  function track(name, row, callId) {
+    const key = String(name || 'tool');
+    if (!pendingByName.has(key)) pendingByName.set(key, []);
+    pendingByName.get(key).push(row);
+    if (callId) pendingById.set(String(callId), row);
+  }
+
+  function previewHtml(path, size, row) {
+    if (!/\.html?$/i.test(path) || (Number(size) || 0) > PREVIEW_LIMIT) return;
+    const btn = el('button', 'preview-action', '👁 Preview HTML');
+    btn.type = 'button';
+    btn.title = 'Preview a local HTML file without running scripts';
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = 'Loading preview…';
+      try {
+        const token = window.__MAJIN_TOKEN__ || 'demo';
+        const res = await fetch('/api/file?path=' + encodeURIComponent(path) + '&t=' + encodeURIComponent(token), {
+          headers: { authorization: 'Bearer ' + token },
+        });
+        if (!res.ok) throw new Error('Cannot read this file (' + res.status + ')');
+        const length = Number(res.headers.get('content-length') || 0);
+        if (length > PREVIEW_LIMIT) throw new Error('Preview is too large');
+        const html = await res.text();
+        if (BYTES.encode(html).length > PREVIEW_LIMIT) throw new Error('Preview is too large');
+
+        if (preview) preview.remove();
+        preview = el('section', 'preview-panel');
+        preview.setAttribute('aria-label', 'HTML preview');
+        const head = el('div', 'preview-head');
+        head.append(el('strong', '', 'Live file preview'));
+        const close = el('button', 'preview-close', '✕ Close');
+        close.type = 'button';
+        close.onclick = () => { preview.remove(); preview = null; };
+        head.append(close);
+        const frame = document.createElement('iframe');
+        frame.className = 'preview-frame';
+        frame.title = 'Sandboxed HTML file preview';
+        frame.setAttribute('sandbox', ''); // no scripts, forms, top navigation or same-origin access
+        frame.setAttribute('referrerpolicy', 'no-referrer');
+        const csp = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'\">";
+        frame.srcdoc = csp + html;
+        preview.append(head, frame);
+        root.append(preview);
+        preview.scrollIntoView({ block: 'nearest' });
+      } catch (error) {
+        btn.textContent = String(error.message || error);
+      } finally {
+        btn.disabled = false;
+        if (btn.textContent === 'Loading preview…') btn.textContent = '👁 Preview HTML';
+      }
+    };
+    row.append(btn);
+  }
+
   /* Feed one real run event. Called from app.js's onEvent — the single
    * funnel the SSE stream already passes through. */
   function onEvent(ev) {
@@ -127,24 +188,53 @@
         setCore('thinking');
         break;
       case 'tool': {
+        // Older MAJIN streams announce proposed tool calls without IDs. Retain
+        // those rows and attach call IDs once the loop starts the real calls.
         setCore('working');
-        const row = stepRow(iconFor(ev.name), ev.name || 'tool', 'running…');
+        const name = String(ev.name || 'tool');
+        const row = stepRow(iconFor(name), name, 'running…');
         row.classList.add('running');
         addStep(row);
-        currentToolRow = row;
+        track(name, row, ev.callId);
+        break;
+      }
+      case 'tool_begin': {
+        setCore('working');
+        const name = String(ev.name || 'tool');
+        // Reuse the proposed row if it already exists; never show duplicates.
+        let row = (pendingByName.get(name) || []).find((r) => !r.dataset.callId && !r.dataset.finished);
+        if (!row) {
+          row = stepRow(iconFor(name), name, 'running…');
+          row.classList.add('running');
+          addStep(row);
+          track(name, row);
+        }
+        if (ev.callId) {
+          row.dataset.callId = String(ev.callId);
+          pendingById.set(String(ev.callId), row);
+        }
         break;
       }
       case 'tool_result': {
-        const row = currentToolRow;
-        if (row) {
-          row.classList.remove('running');
-          row.classList.add(ev.ok ? 'ok' : 'fail');
-          const sub = row.querySelector('.step-sub');
-          if (sub) sub.textContent = ev.ok ? (ev.summary || 'done') : 'error: ' + (ev.error || 'unknown');
-          row.append(detailEl({ tool: ev.tool, ok: ev.ok, summary: ev.summary, error: ev.error, meta: ev.meta }));
+        const name = String(ev.tool || 'tool');
+        let row = ev.callId ? pendingById.get(String(ev.callId)) : null;
+        if (!row) row = (pendingByName.get(name) || []).find((r) => !r.dataset.finished);
+        if (!row) {
+          row = stepRow(iconFor(name), name, 'running…');
+          addStep(row);
         }
-        currentToolRow = null;
-        setCore('thinking');
+        row.dataset.finished = '1';
+        row.classList.remove('running');
+        row.classList.add(ev.ok ? 'ok' : 'fail');
+        const sub = row.querySelector('.step-sub');
+        const errText = typeof ev.error === 'string' ? ev.error : (ev.error && ev.error.message) || 'unknown';
+        if (sub) sub.textContent = ev.ok ? (ev.summary || 'done') : 'error: ' + errText;
+        row.append(detailEl({ tool: ev.tool, ok: ev.ok, summary: ev.summary, error: ev.error, meta: ev.meta }));
+        if (ev.callId) pendingById.delete(String(ev.callId));
+        if (ev.ok && ev.meta && typeof ev.meta.path === 'string') {
+          previewHtml(ev.meta.path, ev.meta.bytes, row);
+        }
+        if (!pendingById.size) setCore('thinking');
         break;
       }
       case 'escalate':
@@ -200,7 +290,10 @@
   function reset() {
     if (!root) return;
     list.textContent = '';
-    currentToolRow = null;
+    pendingById.clear();
+    pendingByName.clear();
+    if (preview) preview.remove();
+    preview = null;
     core = 'idle';
     root.hidden = true;
     if (!empty) {
