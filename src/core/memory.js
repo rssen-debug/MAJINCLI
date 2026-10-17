@@ -5,7 +5,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { dirs } from './paths.js';
+import { dirs, resolveData } from './paths.js';
 import { bus } from './log.js';
 
 const stop = new Set(['och', 'att', 'det', 'som', 'för', 'med', 'den', 'the', 'and', 'this', 'that', 'with', 'from', 'jag', 'du', 'pa', 'på', 'av', 'en', 'et', 'at', 'är', 'ar', 'har', 'ha', 'ska', 'borde', 'kunde']);
@@ -25,7 +25,7 @@ function tokenize(s) {
 export class Memory {
   constructor(cfg) {
     this.cfg = cfg;
-    this.dir = cfg?.get('memory.dir') ? path.resolve(cfg.get('memory.dir')) : dirs.memory;
+    this.dir = resolveData(cfg?.get('memory.dir'), dirs.memory);
     fs.mkdirSync(this.dir, { recursive: true });
   }
 
@@ -144,7 +144,7 @@ const FRONT = /^---\n([\s\S]*?)\n---\n?/;
 export class Skills {
   constructor(cfg) {
     this.cfg = cfg;
-    this.dir = dirs.skills;
+    this.dir = resolveData(cfg?.get('skills.dir'), dirs.skills);
     fs.mkdirSync(this.dir, { recursive: true });
   }
 

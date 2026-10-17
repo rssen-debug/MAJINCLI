@@ -35,6 +35,7 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
   ctx.resume = () => agent.resume();
   ctx.statusProviders = () => cfg.providerStatus();
   ctx.setPlan = (session, plan, note) => agent.setPlan(session, plan, note);
+  ctx.getPlan = (session) => agent.plans.get(session) || [];
   ctx.registryCount = () => registry.list().length;
 
   let sched = null;

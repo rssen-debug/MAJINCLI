@@ -17,18 +17,19 @@ export const agentTools = [
       note: 'string: briefly why the plan looks like this',
     },
     async run({ items = [], mode = 'replace', note }, ctx) {
+      const prev = mode === 'merge' ? ctx.plan || ctx.getPlan?.() || [] : [];
       const norm = items.map((it, i) => ({
-        id: it.id || `t${i + 1}`,
+        id: it.id || `t${prev.length + i + 1}`,
         text: String(it.text || it.title || '').slice(0, 300),
         status: ['todo', 'doing', 'done', 'blocked'].includes(it.status) ? it.status : 'todo',
       }));
-      let plan = mode === 'merge' ? [...(ctx.plan || []), ...norm] : norm;
+      let plan = [...prev, ...norm];
       const seen = new Set();
       plan = plan.filter((p) => !seen.has(p.id) && seen.add(p.id));
       ctx.plan = plan;
       ctx.setPlan?.(plan, note);
       const done = plan.filter((p) => p.status === 'done').length;
-      return { result: `plan (${done}/${plan.length} klara)${note ? ` — ${note}` : ''}\n${plan.map((p) => `[${p.status === 'done' ? 'x' : p.status === 'doing' ? '~' : p.status === 'blocked' ? '!' : ' '}] ${p.text}`).join('\n')}`, meta: { plan }, summary: `plan ${done}/${plan.length}` };
+      return { result: `plan (${done}/${plan.length} done)${note ? ` — ${note}` : ''}\n${plan.map((p) => `[${p.status === 'done' ? 'x' : p.status === 'doing' ? '~' : p.status === 'blocked' ? '!' : ' '}] ${p.text}`).join('\n')}`, meta: { plan }, summary: `plan ${done}/${plan.length} done` };
     },
   }),
 

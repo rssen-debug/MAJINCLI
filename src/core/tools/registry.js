@@ -191,7 +191,10 @@ export class Registry {
     const t0 = Date.now();
     this.ctx.emit?.({ type: 'tool:start', tool: name, step, args: preview(parsed.args) });
     try {
-      const out = await t.run(parsed.args, { ...this.ctx, session, emit: this.ctx.emit });
+      // Bridge the per-session plan setter so tools never see the runtime's 3-arg shape.
+      const setPlan = this.ctx.setPlan ? (plan, note) => this.ctx.setPlan(session, plan, note) : this.ctx.setPlan;
+      const getPlan = this.ctx.getPlan ? () => this.ctx.getPlan(session) : () => this.ctx.plan || [];
+      const out = await t.run(parsed.args, { ...this.ctx, session, step, emit: this.ctx.emit, setPlan, getPlan });
       const res = normalize(out);
       const cap = this.ctx.cfg.get('tools.maxOutputChars') || 12000;
       const text = typeof res.result === 'string' ? res.result : JSON.stringify(res.result ?? res, null, 1);

@@ -62,6 +62,17 @@ export const dirs = {
 /** YARA rules shipped with the app — copied into the data dir on first run so they stay editable. */
 export const pkgRules = path.join(repoRoot, 'rules');
 
+/**
+ * Data directory for a config value: absolute stays, relative hangs under the MAJIN home.
+ * Without this, `memory.dir: "memory"` would write into whatever folder the process
+ * happened to start in (the repo, or worse: an unwritable Program Files dir).
+ */
+export function resolveData(raw, fallback = dirs.root) {
+  const v = raw == null || raw === '' ? null : expand(String(raw));
+  if (!v) return fallback;
+  return path.isAbsolute(v) ? path.normalize(v) : path.join(D, v);
+}
+
 export function ensureDirs() {
   for (const [k, v] of Object.entries(dirs)) {
     if (k === 'config' || k === 'devConfig' || k === 'pid') continue;
