@@ -1,0 +1,518 @@
+/**
+ * LENT — server.
+ * Bara node:http. Inget ramverk. Samma port serverar UI:et, API:t, SSE-flödet
+ * och WhatsApp-webhooken. Token låser dörren; webbläsarfönstret får den automatiskt.
+ */
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { bus } from '../log.js';
+import { dirs, safeJoin } from '../paths.js';
+import { readHistory } from '../context.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const UI_DIR = path.resolve(__dirname, '../../ui');
+const MAX_BODY = 64 * 1024 * 1024;
+const VERSION = '0.1.0';
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.txt': 'text/plain; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8',
+  '.jsonl': 'application/x-ndjson; charset=utf-8',
+  '.yar': 'text/plain; charset=utf-8',
+};
+
+export function createServer(rt) {
+  const { cfg, agent, registry, memory, skills, usage, approvals, scheduler, channels } = rt;
+  const pairs = new Map();
+
+  const server = http.createServer((req, res) => {
+    handle(req, res).catch((err) => {
+      bus.error('http.error', { url: req.url, error: err.message });
+      if (!res.headersSent) json(res, 500, { ok: false, error: err.message, hint: err.hint || null });
+      else res.end();
+    });
+  });
+
+  async function handle(req, res) {
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const p = url.pathname.replace(/\/+$/, '') || '/';
+    const token = String(cfg.get('server.token') || '');
+    const authed = authOk(req, url, token, cfg);
+
+    res.setHeader('x-powered-by', 'LENT');
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type,authorization', 'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS' });
+      return res.end();
+    }
+
+    /* ---------- publika ---------- */
+    if (p === '/healthz') return json(res, 200, { ok: true, name: cfg.get('name'), version: VERSION, up: Math.round(process.uptime()) });
+    if (p === '/api/hello') return json(res, 200, { ok: true, name: cfg.get('name'), version: VERSION, needToken: !authed, tokenOk: authed });
+
+    /* WhatsApp Cloud-webhook (Meta verifierar med eget token, ingen LENT-token) */
+    if (p === '/whatsapp' || p === '/api/webhook/whatsapp') {
+      if (!channels) return json(res, 503, { ok: false, error: 'kanaler är inte igång' });
+      if (req.method === 'GET') {
+        const q = Object.fromEntries(url.searchParams);
+        const v = channels.whatsapp.verifyWebhook(q);
+        if (!v.ok) return text(res, 403, v.error || 'avvisad');
+        return text(res, 200, String(v.challenge || ''));
+      }
+      const raw = (await readBody(req, 2 * 1024 * 1024)).toString('utf8');
+      const secret = cfg.get('channels.whatsapp.cloud.appSecret');
+      if (secret) {
+        const sig = String(req.headers['x-hub-signature-256'] || '');
+        const crypto = await import('node:crypto');
+        const want = `sha256=${crypto.createHmac('sha256', secret).update(raw).digest('hex')}`;
+        if (!sig || sig !== want) return text(res, 403, 'bad signature');
+      }
+      let body = {};
+      try {
+        body = JSON.parse(raw || '{}');
+      } catch {
+        return json(res, 400, { ok: false, error: 'kropps-JSON trasig' });
+      }
+      const r = channels.whatsapp.ingest(body);
+      return json(res, 200, r.ok !== false ? { ok: true } : { ok: false });
+    }
+
+    if (p === '/api/keys/claim') {
+      const code = String(url.searchParams.get('code') || '').toUpperCase();
+      const hit = pairs.get(code);
+      if (!hit || hit.expires < Date.now()) return json(res, 404, { ok: false, error: 'koden är ogiltig eller utgången' });
+      pairs.delete(code);
+      return json(res, 200, { ok: true, token });
+    }
+
+    if (!authed) {
+      if (p === '/' || p === '/index.html') {
+        return html(res, 200, `<!doctype html><meta charset=utf-8><title>LENT — nyckel krävs</title>
+<style>body{background:#04070a;color:#9fe8ff;font:15px/1.6 ui-monospace,Menlo,Consolas,monospace;display:grid;place-items:center;height:100vh;margin:0}
+a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px solid #14384d;border-radius:8px;color:#c9f5ff}</style>
+<div><b>LENT</b> kräver engångsnyckeln.<br>Kör <pre>lent window</pre> så öppnas fönstret med nyckeln inbakad.<br>Eller öppna <pre>http://${req.headers.host}/?t=${token}</pre> den här gången.</div>`);
+      }
+      return json(res, 401, { ok: false, error: 'token krävs', hint: `öppna med ?t=${token} eller skicka header \"authorization: Bearer ${token}\"` });
+    }
+
+    /* ---------- UI + statica ---------- */
+    if (p === '/' || p === '/index.html' || p === '/app') {
+      const file = path.join(UI_DIR, 'index.html');
+      if (!fs.existsSync(file)) return html(res, 200, '<pre>UI saknas — kör npm run ui</pre>');
+      const raw = fs.readFileSync(file, 'utf8').replace(/__LENT_TOKEN__/g, token).replace(/__LENT_VERSION__/g, VERSION).replace(/__LENT_NAME__/g, cfg.get('name') || 'LENT');
+      res.setHeader('set-cookie', `lent=${token}; Path=/; SameSite=Lax`);
+      return html(res, 200, raw);
+    }
+    if (!p.startsWith('/api/')) {
+      const clean = p.replace(/\.\./g, '');
+      const file = path.join(UI_DIR, clean);
+      if (file.startsWith(UI_DIR) && fs.existsSync(file) && fs.statSync(file).isFile()) {
+        res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });
+        return fs.createReadStream(file).pipe(res);
+      }
+      return json(res, 404, { ok: false, error: `hittar inte ${p}` });
+    }
+
+    /* ---------- state ---------- */
+    if (p === '/api/state') return json(res, 200, rt.state({ includeTools: url.searchParams.get('tools') !== '0' }));
+    if (p === '/api/config' && req.method === 'GET') return json(res, 200, { ok: true, config: cfg.redacted(), file: cfg.file, diffReady: true });
+    if (p === '/api/logs') return json(res, 200, { ok: true, events: bus.tail(Number(url.searchParams.get('n') || 200), Number(url.searchParams.get('after') || 0)) });
+    if (p === '/api/usage') return json(res, 200, { ok: true, ...usage.summary(), routes: cfg.routeTable().length });
+    if (p === '/api/memory') {
+      const q = url.searchParams.get('q');
+      return json(res, 200, { ok: true, facts: q ? memory.recall(q, 20) : memory.facts(), events: memory.recentEvents(25), stats: memory.stats() });
+    }
+    if (p === '/api/skills') return json(res, 200, { ok: true, skills: skills.list() });
+    if (p === '/api/tools') return json(res, 200, { ok: true, count: registry.list().length, groups: registry.groups(), tools: registry.list().map((t) => ({ name: t.name, group: t.group, risk: t.risk, desc: t.desc, params: Object.keys(t.raw || {}) })) });
+    if (p === '/api/schedule') return json(res, 200, { ok: true, jobs: scheduler ? scheduler.list() : [], enabled: Boolean(scheduler) });
+    if (p === '/api/channels') return json(res, 200, { ok: true, ...(channels ? channels.status() : { telegram: { online: false, state: 'av' }, whatsapp: { online: false, state: 'av' } }) });
+    if (p === '/api/approvals') return json(res, 200, { ok: true, pending: approvals.list(), recent: approvals.recent(12) });
+    if (p === '/api/sessions') {
+      let files = [];
+      try {
+        files = fs.readdirSync(dirs.sessions).filter((f) => f.endsWith('.jsonl'));
+      } catch {
+        /* ingen historik ännu */
+      }
+      const sessions = files
+        .map((f) => {
+          const abs = path.join(dirs.sessions, f);
+          const st = fs.statSync(abs);
+          const msgs = readHistory(path.basename(f, '.jsonl'), 3);
+          const last = msgs[msgs.length - 1];
+          return { id: path.basename(f, '.jsonl'), file: f, bytes: st.size, mtime: st.mtime.toISOString(), messages: msgs.length ? countLines(abs) : 0, lastRole: last?.role || null, lastAt: last?.ts || null, lastText: String(last?.content || '').slice(0, 120) };
+        })
+        .sort((a, b) => (a.mtime < b.mtime ? 1 : -1));
+      return json(res, 200, { ok: true, sessions, dir: dirs.sessions });
+    }
+    if (p === '/api/session/clear' && req.method === 'POST') {
+      const body = await readJson(req);
+      const id = String(body.session || 'desktop').replace(/[^\w.:-]/g, '_');
+      const abs = path.join(dirs.sessions, `${id}.jsonl`);
+      try {
+        if (fs.existsSync(abs)) fs.renameSync(abs, `${abs}.${Date.now()}.bak`);
+        return json(res, 200, { ok: true, session: id });
+      } catch (err) {
+        return json(res, 422, { ok: false, error: err.message });
+      }
+    }
+    if (p === '/api/history') {
+      const s = url.searchParams.get('session') || 'desktop';
+      return json(res, 200, { ok: true, session: s, messages: readHistory(s, Number(url.searchParams.get('n') || 200)) });
+    }
+    if (p === '/api/keys/pair' && req.method === 'POST') {
+      const code = Math.random().toString(36).slice(2, 8).toUpperCase();
+      pairs.set(code, { code, expires: Date.now() + 5 * 60_000 });
+      return json(res, 200, { ok: true, code, expiresSec: 300, url: `http://${req.headers.host}/?t=${token}` });
+    }
+    if (p === '/api/report' && req.method === 'GET') {
+      const file = url.searchParams.get('file') || '';
+      const abs = safeJoin(dirs.out, file);
+      if (!abs || !fs.existsSync(abs)) return json(res, 404, { ok: false, error: 'rapporten finns inte' });
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-disposition': `attachment; filename="${path.basename(abs)}"` });
+      return fs.createReadStream(abs).pipe(res);
+    }
+    if (p === '/api/file') {
+      const want = url.searchParams.get('path') || '';
+      const abs = path.isAbsolute(want) ? path.resolve(want) : path.resolve(cfg.get('workspace'), want);
+      const roots = [dirs.workspace, dirs.out, dirs.uploads, dirs.cache, dirs.memory, dirs.sessions, dirs.rules];
+      const allowed = roots.some((root) => abs.startsWith(path.resolve(root) + path.sep) || abs === path.resolve(root));
+      if (!allowed || !fs.existsSync(abs)) return json(res, 403, { ok: false, error: 'inte tillåten sökväg', hint: 'servern serverar bara workspace, out, uploads och memory' });
+      const st = fs.statSync(abs);
+      res.writeHead(200, { 'content-type': MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream', 'content-length': st.size, 'content-disposition': `attachment; filename="${path.basename(abs)}"` });
+      return fs.createReadStream(abs).pipe(res);
+    }
+
+    /* ---------- SSE-flöden ---------- */
+    if (p === '/api/events') {
+      sseHead(res);
+      const ac = new AbortController();
+      res.on('close', () => ac.abort());
+      (async () => {
+        try {
+          for await (const ev of bus.stream({ fromSeq: bus.seq, signal: ac.signal })) {
+            if (res.writableEnded || res.destroyed) break;
+            res.write(`event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`);
+          }
+        } catch {
+          /* klienten stängde */
+        }
+        res.end();
+      })();
+      return;
+    }
+    if (p === '/api/chat') {
+      const body = await readJson(req);
+      const input = String(body.input || body.text || '').trim();
+      if (!input) return json(res, 400, { ok: false, error: 'tom input' });
+      const session = String(body.session || 'desktop');
+      const attachments = Array.isArray(body.attachments) ? body.attachments : [];
+      if (body.stream === false) {
+        const r = await agent.turn({ input, session, attachments, source: 'api' });
+        return json(res, 200, { ok: !r.error, ...r });
+      }
+      sseHead(res);
+      const ac = new AbortController();
+      res.on('close', () => ac.abort());
+      try {
+        const r = await agent.turn({
+          input,
+          session,
+          attachments,
+          source: 'ui',
+          onEvent: (ev) => res.write(`event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`),
+        });
+        res.write(`event: done\ndata: ${JSON.stringify({ ok: !r.error, steps: r.steps, tools: r.tools?.length || 0, usage: r.usage, moa: r.moa, job: r.job })}\n\n`);
+      } catch (err) {
+        res.write(`event: error\ndata: ${JSON.stringify({ message: err.message, hint: err.hint || null })}\n\n`);
+      }
+      return res.end();
+    }
+
+    /* ---------- skrivningar ---------- */
+    if (p === '/api/chat/stop' && req.method === 'POST') {
+      const body = await readJson(req);
+      agent.stop(String(body.session || 'desktop'));
+      return json(res, 200, { ok: true });
+    }
+    if (p === '/api/config' && (req.method === 'PATCH' || req.method === 'POST')) {
+      const patch = await readJson(req);
+      if (!Object.keys(patch || {}).length) return json(res, 400, { ok: false, error: 'tom patch — skicka JSON' });
+      const r = cfg.patch(patch, { source: 'ui' });
+      return json(res, r.ok ? 200 : 422, { ok: r.ok, diff: r.diff || [], errors: r.errors || [], config: cfg.redacted() });
+    }
+    if (p === '/api/config/dry' && req.method === 'POST') {
+      const patch = await readJson(req);
+      const r = cfg.patch(patch, { dry: true });
+      return json(res, 200, { ok: r.ok, diff: r.diff, errors: r.errors, preview: r.preview && { moa: r.preview.moa?.policy, routes: r.preview.models?.routes } });
+    }
+    if (p === '/api/intent' && req.method === 'POST') {
+      const { parseIntent } = await import('../routes.js');
+      const body = await readJson(req);
+      const i = parseIntent(String(body.text || ''), cfg);
+      const dry = i.matched ? cfg.patch(i.patch, { dry: true }) : { ok: false, errors: [], diff: [] };
+      return json(res, 200, { ok: i.matched, matched: i.matched, notes: i.notes, patch: i.patch, diff: dry.diff, errors: dry.errors });
+    }
+    if (p === '/api/provider' && req.method === 'POST') {
+      const body = await readJson(req);
+      const { PRESETS } = await import('../presets.js');
+      const preset = PRESETS[body.preset];
+      const name = String(body.name || (preset ? body.preset : 'custom')).replace(/[^a-z0-9_-]/gi, '').toLowerCase().slice(0, 24);
+      if (!name) return json(res, 400, { ok: false, error: 'providerspecifikt namn saknas' });
+      const entry = {
+        label: body.label || preset?.label || name,
+        kind: body.kind || preset?.kind || 'openai',
+        baseUrl: body.baseUrl || preset?.baseUrl || '',
+        apiKey: body.apiKey || '',
+        models: Array.isArray(body.models) && body.models.length ? body.models : preset?.models || [],
+      };
+      if (!entry.baseUrl && entry.kind !== 'mock') return json(res, 422, { ok: false, error: 'baseUrl krävs för egen provider' });
+      const r = cfg.patch({ providers: { [name]: entry } }, { source: 'ui' });
+      if (!r.ok) return json(res, 422, { ok: false, errors: r.errors });
+      return json(res, 200, { ok: true, provider: name, status: cfg.providerStatus().find((p2) => p2.name === name) });
+    }
+    if (p === '/api/provider/test' && req.method === 'POST') {
+      const body = await readJson(req);
+      const ref = String(body.ref || `${body.provider || cfg.get('models.provider')}/`);
+      const { complete } = await import('../provider/chat.js');
+      const route = cfg.resolveModel(ref.includes('/') ? ref : `${body.provider}/`, 'router');
+      const t0 = Date.now();
+      try {
+        const r = await complete({ route, job: 'test', messages: [{ role: 'user', content: 'Svara med exakt: OK' }], maxTokens: 16, temperature: 0, retries: 0 });
+        return json(res, 200, { ok: true, ms: Date.now() - t0, text: String(r.text).slice(0, 60), usage: r.usage });
+      } catch (err) {
+        return json(res, 200, { ok: false, error: err.message, code: err.code || null, hint: err.hint || null, ms: Date.now() - t0 });
+      }
+    }
+    if (p === '/api/models' && req.method === 'GET') {
+      const { listModelsUrl } = await import('../presets.js');
+      const name = String(url.searchParams.get('provider') || cfg.get('models.provider'));
+      const prov = (cfg.get('providers') || {})[name];
+      if (!prov) return json(res, 404, { ok: false, error: `okänd provider "${name}"` });
+      const listUrl = listModelsUrl(prov);
+      if (!listUrl) return json(res, 200, { ok: true, provider: name, models: prov.models || [], note: 'provider saknar modellista — skriv modellnamnet själv' });
+      try {
+        const r = await fetch(listUrl, { headers: prov.apiKey ? { authorization: `Bearer ${prov.apiKey}` } : {}, signal: AbortSignal.timeout(12000) });
+        const j = await r.json().catch(() => ({}));
+        const models = (j.data || j.models || j || []).map((m) => (typeof m === 'string' ? m : m.id)).filter(Boolean).sort();
+        return json(res, 200, { ok: r.ok, provider: name, models: models.slice(0, 400), count: models.length, status: r.status });
+      } catch (err) {
+        return json(res, 200, { ok: false, error: err.message, hint: 'nätverksfel eller fel baseUrl' });
+      }
+    }
+    if (p === '/api/approve' && req.method === 'POST') {
+      const body = await readJson(req);
+      const ok = approvals.respond(String(body.id), Boolean(body.approved), String(body.note || 'ui'));
+      return json(res, 200, { ok, pending: approvals.list().length });
+    }
+    if (p === '/api/schedule' && req.method === 'POST') {
+      if (!scheduler) return json(res, 503, { ok: false, error: 'schemaläggaren är av' });
+      const body = await readJson(req);
+      try {
+        return json(res, 200, { ok: true, job: scheduler.add({ when: body.when, task: body.task, deliver: body.deliver || 'silent', model: body.model || null, name: body.name || '' }) });
+      } catch (err) {
+        return json(res, 422, { ok: false, error: err.message });
+      }
+    }
+    if (p === '/api/schedule' && req.method === 'DELETE') {
+      const id = url.searchParams.get('id');
+      return json(res, 200, { ok: scheduler ? scheduler.remove(id) : false });
+    }
+    if (p === '/api/schedule/run' && req.method === 'POST') {
+      const body = await readJson(req);
+      const r = scheduler ? await scheduler.runNow(body.id) : { error: 'ingen scheduler' };
+      return json(res, r.error ? 422 : 200, { ok: !r.error, ...r });
+    }
+    if (p === '/api/skills' && req.method === 'POST') {
+      const body = await readJson(req);
+      const r = skills.save(body);
+      return json(res, r.ok ? 200 : 422, r);
+    }
+    if (p === '/api/memory' && req.method === 'POST') {
+      const body = await readJson(req);
+      if (body.action === 'forget') return json(res, 200, { ok: memory.forget(String(body.query || '')) });
+      return json(res, 200, memory.remember(String(body.text || ''), body.tags || []));
+    }
+    if (p === '/api/channels/telegram' && req.method === 'POST') {
+      const body = await readJson(req);
+      if (body.botToken) cfg.patch({ channels: { telegram: { botToken: String(body.botToken).trim(), enabled: true } } });
+      if (!channels) return json(res, 503, { ok: false, error: 'kanaler är inte igång (starta om LENT med channels aktiverade)' });
+      const ok = body.action === 'stop' ? channels.stopTelegram() : await channels.startTelegram();
+      return json(res, 200, { ok: Boolean(ok), status: channels.telegram.status(), pairingCode: channels.telegram.status().pairingCode });
+    }
+    if (p === '/api/channels/whatsapp' && req.method === 'POST') {
+      const body = await readJson(req);
+      if (body.transport) cfg.patch({ channels: { whatsapp: { transport: body.transport === 'cloud' ? 'cloud' : 'baileys', enabled: true, ...(body.cloud || {}) } } });
+      if (!channels) return json(res, 503, { ok: false, error: 'kanaler är inte igång' });
+      if (body.action === 'stop') await channels.stopWhatsapp();
+      else await channels.startWhatsapp();
+      return json(res, 200, { ok: true, status: channels.whatsapp.status() });
+    }
+    if (p === '/api/channels/allow' && req.method === 'POST') {
+      const body = await readJson(req);
+      if (body.channel === 'telegram') {
+        const list = [...new Set([...(cfg.get('channels.telegram.allowedChatIds') || []), Number(body.chatId)])].filter(Boolean);
+        cfg.patch({ channels: { telegram: { allowedChatIds: list } } });
+        return json(res, 200, { ok: true, list });
+      }
+      if (channels) await channels.whatsapp.allow(body.jid);
+      return json(res, 200, { ok: true, list: cfg.get('channels.whatsapp.allowedJids') || [] });
+    }
+    if (p === '/api/re/upload' && req.method === 'POST') {
+      const name = sanitize(String(url.searchParams.get('name') || 'prov.bin'));
+      const cap = cfg.get('tools.re.maxFileBytes') || 6e8;
+      const buf = await readBody(req, cap);
+      if (buf.length > cap) return json(res, 413, { ok: false, error: `för stor fil (${buf.length} > ${cap})` });
+      const abs = path.join(dirs.uploads, `${Date.now()}-${name}`);
+      fs.mkdirSync(dirs.uploads, { recursive: true });
+      fs.writeFileSync(abs, buf);
+      const crypto = await import('node:crypto');
+      const sha = crypto.createHash('sha256').update(buf).digest('hex');
+      return json(res, 200, { ok: true, path: abs, name, size: buf.length, sha256: sha });
+    }
+    if (p === '/api/re/analyze' && req.method === 'POST') {
+      const body = await readJson(req);
+      const out = await registry.exec('re.analyze', { path: String(body.path || ''), maxStrings: Number(body.maxStrings) || 0, rules: body.rules || 'builtin+user' }, { ...rt.ctx, session: 'ui-api', step: 1 });
+      if (!out.ok) return json(res, 422, { ok: false, error: out.error?.message || 'analys gick inte', hint: out.error?.hint || null });
+      return json(res, 200, { ok: true, result: out.result, meta: out.meta, spilled: out.spilled });
+    }
+    if (p === '/api/selftest' && req.method === 'POST') {
+      const body = await readJson(req).catch(() => ({}));
+      const out = await registry.exec('lent.selftest', { level: body.level === 'full' ? 'full' : 'quick' }, { ...rt.ctx, session: 'ui-api', step: 1 });
+      return json(res, 200, { ok: out.ok !== false, text: out.result, meta: out.meta || null, error: out.error?.message || null });
+    }
+    if (p === '/api/tool' && req.method === 'POST') {
+      const body = await readJson(req);
+      const name = String(body.tool || body.name || '');
+      if (!name) return json(res, 400, { ok: false, error: 'tool saknas' });
+      const out = await registry.exec(name, body.args || {}, { ...rt.ctx, session: 'ui-api', step: 1 });
+      return json(res, 200, { ok: out.ok !== false, result: out.result, meta: out.meta || null, error: out.error || null, ms: out.ms });
+    }
+    if (p === '/api/usage/reset' && req.method === 'POST') {
+      const ok = usage.reset ? usage.reset() : false;
+      return json(res, 200, { ok, note: ok ? 'månaden nollställd' : 'usage.reset finns inte i den här bygget' });
+    }
+    if (p === '/api/restart' && req.method === 'POST') {
+      json(res, 200, { ok: true, restart: true, note: 'stänger med kod 75 — lent start startar om' });
+      setTimeout(() => {
+        try {
+          server.close();
+        } catch {
+          /* */
+        }
+        process.exit(75);
+      }, 250);
+      return;
+    }
+    if (p === '/api/shutdown' && req.method === 'POST') {
+      json(res, 200, { ok: true, bye: true });
+      setTimeout(() => process.emit('SIGTERM', 'SIGTERM'), 120);
+      return;
+    }
+    return json(res, 404, { ok: false, error: `okänd väg ${p}`, hint: 'se /api/state för allt som finns' });
+  }
+
+  return server;
+}
+
+/* ------------------------------- helpers --------------------------------- */
+
+/**
+ * Local-first: localhost (och sandbox-förhandsvisningen .e2b.app) litar vi på utan
+ * token i URL:en — allt annat kräver nyckeln. Stäng av med server.trustLocal:false.
+ */
+const TRUSTED = /^(127\.|localhost|\[::1\]|0\.0\.0\.0|\*\.e2b\.app|[\w.-]+\.e2b\.app)$/i;
+
+function authOk(req, url, token, cfg) {
+  if (!token) return true;
+  if (url.searchParams.get('t') === token || url.searchParams.get('token') === token) return true;
+  const h = req.headers.authorization || '';
+  if (h === `Bearer ${token}` || h === `lent ${token}`) return true;
+  if ((req.headers.cookie || '').split(/;\s*/).includes(`lent=${token}`)) return true;
+  if (req.headers['x-lent-token'] === token) return true;
+  const host = String(req.headers.host || '').split(':')[0];
+  if (cfg?.get?.('server.trustLocal') !== false && TRUSTED.test(host)) return true;
+  return false;
+}
+
+function json(res, code, obj) {
+  const body = JSON.stringify(obj);
+  res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body), 'access-control-allow-origin': '*' });
+  return res.end(body);
+}
+
+function text(res, code, s) {
+  res.writeHead(code, { 'content-type': 'text/plain; charset=utf-8' });
+  return res.end(s);
+}
+
+function html(res, code, s) {
+  res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(s), 'cache-control': 'no-store' });
+  return res.end(s);
+}
+
+function sseHead(res) {
+  res.writeHead(200, {
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': 'no-cache, no-transform',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    'x-accel-buffering': 'no',
+  });
+  res.write(': lent\n\n');
+}
+
+function readBody(req, max = MAX_BODY) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let n = 0;
+    req.on('data', (c) => {
+      n += c.length;
+      if (n > max) {
+        reject(Object.assign(new Error(`body för stort (${n} > ${max})`), { code: 'too_big' }));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+async function readJson(req) {
+  const buf = await readBody(req, 20 * 1024 * 1024);
+  if (!buf.length) return {};
+  try {
+    return JSON.parse(buf.toString('utf8'));
+  } catch {
+    return Object.fromEntries(new URLSearchParams(buf.toString('utf8')).entries());
+  }
+}
+
+function countLines(abs) {
+  try {
+    let n = 0;
+    const buf = fs.readFileSync(abs, 'utf8');
+    for (let i = 0; i < buf.length; i += 1) if (buf[i] === '\n') n += 1;
+    return n;
+  } catch {
+    return 0;
+  }
+}
+
+function sanitize(name) {
+  return path.basename(String(name)).replace(/[^\w.\-+()]/g, '_').slice(0, 140) || 'prov.bin';
+}
+
+export { VERSION };

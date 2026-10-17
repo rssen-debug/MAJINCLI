@@ -1,0 +1,19 @@
+{"ts":"2026-10-17T11:37:18.410Z","type":"turn","summary":"list filer i workspacet och säg hur många det är","tools":"fs.list","ok":true}
+{"ts":"2026-10-17T11:37:18.461Z","type":"turn","summary":"använd demo/demo-pro för kod alltid","tools":"fs.list","ok":true}
+{"ts":"2026-10-17T11:38:26.342Z","type":"config","summary":"code → demo/demo-pro"}
+{"ts":"2026-10-17T11:38:26.346Z","type":"config","summary":"alla 13 jobb → demo/demo-fast"}
+{"ts":"2026-10-17T11:38:26.580Z","type":"turn","summary":"slå på moa med 5 referenser","tools":"fs.list","ok":true}
+{"ts":"2026-10-17T11:38:26.581Z","type":"config","summary":"re → deepseek/deepseek-v4-pro"}
+{"ts":"2026-10-17T11:38:26.793Z","type":"turn","summary":"demoförsök nu: vad är 12*9","tools":"fs.list","ok":true}
+{"ts":"2026-10-17T11:38:27.009Z","type":"turn","summary":"läs filen a.txt och använd pro för kod","tools":"fs.list","ok":true}
+{"ts":"2026-10-17T11:38:27.226Z","type":"turn","summary":"fråga inte innan du raderar","tools":"fs.list","ok":true}
+{"ts":"2026-10-17T11:38:39.335Z","type":"config","summary":"code → demo/demo-pro"}
+{"ts":"2026-10-17T11:38:39.338Z","type":"config","summary":"alla 13 jobb → demo/demo-fast"}
+{"ts":"2026-10-17T11:38:39.576Z","type":"config","summary":"re → deepseek/deepseek-v4-pro"}
+{"ts":"2026-10-17T11:39:28.764Z","type":"turn","summary":"list filer i workspacet och säg hur många det är","tools":"fs.list","ok":true}
+{"ts":"2026-10-17T11:39:28.772Z","type":"config","summary":"code → demo/demo-pro"}
+{"ts":"2026-10-17T11:45:28.689Z","type":"turn","summary":"list filer i workspacet och säg hur många det är","tools":"fs.list","ok":true}
+{"ts":"2026-10-17T11:45:28.698Z","type":"config","summary":"code → demo/demo-pro"}
+{"ts":"2026-10-17T11:45:39.452Z","type":"turn","summary":"list filer i workspacet och säg hur många det är","tools":"fs.list","ok":true}
+{"ts":"2026-10-17T11:45:39.460Z","type":"config","summary":"code → demo/demo-pro"}
+{"ts":"2026-10-17T11:54:09.214Z","type":"turn","summary":"räkna vad 21*2 blir och lista sedan filer i workspacet","tools":"fs.list","ok":true}

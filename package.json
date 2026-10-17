@@ -1,0 +1,59 @@
+{
+  "name": "lent",
+  "version": "0.1.0",
+  "description": "LENT — a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "bin": {
+    "lent": "./src/cli/lent.js"
+  },
+  "main": "./src/core/runtime.js",
+  "exports": {
+    ".": "./src/core/runtime.js",
+    "./config": "./src/core/config.js",
+    "./tools": "./src/core/tools/index.js"
+  },
+  "scripts": {
+    "start": "node ./src/cli/lent.js start",
+    "serve": "node ./src/cli/lent.js _serve --no-window --no-channels",
+    "window": "node ./src/cli/lent.js window",
+    "doctor": "node ./src/cli/lent.js doctor",
+    "doctor:full": "node ./src/cli/lent.js doctor --full",
+    "test": "node --test test/*.test.js",
+    "check": "node ./scripts/parse-all.js",
+    "pair": "node ./src/cli/lent.js pair",
+    "ui": "node ./src/cli/lent.js window",
+    "setup": "powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1",
+    "setup:whatsapp": "powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1 -WhatsApp",
+    "uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1 -Uninstall",
+    "clean": "node ./scripts/clean.js"
+  },
+  "optionalDependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "qrcode": "1.5.4"
+  },
+  "files": [
+    "src",
+    "rules",
+    "docs",
+    "scripts",
+    "test",
+    "README.md",
+    "install.ps1",
+    "start-lent.cmd",
+    "uninstall-lent.cmd",
+    "lent.bat"
+  ],
+  "keywords": [
+    "agent",
+    "windows",
+    "reverse-engineering",
+    "moa",
+    "telegram",
+    "whatsapp",
+    "jarvis"
+  ]
+}
