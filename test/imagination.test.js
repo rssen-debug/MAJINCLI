@@ -18,7 +18,8 @@ test('every status row begins life as a real event — no fabricated activity', 
   const src = read('src/ui/imagine.js');
   // the module only ever paints inside onEvent(ev): no timers, no fakes
   assert.doesNotMatch(src, /setInterval|setTimeout|requestAnimationFrame/, 'no self-driving animation: an idle agent shows an idle core');
-  assert.doesNotMatch(src, /fetch\(|XMLHttpRequest|EventSource/, 'zero extra network: renders the stream the app already has');
+  const events = src.slice(src.indexOf('function onEvent('), src.indexOf('function reset('));
+  assert.doesNotMatch(events, /fetch\\(|XMLHttpRequest|EventSource/, 'event rendering is network-free; a user may explicitly fetch a local preview');
   assert.match(src, /case 'tool'/, 'tool starts are shown');
   assert.match(src, /case 'tool_result'/, 'tool outcomes are shown');
   assert.match(src, /case 'approval:request'/, 'waiting-for-you is a real state');
