@@ -1,0 +1,175 @@
+# Configuration
+
+One JSON file, no env-specific format, no hidden state:
+
+```
+Windows: %LOCALAPPDATA%\MAJIN\majin.config.json  (installed)  ·  <repo>\majin.config.json (dev)
+POSIX:   ~/.majin/majin.config.json
+```
+
+`MAJIN_CONFIG` points at another file, `MAJIN_HOME` at another data home (config, memory,
+sessions, skills, rules, logs, out, uploads, cache all live under it). `MAJIN_PORT` and
+`MAJIN_TOKEN` override `server.port` / `server.token` at load time — that is what the Task
+Scheduler entry and the shims use.
+
+Read it: `majin config get <key>` · `GET /api/config` · the panel.
+Write it: `majin config set <key> <value>` · `PATCH /api/config` · **or say it in chat.**
+Every write is validated, the previous file is kept as `<name>.bak.<timestamp>`, and a failed
+validation returns per-field errors instead of half-applying the change.
+
+## Top level
+
+```jsonc
+{
+  "version": 1,
+  "name": "MAJIN",                 // shown everywhere, including the window title
+  "workspace": "<home>/workspace", // default root for fs.* and shell.* cwd
+  "persona": { "identity": "…", "tone": "…", "style": "…", "rules": [ "…" ], "extra": "" },
+  "providers": { … },              // 10 presets, apiKey lives here
+  "models":  { "provider": "deepseek", "routes": { …13… } },
+  "pricing": { "deepseek/deepseek-flash": { "in": 0.14, "out": 0.28 } },
+  "routing": { … },                // auto-route, escalation, rules[]
+  "moa":     { … },                // mixture of agents
+  "tools":   { … },                // limits, not on/off switches
+  "guard":   { … },                // modes, askOn, neverOn, protectedPaths
+  "memory":  { … }, "skills": { … }, "schedule": { … }, "tasks": { … },
+  "channels": { "telegram": { … }, "whatsapp": { … } },
+  "agent":   { … }, "ui": { … }, "budget": { … }, "logging": { … }, "server": { … }
+}
+```
+
+No key is required unless you change it. Unknown top-level keys are rejected — the error names
+the key and lists what is close to it, so a typo never becomes silent config.
+
+## Providers and models
+
+`providers.<name>` = `{ label, kind, baseUrl, model, apiKey, models[] }`, where `kind` is
+`openai` (any OpenAI-compatible endpoint), `anthropic`, `gemini` or `mock`. Presets:
+`openrouter`, `nous`, `groq`, `openai`, `anthropic`, `gemini`, `ollama`, `lmstudio`, `deepseek`,
+`demo`.
+
+* `apiKey` may be a literal, `{env:MY_VAR}` (resolved per read, never stored resolved) or `null`.
+* `baseUrl` is the only thing you need to change for a proxy or a self-hosted gateway; e.g.
+  OpenRouter is `https://openrouter.ai/api/v1` + model `deepseek/deepseek-chat-v3.1`.
+* `demo` is the offline mock: it answers without a key so the loop, the UI and the tests work on
+  a plane. It is deliberately **not** counted as setup: `needsSetup` stays true until a real
+  provider has a key.
+
+`models.provider` picks the default model; `models.routes.<job>` overrides per job. Thirteen
+jobs: `chat, tasks, tools, summarize, router, vision, code, re, analysis, plan, research, final,
+aggregator`. A route value is `provider/model` (`"deepseek/deepseek-v4-pro"`) or just `model`
+when it is unique across providers — and an explicit `provider/model` always wins over fuzzy
+matching, so `openrouter/deepseek/deepseek-chat-v3.1` is not mangled.
+
+`pricing` maps a ref to USD per million tokens (in/out). Without an entry MAJIN reports token
+counts and leaves cost at 0 instead of guessing.
+
+## Routing and escalation
+
+`routing.auto` classifies each turn (`router` job — a cheap model on purpose) and writes the
+choice to `models.routes`. `routing.rules[]` are yours: `{ id, match, job, weight }` where `match`
+accepts `"/regex/flags"` or a plain substring, and `weight` (default 1.2) decides who wins when
+several hit. Escalation is event-based, never time-based:
+
+* `escalateAfterErrors` (2) — that many tool errors in a row promotes the step to
+  `routing.escalateJob` (`analysis`)
+* `escalateOnDisagreement` (0.35) — MOA disagreeing that much reruns the question on the heavier
+  model
+* `llmTiebreak` + `llmTiebreakAbove` (0.45) — a weak classification gets one extra model call
+* `escalateOnErrors` — errors alone may also promote
+
+## MOA (Mixture-of-Agents)
+
+```jsonc
+"moa": {
+  "enabled": true, "policy": "always",          // always | hardOnly | auto | off
+  "hardJobs": ["re","code","analysis","plan","final","research"],
+  "width": 3,
+  "references": [ { "model": "deepseek/deepseek-flash", "temperature": 0.1 }, … ],
+  "aggregator": "deepseek/deepseek-v4-pro",
+  "referenceMaxTokens": 900, "aggregatorMaxTokens": 3000, "referenceTemperature": 0.5,
+  "disagreementFloor": 0.25
+}
+```
+
+`policy` is the interesting one: `always` answers with MOA on every turn except trivial chat,
+`hardOnly` runs it for the jobs in `hardJobs`, `auto` decides per turn from the tools used, the
+attachment size and a `moa?`/`hard?` marker in your message, `off` disables it. `width` (1–6)
+overrides how many `references` are used, so you can dial cost without editing the list.
+
+The answer you see is the **aggregator's** text; references are kept separate and never leak into
+the history. `disagreementFloor` is below which the merge flags disagreement (and can escalate).
+A degraded MOA (some refs failed) still answers, and the UI shows the state.
+
+## Guard
+
+```jsonc
+"guard": {
+  "mode": "confirm",                  // strict (Assist) | confirm (Approval) | off (Full auto)
+  "askOn":     ["/regex/"],           // force confirmation
+  "neverOn":   ["/regex/"],           // hard block, no approval can override
+  "protectedPaths": ["C:\\Windows", "/etc", …],
+  "pathWriteRoots": ["auto"]          // auto = workspace + data dirs, or explicit dirs
+}
+```
+
+Plus `tools.shell.requireApproval` (`dangerous` | `all` | `off`) and `tasks.approvalTimeoutMs`
+(default 180000 = 30 min; the timeout means *no*). `guard.autoApprove` accepts `"fs.write"` or
+`"fs.write:<hash>"` — a hash of the exact arguments, so approving one command does not approve the
+family.
+
+`strict` maps writes **and** exec; `confirm` maps exec and destructive only; `off` asks for
+nothing but still honours `neverOn` and the protected-path rules. `majin doctor` shows the mode and
+how many approvals are waiting; `GET /api/approvals` lists them, `POST /api/approve` answers them.
+
+## Tools and agent
+
+`tools.allow: "*"` — always. The keys under `tools` are limits: `maxOutputChars` (long results
+spill to a file and the model gets a pointer), `shell.timeoutSec`, `files.maxReadBytes`,
+`files.followSymlinks: false`, `web.provider: "auto"` (`searxng` for a self-hosted search
+instance), `http.allowPrivate` (fetching localhost/LAN; set false to fence the agent off your
+network), `re.maxFileBytes`, `re.external: "auto"`, `re.yaraRules: []` (extra `.yar` files or
+directories).
+
+`agent.maxSteps` (60) bounds one turn; `contextTokens` (48000) triggers compaction;
+`subagents.{enabled,maxParallel:3,maxSteps:14,shareMemory:true}` back `agent.delegate`;
+`historyInPrompt` (40) how many turns of the session travel with the prompt; `stepJob` (`tasks`)
+is the job used when the classifier did not pick one.
+
+`tasks.concurrency` (3) limits parallel tool work; `tasks.approvalTimeoutMs` the approval queue.
+
+## Channels, schedule, budget
+
+```jsonc
+"channels": {
+  "telegram": { "enabled": true, "botToken": null, "allowedChatIds": [], "pairingCode": null,
+                "parseMode": "HTML", "reactions": true, "proxy": null, "apiBase": "…" },
+  "whatsapp": { "enabled": false, "allowFrom": [], "pairingCode": null, "webhook": {
+                "enabled": false, "host": "0.0.0.0", "port": 8788, "path": "/whatsapp",
+                "tunnel": "none", "appId": null, "appSecret": null, "verifyToken": null } }
+},
+"schedule": { "enabled": true, "timezone": "local", "maxConcurrent": 2, "tickMs": 20000 },
+"budget":   { "mode": "track", "monthlyUsd": 0, "warnAt": 0.8 }
+```
+
+`enabled` on a channel means "start it if a token/creds exist" — nothing dials a tool off.
+`allowedChatIds` / `allowFrom` are the allow-lists; empty means only the paired chat (a pairing
+run stores your chat id). `budget.mode: "cap"` refuses to start a turn that would cross
+`monthlyUsd`; `"track"` only warns at `warnAt` (80 %) and the UI chip turns amber.
+
+## UI
+
+`ui.title`, `ui.tagline`, `ui.theme` (`jarvis` is the only built-in look; the ◐ button in the
+header toggles light/dark and stores it in `localStorage`, not in config), `ui.voice`
+(`enabled`, `lang`, `wakeWord`, `tts`, `rate`, `pitch`), `ui.transparency`
+(`showTools: verbose|summary|off`, `showThinking: …`, `showTokens`), `ui.density`,
+`ui.autoOpen`. `majin doctor` warns if the window cannot open or the port is taken.
+
+## Saying it instead of writing it
+
+Natural-language config is a route, not a hack: `POST /api/intent {"text":"…"}` shows what a
+sentence **would** change, and the same parser runs inside a turn. It handles keys, per-job model
+choices, whole-route ("use X for everything"), `om <condition>` → routing rule, MOA on/off and
+width, delete-approval-off, "confirm everything dangerous", persona appends, `max N steps`, a
+monthly budget cap, and "store no memories". Unrelated sentences return `matched: false` and patch
+nothing — a mis-heard voice command must not rewrite config.

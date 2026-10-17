@@ -285,23 +285,23 @@ function hashLite(buf) {
  */
 function nextSteps(r, format) {
   const out = [];
-  if (r.parseError) out.push(`Huvudet kallas fel (${r.parseError.message}). Försök ${r.kind === 'pe' ? 'kontrollera e_lfanew/section alignment' : 'klip first 4 KB till en hex-dump'}.`);
-  if (r.packers?.some((p) => /UPX/.test(p.packer))) out.push('Probabelt UPX: kör `upx -d fil` (eller re.unpack med upx installerat) och analysera den unpackade kopian.');
-  if (r.packers?.some((p) => /VMProtect|Themida|Enigma/.test(p.packer))) out.push('Kommersiell protector: statisk analys är värdelös först. Kör i sandbox (uleast) och följ API-anrop i stället.');
-  if ((r.sections || []).some((s) => s.executable && s.writable)) out.push('Sektion som är både skrivbar och körbar — packa upp den eller dumpa processminnet och analysera det blocket.');
-  if (r.entry && r.entry.inImage === false) out.push('Entry point utanför image: kontrollera overlay och TLS-callbacks; trolig self-extractor.');
-  if (r.tls?.count) out.push(`${r.tls.count} TLS-callback(s) — dekoder dessa först, de kör före main och döljer ofta avpackningskod.`);
+  if (r.parseError) out.push(`the header failed to parse (${r.parseError.message}). For PE: ${r.kind === 'pe' ? 'check e_lfanew and section alignment' : 'cut the first 4 KB into a hexdump'}.`);
+  if (r.packers?.some((p) => /UPX/.test(p.packer))) out.push('Likely UPX: run `upx -d file` (or re.unpack when upx is installed) and analyse the unpacked copy.');
+  if (r.packers?.some((p) => /VMProtect|Themida|Enigma/.test(p.packer))) out.push('Commercial protector: static analysis is near-useless first. Run it in a sandbox and trace API calls instead.');
+  if ((r.sections || []).some((s) => s.executable && s.writable)) out.push('Section that is both writable and executable — unpack it, or dump process memory and analyse that block.');
+  if (r.entry && r.entry.inImage === false) out.push('Entry point outside the image: check the overlay and TLS callbacks; probably a self-extractor.');
+  if (r.tls?.count) out.push(`${r.tls.count} TLS callback(s) — decode these first; they run before main and often hide the unpacking stub.`);
   if (r.importCount < 10 && (r.entropy?.overall || 0) > 7) out.push('Few imports + high entropy: almost certainly a packed or encrypted payload. Try dynamic analysis.');
-  if (r.apis.flagged.some((f) => f.tags.includes('inject'))) out.push('Injectering: sätt breakpoint på WriteProcessMemory/CreateRemoteThread i x64dbg och dumpa den skrivna bufferten.');
-  if (r.apis.flagged.some((f) => f.tags.includes('downloader'))) out.push('Downloader: extrahera URL:erna, kontrollera domänens ålder och hämta payloaden i en sandbox (aldrig på värden).');
-  if (r.apis.flagged.some((f) => f.tags.includes('ransom'))) out.push('Ransomware-mönster: kör i isolerad miljö med dokument som lockbete; dokumentera krypteringsbeteende, nyckelhämtning och utpressningsfil.');
-  if (r.security && r.security.signed === false && r.kind === 'pe') out.push('Osignerat: matchar imphash mot kända familjer och kör filen genom en sandbox innan du litar på den.');
-  if (r.dotnet?.managed) out.push('.NET: använd ilspycmd/dnSpy (dotnet tool install -g ilspycmd) — hanterad kod är lätt att läsa, slösa inte tid på assembly.');
-  if (r.containers?.some((c) => c.kind === 'apk')) out.push('APK: packa upp med apktool, läs AndroidManifest.xml, leta efter url/permission-strängar och dekompile classes.dex.');
-  if (r.containers?.some((c) => c.kind === 'asar')) out.push('Electron: montera asar-arkivet (npx @electron/asar extract) och läs JS-bundlen — logiken ligger där, inte i exet.');
+  if (r.apis.flagged.some((f) => f.tags.includes('inject'))) out.push('Injection: break on WriteProcessMemory/CreateRemoteThread in x64dbg and dump the buffer being written.');
+  if (r.apis.flagged.some((f) => f.tags.includes('downloader'))) out.push('Downloader: extract the URLs, check the domain age, and fetch the payload in a sandbox (never on the host).');
+  if (r.apis.flagged.some((f) => f.tags.includes('ransom'))) out.push('Ransomware pattern: run in an isolated environment with bait documents; record encryption behaviour, key retrieval and the ransom note.');
+  if (r.security && r.security.signed === false && r.kind === 'pe') out.push('Unsigned: match the imphash against known families and run the file through a sandbox before trusting it.');
+  if (r.dotnet?.managed) out.push('.NET: use ilspycmd/dnSpy (dotnet tool install -g ilspycmd) — managed code is easy to read, do not waste time on assembly.');
+  if (r.containers?.some((c) => c.kind === 'apk')) out.push('APK: unpack with apktool, read AndroidManifest.xml, look for URL/permission strings and decompile classes.dex.');
+  if (r.containers?.some((c) => c.kind === 'asar')) out.push('Electron: extract the asar archive (npx @electron/asar extract) and read the JS bundle — the logic is there, not in the exe.');
   if (r.overlay?.size > 100000) out.push(`Overlay of ${Math.round(r.overlay.size / 1024)} kB after the last section: dump offset ${r.overlay.offset} and run entropy on that part.`);
-  if (r.iocs?.urls?.length) out.push(`${r.iocs.urls.length} URL:er — kontrollera DOMÄN-ålder/ssl-certifikat och hämta med web.fetch i sand-box-läge.`);
-  if (!out.length && format.kind === 'text') out.push('Textfiler: kör den genom majin.syntax / grep för hårdkodade nycklar, endpoint:er och hemliga strängar.');
+  if (r.iocs?.urls?.length) out.push(`${r.iocs.urls.length} URLs — check domain age and the TLS certificate, and fetch with web.fetch in a sandboxed run.`);
+  if (!out.length && format.kind === 'text') out.push('Text file: grep it for hard-coded keys, endpoints and secret strings.');
   return out.slice(0, 8);
 }
 

@@ -14,7 +14,7 @@ export const API_RISK = [
   { re: /^NtUnmapViewOfSection$/, sev: 5, why: 'process hollowing', tags: ['inject', 'hollow'] },
   { re: /^SetWindowsHookEx[AW]?$/, sev: 4, why: 'keylogger/mhook', tags: ['keylog'] },
   { re: /^GetAsyncKeyState$/, sev: 3, why: ' tangenttryckningar', tags: ['keylog'] },
-  { re: /^(URL)?DownloadTo(CacheFile|File)[AW]?$/, sev: 5, why: 'laddar ner kod', tags: ['downloader'] },
+  { re: /^(URL)?DownloadTo(CacheFile|File)[AW]?$/, sev: 5, why: 'downloads code', tags: ['downloader'] },
   { re: /^InternetReadFile$/, sev: 3, why: 'hämtar data över nätet', tags: ['net'] },
   { re: /^WinHttp.*/, sev: 2, why: 'http-klient', tags: ['net'] },
   { re: /^URLDownloadToFileWithProgress$/, sev: 5, why: 'downloader', tags: ['downloader'] },
@@ -119,7 +119,7 @@ export function detectPackers({ sections = [], overlay = {}, strings = '', impor
   const high = ent.length ? ent.reduce((a, b) => a + b, 0) / ent.length : 0;
   const execWrite = sections.filter((s) => s.executable && s.writable).map((s) => s.name);
   if (high > 7.35 && importsCount < 6) hits.push({ packer: 'okänd packare/arkiv', evidence: `hög entropi (${high.toFixed(2)}) + nästan inga imports` });
-  if (execWrite.length) hits.push({ packer: 'RWX-sektion', evidence: execWrite.join(', '), severity: 4 });
+  if (execWrite.length) hits.push({ packer: 'RWX section', evidence: execWrite.join(', '), severity: 4 });
   if (overlay.size > 4096) hits.push({ packer: 'overlay-data', evidence: `${overlay.size} byte efter sista sektionen (signatur, arkiv eller payload)` });
   for (const l of LINKER_STAMPS) if (l.re.test(strings)) hits.push({ packer: l.name, evidence: 'strängsignatur', severity: l.sev, runtime: true });
   const uniq = new Map();
@@ -140,30 +140,30 @@ export function risk(report) {
   };
   const apis = report.apis || { flagged: [], tags: {} };
   const maxSev = Math.max(0, ...apis.flagged.map((f) => f.severity));
-  if (maxSev >= 5) add(24, `API med hög allvarlighetsgrad (${[...new Set(apis.flagged.filter((f) => f.severity >= 5).map((f) => f.api))].slice(0, 4).join(', ')})`);
-  else if (maxSev >= 4) add(14, 'API:er för processinjektion/hijack');
-  if (apis.flagged.length >= 12) add(10, `${apis.flagged.length} riskfyllda API-anrop importerade`);
+  if (maxSev >= 5) add(24, `API with high severity (${[...new Set(apis.flagged.filter((f) => f.severity >= 5).map((f) => f.api))].slice(0, 4).join(', ')})`);
+  else if (maxSev >= 4) add(14, 'process injection / hijack APIs');
+  if (apis.flagged.length >= 12) add(10, `${apis.flagged.length} risky API imports`);
   for (const [tag, n] of Object.entries(apis.tags || {})) {
-    if (tag === 'inject' && n) add(12 * Math.min(2, n), 'injecteringsmönster');
-    if (tag === 'keylog' && n) add(14, 'tangenttrycknings-API:er');
-    if (tag === 'ransom' && n) add(16, 'skuggkopi-åtgärder (ransomware-mönster)');
-    if (tag === 'creds' && n) add(12, 'åtkomst av uppgifter');
+    if (tag === 'inject' && n) add(12 * Math.min(2, n), 'injection pattern');
+    if (tag === 'keylog' && n) add(14, 'keylogging APIs');
+    if (tag === 'ransom' && n) add(16, 'shadow-copy deletion (ransomware pattern)');
+    if (tag === 'creds' && n) add(12, 'credential access');
     if (tag === 'anti_dbg' && n >= 2) add(8, 'anti-debug/anti-sandbox cluster');
-    if (tag === 'downloader' && n) add(10, 'laddar ner kod');
+    if (tag === 'downloader' && n) add(10, 'downloads code');
   }
-  if (report.packers?.some((p) => p.severity >= 4)) add(10, 'RWX-sektion');
-  if (report.packers?.some((p) => !p.runtime)) add(8, 'packare/protector identifierad');
-  if (report.entryPoint && report.entryPoint.inImage === false) add(14, 'entry point utanför någon sektion (klassiskt packar-tecken)');
-  if (report.pe?.futureTimestamp) add(6, 'byggdatum ligger i framtiden (modifierad header)');
-  if (report.pe?.tinyTimestamp) add(4, 'tidsstämpel nollställd — packare gör det');
-  if (report.security?.signed === false && report.kind === 'pe') add(6, 'osignerad körbar fil');
+  if (report.packers?.some((p) => p.severity >= 4)) add(10, 'RWX section');
+  if (report.packers?.some((p) => !p.runtime)) add(8, 'packer/protector identified');
+  if (report.entryPoint && report.entryPoint.inImage === false) add(14, 'entry point outside any section (classic packer sign)');
+  if (report.pe?.futureTimestamp) add(6, 'build date in the future (modified header)');
+  if (report.pe?.tinyTimestamp) add(4, 'timestamp zeroed — packers do that');
+  if (report.security?.signed === false && report.kind === 'pe') add(6, 'unsigned executable');
   if (report.security?.signatureInvalid) add(18, 'bruten/invalid signatur');
-  if (report.yara?.some((y) => (y.meta?.severity || '').toLowerCase() === 'high')) add(15, 'YARA-träff med high severity');
-  if (report.iocs?.urls?.length && /(^|\D)(\d{1,3}\.){3}\d{1,3}/.test(report.iocs.urls.join(' '))) add(8, 'hårdkodad IP-URL');
-  if (report.iocs?.suspicious?.length) add(10, `${report.iocs.suspicious.length} misstänkta strängar`);
-  if (report.pe?.tls?.count) add(6, `TLS-callbacks (${report.pe.tls.count}) — kör FÖRE entry point`);
+  if (report.yara?.some((y) => (y.meta?.severity || '').toLowerCase() === 'high')) add(15, 'YARA hit with high severity');
+  if (report.iocs?.urls?.length && /(^|\D)(\d{1,3}\.){3}\d{1,3}/.test(report.iocs.urls.join(' '))) add(8, 'hard-coded IP URL');
+  if (report.iocs?.suspicious?.length) add(10, `${report.iocs.suspicious.length} suspected strings`);
+  if (report.pe?.tls?.count) add(6, `TLS callbacks (${report.pe.tls.count}) — run BEFORE the entry point`);
   if (report.pe?.overlay?.size > 200000) add(5, `stor overlay (${report.pe.overlay.size} byte)`);
-  if ((report.sections || []).some((s) => s.entropy > 7.6 && s.rawSize > 4096)) add(6, 'sektion med mycket hög entropi');
+  if ((report.sections || []).some((s) => s.entropy > 7.6 && s.rawSize > 4096)) add(6, 'section with very high entropy');
   if (report.kind === 'dotnet') score = Math.max(0, score - 8);
   return { score: Math.max(0, Math.min(100, Math.round(score))), level: band(score), reasons: reasons.sort((a, b) => b.points - a.points) };
 }
