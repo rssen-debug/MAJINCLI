@@ -608,15 +608,15 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     name: 're.rules',
     group: 'reverse',
     risk: 'read',
-    desc: 'List and save YARA rules in rules/majin.yar (its own rule database).',
-    params: { action: 'string: list | save | delete [list|save|delete]', name: 'string: reglens namn', text: 'string: regeltext (sparas i filen)' },
+    desc: 'List and save YARA rules in <home>/rules/majin.yar (MAJIN\'s own rule database).',
+    params: { action: 'string: list | save | delete [list|save|delete]', name: 'string: rule name', text: 'string: rule text (saved into the file)' },
     async run({ action = 'list', name = '', text = '' }, ctx) {
       const file = path.join(dirs.rules, 'majin.yar');
       const cur = fss.existsSync(file) ? fss.readFileSync(file, 'utf8') : '';
       if (action === 'list') {
-        const builtin = parseRules(DEFAULT_RULES_TEXT).map((r) => `${r.name} (inbyggd)`);
-        const user = parseRules(cur).map((r) => `${r.name} (din)`);
-        return { result: `${builtin.length + user.length} regler tillgängliga\n${[...builtin, ...user].join('\n')}`, meta: { builtin: builtin.length, user: user.length }, summary: `${builtin.length + user.length} YARA-regler` };
+        const builtin = parseRules(DEFAULT_RULES_TEXT).map((r) => `${r.name} (built-in)`);
+        const user = parseRules(cur).map((r) => `${r.name} (yours)`);
+        return { result: `${builtin.length + user.length} rules available\n${[...builtin, ...user].join('\n')}`, meta: { builtin: builtin.length, user: user.length }, summary: `${builtin.length + user.length} YARA rules` };
       }
       const rulesFile = file;
       await fs.mkdir(path.dirname(rulesFile), { recursive: true });

@@ -417,7 +417,7 @@ async function re() {
 
 async function test() {
   const dir = path.resolve(SELF_DIR, '../../test');
-  if (!fs.existsSync(dir)) return process.stderr.write('ingen test-mapp\n');
+  if (!fs.existsSync(dir)) return process.stderr.write('no test directory\n');
   const child = spawn(process.execPath, ['--test', ...(flags.experimental ? [flags.experimental] : []), dir], { stdio: 'inherit' });
   await new Promise((r) => child.on('exit', r));
   process.exitCode = child.exitCode || 0;
