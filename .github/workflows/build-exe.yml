@@ -75,11 +75,9 @@ jobs:
           $body = "run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID`n`n$f`n$log`n$f`n"
           $payload = @{ title = "build-exe failed on $($env:GITHUB_SHA.Substring(0,7))"; body = $body; labels = @('ci') } | ConvertTo-Json -Compress
           Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/issues" -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" } -Body $payload | ForEach-Object { "opened $($_.html_url)" }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: majin-win-x64
-          path: dist/majin-win-x64.exe
-          if-no-files-found: error
+      # Ingen actions/upload-artifact: artefakt-lagret ar det som tar slut pa
+      # fria konton (100 MB), och en .exe pa 80 MB per koda rad FORPALAR den.
+      # Release-tilgangar raknas inte in i den kvoten, sa filen laggs dar.
       - name: attach to release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
