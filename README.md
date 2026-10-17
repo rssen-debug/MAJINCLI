@@ -50,8 +50,16 @@ node src/cli/majin.js
 
 ### Windows, from an executable
 
-1. Grab `majin-win-x64.exe` — either the artifact from the **Build exe** GitHub Actions run for a
-   tag, or the release asset when a `v*` tag has been pushed (see [docs/EXE.md](docs/EXE.md)).
+1. Grab `majin-win-x64.exe` from the latest release — the `v*` tag triggers the **build-exe**
+   workflow, which packages it and attaches it to the release (see [docs/EXE.md](docs/EXE.md)).
+   One line, no git needed:
+
+```powershell
+curl.exe -L -o majin-win-x64.exe https://github.com/rssen-debug/slurps/releases/latest/download/majin-win-x64.exe
+```
+
+   It is unsigned, so SmartScreen will ask once (*More info → Run anyway*) — that is expected for a
+   personal build, and `majin-win-x64.exe doctor` tells you the file is intact.
 2. Put it anywhere, then double-click it — it starts the server and opens a window. Or:
 
 ```powershell
@@ -66,7 +74,7 @@ directory, and needs no Node.js.
 
 ```powershell
 winget install OpenJS.NodeJS.LTS        # if you do not have Node 20.11+
-git clone <this repo> && cd slurps
+git clone https://github.com/rssen-debug/slurps.git && cd slurps
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
