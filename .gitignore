@@ -11,3 +11,6 @@ dist/
 .env
 
 .pkg-cache/
+memory/
+skills/
+majin.config.json
