@@ -19,7 +19,7 @@
 #define MyAppName "MAJIN"
 ; the build passes /DMyAppVersion=<package.json version>; keep a fallback for hand runs
 #ifndef MyAppVersion
-  #define MyAppVersion "0.4.1"
+  #define MyAppVersion "0.4.2"
 #endif
 #define MyAppPublisher "rssen-debug"
 #define MyAppURL "https://github.com/rssen-debug/MAJINCLI"
@@ -91,6 +91,17 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "start"; Description: "Start {#My
 Filename: "{app}\{#MyAppExeName}"; Parameters: "stop"; Flags: runhidden skipifdoesntexist; RunOnceId: "StopMajin"
 
 [Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  R: Integer;
+begin
+  { The running app holds its own exe and the port: replacing files under it
+    leaves the user staring at the OLD version they just "upgraded" from.
+    Close it first; install continues even if nothing was running. }
+  Exec('taskkill.exe', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, R);
+  Result := '';
+end;
+
 function NeedsAddPath(Param: string): boolean;
 var
   OrigPath: string;

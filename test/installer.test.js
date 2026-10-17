@@ -187,3 +187,9 @@ test('publish: the script refuses an empty release and verifies the download', (
   assert.doesNotMatch(ps, /gh release create/, 'it must not create a release of its own — the workflow does');
   assert.doesNotMatch(ps, /git push --force|push -f origin main/, 'never force-push main');
 });
+
+test('iss: the installer never lets a stale process outlive an upgrade', () => {
+  const iss = fs.readFileSync(path.join(ROOT, 'installer', 'majin.iss'), 'utf8');
+  assert.match(iss, /PrepareToInstall/, 'a PrepareToInstall hook exists');
+  assert.match(iss, /taskkill\.exe[^\n]*\/F \/IM/, 'the running app is closed before files are replaced');
+});

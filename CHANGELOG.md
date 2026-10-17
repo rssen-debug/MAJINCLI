@@ -3,6 +3,14 @@
 Notable changes on `arena/e223e8b9-slurps` (PR #1). Newest first. Verified in the Linux sandbox
 unless stated otherwise; nothing here claims a Windows or browser run.
 
+## 0.4.2 — never upgrade into your own running ghost
+
+- The header now always shows the running version (`v-tag`, filled from the
+  served version) — after an update you can SEE that you are on the new one.
+- The installer force-closes a running MAJIN before replacing files
+  (PrepareToInstall → taskkill), so the old process can no longer survive an
+  upgrade and keep serving the old window on the old port.
+
 ## 0.4.1 — the header stop button leaves Simple mode
 
 The RUN button in the composer already becomes STOP the moment a task runs,

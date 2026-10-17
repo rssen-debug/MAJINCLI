@@ -155,3 +155,9 @@ test('exe build: the icon rides along, and a failed patch may not be reported as
   assert.match(build, /set-icon\.mjs/, 'the win build embeds the M into the exe');
   assert.match(build, /MAJIN_NO_ICON/, 'and that step can be turned off');
 });
+
+test('the window always names its own version', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'src', 'ui', 'index.html'), 'utf8');
+  assert.match(html, /id="v-tag"/, 'a version tag exists in the header');
+  assert.match(html, /__MAJIN_VERSION__/, 'filled from the served version, never hardcoded');
+});

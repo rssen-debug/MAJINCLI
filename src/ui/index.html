@@ -138,6 +138,8 @@ body.simple #b-stop{display:none}
 .ob-model{ padding:7px 10px; text-align:left; border:1px solid transparent; border-radius:8px; background:rgba(255,255,255,.03); color:inherit; font-size:12.5px; cursor:pointer; }
 .ob-model:hover{ border-color:var(--pk,#e0457b); }
 .ob-model.on{ border-color:var(--pk,#e0457b); background:rgba(224,69,123,.12); }
+
+#v-tag{font-size:11px;color:var(--dim,#a98);margin-left:6px;letter-spacing:.05em}
 </style>
 </head>
 <body class="simple">
@@ -161,6 +163,7 @@ body.simple #b-stop{display:none}
   <button id="b-voice" title="Read answers aloud">🔊</button>
   <button id="b-test" title="Run self-test">◎</button>
   <button id="b-stop" class="danger" title="Emergency stop — abort the running task">■</button>
+  <span id="v-tag" title="the version this window is actually running — never guess again"></span>
 </header>
 
 <div id="app">
@@ -200,6 +203,7 @@ body.simple #b-stop{display:none}
 <div id="onboard" hidden role="dialog" aria-modal="true" aria-label="MAJIN setup"><div id="ob-card"><div id="ob-body"></div></div></div>
 <div id="toast"></div>
 <script>window.__MAJIN_TOKEN__='__MAJIN_TOKEN__';window.__MAJIN_VERSION__='__MAJIN_VERSION__';</script>
+<script>document.addEventListener('DOMContentLoaded',function(){document.getElementById('v-tag').textContent='v'+window.__MAJIN_VERSION__;});</script>
 <script src="/imagine.js"></script>
 <script src="/onboard.js"></script>
 <script src="/app.js"></script>
