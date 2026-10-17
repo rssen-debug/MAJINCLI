@@ -46,7 +46,7 @@ function sizeOf(abs) {
 export const fileTools = [
   def({
     name: 'fs.list',
-    group: 'filer',
+    group: 'files',
     risk: 'read',
     desc: 'List a directory: names, sizes, dates. Use `kind` to get only executables or only folders.',
     params: { path: 'string: folder to list (workspace-relative or absolute)' },
@@ -73,7 +73,7 @@ export const fileTools = [
 
   def({
     name: 'fs.read',
-    group: 'filer',
+    group: 'files',
     risk: 'read',
     desc: 'Read a file. Returns numbered lines (or a hex dump for binary files) plus entropy and a file hash when it is binary.',
     params: { path: 'string: file to read', maxBytes: 'number: how much to read (default 200000)', mode: 'string: auto | text | hex | strings [auto|text|hex|strings]' },
@@ -112,7 +112,7 @@ export const fileTools = [
 
   def({
     name: 'fs.write',
-    group: 'filer',
+    group: 'files',
     risk: 'write',
     desc: 'Write a file (missing folders are created). Overwrites — for small edits use fs.patch.',
     params: { path: 'string: target file', content: 'string: the full file content', append: 'boolean: append instead of overwriting' },
@@ -128,7 +128,7 @@ export const fileTools = [
 
   def({
     name: 'fs.patch',
-    group: 'filer',
+    group: 'files',
     risk: 'write',
     desc: 'Exact search/replace in a file. Simple, traceable, no fuzzy matching. Returns a diff.',
     params: {
@@ -161,7 +161,7 @@ export const fileTools = [
 
   def({
     name: 'fs.search',
-    group: 'filer',
+    group: 'files',
     risk: 'read',
     desc: 'Regex search across files under a folder. Returns file:line:match. Use this before reading whole files.',
     params: {
@@ -213,7 +213,7 @@ export const fileTools = [
 
   def({
     name: 'fs.grep',
-    group: 'filer',
+    group: 'files',
     risk: 'read',
     desc: 'Fast content search in ONE file (or every file under a folder) with context. Good for following flow in logs or source.',
     params: { path: 'string: file or folder', pattern: 'string: regex or word', context: 'number: lines around each hit (default 2)', limit: 'number: max hits (default 30)' },
@@ -263,7 +263,7 @@ export const fileTools = [
 
   def({
     name: 'fs.move',
-    group: 'filer',
+    group: 'files',
     risk: 'write',
     desc: 'Move or rename a file/folder. Creates the target folders.',
     params: { from: 'string: source', to: 'string: destination' },
@@ -278,7 +278,7 @@ export const fileTools = [
 
   def({
     name: 'fs.copy',
-    group: 'filer',
+    group: 'files',
     risk: 'write',
     desc: 'Copy a file or folder (recursive).',
     params: { from: 'string: source', to: 'string: destination', overwrite: 'boolean: overwrite what exists' },
@@ -292,7 +292,7 @@ export const fileTools = [
 
   def({
     name: 'fs.delete',
-    group: 'filer',
+    group: 'files',
     risk: 'destructive',
     desc: 'Delete a file or folder. Moves to the recycle bin where possible (Win/mac), otherwise permanent. Always goes through the guard.',
     params: { path: 'string: path', permanent: 'boolean: true = erase now, no recycle bin' },
@@ -316,7 +316,7 @@ export const fileTools = [
 
   def({
     name: 'fs.stat',
-    group: 'filer',
+    group: 'files',
     risk: 'read',
     desc: 'Metadata: size, dates, permissions, hash, entropy, file-type magic.',
     params: { path: 'string: file' },
@@ -335,7 +335,7 @@ export const fileTools = [
 
   def({
     name: 'fs.mkdir',
-    group: 'filer',
+    group: 'files',
     risk: 'write',
     desc: 'Create a folder (recursive).',
     params: { path: 'string: new folder' },
@@ -348,7 +348,7 @@ export const fileTools = [
 
   def({
     name: 'fs.tar',
-    group: 'filer',
+    group: 'files',
     risk: 'write',
     desc: 'Pack or unpack with the system tar (built into Windows 10+). Use it to move a folder around or extract an archive.',
     params: { op: 'string: create | extract [create|extract]', archive: 'string: archive file .tar.gz/.zip', path: 'string: folder or file to work on', cwd: 'string: working directory' },

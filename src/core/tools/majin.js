@@ -519,7 +519,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'read',
     desc: 'List every tool with its description and risk level. All of them are always on — there is no off switch.',
-    params: { group: 'string: filtrera på grupp', describe: 'string: skrivverktygsnamn för full beskrivning' },
+    params: { group: 'string: filter by group', describe: 'string: tool name for the full description' },
     async run({ group = '', describe = '' }, ctx) {
       if (describe) {
         const t = ctx.registry.byName.get(describe);

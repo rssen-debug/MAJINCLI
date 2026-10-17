@@ -36,7 +36,7 @@ function csvRow(line) {
 export const netTools = [
   def({
     name: 'net.dns',
-    group: 'nät',
+    group: 'network',
     risk: 'read',
     desc: 'Look up a domain (A/AAAA/TXT/CNAME/NS/MX). Used to follow IOCs found in a binary.',
     params: { host: 'string: domain or IP', type: 'string: A | AAAA | TXT | CNAME | NS | MX | ANY [A|AAAA|TXT|CNAME|NS|MX|ANY]' },
@@ -55,7 +55,7 @@ export const netTools = [
 
   def({
     name: 'net.tcp',
-    group: 'nät',
+    group: 'network',
     risk: 'read',
     desc: 'Probe a TCP port (open/closed) with a timeout. Only use it against things you own.',
     params: { host: 'string: host', port: 'n: number: port', timeoutMs: 'number: milliseconds (default 1500)' },
@@ -81,7 +81,7 @@ export const netTools = [
 
   def({
     name: 'net.http',
-    group: 'nät',
+    group: 'network',
     risk: 'read',
     desc: 'Raw HTTP request (method, headers, body). Use for your own APIs and for testing a local web service.',
     params: { url: 'string: address', method: 'string: GET | POST | PUT | DELETE | HEAD | OPTIONS [GET|POST|PUT|DELETE|HEAD|OPTIONS]', headers: 'object: extra headers', body: 'string: body', maxChars: 'number: response cap (default 8000)' },
@@ -100,7 +100,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
 
   def({
     name: 'net.serve',
-    group: 'nät',
+    group: 'network',
     risk: 'exec',
     desc: 'Start a temporary HTTP server that shares a folder (to pull samples into the sandbox). Returns the URL + job id.',
     params: { dir: 'string: folder to share', port: 'number: port (default 0 = any free port)' },
@@ -144,7 +144,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
 
   def({
     name: 'net.serve_stop',
-    group: 'nät',
+    group: 'network',
     risk: 'exec',
     desc: 'Stop a temporary sharing server.',
     params: { port: 'number: the port from net.serve' },
@@ -159,7 +159,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
 
   def({
     name: 'screen.capture',
-    group: 'skärm',
+    group: 'screen',
     risk: 'read',
     desc: 'Take a screenshot (PNG). On Windows via .NET; needs no extra software.',
     params: { path: 'string: target file (default screenshot-<time>.png)', region: 'string: x,y,width,height', then: 'string: describe | save [describe|save]' },
@@ -191,7 +191,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
 
   def({
     name: 'screen.claim',
-    group: 'skärm',
+    group: 'screen',
     risk: 'read',
     desc: 'Read what is in the clipboard (text/file). Handy after the user selected something in a binary.',
     params: {},
