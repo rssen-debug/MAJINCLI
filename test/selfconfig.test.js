@@ -70,7 +70,7 @@ test('villkorsregler: "om X, använd Y"', (t) => {
   assert.ok(c.get('routing.rules').some((r) => r.job === 're'));
 });
 
-test('MOA, guard, budget, maxSteps, minne och persona', (t) => {
+test('MOA, guard, budget, maxSteps, memory and persona — Swedish and English', (t) => {
   const c = cfg0(t);
   const cases = [
     ['slå på moa för allt', (i) => i.patch.moa.policy === 'always'],
@@ -83,6 +83,19 @@ test('MOA, guard, budget, maxSteps, minne och persona', (t) => {
     ['budget 20 dollar i månaden', (i) => Number(i.patch.budget.monthlyUsd) === 20],
     ['spara inga minnen', (i) => i.patch.memory.auto === false],
     ['var mer rakt på sak', (i) => Boolean(i.patch.persona)],
+    // English synonyms — voice control must work in the user's language too
+    ['turn moa on for everything', (i) => i.patch.moa.policy === 'always'],
+    ['run with 4 references', (i) => i.patch.moa.width === 4],
+    ['use 3 models in parallel', (i) => i.patch.moa.width === 3],
+    ['disable moa', (i) => i.patch.moa.enabled === false],
+    ['stop asking', (i) => i.patch.guard.mode === 'off'],
+    ['confirm everything', (i) => i.patch.guard.mode === 'strict'],
+    ['ask before deleting', (i) => i.patch.guard.mode === 'confirm'],
+    ['no more than 10 steps', (i) => i.patch.agent.maxSteps === 10],
+    ['stop remembering', (i) => i.patch.memory.auto === false],
+    ['be concise', (i) => Boolean(i.patch.persona)],
+    ['reply in english', (i) => /English/.test(i.patch.persona.style)],
+    ['budget 50 usd a month', (i) => Number(i.patch.budget.monthlyUsd) === 50],
   ];
   for (const [text, check] of cases) {
     const i = parseIntent(text, c);

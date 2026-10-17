@@ -64,7 +64,8 @@ export function createServer(rt) {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const p = url.pathname.replace(/\/+$/, '') || '/';
     const token = String(cfg.get('server.token') || '');
-    const authed = authOk(req, url, token, cfg);
+    const peer = String(req.socket?.remoteAddress || '').replace(/^::ffff:/, '');
+    const authed = authOk(req, url, token, cfg, peer);
 
     res.setHeader('x-powered-by', 'MAJIN');
     if (req.method === 'OPTIONS') {
@@ -453,7 +454,9 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
 // Betrodda värdar utan token: loopback (lokalhost, 127.x, ::1) och sandbox-förhandsvisning.
 const TRUSTED = /^(localhost|127(\.\d{1,3}){3}|\[?::1\]?|0\.0\.0\.0|[\w-]+\.e2b\.app)$/i;
 
-function authOk(req, url, token, cfg) {
+const LOCAL_PEER = /^(127\.|::1$)/;
+
+export function authOk(req, url, token, cfg, peer = '') {
   if (!token) return true;
   if (url.searchParams.get('t') === token || url.searchParams.get('token') === token) return true;
   const h = req.headers.authorization || '';
@@ -461,7 +464,12 @@ function authOk(req, url, token, cfg) {
   if ((req.headers.cookie || '').split(/;\s*/).includes(`majin=${token}`)) return true;
   if (req.headers['x-majin-token'] === token) return true;
   const host = String(req.headers.host || '').split(':')[0];
-  if (cfg?.get?.('server.trustLocal') !== false && TRUSTED.test(host)) return true;
+  if (!TRUSTED.test(host)) return false;
+  // Betrodd värd räcker bara om paketet faktiskt kommer lokalt (eller att remote uttryckligen
+  // tillåtits) — annars räcker det att lura ett DNS-namn för att bli "localhost".
+  const fromLocalHost = peer === '' || LOCAL_PEER.test(peer);
+  if (cfg?.get?.('server.allowRemote') === true) return true;
+  if (cfg?.get?.('server.trustLocal') !== false && fromLocalHost) return true;
   return false;
 }
 

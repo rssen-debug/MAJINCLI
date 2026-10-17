@@ -25,6 +25,14 @@ node src/cli/majin.js
 
 ---
 
+## Docs
+
+* [docs/CONFIG.md](docs/CONFIG.md) — every config key, what it does, what it costs
+* [docs/REVERSE.md](docs/REVERSE.md) — the 22 RE tools, the mini-YARA engine, rule files
+* [docs/WINDOWS.md](docs/WINDOWS.md) — installer, data layout, ports, uninstall, stumbles
+* [docs/EXE.md](docs/EXE.md) — how the single-file exe is built and why CI builds it
+* [docs/BENCHMARKS.md](docs/BENCHMARKS.md) — deterministic scenario harness + reference numbers
+
 ## What it does
 
 | | |
@@ -197,8 +205,9 @@ POST /api/restart | /api/shutdown | GET /healthz | POST /api/webhook/whatsapp
 
 Loopback (`localhost`, `127.0.0.1`, `[::1]`) is trusted without a token so the window works;
 everything else needs `?t=`, `authorization: Bearer`, the `majin=` cookie or `x-majin-token`.
-Set `server.trustLocal: false` to require a token even locally, and `server.allowRemote` if you
-want a non-loopback bind without a tunnel.
+Set `server.trustLocal: false` to require a token even locally. The loopback trust only applies to
+packets that really come from loopback, so a remote request forging `Host: localhost` gets 401 —
+`server.allowRemote: true` is what opts into host-based trust from any peer (tunnel/VPN first).
 
 ## Development
 
@@ -213,7 +222,8 @@ node src/cli/majin.js send "what is in this folder?"
 The test suites are `config`, `selfconfig`, `router-moa`, `tools`, `re`, `agent` (end-to-end
 against the `demo` mock provider) and `server` (a real child process on a free port).
 Building the exe and the CI recipe: [docs/EXE.md](docs/EXE.md). Benchmarks:
-`node scripts/bench.mjs`, see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+`npm run bench` (mock provider, deterministic — what the harness measures and what it does not is
+spelled out in [docs/BENCHMARKS.md](docs/BENCHMARKS.md)).
 
 ## Layout
 

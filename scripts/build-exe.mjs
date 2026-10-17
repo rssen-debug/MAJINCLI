@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * MAJIN — bygger en fristående körbar (.exe på Windows, binär på linux/mac).
+ * MAJIN — builds a standalone executable (.exe on Windows, binary on linux/mac).
  *
  *   node scripts/build-exe.mjs                 # win-x64 (standard)
  *   node scripts/build-exe.mjs --all           # win + linux + macos
- *   node scripts/build-exe.mjs --no-pkg        # bara bundlat CJS (snabbt)
+ *   node scripts/build-exe.mjs --no-pkg          # bundle only, as CJS (fast)
  *
- * Steg: 1) src/ui + rules kopplas till dist/  2) esbuild paketerar CLI:t till
- * dist/majin.cjs  3) @yao-pkg/pkg snapshotar det till en binär med node inbakat.
- * Inga nativa beroenden — Baileys/qrcode hålls externa (valfria).
+ * Steps: 1) src/ui + rules are copied into dist/  2) esbuild packages the CLI into
+ * dist/majin.cjs  3) @yao-pkg/pkg snapshots it into a binary with node built in.
+ * No native dependencies — Baileys/qrcode stay external (optional).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -75,7 +75,7 @@ run(process.execPath, [
 const bundleBytes = fs.statSync(out).size;
 process.stdout.write(`\nbundle: dist/majin.cjs (${(bundleBytes / 1024).toFixed(0)} kB)\n\n`);
 if (noPkg) {
-  process.stdout.write('klart (--no-pkg). Testa: node dist/majin.cjs doctor\n');
+  process.stdout.write('done (--no-pkg). Try it: node dist/majin.cjs doctor\n');
   process.exit(0);
 }
 
@@ -107,7 +107,7 @@ fs.writeFileSync(
 const pkgBin = ['node_modules/@yao-pkg/pkg/lib-es5/bin.js', 'node_modules/@yao-pkg/pkg/lib-es/bin.js', 'node_modules/@yao-pkg/pkg/lib/bin.js']
   .map((r) => path.join(root, ...r.split('/')))
   .find((f) => fs.existsSync(f));
-if (!pkgBin) throw new Error('pkg hittades inte — kör: npm i -D @yao-pkg/pkg');
+if (!pkgBin) throw new Error('pkg not found — run: npm i -D @yao-pkg/pkg');
 
 for (const t of targets) {
   const name = t.includes('win') ? 'majin-win-x64.exe' : t.includes('linux') ? 'majin-linux-x64' : 'majin-macos-x64';
@@ -116,11 +116,11 @@ for (const t of targets) {
       env: { ...process.env, PKG_CACHE_PATH: path.join(root, '.pkg-cache') },
     });
   } catch (e) {
-    process.stdout.write(`\n! ${t} kunde inte byggas: ${e.message}\n  (nätet till github.com/nodejs-krävs för node-binären; kör om eller använd "node dist/majin.cjs")\n`);
+    process.stdout.write(`\n! ${t} could not be built: ${e.message}\n  (pkg needs the node host binary from github.com release assets — build where that is reachable, or run "node dist/majin.cjs")\n`);
     continue;
   }
   const p2 = path.join(dist, name);
   if (fs.existsSync(p2)) process.stdout.write(`\n✔ ${name} (${(fs.statSync(p2).size / 1024 / 1024).toFixed(1)} MB)\n`);
   if (name === 'majin-linux-x64') fs.chmodSync(p2, 0o755);
 }
-process.stdout.write('\nKlart. Filerna ligger i dist/ (inte i git).\n');
+process.stdout.write('\nDone. The files are in dist/ (not in git).\n');

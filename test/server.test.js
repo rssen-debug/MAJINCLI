@@ -225,6 +225,20 @@ test('/api/events: SSE headers, retry and streaming events', async () => {
   ac.abort();
 });
 
+test('authOk: the trusted-host rule cannot be reached from outside', async () => {
+  const { authOk } = await import('../src/core/server/index.js');
+  const cfg = { get: (k) => ({ 'server.trustLocal': true, 'server.allowRemote': false })[k] };
+  const url = new URL('http://localhost:8787/api/state');
+  const req = (host) => ({ headers: { host } });
+  assert.equal(authOk(req('localhost:8787'), url, 'sekret', cfg, '127.0.0.1'), true, 'loopback peer + local host = no token');
+  assert.equal(authOk(req('localhost:8787'), url, 'sekret', cfg, '10.0.0.5'), false, 'DNS rebinding: local Host from a remote peer must be refused');
+  assert.equal(authOk(req('evil.example'), url, 'sekret', cfg, '127.0.0.1'), false, 'alien host needs the token');
+  assert.equal(authOk(req('evil.example'), new URL('http://evil.example/api/state?t=sekret'), 'sekret', cfg, '10.0.0.5'), true, 'a token always works');
+  assert.equal(authOk(req('evil.example'), url, '', cfg, '10.0.0.5'), true, 'no token configured = open (fresh install, loopback only)');
+  const noTrust = { get: (k) => ({ 'server.trustLocal': false, 'server.allowRemote': false })[k] };
+  assert.equal(authOk(req('localhost'), url, 'sekret', noTrust, '127.0.0.1'), false, 'trustLocal:false måste gälla även lokalt');
+});
+
 test('/api/keys/claim + /api/tool: pairing flow and tool calls', async () => {
   const pair = JSON.parse((await get(`/api/keys/pair?t=${TOKEN}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).body);
   assert.match(String(pair.code), /^[A-Za-z0-9]{6,}$/, 'a one-time code must exist');

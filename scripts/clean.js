@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Nollställ MAJIN:s kördata: loggar, sparade rapporter, cache, uppladdade filer.
- * Config, minne, skills och sessionar lämnas orörda (där bor ens inställningar).
- *   npm run clean            # töm cache/out/logs/uploads
+ * Reset MAJIN runtime data: logs, saved reports, cache, uploaded files.
+ * Config, memory, skills and sessions are left alone (that is where your setup lives).
+ *   npm run clean            # empty cache/out/logs/uploads
  *   npm run clean -- --all   + tmp-filer och .bak
  */
 import fs from 'node:fs';
@@ -30,7 +30,7 @@ for (const t of targets) {
     }
     console.log(`· rensade ${t}`);
   } catch (err) {
-    if (err.code !== 'ENOENT') console.log(`  (hoppar över ${t}: ${err.code || err.message})`);
+    if (err.code !== 'ENOENT') console.log(`  (skipping ${t}: ${err.code || err.message})`);
   }
 }
 console.log(`\nLENT: ${n} poster borttagna. Config + minne + sessioner finns kvar i ${dirs.root}`);

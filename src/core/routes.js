@@ -206,7 +206,7 @@ export function parseIntent(text, cfg) {
     if (ref) {
       patch.models = { routes: {} };
       for (const j of JOBS) patch.models.routes[j] = ref.ref;
-      notes.push(`alla ${JOBS.length} jobb → ${ref.ref}`);
+      notes.push(`all ${JOBS.length} jobs → ${ref.ref}`);
       matched = true;
     }
   }
@@ -237,7 +237,7 @@ export function parseIntent(text, cfg) {
       ...(patch.routing.rules || []),
       { id: `auto-${Date.now().toString(36)}`, match: pattern, job, note: `"${cond}" → ${ref.ref}`, model: ref.ref },
     ];
-    notes.push(`regel: ${pattern} → ${ref.ref}`);
+    notes.push(`rule: ${pattern} → ${ref.ref}`);
     matched = true;
   }
 
@@ -251,18 +251,18 @@ export function parseIntent(text, cfg) {
       const w = Number(widthHit[1]);
       if (w >= 2 && w <= 8) {
         patch.moa.width = w;
-        notes.push(`bredd ${w}`);
+        notes.push(`width ${w}`);
       }
     }
     notes.push(off ? 'MOA off' : hard ? 'MOA on for hard jobs' : 'MOA on for everything');
     matched = true;
   }
-  const widthOnly = /^(?:kör|använd|use|sätt|set|slå på)?\s*(?:med)?\s*(\d)\s*(?:stucks\s+)?(referenser|referens|refs|modeller|modeller parallellt)\b/i.exec(s);
+  const widthOnly = /^(?:(?:run|use|set|go with|switch to|try|kör|använd|sätt|slå på)\s+)?(?:with\s+|med\s+)?(\d)\s*(?:references?|refs?|referenser?|models?\b(?:\s+in\s+parallel)?|modeller\b(?:\s+parallellt)?)/i.exec(s);
   if (widthOnly) {
     const w = Number(widthOnly[1]);
     if (w >= 2 && w <= 8) {
       patch.moa = { ...(patch.moa || {}), enabled: true, policy: patch.moa?.policy || 'always', width: w };
-      notes.push(`bredd ${w}`);
+      notes.push(`width ${w}`);
       matched = true;
     }
   }
@@ -274,21 +274,21 @@ export function parseIntent(text, cfg) {
       .filter(Boolean);
     if (list.length >= 2) {
       patch.moa = { ...(patch.moa || {}), enabled: true, policy: patch.moa?.policy || 'always', references: list.map((r) => ({ model: normalizeRef(r, cfg) })) };
-      notes.push(`referenser: ${list.join(', ')}`);
+      notes.push(`references: ${list.join(', ')}`);
       matched = true;
     }
   }
 
   /* 6) Guard */
-  if (/alltid på|utan att fråga|fråga inte|inget bekräfta|no confirm|auto-?approve|kör på direkt/i.test(s)) {
+  if (/alltid på|utan att fråga|fråga inte|inget bekräfta|no confirm|auto-?approve|kör på direkt|run without asking|stop asking|no questions|full ?auto|just do it/i.test(s)) {
     patch.guard = { mode: 'off' };
     notes.push('guard off — everything runs straight away');
     matched = true;
-  } else if (/bekr[aä]fta allt|alltid bekr[aä]ftelse|fr[aä]ga varje g[aä]ng|strict mode|var strikt|ingen auto/i.test(s)) {
+  } else if (/bekr[aä]fta allt|alltid bekr[aä]ftelse|fr[aä]ga varje g[aä]ng|strict mode|var strikt|ingen auto|confirm everything|be strict|ask before every|treat everything as dangerous|confirm all dangerous|confirm every thing/i.test(s)) {
     patch.guard = { mode: 'strict' };
     notes.push('guard strict — anything that can do damage is confirmed');
     matched = true;
-  } else if (/fråga innan (radera|farliga|destructive)|confirm mode|sitt på bekräfta/i.test(s)) {
+  } else if (/fråga innan (radera|farliga|destructive)|confirm mode|sitt på bekräfta|confirm destructive|ask before deleting|ask for approval/i.test(s)) {
     patch.guard = { mode: 'confirm' };
     notes.push('guard on for destructive things');
     matched = true;
@@ -300,17 +300,17 @@ export function parseIntent(text, cfg) {
   }
 
   /* 7) personlighet / stil */
-  const style = /(?:var|vær|bli|svara|uppträd|uppträda|prata|för||bli)\s+(kortare|kort|längre|mer direkt|rakt på sak|rakt\s+på\s+sak|mindre fluff|mindre|rolig|allvarlig|teknisk|enkel|på svenska|på engelska|svenska|engelska)/i.exec(s);
+  const style = /\b(?:var|vær|bli|svara|uppträd|uppträda|prata|för|be|become|act|reply|answer|talk|write|speak)\b[\s,:]+(?:mer|lite|more|less|a bit|please)?[\s,]*(kortare|kort|längre|longer|mer direkt|direkt|rakt\s+på\s+sak|straight(?:\s+to\s+the\s+point)?|mindre fluff|mindre noise|less fluff|concise|short|rolig|fyntig|allvarlig|seriös|teknisk|technical|enkel|simple|på svenska|svenska|på engelska|engelska|in english|in swedish)/i.exec(s);
   if (style) {
     const w = style[1].toLowerCase();
-    const add = /rakt p.{0,3} sent|straight to the point/.test(w) ? 'No preamble, no summary — the thing first.' : /kort|concise|short/.test(w) ? 'Be extremely short: one or two lines before the next action.' : /direkt|immediate/.test(w) ? 'No preamble, no summary, just the answer.' : /teknisk|technical/.test(w) ? 'Answer like an engineer: exact numbers, paths, commands.' : /svensk/.test(w) ? 'Always reply in Swedish.' : /english/.test(w) ? 'Always reply in English.' : 'Explain a bit more when it helps.';
+    const add = /rakt p.{0,4}sak|straight/.test(w) ? 'No preamble, no summary — the thing first.' : /kort|concise|short/.test(w) ? 'Be extremely short: one or two lines before the next action.' : /direkt|immediate/.test(w) ? 'No preamble, no summary, just the answer.' : /teknisk|technical/.test(w) ? 'Answer like an engineer: exact numbers, paths, commands.' : /svensk|swedish/.test(w) ? 'Always reply in Swedish.' : /engelsk|english/.test(w) ? 'Always reply in English.' : 'Explain a bit more when it helps.';
     patch.persona = { style: `${cfg.get('persona.style') || ''} ${add}`.trim() };
-    notes.push('personlighet uppdaterad');
+    notes.push('persona updated');
     matched = true;
   }
 
   /* 8) max steg / budget */
-  const stepHit = /\b(?:max|högst|limit)\s+(\d{1,3})\s*(?:steg|steps|tool calls|verktyg)\b/i.exec(s);
+  const stepHit = /\b(?:max|högst|limit|maximum|at most|no more than|up to)\s+(\d{1,3})\s*(?:steg|steps|tool calls|tool calls per turn|verktyg)\b/i.exec(s);
   if (stepHit) {
     patch.agent = { maxSteps: Math.max(1, Math.min(200, Number(stepHit[1]))) };
     notes.push(`maxSteps=${patch.agent.maxSteps}`);
@@ -323,9 +323,9 @@ export function parseIntent(text, cfg) {
     notes.push(`budget ${usd} USD per month`);
     matched = true;
   }
-  if (/spara inga (loggar|minnen)|glöm allt|minne av/i.test(s)) {
+  if (/spara inga (loggar|minnen)|glöm allt|minne av|don'?t (store|save|keep) (any )?(memor|minnen)|no memor|stop remembering|forget everything|memory off/i.test(s)) {
     patch.memory = { auto: false };
-    notes.push('auto-minne av');
+    notes.push('auto-memory off');
     matched = true;
   }
 

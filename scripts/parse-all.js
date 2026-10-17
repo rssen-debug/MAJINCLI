@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Syntax-kontroll utan beroenden. Kör `node --check` på varje JS-fil i repo.
- * Fångar det som är dyrast i den här koden: trasig syntax i en modul som
- * ännu inte importerats av något test.
+ * Dependency-free syntax check. Runs `node --check` over every JS file in the repo.
+ * Catches the most expensive failure mode in this codebase: broken syntax in a module
+ * that no test has imported yet.
  *
  *   npm run check            alla filer
  *   npm run check -- src     bara under src/
@@ -35,7 +35,7 @@ for (const f of files) {
   const src = fs.readFileSync(f, 'utf8');
   const isModule = /^\s*(import|export)\b/m.test(src);
   if (!isModule && !/[();=]\s*$/.test(src.trim().slice(-400))) {
-    /* HTML/CSS-liknande eller tomt — hoppa över */
+    /* html/css-ish or empty — skip */
   }
   const extOk = /\.(js|mjs|cjs)$/.test(f);
   if (!extOk) continue;
@@ -49,5 +49,5 @@ for (const f of files) {
     console.log(`✔ ${path.relative(root, f)}`);
   }
 }
-console.log(`\n${checked - bad}/${checked} filer ren syntax${bad ? ` — ${bad} trasiga` : ''}.`);
+console.log(`\n${checked - bad}/${checked} files parse cleanly${bad ? ` — ${bad} broken` : ''}.`);
 process.exitCode = bad ? 1 : 0;
