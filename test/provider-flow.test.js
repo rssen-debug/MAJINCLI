@@ -37,6 +37,14 @@ test('add → list models → verify key: the whole flow on a stub provider', as
   const cfg = new Config(clone(DEFAULTS), path.join(dir, 'config.json'));
   const ctx = { cfg };
 
+  /* Gateway-presets (opencode m.fl.) krawer skall-headrar; utan dem 400:ar
+     gatewayen aven om nyckeln ar perfekt. Headers maste alltsa folja med. */
+  const oc = await providerTool.run({ action: 'add', name: 'opencodechathe', preset: 'opencode', apiKey: 'oc_sk_dummy-not-real' }, ctx);
+  assert.ok(oc.ok !== false && !oc.error, 'opencode-add failed: ' + JSON.stringify(oc.error || oc));
+  const ocSaved = cfg.get('providers.opencodechathe') || {};
+  assert.equal(ocSaved.headers?.['x-opencode-session'], 'majin', 'preset headers must follow the saved provider or the gateway 400:s');
+  cfg.patch({ providers: { opencodechathe: undefined } });
+
   try {
     // 1) onboarding "Save key" — persisted, never echoed back raw
     const add = await providerTool.run(

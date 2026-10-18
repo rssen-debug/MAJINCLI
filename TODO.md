@@ -6,6 +6,13 @@ autopilot/teamwork/dashboard additions).
 
 ## Hög prioritet
 
+- ~~**opencode-free-PLC test**~~ **VERIFIERAT 2026-10-18 kväll** — båda
+  free-modellerna (longcat-2.5-preview-free, beam-free) svarade genom
+  MAJIN (direct 7856/551 ms, turns 7.6s/3.0s med korrekt aritmetik 17×3=51
+  och 51+9=60 kopplad över session-historik). Mission mot mån cloud-model
+  var OK. Brist fixad: `majin.provider add`-spåret bar inte preset-headers
+  → opencode via chat 400ade; nu plattger både UI- och verktygs-spår.
+
 - ~~**Persistent Session & Agent Handoff Engine**~~ **SHIPPED 2026-10-18 kväll**
   (agent.js handoff/consumeHandoff/planSnapshot + disk-first history-load,
   `<sid>.plan.json`/`<sid>.handoff.json` bredvid historikfilen).

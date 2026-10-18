@@ -154,6 +154,10 @@ export const majinTools = [
           baseUrl: baseUrl || base.baseUrl || '',
           apiKey: env ? `{env:${env}}` : apiKey || base.apiKey || '',
           models: models ? String(models).split(',').map((x) => x.trim()).filter(Boolean) : base.models || [],
+          /* gateway-presets kan kräva skall-headrar (opencode Go 400:ar utan
+             x-opencode-session) — de måste följa med in i config, annars
+             sparas en nyckel som aldrig kan svara */
+          ...(base.headers ? { headers: base.headers } : {}),
         };
         if (entry.kind !== 'mock' && !entry.baseUrl) return { ok: false, error: { code: 'no_url', message: 'baseUrl is required (or pick a preset)' } };
         // ett tomt nyckelfalt far inte kunna rapporteras som "sparat": en vanlig
