@@ -439,7 +439,8 @@ export class Config {
       kind: provider.kind || PRESETS[provider.preset]?.kind || 'openai',
       baseUrl: provider.baseUrl,
       endpoint: provider.endpoint || chatUrl({ kind: provider.kind || PRESETS[provider.preset]?.kind || 'openai', baseUrl: provider.baseUrl }),
-      apiKey: provider.apiKey,
+      // Environment keys remain in the process, never copied to config or UI.
+      apiKey: provider.apiKey || (provider.keyEnv && process.env[provider.keyEnv]) || '',
       extraHeaders: provider.headers || {},
       pricing,
       job,
@@ -525,6 +526,8 @@ export function hasKey(provider) {
   if (!provider) return false;
   if (provider.kind === 'mock') return true;
   const raw = String(provider.apiKey || '').trim();
+  // Detect environment-configured providers without persisting their secret.
+  if (!raw && provider.keyEnv && String(process.env[provider.keyEnv] || '').trim()) return true;
   if (!raw) return false;
   if (/^\{env:[A-Z0-9_]+\}$/i.test(raw)) return Boolean(process.env[raw.slice(5, -1)]);
   return true;
