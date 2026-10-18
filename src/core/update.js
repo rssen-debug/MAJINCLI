@@ -250,7 +250,8 @@ export async function installSetup(o = {}) {
  * (base64 of UTF-16LE) dodges every quoting layer on the way. Everything the
  * watchdog does lands in %LOCALAPPDATA%\MAJIN\update-relaunch.log so a
  * failed relaunch is forever debuggable instead of "the app just vanished". */
-export function relaunchScript(installerPid, executable = process.execPath) {
+const DEFAULT_INSTALLED_EXE = 'C:\\Program Files\\MAJIN\\majin-win-x64.exe';
+export function relaunchScript(installerPid, executable = DEFAULT_INSTALLED_EXE) {
   // The actual installation can be per-user OR per-machine; Program Files is
   // not a reliable relaunch location. Use the executable currently installed.
   const safeExe = String(executable).replace(/'/g, "''");
@@ -268,7 +269,7 @@ export function relaunchScript(installerPid, executable = process.execPath) {
   ].join('; ');
 }
 
-export function relaunchCommand(installerPid, executable = process.execPath) {
+export function relaunchCommand(installerPid, executable = DEFAULT_INSTALLED_EXE) {
   return Buffer.from(relaunchScript(installerPid, executable), 'utf16le').toString('base64');
 }
 
