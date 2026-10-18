@@ -109,6 +109,19 @@ jobs:
           }
           Get-ChildItem dist/installer | Select-Object Name, Length | Format-Table -AutoSize
 
+      - name: browser tools must work against a real browser (live e2e, observed)
+        # continue-on-error for now on purpose: the CDP wire is new — first
+        # let this step prove itself across runs, then it becomes a gate.
+        # The runner has Edge + node 22; the test serves a local form page,
+        # submits it, proves the upload from the input element, and closes.
+        continue-on-error: true
+        shell: pwsh
+        env:
+          MAJIN_BROWSER_LIVE: '1'
+        run: |
+          $env:MAJIN_HOME = "$env:GITHUB_WORKSPACE\.livedemo"
+          node --test test/browser.live.test.js
+
       - name: the installer must install, run, survive a restart and uninstall
         # One verifier for CI and for a person's own laptop: the same script the
         # owner can run locally. -SkipBuild because the artifacts above already

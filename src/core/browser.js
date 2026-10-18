@@ -258,15 +258,10 @@ export async function openFor({ session, url = 'about:blank', headless = true, c
      websocket — the modern CDP layout, no nested sendMessageToTarget */
   const { targetId } = await cdp('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await cdp('Target.attachToTarget', { targetId, flatten: true });
-  const send = (method, params = {}, opts = null) => sendRaw({ sessionId, method, params }, opts);
-
-  const close = () => {
-    try { ws.close(); } catch { /* gone */ }
-    try { if (!proc.killed) proc.kill(); } catch { /* gone */ }
-    thePool.release(session);
-    sess.delete(session);
-  };
-  const b = { session, sessionId, send, goto: null, eval: null, close, proc, slot };
+  const b = { session, sessionId, send: null, goto: null, eval: null, close, proc, slot };
+  /* send reads b.sessionId EVERY call — smarttab can re-wire it later */
+  const send = (method, params = {}, opts = null) => sendRaw({ sessionId: b.sessionId, method, params }, opts);
+  b.send = send;
   b.goto = async (u) => {
     await send('Page.enable');
     await send('Page.navigate', { url: u });
@@ -282,6 +277,27 @@ export async function openFor({ session, url = 'about:blank', headless = true, c
   };
   await b.goto(url);
   sess.set(session, b);
+
+  /* smarttab: a click that opens a NEW page target must not strand the agent
+     in the old, empty tab. 1.5 s window to catch the spawn, then re-attach. */
+  b.followNewTarget = async ({ windowMs = 1500 } = {}) => {
+    const deadline = Date.now() + windowMs;
+    while (Date.now() < deadline) {
+      const { targetInfos = [] } = await cdp('Target.getTargets');
+      const mine = targetInfos.find((t) => t.targetId === targetId);
+      const spawnTarget = targetInfos.find((t) => t.type === 'page' && t.targetId !== targetId && !t.attached);
+      if (spawnTarget) {
+        const { sessionId: s2 } = await cdp('Target.attachToTarget', { targetId: spawnTarget.targetId, flatten: true });
+        b.sessionId = s2;
+        const meta = await b.eval('(() => ({ url: location.href, title: document.title }))()');
+        await new Promise((r) => setTimeout(r, 300));
+        return { followed: true, ...meta };
+      }
+      if (!mine) break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return { followed: false };
+  };
   return b;
 }
 

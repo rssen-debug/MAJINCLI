@@ -10,6 +10,8 @@ import { resolveIn } from './files.js';
 import { bus } from '../log.js';
 import { openFor, closeFor, isOpen, journal } from '../browser.js';
 
+const followedSafe = (fol) => (fol && fol.followed === true ? true : false);
+
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36 MAJIN/1.0';
 
 async function httpGet(url, { headers = {}, timeoutSec = 25, maxBytes = 4_000_000, method = 'GET', body = null } = {}) {
@@ -285,12 +287,14 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         return { found: true, tag: String(el.tagName).toLowerCase(), text: t };
       })()`);
       if (!hit.found) return { ok: false, error: { code: 'no_such_element', message: `no clickable element matches ${selector}`, hint: 'browser.read the page and pick a selector from the real text' } };
-      await new Promise((r) => setTimeout(r, 700));
-      const after = await b.eval('(() => ({ url: location.href, title: document.title }))()');
+      /* a click may spawn a NEW tab (target=_blank, window.open): follow it
+         so the agent lands where the page actually went */
+      const fol = await (b.followNewTarget ? b.followNewTarget({ windowMs: 1500 }) : { followed: false });
+      const after = fol.followed ? { url: fol.url, title: fol.title } : await b.eval('(() => ({ url: location.href, title: document.title }))()');
       return {
         ok: true,
-        result: `clicked ${hit.tag} "${hit.text}" — page now: "${after.title}" at ${after.url}`,
-        meta: { tag: hit.tag, text: hit.text, urlAfter: after.url, title: after.title },
+        result: `clicked ${hit.tag} "${hit.text}"${fol.followed ? ' (new tab followed)' : ''} — page now: "${after.title}" at ${after.url}`,
+        meta: { tag: hit.tag, text: hit.text, urlAfter: after.url, title: after.title, openedNewTab: fol.followed },
         summary: `clicked "${hit.text}"`,
       };
     },
@@ -343,6 +347,37 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       await fs.writeFile(file, Buffer.from(shot.data, 'base64'));
       ctx.bus?.emit?.('file.write', { path: file, bytes: shot.data.length * 0.75 | 0 });
       return { ok: true, result: `screenshot saved: ${file}`, meta: { path: file }, summary: `shot ${path.basename(file)}` };
+    },
+  }),
+
+  def({
+    name: 'browser.upload',
+    group: 'web',
+    risk: 'exec',
+    desc: 'Attach a local file to a page file input (<input type=file>) — CV/portfolio uploads. The confirmation comes from the page itself.',
+    params: { selector: 'string: CSS selector of the file input', path: 'string: local file to upload (inside the workspace)' },
+    async run({ selector, path: p }, ctx) {
+      const session = ctx.session || 'default';
+      if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
+      journal.guard(session, `browser.upload:${selector}`);
+      const { resolveIn } = await import('./files.js');
+      const { abs } = resolveIn(ctx, p);
+      const st = await fs.stat(abs).catch(() => null);
+      if (!st || !st.isFile()) return { ok: false, error: { code: 'no_file', message: `no such file: ${abs}` } };
+      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
+      const sel = JSON.stringify(String(selector));
+      await b.send('DOM.enable');
+      const { root } = await b.send('DOM.getDocument');
+      const { nodeId } = await b.send('DOM.querySelector', { nodeId: root.nodeId, selector: String(selector) });
+      if (!nodeId) return { ok: false, error: { code: 'no_such_element', message: `no file input matches ${selector}`, hint: 'browser.read the page or browser.shot it; find the real input' } };
+      await b.send('DOM.setFileInputFiles', { files: [abs], nodeId });
+      const confirm = await b.eval(`(() => {
+        const el = document.querySelector(${sel});
+        const f = el && el.files && el.files[0];
+        return f ? { ok: true, name: f.name, size: f.size } : { ok: false };
+      })()`);
+      if (!confirm.ok) return { ok: false, error: { code: 'no_upload', message: 'the input did not accept the file', hint: 'screenshot the page and check for a custom uploader' } };
+      return { ok: true, result: `uploaded — page now holds "${confirm.name}" (${confirm.size} bytes)`, meta: { name: confirm.name, size: confirm.size, path: abs }, summary: `uploaded ${confirm.name}` };
     },
   }),
 

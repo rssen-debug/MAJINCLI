@@ -14,11 +14,11 @@ autopilot/teamwork/dashboard additions).
   *(källa: master brief §"TRUE PARALLEL AUTOPILOT")*
 - **Browser-use — foundation done 2026-10-18.** CDP, six tools, slot pool, loop guard,
   evidence-everywhere, all deterministic parts tested (189/0). Remaining for the full claim:
-  (1) wire a real Chrome/Edge agent turn into CI Windows (headless — click + fill on a test
-  page, screenshot proof), (2) `browser.upload` (DOM.setFileInputFiles) for CV-type flows,
-  (3) smarttab: follow the first navigation after a click even when it is a new target,
-  (4) recovery cookbook in the system prompt (read → narrower selector → shot → ask).
-  *(källa: master brief §2B)*
+  (1) `browser.upload` ✅, (2) smarttab (follow the spawned tab) ✅, (3) recovery cookbook ✅.
+  Remaining: CI live step must print green across consecutive runs, then flip
+  `continue-on-error` to a hard gate; checkbox/radio semantics beyond click (tristate ARIA),
+  and a scrollIntoView-iframes note for big job portals.
+  *(källa: master brief §2B — the live harness is the remaining proof)*
 - **Cost truth.** `pricing` only has DeepSeek entries — every other provider reports $0 by
   design. Kilo/OpenRouter `/models` answers carry per-model pricing: import it during model
   discovery instead of curating by hand, then slice-2's cost chip + the real budget cap

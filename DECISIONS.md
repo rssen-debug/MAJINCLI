@@ -121,6 +121,7 @@ allowed to contradict a test.
 - **ETA granularity.** Per-tool timings are already measurable; the open question is which
   unit of work aggregates well enough across tasks to predict ("28/100 jobb" is a queue, not a
   clock). Needs recorded telemetry from real runs before design.
+- **Browser live-gate cadence.** `test/browser.live.test.js` runs in CI with `continue-on-error: true` until green across consecutive runs — then flips to a hard gate. Open question: is the local form server deterministic enough for a Windows runner (port races, first-run Edge profile popups)? Watched on the next two builds.
 - **Browser-context resource model.** Files lock cleanly by path; a browser context is not a
   path. Candidates: a named-resource lock per provider-site domain; count-based pool keyed by
   `channel:browser`. Decided when browser hardening starts (next phase).

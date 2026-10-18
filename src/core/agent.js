@@ -86,6 +86,7 @@ export class Agent {
       this.plans.get(session)?.length ? `ACTIVE PLAN:\n${this.plans.get(session).map((p) => `[${p.status === 'done' ? 'x' : p.status === 'doing' ? '~' : p.status === 'blocked' ? '!' : ' '}] ${p.text}`).join('\n')}` : '',
       '',
       'Reply in English unless the user clearly writes another language. Short before long. No metadata about yourself.',
+      'Browser work: if a click/fill fails, recover in order — browser.read the page, try a narrower selector (or search text from browser.read), browser.shot once to look, then try again or ask. Usually the bottleneck: never click the same failing element more than twice; the loop guard stops at three.',
     ]
       .filter((l) => l !== '')
       .join('\n');

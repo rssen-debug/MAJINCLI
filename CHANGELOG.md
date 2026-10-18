@@ -5,6 +5,33 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (browser-use: upload + smarttab + the live wire)
+
+### Ändrat
+- **`browser.upload`** (DOM.setFileInputFiles over CDP): a file is attached to a page
+  `<input type=file>` and the confirmation is read back from the input element itself —
+  the CV-upload path the job agent will need. 84 → **85** tools.
+- **Smarttab**: a click that spawns a new tab (target=_blank / window.open) is followed
+  within 1.5 s — the agent never keeps acting on the stale tab. Session routing reads
+  the live target dynamically (`send` now re-reads `b.sessionId` per call).
+- **Recovery cookbook in the system prompt**: failures recover in deterministic order
+  (read → narrower selector → shot once → retry/ask; no more than two clicks on the
+  same failing element — three trips the loop guard).
+- **CI live wire**: the exe job runs `test/browser.live.test.js` on the real Windows
+  runner (Edge + node 22 exist there) with a deterministic local form server —
+  `continue-on-error: true` for the first runs by design, gates once stable (noted in
+  the workflow itself).
+
+### Fixat
+- My own closure bug: `send` captured the initial tab's sessionId, which would have
+  broken smarttab the one time it matters — found during review before running.
+
+### Verifierat
+- `node --test`: **190 pass / 0 fail / 5 skipped** (adds `test/browser.test.js` 7/7:
+  upload risk-pin, followNewTarget source-pin, cookbook pins); `npm run i18n` 0/69
+  files; `npm run check` 96/96. LIVE e2e intentionally skipped locally (no browser in
+  the sandbox, node 20 has no built-in WebSocket); its wire proof is owed by the next CI run.
+
 ## 2026-10-18 (browser-use foundation) — the agent drives the browser that is already on the machine
 
 ### Ändrat

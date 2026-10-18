@@ -83,16 +83,26 @@ test('process-wide session helpers stay truthful without a browser', () => {
   assert.equal(closeFor('nothing-here'), false, 'closing nothing reports nothing closed');
 });
 
+test('click follows a spawned tab, and the recovery cookbook lives in the system prompt', async () => {
+  const web = (await import('node:fs')).readFileSync(new URL('../src/core/tools/web.js', import.meta.url), 'utf8');
+  assert.match(web, /followNewTarget/, 'click must attach to a tab the click itself spawned');
+  assert.match(web, /new tab followed/, 'the agent is told what actually happened');
+  const agent = (await import('node:fs')).readFileSync(new URL('../src/core/agent.js', import.meta.url), 'utf8');
+  assert.match(agent, /browser\.read the page, try a narrower selector/, 'the recovery path is taught, deterministic order');
+  assert.match(agent, /never click the same failing element more than twice/, 'the loop guard is explained to the model');
+});
+
 test('the browser tools are registered with guard-approved risks and loop-journal wiring', async () => {
   const { webTools } = await import('../src/core/tools/web.js');
   const names = webTools.map((t) => t.name);
-  for (const want of ['browser.open', 'browser.read', 'browser.click', 'browser.fill', 'browser.shot', 'browser.close']) {
+  for (const want of ['browser.open', 'browser.read', 'browser.click', 'browser.fill', 'browser.upload', 'browser.shot', 'browser.close']) {
     assert.ok(names.includes(want), `${want} registered`);
   }
   const acts = Object.fromEntries(webTools.filter((t) => t.name.startsWith('browser.')).map((t) => [t.name, t]));
   assert.equal(acts['browser.open'].risk, 'exec', 'opening a browser is an act on the machine — approvable');
   assert.equal(acts['browser.click'].risk, 'exec');
   assert.equal(acts['browser.fill'].risk, 'exec');
+  assert.equal(acts['browser.upload'].risk, 'exec', 'uploading a file is an outward act too');
   assert.equal(acts['browser.read'].risk, 'read');
   assert.equal(acts['browser.shot'].risk, 'read');
   /* a closed fleet answers with a sentence, not a stack trace */
