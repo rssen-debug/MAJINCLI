@@ -26,7 +26,8 @@ autopilot/teamwork/dashboard additions).
   slice-2's per-task cost chip in the UI, and eur/sek display.
   *(källa: master brief §2E)*
 - **Windows/browser human round on top of the CI smoke.** CI now installs/runs/uninstalls on
-  real Windows every build (job "the installer must install, run, survive a restart"), but a
+  real Windows every build — and, as of the config-race fix (commit f6869bc, run 39134332080),
+  it VERIFIES every build that a write from outside the process survives a restart. A
   human still has to click: provider picker, key box, first real model call, update chip →
   relaunch, Quit — and the new parallel task cards (send a second message mid-run, stop only that one). One run with notes, then this item dissolves.
 
