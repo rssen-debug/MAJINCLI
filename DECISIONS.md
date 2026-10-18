@@ -128,6 +128,13 @@ allowed to contradict a test.
 
 ## Öppna frågor
 
+- **Ska loopen skicka RELEVANTA verktygsscheman i stället för alla 103 till modellen?**
+  Nu vann som ligger kvar: alla schemas i varje turn. search() finns men används
+  på modellens initiativ, inte åt den. En subset-variant (topp-N via search(job)
+  + tools.search som flyktning) sparar direkt tokens men riskerar att verktyg
+  utanför subsetet blir osynliga. Besked efter benchmark: bench.mjs före/efter
+  på samma turn, annars ryker loopen utan bevis på vinst.
+
 - ~~**Job dedupe identity**~~ **DECIDED 2026-10-18**: fingerprint = canonical URL
   (tracking params stripped, real id params kept, case/diacritics-folded
   title+company fallback). The pipeline file IS the dedupe memory — one place where
@@ -158,6 +165,11 @@ allowed to contradict a test.
   Cost: prices for providers without pricing in `/models` stay unknown... which is the
   point: unknown is never reported as $0, it is counted (`unpricedCount`) and treated
   as PAID under a spending cap. Proof: `test/pricing.test.js` 6/6.
+- **`cap/1`-kontraktet är utlett, inte handskrivet** (2026-10-18): sideEffects,
+  tags och inputs härleds ur risk/namn/schema som redan finns. Underhållsdyrk:
+  en handskriven klassificering hade sett bättre ut men kostar en människa vid
+  varje ny verktyg. Cap/2 får lägga till kostnad/tillstånd/verify per verktyg
+  när bevis finns att det används.
 - **Brand consistency is enforced by measurement, not memory** (2026-10-18):
   brand.test.js asserts rosa-dominans + M-separation i varje ico-storlek och
   båda png-varianterna. En framtida designändring = ändra kanonen + alla

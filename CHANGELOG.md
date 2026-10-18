@@ -5,6 +5,30 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (GENESIS OMEGA fas 1: capabilities märkta + dynamisk verktygsplockning)
+
+### Ändrat
+- **Capability-kontrakt `cap/1`** på varje verktyg (`Registry.capabilities()`):
+  id, grupp, beskrivning, tags (grupp + namnsegment), `sideEffects` utledd ur
+  risk (read→none, write→local, exec→process, destructive→destructive) och
+  inputs = verktygets eget JSON-schema. Samma pipeline som registryt redan
+  mäter sig med — inga parallella sanningar.
+- **`Registry.search(q)`**: deterministisk, token-fri träffsärkning. Seed-regel:
+  en description ord aldrig ensam fram ett verktyg (namn/tag/grupp måste ge
+  seed, beskrivning bara boost) — annars drunknar listan i löst prat.
+- **Nytt verktyg `tools.search`** (meta/read, 103:e verktyget): agenterna
+  hittar rätt capability på vanligt språk; svarar ärligt med `count: 0` + tips
+  när ord saknas. Fungerar i readOnly-läge.
+- **Systemprompten** berättar för modellen att tools.search finns så den söker
+  före gissning — annars hade hela skivan legat oanvänd.
+- Test-tejp: fyra antal-pinnar 102→103 med ärlig motivering i samma assert.
+
+### Verifierat
+- `node --test test/capability.test.js` → 7 pass (skrevs fail-first: alla 7 röda
+  före implementationen; ranking pins: github.research vinner researchfrågan,
+  fs.write hittas, browser.fill topp, inga desc-bara seeds, determinism).
+- `npm test` → 280 pass, 0 fail, 7 skipped · i18n 0/85 · parse 124/124.
+
 ## 2026-10-18 (logo-audit: branden mäter grön, småstorlekarna anklagades felaktigt)
 
 ### Ändrat
