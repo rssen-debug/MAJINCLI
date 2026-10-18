@@ -203,6 +203,47 @@ export class Agent {
       }
       emit({ type: 'route', job: decision.job, confidence: decision.confidence, model: turnPlan.route?.ref, moa: turnPlan.moa, reasons: decision.reasons, alt: decision.alt, tiebreak: Boolean(decision.llmTiebreak) });
 
+      /* 2b) GRAND ARCHITECT mission gate: ett tydligt flerdelsmaal kompileras till DAG
+         → HYPERSWARM. Beslutet om HUR manga workers: analyzer i kod. Alla fel
+         trillar tillbaka till normal turn — GENESIS ZERO garanterar att ett svar alltid landar. */
+      if (!readOnly) {
+        const { shouldMission, runMission } = await import('./mission.js');
+        if (shouldMission(input).mission) {
+          try {
+            const m = await runMission({
+              cfg,
+              registry: this.registry,
+              session,
+              input,
+              emit,
+              memory: this.memory,
+            });
+            if (m.kind === 'mission') {
+              emit({ type: 'mission', nodes: m.nodes, workers: m.workers, okCount: m.okCount, failCount: m.failCount, blockedCount: m.blockedCount });
+              const text = [
+                `Mission done — ${m.okCount}/${m.nodes} parts ok` + (m.failCount ? `, ${m.failCount} failed` : '') + (m.blockedCount ? `, ${m.blockedCount} blocked` : '') + `. ${m.workers} workers decided by the analyzer (code, not the model).`,
+                '',
+                ...m.textSummary,
+              ].join('\n');
+              appendHistory(session, { role: 'user', content: input, source });
+              appendHistory(session, { role: 'assistant', content: text, mission: true });
+              this.memory?.event?.('mission', { summary: `${m.okCount}/${m.nodes}: ${String(input).slice(0, 140)}` });
+              emit({ type: 'answer', text, mission: true });
+              return {
+                text,
+                mission: { nodes: m.nodes, workers: m.workers, okCount: m.okCount, failCount: m.failCount, blockedCount: m.blockedCount, wallMs: m.result.wallMs, analysis: m.analysis },
+                steps: 0,
+                tools: [],
+                usage: { input: 0, output: 0, costUsd: 0 },
+                job: decision.job,
+              };
+            }
+          } catch {
+            /* mission NEVER kraschar en turn — vanlig normal vag fortsatter */
+          }
+        }
+      }
+
       /* 3) verktygsslingan */
       const sys = this.systemPrompt({ session, decision, turnPlan, attachments, readOnly, aware, input });
       const ctx = {

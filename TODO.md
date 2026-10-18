@@ -6,6 +6,14 @@ autopilot/teamwork/dashboard additions).
 
 ## Hög prioritet
 
+- ~~**GRAND ARCHITECT mission compiler + chat-wired HYPERSWARM**~~
+  **SHIPPED 2026-10-18** (`src/core/mission.js`, agent gate, work-conserving
+  runSwarm with transitive blocked propagation, diagnostics skeleton).
+  Proof: mission 5/5, swarm 10/10, diag 5/5, live qwen3:0.6b 3/3 workers.
+  Remaining: mission with REAL cloud models (needs Go plan or other key),
+  UI mission surface (worker trace row in rail - UI lane), and Reality
+  Engine verification loop (execute→test→repair).
+  *(kaella: GRAND ARCHITECT brief den 2026-10-18 - prioritet 1)*
 - ~~**Update-chain root-cause + linux/mac answers + opencode provider**~~
   **SHIPPED 2026-10-18**: status field in every update answer, honest
   windows_only+releaseUrl path, preset header plumbing (x-opencode-session),

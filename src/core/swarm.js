@@ -178,68 +178,109 @@ export function analyzeSwarm(nodes, opts = {}) {
 }
 
 /**
- * Kör en DAG med kap-cachet parallelism. Alla noder får en ärlig slutpunkt:
- * ok:true med value, ok:false med error, ok:undefined + blocked:true om en
- * dep misslyckades. Aldrig tysta övergivna noder.
+ * runSwarm - WORK-CONSERVING DAG-schemalaggare.
+ * Sa fort en worker blir ledig tillelas den nasta korbara nod direkt:
+ * aldrig batch-vantan. Blockade noder bubblar transitivt (om a failar ar
+ * aven barn-till-barn blocked, med arlig orsak), sa inget vantar for evigt.
+ * Stoder AbortSignal: avbruten paus = resterande markeras cancelled.
  */
-export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, onEvent = () => {} }) {
+export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, onEvent = () => {} }) {
   validateGraph(nodes);
   const capN = Math.max(1, Math.min(16, Number(cap) || 4));
   const results = new Map(nodes.map((n) => [n.id, null]));
-  const remaining = new Map(nodes.map((n) => [n.id, new Set(n.deps || [])]));
   const done = new Set(), failed = new Set();
   const t0 = performance.now();
   const deadline = timeoutMs > 0 ? t0 + timeoutMs : Infinity;
+  const aborted = () => Boolean(signal && signal.aborted);
 
-  const readyOf = (n) => (n.deps || []).every((d) => done.has(d));
-  const blockedBy = (n) => (n.deps || []).find((d) => failed.has(d));
+  /* transitivt: en dep ar "dod" om den failat ELLER sjalv markerats blocked */
+  const deadDep = (n) => (n.deps || []).find((d) => failed.has(d) || (results.get(d) && results.get(d).blocked));
+  const readyFor = (n) => (n.deps || []).every((d) => done.has(d));
 
-  const launch = async (n) => {
-    const startedAt = performance.now();
-    onEvent({ type: 'worker_start', id: n.id });
-    try {
-      const value = await n.run(n);
-      const endedAt = performance.now();
-      results.set(n.id, { ok: true, value, ms: Math.round(endedAt - startedAt), startedAt: Math.round(startedAt), endedAt: Math.round(endedAt) });
-      done.add(n.id);
-      onEvent({ type: 'worker_done', id: n.id, ok: true });
-    } catch (err) {
-      const endedAt = performance.now();
-      results.set(n.id, { ok: false, error: String(err?.message || err).slice(0, 300), ms: Math.round(endedAt - startedAt), startedAt: Math.round(startedAt), endedAt: Math.round(endedAt) });
-      failed.add(n.id);
-      onEvent({ type: 'worker_done', id: n.id, ok: false, error: err?.message });
-    }
-  };
-
-  while (true) {
-    /* blockera ärligt: noder vars dep misslyckat/felats */
-    for (const n of nodes) {
-      if (results.get(n.id) === null && !done.has(n.id)) {
-        const b = blockedBy(n);
-        if (b) {
-          results.set(n.id, { ok: undefined, blocked: true, by: b, reason: `dependency ${b} failed` });
-          onEvent({ type: 'worker_blocked', id: n.id, by: b });
+  function markBlocked() {
+    let moved = true;
+    while (moved) {
+      moved = false;
+      for (const n of nodes) {
+        if (results.get(n.id) !== null) continue;
+        const d = deadDep(n);
+        if (d) {
+          results.set(n.id, { ok: undefined, blocked: true, by: d, reason: `dependency ${d} failed` });
+          onEvent({ type: 'worker_blocked', id: n.id, by: d });
+          moved = true;
         }
       }
     }
-    const pending = nodes.filter((n) => results.get(n.id) === null);
-    if (!pending.length) break;
-    const launchable = pending.filter((n) => readyOf(n));
-    if (!launchable.length) {
-      /* antingen blockerad (markerad ovan) eller tidsgränsen tog slut */
-      if (performance.now() > deadline) {
-        for (const n of pending) results.set(n.id, { ok: undefined, blocked: true, reason: 'deadline' });
-        break;
+  }
+
+  const inFlight = new Set();
+  const started = new Set(); /* started men INTE klar: aldrig en dublettkörning */
+
+  const launchOne = (n) => {
+    started.add(n.id);
+    const job = (async () => {
+      const startedAt = performance.now();
+      onEvent({ type: 'worker_start', id: n.id });
+      try {
+        const value = await n.run(n, { signal });
+        const endedAt = performance.now();
+        if (aborted()) {
+          results.set(n.id, { ok: undefined, blocked: true, reason: 'cancelled', ms: Math.round(endedAt - startedAt) });
+          onEvent({ type: 'worker_cancel', id: n.id });
+          return;
+        }
+        results.set(n.id, { ok: true, value, ms: Math.round(endedAt - startedAt), startedAt: Math.round(startedAt), endedAt: Math.round(endedAt) });
+        done.add(n.id);
+        onEvent({ type: 'worker_done', id: n.id, ok: true });
+      } catch (err) {
+        const endedAt = performance.now();
+        results.set(n.id, { ok: false, error: String(err && err.message || err).slice(0, 300), ms: Math.round(endedAt - startedAt), startedAt: Math.round(startedAt), endedAt: Math.round(endedAt) });
+        failed.add(n.id);
+        onEvent({ type: 'worker_done', id: n.id, ok: false, error: err && err.message });
       }
-      /* pending men inget klart → ska vara omöjligt efter cykelkontroll, men typ-markera om något gakar */
-      if (pending.every((n) => blockedBy(n))) continue;
-      await new Promise((r) => setTimeout(r, 5));
-      continue;
+    })();
+    inFlight.add(job);
+    job.finally(() => { inFlight.delete(job); started.delete(n.id); });
+  };
+
+  while (true) {
+    markBlocked();
+    if (aborted()) {
+      for (const n of nodes) {
+        if (results.get(n.id) === null) {
+          results.set(n.id, { ok: undefined, blocked: true, reason: 'cancelled' });
+          onEvent({ type: 'worker_cancel', id: n.id });
+        }
+      }
+      break;
     }
-    const batch = launchable.slice(0, capN);
-    await Promise.all(batch.map(launch));
+    /* pending = INTE igang och inget svar än (started-noder räknas aldrig dubbelt) */
+    const pending = nodes.filter((n) => results.get(n.id) === null && !started.has(n.id));
+    if (!pending.length && inFlight.size === 0) break;
+
+    /* ledig kapacitet rullar genast ut pa korbar ett arbete */
+    const launchable = pending.filter((n) => readyFor(n));
+    while (launchable.length && inFlight.size < capN) {
+      launchOne(launchable.shift());
+    }
+    if (inFlight.size === 0 && pending.filter((n) => readyFor(n)).length === 0) {
+      const rest = nodes.filter((n) => results.get(n.id) === null && !started.has(n.id));
+      if (!rest.length) break;
+      /* alla rest blockerade redan ovan - garanti for terminering */
+    }
+
+    if (inFlight.size > 0) {
+      const hbMs = Math.max(10, Math.min(250, deadline === Infinity ? 250 : Math.max(1, deadline - performance.now())));
+      let hb;
+      const hbP = new Promise((r) => { hb = setTimeout(r, hbMs); });
+      if (hb.unref) hb.unref();
+      await Promise.race([...inFlight, hbP]);
+      clearTimeout(hb);
+    }
     if (performance.now() > deadline) {
-      for (const n of pending.filter((x) => results.get(x.id) === null)) results.set(n.id, { ok: undefined, blocked: true, reason: 'deadline' });
+      for (const n of nodes) {
+        if (results.get(n.id) === null) results.set(n.id, { ok: undefined, blocked: true, reason: 'deadline' });
+      }
       break;
     }
   }
