@@ -50,7 +50,7 @@ test('missing GitHub token or rate limit fails clearly, never suggests third-par
 });
 
 test('tool is model-visible and read-only, without extra model calls',async()=>{
-  assert.deepEqual(githubTools.map(t=>t.name),['github.research']);
+  assert.deepEqual(githubTools.map(t=>t.name).sort(),['github.research','github.verify']);
   assert.equal(githubTools[0].risk,'read');
   const wrong=await githubTools[0].run({action:'unknown'});
   assert.equal(wrong.ok,false);
