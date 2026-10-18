@@ -50,6 +50,11 @@ without saying so explicitly. Version tags map 1:1 to git tags.
   the workflow itself).
 
 ### Fixat
+- **`close is not defined` in `openFor`** — my smarttab refactor dropped the `close()`
+  definition; only a REAL browser run could see it, and the brand-new CI live step did
+  (Windows runner, first dispatch). Restored, plus a safety net: any failure between
+  browser spawn and session-ready now kills process/ws and returns the pool slot — the
+  leaked handles had held the runner step for 18 minutes.
 - My own closure bug: `send` captured the initial tab's sessionId, which would have
   broken smarttab the one time it matters — found during review before running.
 
