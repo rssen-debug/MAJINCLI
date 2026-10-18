@@ -107,6 +107,73 @@ export function verifyClaimedArtifact(claimed, { cfg }) {
   return { verifiable: true, ok: false, reason: 'file missing or empty after run', path: claimed };
 }
 
+/* VERIFICATION CONTRACTS (Del 4A): claims are typed, evidence has provenance,
+   and every verdict string names what was actually checked. Never trust the
+   worker's prose — recompute. */
+export function buildContracts(input) {
+  const t = String(input || '');
+  const contracts = [];
+  const file = findClaimedArtifact(t);
+  if (file) contracts.push({ type: 'file_exists', path: file });
+  const cont = /contain(?:ing|s)?\s+(?:the\s+(?:word|text|string)\s+)?["']([^"']{1,80})["']/i.exec(t);
+  if (file && cont) contracts.push({ type: 'file_contains', path: file, needle: cont[1] });
+  const cnt = /(?:report\s+the\s+number\s+of|count|how\s+many|antal)\s+([a-z]+)?\s*files?\s+in\s+([^(\s,.)]+\/?)/i.exec(t);
+  if (cnt) contracts.push({ type: 'count', dir: cnt[2], unit: cnt[1] || null });
+  return contracts;
+}
+
+function countFiles(dir) {
+  try {
+    return nodeFs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isFile()).length;
+  } catch { return null; }
+}
+
+/** verify ONE contract against real evidence; never against worker claims */
+export function verifyContract(c, { cfg, partText = '' } = {}) {
+  const ws = missionWorkspace(cfg);
+  if (c.type === 'file_exists') {
+    const abs = nodePath.resolve(ws, c.path);
+    const rel = nodePath.relative(ws, abs);
+    if (rel.startsWith('..') || nodePath.isAbsolute(rel)) return { ...c, ok: false, evidence: 'path escapes the workspace' };
+    try {
+      const st = nodeFs.statSync(abs);
+      if (st.isFile() && st.size > 0) return { ...c, ok: true, evidence: `${c.path} (${st.size} bytes, sha:${shaOf(abs)})` };
+    } catch { /* fall through */ }
+    return { ...c, ok: false, evidence: 'missing or empty after run' };
+  }
+  if (c.type === 'file_contains') {
+    const abs = nodePath.resolve(ws, c.path);
+    try {
+      const text = nodeFs.readFileSync(abs, 'utf8');
+      return text.includes(c.needle)
+        ? { ...c, ok: true, evidence: `${c.path} contains "${c.needle}"` }
+        : { ...c, ok: false, evidence: `${c.path} does NOT contain "${c.needle}"` };
+    } catch {
+      return { ...c, ok: false, evidence: `${c.path} unreadable` };
+    }
+  }
+  if (c.type === 'count') {
+    const abs = nodePath.resolve(ws, c.dir);
+    const actual = countFiles(abs);
+    const m = /(\d+)\s*files?/i.exec(partText);
+    const claimed = m ? parseInt(m[1], 10) : null;
+    if (actual === null) return { ...c, ok: false, evidence: `directory ${c.dir} unreadable` };
+    if (claimed === null) return { ...c, ok: false, evidence: `worker gave no "N files" number (actual ${actual})` };
+    return claimed === actual
+      ? { ...c, ok: true, evidence: `${c.dir} has ${actual} files (independently counted)` }
+      : { ...c, ok: false, evidence: `${c.dir} has ${actual} files — worker claimed ${claimed}` };
+  }
+  return { ...c, ok: false, evidence: `unknown contract type ${c.type}` };
+}
+
+function shaOf(abs) {
+  try {
+    const crypto = nodeCrypto;
+    return crypto.createHash('sha256').update(nodeFs.readFileSync(abs)).digest('hex').slice(0, 8);
+  } catch { return 'n/a'; }
+}
+import nodeCrypto from 'node:crypto';
+
 const COMPILE_SYS = `You extract a SMALL parallel task graph from a goal. Reply with ONLY the JSON, no prose, no fences.
 Schema: {"nodes":[{"id":"snake_case","input":"<self-contained worker instruction>","deps":[],"estMs":30000}]}
 Rules: 2-6 nodes. deps = ids that must finish first; [] when independent. estMs: honest wall estimate in ms (20000-60000 typical model-work). Every input must be self-contained - a worker sees ONLY its own input. Never include secrets or file paths you were not given.`;
@@ -196,6 +263,19 @@ export async function compileMission(input, { cfg, maxNodes = 6, modelCall = nul
  * Kor en kor en kompilerad mission: analyzer i KOD bestammer antalet workers;
  * inget annat tillats fatta beslutet. Blocked/fail rapporteras aarligt.
  */
+function verifyContractLegacy(c, { cfg, part }) {
+  return verifyContract(c, { cfg, partText: String(part?.value?.text || '') });
+}
+function contractFailureNames(results) {
+  return results.filter((r) => !r.ok).map((r) => `${r.type}(${r.path || r.dir || '?'}): ${r.evidence}`);
+}
+function contractVerdict(contracts, results) {
+  if (!results.length) return { ok: true, summary: 'no contracts' };
+  const fail = results.filter((r) => !r.ok);
+  if (fail.length) return { ok: false, reason: `${fail.length}/${results.length} contracts failed`, summary: results.map((r) => r.evidence).join('; ') };
+  return { ok: true, summary: results.map((r) => r.evidence).join('; ') };
+}
+
 export async function runMission({ cfg, registry, session, input, emit = () => {}, memory = null, maxNodes = 6, modelCall = null, capOverride = 0 }) {
   const compiled = await compileMission(input, { cfg, maxNodes, modelCall });
   if (compiled.kind !== 'mission') return { kind: 'single', compiled };
@@ -217,30 +297,33 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
     const n = compiled.nodes[i];
     const p = parts[i];
     if (!p || p.ok !== true) continue;
-    const claimed = findClaimedArtifact(n.input);
-    if (!claimed) continue;
-    let vr = verifyClaimedArtifact(claimed, { cfg });
+    /* Del 4A: typed contracts for every claim in the node input; every failing
+       contract names its own evidence. */
+    const contracts = buildContracts(n.input);
+    if (!contracts.length) continue;
+    let results = contracts.map((c) => verifyContractLegacy(c, { cfg, part: p }));
+    let vr = contractVerdict(contracts, results);
     if (vr.ok) { p.verified = vr; verifiedCount += 1; continue; }
-    /* repair: EN runda med exakt feedback om vad verifieraren hittade */
-    emit({ type: 'mission_verify_fail', id: n.id, path: claimed, reason: vr.reason });
-    let claim = null;
+    emit({ type: 'mission_verify_fail', id: n.id, reason: contractFailureNames(results).join('; ') });
     try {
-      const repairInput = `${n.input}\n\n[VERIFICATION FAILED — you claimed the file "${claimed}" was written, but it does not exist in the workspace after your run (${vr.reason}). Do it FOR REAL now: call the fs.write tool exactly against "${claimed}" and report the path. Do not claim the file is written until the tool has actually confirmed the write.]`;
+      const why = contractFailureNames(results).join('; ');
+      const repairInput = `${n.input}\n\n[VERIFICATION FAILED on contracts: ${why}. Do it FOR REAL now: for every failing contract, produce the real evidence (fs.write the file again with the EXACT required content; report NO number or fact you cannot prove). Do not claim success before the evidence exists on disk or in your answer.]`;
       const value = await worker({ ...n, input: repairInput }, { signal: null });
-      vr = verifyClaimedArtifact(claimed, { cfg });
+      p.value = value;
+      results = contracts.map((c) => verifyContractLegacy(c, { cfg, part: p }));
+      vr = contractVerdict(contracts, results);
       if (vr.ok) {
-        p.value = value;
         p.verified = vr;
         p.repaired = true;
         repairedCount += 1;
         verifiedCount += 1;
-        emit({ type: 'mission_repaired', id: n.id, path: claimed, size: vr.size });
+        emit({ type: 'mission_repaired', id: n.id, contracts: contracts.length });
       } else {
         p.ok = false;
-        p.error = `verification failed: "${claimed}" ${vr.reason}${p.error ? ' | worker: ' + p.error : ''}`;
+        p.error = `verification failed on contracts: ${contractFailureNames(results).join('; ')}`;
         r.failCount += 1;
         r.okCount -= 1;
-        emit({ type: 'mission_verify_failed', id: n.id, path: claimed, reason: vr.reason });
+        emit({ type: 'mission_verify_failed', id: n.id, reason: p.error });
       }
     } catch (err) {
       p.ok = false;
@@ -264,7 +347,7 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
     nodes: compiled.nodes.length,
     textSummary: parts.map((p, i) => {
       const n = compiled.nodes[i];
-      if (p && p.ok === true && p.verified) return `✓ ${n.id}: ${String(p.value?.text || '').slice(0, 220)} [VERIFIED: ${p.verified.path}, ${p.verified.size} bytes${p.repaired ? ', after repair' : ''}]`;
+      if (p && p.ok === true && p.verified) return `✓ ${n.id}: ${String(p.value?.text || '').slice(0, 220)} [VERIFIED: ${p.verified.summary}${p.repaired ? ', after repair' : ''}]`;
       if (p && p.ok === true) return `✓ ${n.id}: ${String(p.value?.text || '').slice(0, 220)} [reported, not independently verifiable]`;
       if (p && p.ok === false) return `✗ ${n.id}: ${p.error}`;
       if (p && p.blocked) return `↷ ${n.id}: blocked — ${p.reason}`;

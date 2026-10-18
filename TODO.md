@@ -6,11 +6,13 @@ autopilot/teamwork/dashboard additions).
 
 ## Hög prioritet
 
-- **Completion matrix: 41/100** (`docs/COMPLETION_MATRIX.md`). Del 1D SHIPPED
-  (resume.test 6/6 + wired journaling). Next in point-density order: **Del 4A/4C** (verification contract types +
-  hard retry/budget/timeout caps), **Del 3C/D/E** (transient recovery, corruption
+- **Completion matrix: 45/100** (`docs/COMPLETION_MATRIX.md`). Del 1D + **Del 4A** SHIPPED
+  (contracts engine: file_exists/file_contains/count verified in CODE, repair-before-fail,
+  provenance strings; mission 12/12). Next in point-density order: **Del 4C**
+  (hard retry/budget/timeout caps), **Del 3C/D/E** (transient recovery, corruption
   adversarial, measured parallel benefit), **Del 2C** (clarify + replan), **Del 1E**
-  (live two-provider handoff).
+  (live two-provider handoff — BLOCKED in sandbox: no second live provider, ollama
+  wiped by snapshot).
 
 - ~~**opencode-free-PLC test**~~ **VERIFIERAT 2026-10-18 kväll** — båda
   free-modellerna (longcat-2.5-preview-free, beam-free) svarade genom

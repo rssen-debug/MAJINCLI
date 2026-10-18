@@ -5,6 +5,40 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (evening, part 4) — Del 4A: verification contracts + evidence provenance
+
+### Changed
+- **`src/core/mission.js` — contract engine.** A mission part no longer ships on the
+  worker's word: `buildContracts` derives typed contracts from the brief and
+  `verifyContract` checks each one against REAL evidence, in code, after the run:
+  - `file_exists` — stat of the resolved path (workspace-escape guarded), size > 0,
+    sha256[:8] fingerprint recorded in the evidence string.
+  - `file_contains` — the file must literally contain the quoted needle from the brief
+    (`readFileSync.includes`), so "the file says survival of the fittest" is checked
+    against CONTENT, not existence.
+  - `count` — "report the number of files in <dir>/" is re-counted independently by
+    `fs.readdir` and compared against the worker's "N files" claim; a mismatch is a
+    dead contract. The verifier never asks a second model whether the number is right.
+- **Repair loop speaks contracts.** A part with dead contracts gets one repair round
+  whose prompt lists exactly which contracts died; the part only ships when the
+  repaired output re-verifies. Parts without contracts keep the old
+  "reported, not independently verifiable" treatment.
+- **Provenance in the summary.** Verified parts carry
+  `[VERIFIED: store/ has 3 files (independently counted), after repair]` — the reader
+  sees WHAT was checked (real disk state), not who claimed what. (PR PR #40)
+
+### Verified
+- `node --test test/mission.test.js` → 12/12. New: t10 (file_contains lie → dead contract
+  → repair re-writes real content → VERIFIED), t11 (count lie "7 files" against a 3-file
+  store/ → code recount catches it → repair → VERIFIED `3 files (independently counted)`),
+  t12 (honest count verifies with zero repair rounds).
+- **Discrimination:** trust-the-claim sabotage on `count` turns ONLY t11 red; a
+  rubber-stamped `file_contains` turns ONLY t10 red; sane baseline 12/12.
+- Full suite 332/0/7, i18n 3/3, bench 7/7 unchanged (p50 41 ms, p95 4525 ms).
+- Master-audit fix: the okCount assertion in t11 verified against an end-to-end debug run
+  (`/tmp/dbgctr4.mjs`) before the suite claim was made.
+
+
 ## 2026-10-18 (kväll, del 3) — Del 1D: crash-resume without duplicate side effects
 
 ### Ändrat

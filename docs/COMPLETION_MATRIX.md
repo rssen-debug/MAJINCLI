@@ -5,14 +5,14 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 41 / 100** (verified against main `2c5f308`, v0.5.8, 2026-10-18).
+**Score so far: 45 / 100** (verified against the Del 4A PR head, 2026-10-18).
 
 | Phase | Max | Earned |
 |---|---:|---:|
 | 1. Persistent Sessions & Handoff | 10 | 8 |
 | 2. Grand Architect | 12 | 9 |
 | 3. HYPERSWARM | 10 | 4 |
-| 4. Reality Engine | 16 | 4 |
+| 4. Reality Engine | 16 | 8 |
 | 5. Browser & Computer Use | 10 | 2 |
 | 6. GENESIS ZERO & Cost | 9 | 3 |
 | 7. Skill Compiler | 8 | 2 |
@@ -21,7 +21,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 10. Security & Privacy | 5 | 3 |
 | 11. Windows & Updates | 4 | 2 |
 | 12. Final Acceptance | 3 | 0 |
-| **TOTAL** | **100** | **41** |
+| **TOTAL** | **100** | **45** |
 
 ---
 
@@ -54,12 +54,12 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 3D | 2 | Parallel work cannot corrupt shared resources (locks, worktrees, ownership) | `fs.write` serializes per path via `locked()`; no adversarial corruption test | — | — | UNVERIFIED | 2026-10-18 |
 | 3E | 2 | Real model runs show measurable benefit where parallelism applies | Workers ran live but no against-sequential benchmark of wall time/tokens | — | — | UNVERIFIED | 2026-10-18 |
 
-## DEL 4 — Reality Engine (4/16)
+## DEL 4 — Reality Engine (8/16)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
-| 4A | 4 | Explicit verification contracts + evidence provenance | Only file-artifact contract exists (`findClaimedArtifact` → exists+size, `[VERIFIED: path, N bytes]` provenance) — no contract types for numbers/text/action claims | mock + live | `a0a08b0` | UNVERIFIED (partial v1) | 2026-10-18 |
-| 4B | 4 | Detect and repair intentionally introduced failures | `test/mission.test.js` 8/9 — lying workers detected, one repair round turns a fake write into a real `fs.write`; fail-first proven on pre-fix code | mock | `a0a08b0` | PASS | 2026-10-18 |
+| 4A | 4 | Explicit verification contracts + evidence provenance | Contract engine in `src/core/mission.js`: `buildContracts` derives typed contracts from the mission brief (`file_exists` — stat>0 + sha256[:8], path-escape guarded; `file_contains` — `readFileSync.includes(needle)` on REAL content; `count` — independent `fs.readdir` recount compared against the worker's "N files" claim). `verifyContract` checks CODE-side, never by asking a second model. Dead contracts force a repair round naming the dead contracts; parts only ship when contracts re-verify. Summary carries provenance: `[VERIFIED: store/ has 3 files (independently counted), after repair]`. `test/mission.test.js` 12/12 — t10 content-lie caught, t11 count-lie caught, t12 honest count → no repair. Discrimination: skipping the recount turns ONLY t11 red; rubber-stamping `includes()` turns ONLY t10 red. | mock | PR #40 | PASS | 2026-10-18 |
+| 4B | 4 | Detect and repair intentionally introduced failures | `test/mission.test.js` 12/12 — lying workers detected, one repair round turns a fake write into a real `fs.write`; fail-first proven on pre-fix code | mock | `a0a08b0` | PASS | 2026-10-18 |
 | 4C | 4 | Retry/budget/timeout/approval limits respected | Swarm timeouts + agent step caps exist; no budget cap and no acceptance test that limits hard-stop execution | — | — | UNVERIFIED | 2026-10-18 |
 | 4D | 4 | Real cross-domain tasks with independently checked results | Only the file domain verified live so far | opencode live | — | UNVERIFIED (1 domain) | 2026-10-18 |
 
