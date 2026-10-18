@@ -65,7 +65,7 @@ test('live: prepare fills + send submits + proof lands in history', { skip: !LIV
     const cfg = {
       get: (k) => (k === 'workspace' ? path.join(home, 'ws')
         : k === 'browser.maxInstances' ? 2
-        : k === 'guard.autoApprove' ? ['jobs.send']      // deterministic HERE — prod asks a human
+        : k === 'guard.autoApprove' ? ['jobs.prepare', 'jobs.send']  // deterministic HERE — prod asks a human
         : 0),
     };
     const { buildRegistry } = await import('../src/core/tools/index.js');
