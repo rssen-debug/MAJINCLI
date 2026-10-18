@@ -253,7 +253,10 @@ test('the window shows a chip for it, in the same language as everything else', 
   assert.match(html, /id="c-update" hidden/, 'hidden until there is something to say');
   assert.match(panels, /st\.update/, 'the chip reads the state, not its own guess');
   assert.match(panels, /api\('\/update', \{ method: 'POST'/, 'and one endpoint does the work');
-  assert.match(panels, /MAJIN-Setup\.exe is in/, 'the answer names the file it produced');
+  /* livedelivery 2026-10-18: pa linux/mac hjalper en Windows-EXE i Downloads ingen —
+     chippen oppnar release-sidan istallet. Windows one-click sitter kvar ovanfor (install). */
+  assert.match(panels, /windows_only/, 'icke-Windows far ett ärligt plattformssvar, inte en blind nedladdning');
+  assert.match(panels, /releases/, 'och svaret ar release-sidan, plattformsneutrala originet');
 });
 
 test('update checks point at the live repo, and a legacy default is migrated', () => {

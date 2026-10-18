@@ -6,6 +6,15 @@ autopilot/teamwork/dashboard additions).
 
 ## Hög prioritet
 
+- ~~**Update-chain root-cause + linux/mac answers + opencode provider**~~
+  **SHIPPED 2026-10-18**: status field in every update answer, honest
+  windows_only+releaseUrl path, preset header plumbing (x-opencode-session),
+  monotonic bump script wired to the already-auto release workflow.
+  Remaining: real paid call via the Go key (needs an active plan), an
+  About-surface binding for st.update.status (UI lane), full
+  Windows-to-Windows A-F upgrade matrix on real hardware, and the
+  privacy-first diagnostics system (LIVE DELIVERY section 7-11, not started).
+  *(kaella: master brief den 2026-10-18 - MAJIN LIVE DELIVERY 2.0)*
 - ~~**HYPERSWARM: parallel-worker choice in code, judged by tests**~~
   **SHIPPED 2026-10-18** (`src/core/swarm.js`): analyzer picks 3 workers for
   3 independent jobs, 1 for a chain, 1 when overhead eats the win - all

@@ -5,6 +5,50 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (LIVE DELIVERY: update-chain status, linux/mac answers, opencode provider, release-bump)
+
+### Ändrat
+- **Update state speaks one word, always.** Every `checkForUpdate` result now
+  carries `status`: `disabled | error | up_to_date | available`. The UI and a
+  future About-surface read ONE field instead of re-deriving it from flags.
+- **Linux/mac get a real answer, not a Windows EXE in Downloads.** `installSetup`
+  returns `windows_only` **with `releaseUrl`** (repo-slug-derived release page);
+  the chip click opens that page. The installer branch is unchanged on win32.
+  CLI `majin update` prints what to do on linux/mac (`git pull && npm install &&
+  majin restart` for a source checkout) instead of silently downloading a
+  useless Windows installer.
+- **OpenCode Go preset.** `opencode` (base `https://opencode.ai/zen/go/v1`,
+  OpenAI-compatible, free/flash models first) with its REQUIRED
+  `x-opencode-session` header - the gateway returns 400 MissingSessionID
+  without it. `/api/provider` add now carries `preset.headers` into the saved
+  provider (was dropped before: any preset with mandatory headers died at
+  call time). Models read live from the catalog during this session:
+  glm-5.3-flash, qwen3.8-flash, deepseek-v4.1-flash, beam-free, ...
+- **Release bumping is a checked script, not a hand-edit.**
+  `scripts/bump-version.mjs`: refuses non-semver, refuses a tag that already
+  exists on GitHub Releases (never overwrite), refuses going backwards, then
+  syncs package.json, package-lock.json ROOT ONLY (dependency contracts
+  untouched), src/core/version.js and installer/majin.iss. Combined with the
+  existing build-exe.yml (main-push with raised version => auto build + tag +
+  release + sha256 assets) this is the manual-free path: bump => merge =>
+  release published by CI.
+- **Honest limitation recorded:** the advisory key `oc_sk_...` authenticates
+  (model catalog readable) but has NO active Go plan and zero Zen balance, so
+  no real calls yet. Everything except the paid-call run is built and pinned.
+- `test/update.test.js`: the old windows-only fallback assertion (EXE into
+  Downloads on every platform) pinned the defect itself; it now pins the new
+  platform-honest behavior with the reason written next to it.
+
+### Verifierat
+- `node --test test/livedelivery.test.js` -> **7/7 green**, fail-first first
+  (6 red): status in every branch (incl. zero network calls when disabled),
+  same-version silence, releaseUrl from repo slug, preset headers carried over
+  HTTP into saved config, bump plan guards, bump apply touches 4 files and
+  never dependency versions.
+- Suite **303 pass / 0 fail / 7 skipped**; i18n guard 0/85; bench unchanged
+  7/7.
+- `node scripts/bump-version.mjs 0.5.5` demo -> 4 files changed, reverted.
+
 ## 2026-10-18 (HYPERSWARM: parallel workers are chosen AND proven — code, not a coordinator-LLM)
 
 ### Ändrat
