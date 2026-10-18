@@ -6,6 +6,17 @@ autopilot/teamwork/dashboard additions).
 
 ## Hög prioritet
 
+- ~~**HYPERSWARM: parallel-worker choice in code, judged by tests**~~
+  **SHIPPED 2026-10-18** (`src/core/swarm.js`): analyzer picks 3 workers for
+  3 independent jobs, 1 for a chain, 1 when overhead eats the win - all
+  deterministic, no model asked. Scheduler runs the DAG with real overlaps,
+  dependency unlocking, typed honest endings (ok/fail/blocked + reason) and
+  `subagentWorker` executes real `sub:` turns. Proof: `test/swarm.test.js`
+  8/8, `bench --swarm` 66% shorter wall with simulated latency clearly
+  labeled. Remaining: wire into a mission compiler so real goals WITH measured
+  estMs feed the analyzer; today the API is proven but nothing calls it from
+  a user-facing path yet.
+  *(kaella: master brief den 2026-10-18 - "valjer MAJIN ratt i bada fallen")*
 - ~~**Autopilot UI follow-up surface**~~ **SHIPPED 2026-10-18** (reply-to-this-agent rows,
   ⏸/▶ per card via `/api/tasks/action`, live "agents at work" deck — see CHANGELOG).
   Remaining: human click-through in the Windows round below; resumed runs now stream
@@ -25,6 +36,14 @@ autopilot/teamwork/dashboard additions).
   `unpricedCount/unpricedRefs` so a silently-$0 month is impossible to miss. Remaining:
   slice-2's per-task cost chip in the UI, and eur/sek display.
   *(källa: master brief §2E)*
+- **GENESIS OMEGA — universal capability-composition.** Phase 1 SHIPPED 2026-10-18
+  (cap/1 manifests, Registry.search, tools.search). **Phase 2 SHIPPED 2026-10-18:
+  loop sends the measured-relevant subset — -97% schema chars, parity 7/7, flipped
+  to default.** Next: (3) mission compiler above the existing loop, (4) model
+  capability profiler, (5) skill compiler, (6) watch real-model turns for
+  tools.search escape-hatch frequency — if it fires constantly, tune the selector,
+  don't refund the feature. Do NOT build a parallel engine — extend this one.
+  *(källa: master brief §GENESIS OMEGA directive)*
 - **Windows/browser human round on top of the CI smoke.** CI now installs/runs/uninstalls on
   real Windows every build — and, as of the config-race fix (commit f6869bc, run 39134332080),
   it VERIFIES every build that a write from outside the process survives a restart. A

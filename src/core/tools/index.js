@@ -14,9 +14,10 @@ import { jobTools } from './jobs.js';
 import { marketingTools } from './marketing.js';
 import { githubTools } from './github.js';
 import { tradingTools } from './trading.js';
+import { metaTools } from './meta.js';
 import { approvals } from '../guard.js';
 
-export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...reTools, ...majinTools, ...agentTools, ...jobTools, ...marketingTools, ...githubTools, ...tradingTools];
+export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...reTools, ...majinTools, ...agentTools, ...jobTools, ...marketingTools, ...githubTools, ...tradingTools, ...metaTools];
 
 export function buildRegistry(ctx) {
   if (!ctx.approvals) ctx.approvals = approvals;

@@ -89,6 +89,15 @@ allowed to contradict a test.
   of MAJIN's own source (self-config edits *config* with backup+diff only); anything requiring
   Windows Defender/firewall/service mutation; background multi-machine sync.
 
+- **Parallelism decisions are arithmetic, not opinions.** `analyzeSwarm`
+  counts the critical path, simulates makespans per worker count, and grants
+  extra workers only when the modeled gain beats `max(2x spawn overhead, 10%
+  of the sequential plan)`. If durations are unknown it says so and runs one
+  worker - honest underdetermination beats a confident wrong number. Cost:
+  until a mission compiler feeds it measured `estMs`, unknown-shape goals stay
+  sequential (the conservative side; mitigated by per-node usage recording
+  feeding future estimates). Proof: `test/swarm.test.js` 8/8 including the
+  fail-first judges; `bench --swarm` measured gain 66% on real file IO.
 ## Avvisat
 
 - **"loadSafe / meaningful-diffs" as the race answer** (2026-10-18): classifying
@@ -128,6 +137,16 @@ allowed to contradict a test.
 
 ## Öppna frågor
 
+- ~~**Ska loopen skicka RELEVANTA verktygsscheman i stället för alla 103 till modellen?**~~
+  **BESLUTAT 2026-10-18**: ja — subset ar standard nu. Mål-villkoret var
+  uppmatt paritet + raknad besparing innan flipp; bench fyllde det
+  (-97% schema-char, paritet 7/7). Limitation som star kvar: paritet mäts mot
+  en SCRIPTAD mock, sa "selector-blindness" (modellen ser inte verktyget den
+  behovde) kan inte observeras har — den risk mitigeras av flyktvagen
+  tools.search och av capability.test.js som pinnar search-rankingen. Om
+  verkliga modeller visar returvag-ofel: rulla tillbaka via agent.toolSubset=false
+  (en rad, redan testad).
+
 - ~~**Job dedupe identity**~~ **DECIDED 2026-10-18**: fingerprint = canonical URL
   (tracking params stripped, real id params kept, case/diacritics-folded
   title+company fallback). The pipeline file IS the dedupe memory — one place where
@@ -158,6 +177,11 @@ allowed to contradict a test.
   Cost: prices for providers without pricing in `/models` stay unknown... which is the
   point: unknown is never reported as $0, it is counted (`unpricedCount`) and treated
   as PAID under a spending cap. Proof: `test/pricing.test.js` 6/6.
+- **`cap/1`-kontraktet är utlett, inte handskrivet** (2026-10-18): sideEffects,
+  tags och inputs härleds ur risk/namn/schema som redan finns. Underhållsdyrk:
+  en handskriven klassificering hade sett bättre ut men kostar en människa vid
+  varje ny verktyg. Cap/2 får lägga till kostnad/tillstånd/verify per verktyg
+  när bevis finns att det används.
 - **Brand consistency is enforced by measurement, not memory** (2026-10-18):
   brand.test.js asserts rosa-dominans + M-separation i varje ico-storlek och
   båda png-varianterna. En framtida designändring = ändra kanonen + alla

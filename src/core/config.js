@@ -169,6 +169,12 @@ export const DEFAULTS = {
     webhook: { enabled: false, host: '0.0.0.0', port: 8788, path: '/whatsapp', tunnel: 'none' },
   },
   agent: {
+    /* facit: alls schemas varje turn. toolSubset: true = the loop skickar bara
+       determiniskt utvalda verktyg (search(input) + alltid tools.search som
+       flyktväg). Mätt-skick: flippa till true först när bench visar paritet
+       + uträknat spar — se DECISIONS Öppna frågor. */
+    toolSubset: true,
+    toolSubsetLimit: 12,
     maxSteps: 60,
     parallel: true,
     contextTokens: 48000,
