@@ -94,6 +94,12 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "start --no-window"; Description:
 ; our code, our log file at %LOCALAPPDATA%\MAJIN\update-relaunch.log,
 ; and testable on any OS.
 
+; Windows caches shortcut/taskbar icons aggressively — after an update the user
+; can sit with the OLD logo for days (this exact stale-icon case was reported
+; 2026-10-18). Bust the cache silently; skipifdoesntexist keeps it harmless
+; on systems without ie4uinit (Windows 11 renames but still ships it).
+Filename: "{sys}\ie4uinit.exe"; Parameters: "-ClearIconCache"; Flags: runhidden skipifdoesntexist nowait
+
 [UninstallRun]
 ; Stop the running program before its files go, instead of leaving an orphan
 ; port and a "file in use" dialog.

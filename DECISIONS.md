@@ -158,6 +158,11 @@ allowed to contradict a test.
   Cost: prices for providers without pricing in `/models` stay unknown... which is the
   point: unknown is never reported as $0, it is counted (`unpricedCount`) and treated
   as PAID under a spending cap. Proof: `test/pricing.test.js` 6/6.
+- **Brand consistency is enforced by measurement, not memory** (2026-10-18):
+  brand.test.js asserts rosa-dominans + M-separation i varje ico-storlek och
+  båda png-varianterna. En framtida designändring = ändra kanonen + alla
+  varianter + toleranserna i testet. Utpekade småstorlekar som "fel" ska
+  först mätas — 16px-M:et är samma märke, inte en gammal design.
 - ~~**Whose truth is the config file**~~ **DECIDED 2026-10-18**: the disk, at the
   moment of the patch. Readers may be stale; writers never are. Cost: one
   file-read per patch (negligible) + the tombstone rule below. Proof: the

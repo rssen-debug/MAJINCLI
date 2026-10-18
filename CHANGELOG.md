@@ -5,6 +5,32 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (logo-audit: branden mäter grön, småstorlekarna anklagades felaktigt)
+
+### Ändrat
+- **Brand contract test (`test/brand.test.js`)**: från och med nu misslyckas
+  sviten om NÅGON logotyp-variant i repot (-assets/majin.png, -assets/majin.ico
+  i ALLA sju storlekar 16–256, -src/ui/logo.png) slutar vara "vit/mjus-ljus M
+  på rosa". Mätt i pixlar, inte på öga. Det är det som gör att ingen behöver
+  granska loggan manuellt varje gång.
+- **Installer**: rensar Windows ikon-cache efter install/uppdatering
+  (`ie4uinit -ClearIconCache`, tyst, hoppar över om kommandot saknas). Slutet
+  på att gamla ikoner fastnar i aktivitetsfältet/genvägar efter en uppdatering.
+
+### Sanningen om krocken
+Bilden som såg mörk-och-gammal ut är INTE någon fil i repot. Pixelmätningen
+bevisade: varje variant i majin.ico (16-256 px), assets/majin.png och
+src/ui/logo.png bär samma design (rosa familj ≈91%, ljust M med ~60 lumen
+separation). De små 16/24px-ikoner som såg "gamla" ut är bara samma märke
+nedpressat i 16 pixlar. Det som faktiskt kunde bära en gammal ikon är
+Windows ikon-cache eller en installation från före v0.2-märket — därav
+cache-rensaren.
+
+### Verifierat
+- `node --test test/brand.test.js` → 4 pass (skrevs fail-first: fångade först
+  min egen felaktiga mättrogenskap, inte tillgångarna).
+- `npm test` → 273 pass, 0 fail, 7 skipped · i18n 0/84 · parse 122/122.
+
 ## 2026-10-18 (config race: the disk wins, tombstones stay dead)
 
 ### Ändrat
