@@ -126,7 +126,7 @@ export async function checkForUpdate(o = {}) {
   };
   if (conf.check === false) return { ...cached, skipped: 'disabled', silent: true };
   const hours = Number(conf.intervalHours) > 0 ? Number(conf.intervalHours) : 24;
-  if (!o.force && cached.checkedAt && now - cached.checkedAt < hours * 3600 * 1000) {
+  if (!o.force && cached.checkedAt && conf.checkedVersion === current && now - cached.checkedAt < hours * 3600 * 1000) {
     return { ...cached, skipped: 'too soon' };
   }
 
@@ -237,7 +237,7 @@ export async function installSetup(o = {}) {
      silent mode; THIS watchdog does. It outlives us (shutdown follows), waits
      for the installer to die, cleans leftovers, then starts the new exe. */
   if (child.pid) {
-    const ps = spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-EncodedCommand', relaunchCommand(child.pid)], {
+    const ps = spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-EncodedCommand', relaunchCommand(child.pid, process.execPath)], {
       detached: true, stdio: 'ignore', windowsHide: true,
     });
     ps.on('error', () => {});
@@ -250,10 +250,13 @@ export async function installSetup(o = {}) {
  * (base64 of UTF-16LE) dodges every quoting layer on the way. Everything the
  * watchdog does lands in %LOCALAPPDATA%\MAJIN\update-relaunch.log so a
  * failed relaunch is forever debuggable instead of "the app just vanished". */
-export function relaunchScript(installerPid) {
+export function relaunchScript(installerPid, executable = process.execPath) {
+  // The actual installation can be per-user OR per-machine; Program Files is
+  // not a reliable relaunch location. Use the executable currently installed.
+  const safeExe = String(executable).replace(/'/g, "''");
   return [
     "$log = Join-Path $env:LOCALAPPDATA 'MAJIN\\update-relaunch.log'",
-    "$exe = Join-Path $env:ProgramFiles 'MAJIN\\majin-win-x64.exe'",
+    "$exe = '" + safeExe + "'",
     "'--- ' + (Get-Date -Format o) + ' relaunch watchdog, installer pid " + installerPid + "' | Out-File $log -Append",
     '$deadline = (Get-Date).AddMinutes(15)',
     'while (Get-Process -Id ' + installerPid + " -ErrorAction SilentlyContinue) { if ((Get-Date) -gt $deadline) { 'installer took >15 min, giving up' | Out-File $log -Append; exit 1 }; Start-Sleep -Seconds 2 }",
@@ -265,8 +268,8 @@ export function relaunchScript(installerPid) {
   ].join('; ');
 }
 
-export function relaunchCommand(installerPid) {
-  return Buffer.from(relaunchScript(installerPid), 'utf16le').toString('base64');
+export function relaunchCommand(installerPid, executable = process.execPath) {
+  return Buffer.from(relaunchScript(installerPid, executable), 'utf16le').toString('base64');
 }
 
 export async function downloadSetup(o = {}) {
