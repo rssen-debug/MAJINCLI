@@ -198,6 +198,8 @@ export const DEFAULTS = {
   // is always redacted by GET /api/config; use an env reference if preferred.
   marketing: {
     meta: { accountId: '', currency: '', accessToken: '{env:MAJIN_META_ACCESS_TOKEN}' },
+    tiktok: { advertiserId:'', currency:'', accessToken:'{env:MAJIN_TIKTOK_ADS_ACCESS_TOKEN}' },
+    google: { customerId:'', currency:'', accessToken:'{env:MAJIN_GOOGLE_ADS_ACCESS_TOKEN}', developerToken:'{env:MAJIN_GOOGLE_ADS_DEVELOPER_TOKEN}', loginCustomerId:'' },
     economics: { price: 0, cogs: 0, shipping: 0, fees: 0, refundRate: 0, targetProfit: 0, dailyCap: 0 },
   },
   // Spelas endast in när användaren uttryckligen bett om det. Uppladdning finns inte som
@@ -551,7 +553,7 @@ export function validatePatch(patch, current) {
   }
   if (isPlain(patch.marketing)) {
     for (const k of Object.keys(patch.marketing)) {
-      if (!['meta', 'economics'].includes(k)) errors.push({ path: 'marketing.' + k, msg: 'unknown marketing key' });
+      if (!['meta', 'economics', 'tiktok', 'google'].includes(k)) errors.push({ path: 'marketing.' + k, msg: 'unknown marketing key' });
     }
     if (isPlain(patch.marketing.meta)) {
       for (const k of Object.keys(patch.marketing.meta)) {
@@ -560,6 +562,16 @@ export function validatePatch(patch, current) {
       const m = patch.marketing.meta;
       if (m.accountId !== undefined && m.accountId !== '' && !/^(act_)?[0-9]{3,25}$/.test(String(m.accountId))) errors.push({ path: 'marketing.meta.accountId', msg: 'enter a Meta ad account ID' });
       if (m.currency !== undefined && m.currency !== '' && !/^[A-Z]{3}$/.test(String(m.currency))) errors.push({ path: 'marketing.meta.currency', msg: 'use an uppercase ISO currency code' });
+    }
+    for (const platform of ['tiktok','google']) {
+      if (!isPlain(patch.marketing[platform])) continue;
+      const fields=platform==='tiktok'?['advertiserId','currency','accessToken']:['customerId','currency','accessToken','developerToken','loginCustomerId'];
+      for (const [k,v] of Object.entries(patch.marketing[platform])) {
+        if (!fields.includes(k)) errors.push({path:'marketing.'+platform+'.'+k,msg:'unknown marketing credential setting'});
+        else if (k==='currency' && v!=='' && !/^[A-Z]{3}$/.test(String(v))) errors.push({path:'marketing.'+platform+'.currency',msg:'currency must be 3 uppercase letters'});
+        else if (['advertiserId','customerId','loginCustomerId'].includes(k) && v!=='' && !/^[0-9]{3,25}$/.test(String(v))) errors.push({path:'marketing.'+platform+'.'+k,msg:'account ID must be numeric'});
+        else if (['accessToken','developerToken'].includes(k) && typeof v!=='string') errors.push({path:'marketing.'+platform+'.'+k,msg:'token must be a string'});
+      }
     }
     if (isPlain(patch.marketing.economics)) {
       for (const [k, v] of Object.entries(patch.marketing.economics)) {
