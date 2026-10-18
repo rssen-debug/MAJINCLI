@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 
@@ -69,7 +70,11 @@ export function embedIcon(o = {}) {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
+/* WINDOWS TRAP: new URL(...).pathname gives /D:/a/... which never equals a
+   real Windows path — the guard was silently FALSE on Windows for two
+   releases and the exe shipped with the default icon ("icon: no output").
+   fileURLToPath is the only honest comparison. */
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const a = process.argv.slice(2);
   const o = { exe: a[0], ico: a[1] };
   for (const arg of a.slice(2)) {

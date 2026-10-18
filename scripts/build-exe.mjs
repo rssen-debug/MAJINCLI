@@ -175,6 +175,14 @@ for (const t of targets) {
     process.stdout.write(`\n✔ ${name} (${(fs.statSync(p2).size / 1024 / 1024).toFixed(1)} MB)\n`);
     if (name === 'majin-linux-x64') fs.chmodSync(p2, 0o755);
     if (name.endsWith('.exe')) embedExeIcon(p2);
+    /* checksum sidecar at build time — the release glob must find it, and the
+       in-app updater verifies downloads against it */
+    {
+      const { createHash } = await import('node:crypto');
+      const h = createHash('sha256').update(fs.readFileSync(p2)).digest('hex');
+      fs.writeFileSync(p2 + '.sha256', `${h}  ${name}`);
+      process.stdout.write(`  sha256:   ${h.slice(0, 18)}…\n`);
+    }
   }
 }
 /* ett bygge som inte producerade nagon binar ar ett misslyckande, inte en varning:

@@ -104,6 +104,15 @@ test('the update path is wired: chip → install → shutdown (structural contra
   assert.match(rt, /install: \(o = \{\}\) => installSetup/, 'runtime exposes install');
 });
 
+test('the icon entry point actually RUNS on Windows (the v0.4.x-v0.5.0 silent killer)', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'scripts', 'set-icon.mjs'), 'utf8');
+  /* new URL(import.meta.url).pathname is /D:/a/... on Windows — the old guard
+     compared that against process.argv[1] and was FALSE forever → script
+     loaded, printed nothing, exited 0, exe shipped with default icon */
+  assert.doesNotMatch(src, /new URL\(import\.meta\.url\)\.pathname/, 'windows-trap path guard must never come back');
+  assert.match(src, /fileURLToPath\(import\.meta\.url\)/, 'main-guard must use fileURLToPath');
+});
+
 test('icon embedding can no longer fail silently', () => {
   const src = read('scripts/build-exe.mjs');
   assert.match(src, /refusing to ship an exe with the default icon/, 'failed icon = failed build');
@@ -152,4 +161,8 @@ test('publish script fires at the real repo, CI publishes hashes', () => {
   assert.doesNotMatch(ps, /rssen-debug\/slurps/, 'never the archive');
   const wf = fs.readdirSync(path.join(ROOT, '.github/workflows')).map((f) => read('.github/workflows', f)).join('\n');
   assert.match(wf, /MAJIN-Setup\.exe\.sha256/, 'the release carries the installer hash');
+  const bi = read('scripts/build-installer.mjs');
+  const be = read('scripts/build-exe.mjs');
+  assert.match(bi, /createHash\('sha256'\)[\s\S]*?sha256/, 'the installer build writes its own .sha256 sidecar');
+  assert.match(be, /createHash\('sha256'\)[\s\S]*?\.sha256/, 'the exe build writes its own .sha256 sidecar');
 });

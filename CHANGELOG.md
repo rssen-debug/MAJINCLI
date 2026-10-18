@@ -3,6 +3,17 @@
 Notable changes on `arena/e223e8b9-slurps` (PR #1). Newest first. Verified in the Linux sandbox
 unless stated otherwise; nothing here claims a Windows or browser run.
 
+## 0.5.1 — hotfix: ikon-fixen funkar på Windows också + checksum-filerna kommer med
+
+v0.5.0's "vägra skeppa default-ikon" var rätt inställning avslöjade det riktiga
+monstret: `set-icon.mjs` gjorde sin main-guard med
+`new URL(import.meta.url).pathname` — på Windows är den `/D:/a/...`, som
+aldrig matchar `process.argv[1]` → skriptet laddade och dog tyst, exit 0,
+noll output. Två releases skeppade standardikon exakt därför. Nu
+`fileURLToPath` (och ett test som spärrar regressionen för alltid).
+`.sha256`-sidecars skrivs nu av själva byggskripten (installer + exe), så
+release-globben inte längre kan missa dem.
+
 ## 0.5.0 — "Trust & Flow": provider-hantering som aldrig ljuger, ikonen på plats, inget konsolfönster
 
 Den här versionen tog varje granskningsfynd och dina egna bugrapporter och

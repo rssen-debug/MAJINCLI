@@ -107,3 +107,13 @@ fs.readSync(fd, b, 0, 2, 0);
 fs.closeSync(fd);
 if (b.toString('latin1') !== 'MZ') fail('the produced file is not a Windows executable');
 note(`done    dist/installer/MAJIN-Setup.exe (${(size / 1024 / 1024).toFixed(1)} MB, MZ ok)`);
+
+/* ship the checksum beside the installer: the in-app updater verifies the
+   downloaded bytes against the release's published .sha256 (update.js) — the
+   file MUST exist at glob time, so produce it here, not in a flaky CI step */
+{
+  const { createHash } = await import('node:crypto');
+  const h = createHash('sha256').update(fs.readFileSync(setup)).digest('hex');
+  fs.writeFileSync(setup + '.sha256', `${h}  ${path.basename(setup)}`);
+  note(`sha256  ${h.slice(0, 18)}…  -> dist/installer/MAJIN-Setup.exe.sha256`);
+}
