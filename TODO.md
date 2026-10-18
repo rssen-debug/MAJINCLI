@@ -18,10 +18,13 @@ autopilot/teamwork/dashboard additions).
   `continue-on-error` to a hard gate; checkbox/radio semantics beyond click (tristate ARIA),
   and a scrollIntoView-iframes note for big job portals.
   *(källa: master brief §2B — the live harness is the remaining proof)*
-- **Cost truth.** `pricing` only has DeepSeek entries — every other provider reports $0 by
-  design. Kilo/OpenRouter `/models` answers carry per-model pricing: import it during model
-  discovery instead of curating by hand, then slice-2's cost chip + the real budget cap
-  (stop new paid calls when the cap is hit). *(källa: master brief §2E)*
+- ~~**Cost truth.**~~ **SLICE SHIPPED 2026-10-18**: pricing imports itself from the
+  provider's own `/models` answer (gaps only, provenance in `pricingMeta`), `budget.mode
+  'cap'` now actually stops paid calls before they cost (free = 0/0, mock, own server;
+  unknown-price remote counts as paid, honestly), and `usage.summary()` carries
+  `unpricedCount/unpricedRefs` so a silently-$0 month is impossible to miss. Remaining:
+  slice-2's per-task cost chip in the UI, and eur/sek display.
+  *(källa: master brief §2E)*
 - **Windows/browser human round on top of the CI smoke.** CI now installs/runs/uninstalls on
   real Windows every build (job "the installer must install, run, survive a restart"), but a
   human still has to click: provider picker, key box, first real model call, update chip →

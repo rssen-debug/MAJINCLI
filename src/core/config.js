@@ -81,6 +81,9 @@ export const DEFAULTS = {
     'deepseek/deepseek-flash': { in: 0.14, out: 0.28 },
     'deepseek/deepseek-v4-pro': { in: 1.7, out: 8 },
   },
+  /* provenance for prices that rode in from a provider's /models answer —
+     populated by src/core/pricing.js, gaps only, never overwrites. */
+  pricingMeta: {},
   routing: {
     auto: true,
     escalateAfterErrors: 2,

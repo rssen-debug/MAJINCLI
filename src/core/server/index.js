@@ -552,7 +552,9 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
         const r = await fetch(listUrl, { headers: prov.apiKey ? { authorization: `Bearer ${prov.apiKey}` } : {}, signal: AbortSignal.timeout(12000) });
         const j = await r.json().catch(() => ({}));
         const models = (j.data || j.models || j || []).map((m) => (typeof m === 'string' ? m : m.id)).filter(Boolean).sort();
-        return json(res, 200, { ok: r.ok, provider: name, models: models.slice(0, 400), count: models.length, status: r.status });
+        const { importPricing } = await import('../pricing.js');
+        const imp = await importPricing(cfg, name, j, { source: `${name}:/models` }).catch(() => ({ imported: 0, skipped: 0 }));
+        return json(res, 200, { ok: r.ok, provider: name, models: models.slice(0, 400), count: models.length, status: r.status, pricingImported: imp.imported, pricingKnown: imp.imported + imp.skipped });
       } catch (err) {
         return json(res, 200, { ok: false, error: err.message, hint: 'network error or a wrong baseUrl' });
       }

@@ -18,7 +18,7 @@ export class Usage {
     this.data = load();
   }
 
-  record({ job, ref, usage, ms, moa = false, escalated = false }) {
+  record({ job, ref, usage, ms, moa = false, escalated = false, unpriced = false }) {
     const m = month();
     this.data[m] ||= { requests: 0, tokensIn: 0, tokensOut: 0, costUsd: 0, byJob: {}, byModel: {}, days: {} };
     const e = this.data[m];
@@ -36,6 +36,10 @@ export class Usage {
       e.moaCost = round((e.moaCost || 0) + (usage?.costUsd || 0));
     }
     if (escalated) e.escalations = (e.escalations || 0) + 1;
+    if (unpriced) {
+      e.unpricedCount = (e.unpricedCount || 0) + 1;
+      e.unpricedRefs = [...new Set([...(e.unpricedRefs || []), ref || '?'])];
+    }
     save(this.data);
     return e;
   }
@@ -67,6 +71,11 @@ export class Usage {
       byJob: e.byJob,
       byModel: e.byModel,
       days: e.days,
+      /* honesty chip: requests whose price we never knew. NOT part of costUsd —
+         the number is a floor, and this says how much of the month hides
+         behind \"unknown\". */
+      unpricedCount: e.unpricedCount || 0,
+      unpricedRefs: e.unpricedRefs || [],
     };
   }
 

@@ -140,7 +140,10 @@ export const majinTools = [
         const j = await r.json().catch(() => ({}));
         const ids = (j.data || j.models || []).map((m) => m.id || m.name).filter(Boolean);
         await ctx.cfg.patch({ providers: { [name]: { models: ids.slice(0, 400) } } });
-        return { result: `${name}: ${ids.length} models (saved ${Math.min(400, ids.length)} in config)\n${ids.slice(0, 120).join('\n')}`, summary: `${ids.length} models` };
+        const { importPricing } = await import('../pricing.js');
+        const imp = await importPricing(ctx.cfg, name, j, { source: `${name}:/models` }).catch(() => ({ imported: 0 }));
+        const priceNote = imp.imported ? ` — ${imp.imported} model prices rode in with the list` : '';
+        return { result: `${name}: ${ids.length} models (saved ${Math.min(400, ids.length)} in config)${priceNote}\n${ids.slice(0, 120).join('\n')}`, summary: `${ids.length} models` };
       }
       if (action === 'add') {
         if (!name) return { ok: false, error: { code: 'no_name', message: 'give a provider name (or pick a preset)', hint: 'majin.provider({action:"add",name:"deepseek",apiKey:"sk-…"})' } };

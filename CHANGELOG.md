@@ -5,6 +5,36 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (cost truth: prices import themselves, the cap bites)
+
+### Ändrat
+- **Pricing self-import**: `GET /models` answers that carry per-model pricing
+  (OpenRouter, Kilo) now write themselves into `pricing` — gaps only, never
+  over a curated or hand-set price, with provenance per key in `pricingMeta`
+  ({source, at}). Wired into both discovery paths: `majin.provider models`
+  and `/api/models` (the answer reports `pricingImported`).
+- **The budget cap stops money, not just reports**: with `budget.mode 'cap'`
+  and the monthly line crossed, the loop refuses the paid call in preflight
+  (before it costs anything). Free routes still answer: explicit 0/0 price,
+  the mock provider, or your own server (loopback/RFC1918 — same rule as the
+  key box). A remote model with NO known price counts as paid — under a cap,
+  "unknown" never spends.
+- **`usage.summary()` honesty fields**: `unpricedCount` + `unpricedRefs` say
+  how much of the month hides behind "no price known" — a silently-$0 month
+  is now impossible to miss.
+
+### Fixat
+- (Self-review during the slice) an early draft threw the budget refusal out of
+  the loop instead of returning the graceful fatal-shape; tests caught it.
+
+### Verifierat
+- `node --test test/pricing.test.js` → 6 pass, 0 fail (written failing-first).
+- `npm test` → 235 pass, 0 fail, 7 skipped · `npm run i18n` → 0 svenska
+  literals i 80 filer · `npm run check` → 113/113 filer parse.
+- Live-import against a real provider key is NOT claimed here — the parsers
+  are tested against recorded OpenRouter-shaped payloads; the CI run
+  dispatched in parallel exercises the build, not a paid key.
+
 ## 2026-10-18 (autopilot UI: cards you can talk to)
 
 ### Ändrat

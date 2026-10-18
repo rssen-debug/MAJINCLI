@@ -144,6 +144,16 @@ allowed to contradict a test.
   (follow-up with a continue-brief into the same session) — it streams onto the
   exact card that paused it, no second engine path. The NL "resume agent N"
   command stays for channels, unchanged.
+- ~~**Where do prices come from**~~ **DECIDED 2026-10-18**: from the provider's own
+  `/models` answer when it carries pricing (OpenRouter/Kilo do), imported as GAPS ONLY
+  with provenance — a hand-set or shipped price is never overwritten by a later list.
+  Cost: prices for providers without pricing in `/models` stay unknown... which is the
+  point: unknown is never reported as $0, it is counted (`unpricedCount`) and treated
+  as PAID under a spending cap. Proof: `test/pricing.test.js` 6/6.
+- ~~**Does the budget cap stop anything**~~ **DECIDED 2026-10-18**: yes, since today —
+  `budget.mode 'cap'` refuses the call in the loop preflight, BEFORE it costs. Free
+  routes (0/0 price, mock, own server on loopback/RFC1918) still answer. Rejection is a
+  sentence the user can act on, never a spinner. Proof: `test/pricing.test.js` 4/6.
 - ~~**Browser live-gate cadence**~~ **DECIDED 2026-10-18**: two consecutive green runs
   (39 119 535 069 + 39 120 606 397) and one real bug caught on run one — the local form
   server is deterministic enough for the Windows runner. `continue-on-error` removed;

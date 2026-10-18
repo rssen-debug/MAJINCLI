@@ -8,6 +8,7 @@ import { complete, explainError } from './provider/chat.js';
 import { routeFor } from './router.js';
 import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
+import { isFreeRoute } from './pricing.js';
 
 export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = () => {}, signal, maxSteps, usage, ctx, allowTools = true, label = 'agent' }) {
   const agent = cfg.get('agent') || {};
@@ -30,6 +31,17 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     const stepJob = escalated ? cfg.get('routing.escalateJob') || 'analysis' : steps === 1 ? job : agent.stepJob || 'tasks';
     const route = routeFor(cfg, stepJob);
     if (!route) throw new Error('no provider with an API key yet — open the Providers card, pick one and paste the key');
+    /* A cap is a promise: over the monthly line, PAID calls stop right here,
+       before they cost anything. Free routes keep working. */
+    if (usage?.overBudget?.() && cfg.get('budget.mode') === 'cap' && !isFreeRoute(route)) {
+      const capUsd = Number(cfg.get('budget.monthlyUsd')) || 0;
+      const human = route.pricing && (route.pricing.in || route.pricing.out)
+        ? `The monthly budget of $${capUsd} is reached — paid models stop here. Free models and your own server still answer, or say "budget <new> USD" to raise it.`
+        : `The monthly budget of $${capUsd} is reached, and "${route.model || 'this model'}" has no known price — under a cap, unknown never spends. Free models and your own server still answer, or say "budget <new> USD" to raise it.`;
+      bus.warn('loop.budget', { label, cap: capUsd });
+      onEvent({ type: 'error', label, where: 'budget', message: human, kind: 'budget' });
+      return { text: human, steps, toolLog, usage: tally, error: 'budget cap reached', errorKind: 'budget', fatal: true, stopReason: 'budget' };
+    }
     onEvent({ type: 'step', label, step: steps, of: limit, job: stepJob, model: route.ref, escalated });
 
     let res;
@@ -74,7 +86,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     tally.input += res.usage?.input || 0;
     tally.output += res.usage?.output || 0;
     tally.costUsd += res.usage?.costUsd || 0;
-    usage?.record({ job: `${label}:${stepJob}`, ref: res.route || route.ref, usage: res.usage, ms: res.elapsedMs, escalated });
+    usage?.record({ job: `${label}:${stepJob}`, ref: res.route || route.ref, usage: res.usage, ms: res.elapsedMs, escalated, unpriced: !route.pricing && !isFreeRoute(route) });
     answer = res.text || answer;
     onEvent({ type: 'usage', label, step: steps, model: route.ref, tokensIn: res.usage?.input || 0, tokensOut: res.usage?.output || 0, costUsd: res.usage?.costUsd || 0, ms: res.elapsedMs });
 
