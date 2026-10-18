@@ -5,11 +5,11 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 39 / 100** (verified against main `2c5f308`, v0.5.8, 2026-10-18).
+**Score so far: 41 / 100** (verified against main `2c5f308`, v0.5.8, 2026-10-18).
 
 | Phase | Max | Earned |
 |---|---:|---:|
-| 1. Persistent Sessions & Handoff | 10 | 6 |
+| 1. Persistent Sessions & Handoff | 10 | 8 |
 | 2. Grand Architect | 12 | 9 |
 | 3. HYPERSWARM | 10 | 4 |
 | 4. Reality Engine | 16 | 4 |
@@ -21,7 +21,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 10. Security & Privacy | 5 | 3 |
 | 11. Windows & Updates | 4 | 2 |
 | 12. Final Acceptance | 3 | 0 |
-| **TOTAL** | **100** | **39** |
+| **TOTAL** | **100** | **41** |
 
 ---
 
@@ -32,7 +32,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 1A | 2 | Session history persists on disk and sessions never leak into each other | `node --test test/handoff.test.js` — test 1 ("history reaches the model") green, test 2 ("isolation") green; `<sid>.jsonl` on disk | mock provider, linux | `7d04b63` | PASS | 2026-10-18 |
 | 1B | 2 | Model/agent switch mid-conversation preserves goal+plan+context | test/handoff.test.js test 3 green; `consumeHandoff` injects `<sid>.handoff.json` once | mock | `7d04b63` | PASS | 2026-10-18 |
 | 1C | 2 | Full runtime restart restores conversation, plan and checkpoint artifacts | test/handoff.test.js test 4 green; `<sid>.plan.json` loaded by a fresh runtime | mock, cold restart | `7d04b63` | PASS | 2026-10-18 |
-| 1D | 2 | Interrupted work resumes without duplicate side effects | No resume-semantics against crashed/paused tasks with side-effect dedup; plans persist but external actions are not journaled per-effect | — | — | UNVERIFIED | 2026-10-18 |
+| 1D | 2 | Interrupted work resumes without duplicate side effects; uncertain outcomes are externally inspected first; explicit Resume/Retry/Cancel/Start Fresh | `node --test test/resume.test.js` — 6/6: crash mid-plan (s1 not re-written), crash-in-write-window (evidence closes journal gap), corrupted outcome never accepted (sabotage-proven red), cancel/startFresh semantics, plus a WIRED end-to-end turn whose fs.write lands in the journal with the true sha256 | mock + real runtime loop | main after PR #39 | PASS | 2026-10-18 |
 | 1E | 2 | Live handoff between two different real providers (DeepSeek→Qwen →OpenCode→Ollama) | Only one real provider ran live so far (opencode Go free); two-provider switch not executed | needs 2 live providers | — | UNVERIFIED | 2026-10-18 |
 
 ## DEL 2 — Grand Architect (9/12)
@@ -140,7 +140,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 
 ## Current frontier (what the next runs attack, in order)
 
-1. **Del 1D (2 pts)** — crash/pause resume semantics with side-effect journaling (Resume/Retry/Cancel/Start Fresh).
+1. ~~Del 1D~~ ✅ PASS (PR #39). Next: 4A/4C verification contract types + hard limits.
 2. **Del 4A+4C (8 pts)** — verification contract types beyond files (number/text/content claims), retry/budget/timeout caps as enforced acceptance behavior.
 3. **Del 3C/3D/3E (6 pts)** — transient-recovery + corruption-adversarial tests + parallel-vs-sequential measured benefit.
 4. **Del 2C (3 pts)** — ambiguity clarifying questions + failure-driven replanning.

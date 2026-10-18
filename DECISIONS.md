@@ -6,6 +6,12 @@ allowed to contradict a test.
 
 ## Valt
 
+- **Crash recovery = evidence arbitration, not optimism.** After an interrupt the code
+  decides from journal + external inspection what may re-run — never the model.
+  Kinds the code cannot inspect are parked as `uncertain` and require an explicit
+  user action (Del 8 frontier). Cost: one sha256 per journaled write; payoff:
+  "resume" can never duplicate an external effect.
+
 - **Scoring comes from reproduction commands, never from the changelog.** Every row in
   `docs/COMPLETION_MATRIX.md` starts UNVERIFIED (0 pts) until the evidence exists; the
   informal 61% estimate is retired; a regression revokes already-awarded points.
