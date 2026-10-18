@@ -5,6 +5,35 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (ETA lands on the task cards — and the missing wire it exposed)
+
+### Ändrat
+- **Task cards now show real telemetry**: elapsed time (the card's own clock, ticking
+  1×/s while live, frozen on finish/stop), tool count, and an average ms/tool *only when
+  the card itself has measured ≥2 completions*. Nothing is predicted; a number that
+  cannot be counted is not shown.
+- **Per-task telemetry in the registry** (`toolsRun`, `avgToolMs`, `curTool`,
+  `lastTool`) derived from the same event stream the cards see; `/api/tasks` carries
+  it, so channel-started task decks can render honest numbers too.
+- **`tool_begin` counts** alongside `tool`/`tool:start` in both server tracking and
+  card display — the loop had three spellings of "a tool started" and telemetry
+  agreed on all of them.
+
+### Fixat
+- **The ETA wire that was never connected**: `registry.exec` measured `ms` and put it
+  in the tool result, but the loop's `tool_result` *event* dropped the field — so
+  `eta.record()` had been called with `undefined` since v0.6.0's telemetry landed and
+  `estimate()` could never have produced an interval. Caught in self-review while
+  wiring the card display (the display needs the same field). One field, one line;
+  the whole pipeline now counts for real. Also `'steg'` in the card footer is gone;
+  shipped UI is English end-to-end.
+
+### Verifierat
+- `node --test test/tasks.test.js` → 8 pass, 0 fail (failing test written before fix).
+- `npm test` → 197 pass, 0 fail, 5 skipped · `npm run i18n` 0/70 · `npm run check` 98/98.
+- Human/browser round still owed for the visual card tick (no DOM harness here —
+  stated, not hidden).
+
 ## 2026-10-18 (teamwork: NL fleet commands + real ETA telemetry)
 
 ### Ändrat

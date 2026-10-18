@@ -356,7 +356,9 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
         else task.session = session; // observe-only: one name, one behaviour
       }
       const track = (ev) => {
-        tasks.event(task.id, ev.type, null);
+        tasks.event(task.id, ev.type, (ev.type === 'tool' || ev.type === 'tool_begin') ? { tool: ev.name || ev.tool || null }
+          : ev.type === 'tool_result' ? { tool: ev.tool || null, ms: ev.ms ?? null }
+          : null);
         if (ev.type === 'tool_result' && ev.tool && Number.isFinite(ev.ms)) eta.record(ev.tool, ev.ms);
       };
       const noStream = body.stream === false || body.stream === 'false'

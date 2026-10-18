@@ -321,7 +321,8 @@ function parallelTask(input) {
   $('input').value = '';
   autoGrow();
   const card = taskCard({ label: '🧵 launching…', status: 'waiting' });
-  const rec = { card, input, id: null, text: '', last: '', painted: 0, finished: false, abort: new AbortController() };
+  const rec = { card, input, id: null, text: '', last: '', painted: 0, finished: false, toolCount: 0, toolMs: 0, abort: new AbortController() };
+  telJoin(rec);
   (async () => {
     try {
       const r = await fetch('/api/chat?t=' + encodeURIComponent(TOKEN), {
@@ -371,12 +372,13 @@ function taskCard({ label, status }) {
   const st = el('span', 'task-status st-waiting', esc(P_STATUS[status] || status));
   const stopb = el('button', 'task-stop', '⏹ stop');
   const act = el('div', 'task-act kv', '…');
+  const tel = el('div', 'task-tel', '');
   const ans = el('div', 'body task-ans', '');
   head.append(idl, st, stopb);
-  m.append(head, act, ans);
+  m.append(head, act, tel, ans);
   $('scroller').append(m);
   scroll();
-  const card = { m, idl, st, stopb, act, ans };
+  const card = { m, idl, st, stopb, act, tel, ans };
   stopb.onclick = () => stopTask(card.rec);
   return card;
 }
@@ -397,14 +399,52 @@ function paintTaskText(rec, force) {
   scroll();
 }
 
+/* ---- real telemetry on the card: elapsed from the card's own clock, tool
+   counts/averages from the card's own tool_result events. Nothing is a
+   prediction model; a number that cannot be counted is simply not shown. ---- */
+const PLIVE = [];
+let telTimer = null;
+
+function fmtDur(ms) {
+  const sec = Math.max(0, Math.round(ms / 1000));
+  if (sec < 60) return sec + 's';
+  const m = Math.floor(sec / 60), rest = sec % 60;
+  if (m < 60) return m + 'm' + String(rest).padStart(2, '0') + 's';
+  return Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0') + 'm';
+}
+
+function paintTel(rec) {
+  if (!rec.card || !rec.card.tel) return;
+  const bits = [];
+  if (rec.startAt) {
+    const end = rec.finished ? (rec.endAt || Date.now()) : Date.now();
+    bits.push('⏱ ' + fmtDur(end - rec.startAt));
+  }
+  if (rec.toolCount) {
+    bits.push(rec.toolCount + ' tool' + (rec.toolCount === 1 ? '' : 's'));
+    if (rec.toolMs && rec.toolCount >= 2) bits.push('avg ' + fmtDur(rec.toolMs / rec.toolCount) + '/tool');
+  }
+  rec.card.tel.textContent = bits.join(' · ');
+}
+
+function telJoin(rec) { PLIVE.push(rec); if (!telTimer) telTimer = setInterval(telTickAll, 1000); }
+function telLeave(rec) {
+  const i = PLIVE.indexOf(rec);
+  if (i >= 0) PLIVE.splice(i, 1);
+  if (!PLIVE.length && telTimer) { clearInterval(telTimer); telTimer = null; }
+}
+function telTickAll() { for (const rec of PLIVE) paintTel(rec); }
+
 function taskEvent(rec, name, ev) {
   if (name === 'task') {
     rec.id = ev.task;
     rec.session = ev.session;
+    rec.startAt = Date.now();
     rec.card.idl.textContent = '🧵 ' + rec.id;
     rec.card.rec = rec;
     rec.status = 'working';
     paintTaskState(rec, 'agent started (own session: ' + rec.session + ')');
+    paintTel(rec);
     return;
   }
   switch (ev.type) {
@@ -416,13 +456,17 @@ function taskEvent(rec, name, ev) {
       paintTaskState(rec, 'step ' + ev.step + '/' + ev.of + (rec.last ? ' · ' + rec.last : ''));
       break;
     case 'tool':
+    case 'tool_begin':
     case 'tool:start':
       rec.last = 'tool ' + (ev.name || ev.tool || '?');
       paintTaskState(rec, rec.last);
       break;
     case 'tool_result':
       rec.last = (ev.ok ? '✓ ' : '✗ ') + (ev.summary || ev.tool || '');
+      rec.toolCount = (rec.toolCount || 0) + 1;
+      if (Number.isFinite(ev.ms)) rec.toolMs = (rec.toolMs || 0) + ev.ms;
       paintTaskState(rec, rec.last);
+      paintTel(rec);
       break;
     case 'approval':
       rec.status = 'waiting'; paintTaskState(rec, 'waiting for your approval — see the approval card');
@@ -448,8 +492,11 @@ function taskEvent(rec, name, ev) {
 function finishTask(rec, doneEv) {
   if (rec.finished) return;
   rec.finished = true;
+  rec.endAt = Date.now();
+  telLeave(rec);
   rec.status = doneEv.ok === false || rec.status === 'error' ? 'error' : 'done';
-  paintTaskState(rec, (doneEv.steps ? doneEv.steps + ' steg · ' : '') + (doneEv.usage && doneEv.usage.costUsd ? '$' + doneEv.usage.costUsd.toFixed(4) + ' · ' : '') + 'done');
+  paintTaskState(rec, (doneEv.steps ? doneEv.steps + ' steps · ' : '') + (doneEv.usage && doneEv.usage.costUsd ? '$' + doneEv.usage.costUsd.toFixed(4) + ' · ' : '') + 'done');
+  paintTel(rec);
   paintTaskText(rec, true);
   rec.card.stopb.disabled = true;
   rec.card.m.classList.add(rec.status === 'done' ? 'task-done' : 'task-bad');
@@ -464,6 +511,9 @@ async function stopTask(rec) {
   } catch { /* keep */ }
   rec.status = 'stopped';
   rec.finished = true;
+  rec.endAt = Date.now();
+  telLeave(rec);
+  paintTel(rec);
   paintTaskState(rec, 'stopped on request');
   rec.card.m.classList.add('task-bad');
   rec.abort.abort();

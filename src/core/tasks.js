@@ -47,6 +47,10 @@ export class TaskRegistry {
       created: now,
       updated: now,
       events: [],
+      toolsRun: 0,      // REAL tool completions only (tool_result with measured ms)
+      toolMs: 0,        // summed ms of those completions
+      curTool: null,    // name while a tool is running, null between completions
+      lastTool: null,   // last completed tool name
     };
     this.byId.set(id, rec);
     return rec;
@@ -105,6 +109,15 @@ export class TaskRegistry {
        the next real step puts it back to work. No LLM involved. */
     if (type === 'approval' || type === 'resource:wait') t.status = 'waiting';
     else if (type === 'step' || type === 'tool' || type === 'delta') t.status = 'running';
+    /* per-task telemetry from REAL events only — the card numbers must be
+       countable from this stream, never estimated from vibes */
+    if (type === 'tool' && data && data.tool) t.curTool = String(data.tool);
+    if (type === 'tool_result' && data && data.tool && Number.isFinite(data.ms)) {
+      t.toolsRun += 1;
+      t.toolMs += data.ms;
+      t.lastTool = String(data.tool);
+      t.curTool = null;
+    }
     t.updated = Date.now();
   }
 
@@ -127,6 +140,10 @@ export class TaskRegistry {
       updated: t.updated,
       locks: fileLocks.heldBy(t.session),
       last: t.events.length ? t.events[t.events.length - 1].type : null,
+      toolsRun: t.toolsRun,
+      avgToolMs: t.toolsRun ? Math.round(t.toolMs / t.toolsRun) : null, // null = honestly unknown
+      curTool: t.curTool,
+      lastTool: t.lastTool,
     }));
   }
 

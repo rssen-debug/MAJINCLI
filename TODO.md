@@ -34,9 +34,11 @@ autopilot/teamwork/dashboard additions).
   refs: stop/pause/resume/assist/status, zero model calls — see CHANGELOG). Remaining: compound
   sentences ("pausa hemsidan OCH hjälp jobbsökningen" in one line), LLM tiebreak behind the
   single-model rule (today ambiguity is an honest error sentence, never a guess).
-- ~~**ETA engine on real telemetry**~~ **BACKEND SHIPPED 2026-10-18** (per-tool ms from real
-  `tool_result` events, intervals after 2 runs, `null` = "hard to estimate"). Remaining:
-  surface the interval on the task cards in the UI and aggregate per-task step progress.
+- ~~**ETA engine on real telemetry**~~ **SHIPPED 2026-10-18 end-to-end**: per-tool ms from
+  real `tool_result` events (wire bug fixed same day), intervals after 2 runs; task cards
+  show elapsed + tool count + self-measured avg — no predicted totals, ever. Remaining:
+  live `/api/tasks` deck for CHANNEL-started tasks (registry telemetry is already in the
+  payload), and surfacing the global per-tool interval on cards when n is decent.
   *(källa: master brief §"LIVE VISUAL AGENT DASHBOARD & SMART ETA")*
 - **Job-search agent** as tools + skills on top of the verified browser layer: search → match
   against CV → dedupe memory → status cards (found/matched/started/waiting/submitted/failed) →

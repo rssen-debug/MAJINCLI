@@ -101,7 +101,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       if (!ok) errors += 1;
       else errors = Math.max(0, errors - 1);
       toolLog.push({ tool: r.name, args: r.args ?? {}, ok, error: ok ? null : r.out.error?.message || 'unknown error', ms: r.out.ms, summary: summarize(r.out) });
-      onEvent({ type: 'tool_result', label, step: steps, callId: r.id, tool: r.name, ok, error: r.out.error || null, spilled: r.out.spilled || null, summary: summarize(r.out), meta: r.out.meta || null });
+      onEvent({ type: 'tool_result', label, step: steps, callId: r.id, tool: r.name, ok, ms: r.out.ms ?? null, error: r.out.error || null, spilled: r.out.spilled || null, summary: summarize(r.out), meta: r.out.meta || null });
       messages.push({
         role: 'tool',
         tool_call_id: r.id,

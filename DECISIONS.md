@@ -115,6 +115,10 @@ allowed to contradict a test.
 
 ## Öppna frågor
 
+- ~~**Card telemetry source**~~ **DECIDED 2026-10-18**: the card's own clock + the card's
+  own `tool_result` events (elapsed, count, self-measured average). Globally aggregated
+  intervals may enrich later via `/api/tasks`, but a predicted total finish time is not
+  displayable from what we measure — so totals stay unshown until something counts them.
 - **Ambiguity tiebreak for NL control.** Shipped stance: a sentence matching two live tasks is
   refused with a plain-words error ("which one?"), never guessed. Candidate if it annoys:
   task the user most recently addressed, else ask once. (DECIDED 2026-10-18 unless UX says
@@ -125,8 +129,8 @@ allowed to contradict a test.
 - **Pause mechanics.** Shipped pause is abrupt (stop mid-turn + status `paused`; resume says
   "Continue from the step ..."). A graceful "finish the current tool call, then hold" pause is
   the open refinement — loop.js has no safe-point concept yet.
-  clock). Needs recorded telemetry from real runs before design.
-- **Browser live-gate cadence.** `test/browser.live.test.js` runs in CI with `continue-on-error: true` until green across consecutive runs — then flips to a hard gate. Open question: is the local form server deterministic enough for a Windows runner (port races, first-run Edge profile popups)? Watched on the next two builds.
+- **Browser live-gate cadence.** `test/browser.live.test.js` runs in CI with `continue-on-error: true` until green across consecutive runs — then flips to a hard gate. Open question: is the local form server deterministic enough for a Windows runner (port races, first-run Edge profile popups)? One green run banked (2026-10-18, run 39119535069 — full chain incl. live browser on
+the Windows runner); flips to hard gate after one more consecutive green.
 - **Browser-context resource model.** Files lock cleanly by path; a browser context is not a
   path. Candidates: a named-resource lock per provider-site domain; count-based pool keyed by
   `channel:browser`. Decided when browser hardening starts (next phase).

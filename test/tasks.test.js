@@ -179,3 +179,25 @@ test('ETA: two runs minimum, intervals not fake precision, garbage rejected', as
   assert.equal(m.byTool.get('web.fetch').n, 2, 'garbage never enters the model');
   assert.equal(m.summary()['web.fetch'].runs, 2);
 });
+
+test('per-task telemetry: real tool_result ms become snapshot facts (never invented)', async () => {
+  const { tasks, _resetAutopilot } = await import('../src/core/tasks.js');
+  _resetAutopilot();
+  const t = tasks.create({ input: 'telemetri-provet' });
+  tasks.event(t.id, 'tool', { tool: 'web.fetch' });           // tool starting
+  let s = tasks.snapshot().find((x) => x.id === t.id);
+  assert.equal(s.curTool, 'web.fetch', 'the card can say what it is doing right now');
+  tasks.event(t.id, 'tool_result', { tool: 'web.fetch', ms: 1000 });
+  tasks.event(t.id, 'tool_result', { tool: 'web.fetch', ms: 1400 });
+  s = tasks.snapshot().find((x) => x.id === t.id);
+  assert.equal(s.toolsRun, 2, 'exactly the two real completions');
+  assert.equal(s.avgToolMs, 1200, 'average from real measurements, nothing else');
+  assert.equal(s.lastTool, 'web.fetch');
+  assert.equal(s.curTool, null, 'nothing running between completions');
+  // event-entries without data (old call sites) must never break the counters
+  tasks.event(t.id, 'step', null);
+  tasks.event(t.id, 'tool_result', null);
+  s = tasks.snapshot().find((x) => x.id === t.id);
+  assert.equal(s.toolsRun, 2, 'dataless events do not pollute the numbers');
+  _resetAutopilot();
+});
