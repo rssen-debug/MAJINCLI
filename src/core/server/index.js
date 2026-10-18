@@ -12,6 +12,7 @@ import { dirs, safeJoin } from '../paths.js';
 import { readHistory } from '../context.js';
 import { tasks, fileLocks, eta } from '../tasks.js';
 import { parseTaskCommand, statusText } from '../intent-tasks.js';
+import { analyzeMetaAccount, marketingStatus, checkMarketingConfig } from '../marketing.js';
 
 const SELF_DIR = (() => {
   try {
@@ -212,6 +213,37 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     /* the autopilot dashboard feed: who works on what, and who holds which
        file right now. Zero-LLM data, cheap enough to poll. */
     if (p === '/api/tasks') return json(res, 200, { ok: true, tasks: tasks.snapshot(), locks: fileLocks.heldList(), telemetry: eta.summary() });
+    /* Credentials never become agent tool arguments or model-visible data.
+       Existing MAJIN bearer auth is required above this point. */
+    if (p === '/api/marketing') {
+      if (req.method === 'GET') return json(res, 200, { ok: true, ...marketingStatus(cfg) });
+      if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method not allowed' });
+      const body = await readJson(req);
+      if (body.action === 'analyze') {
+        try {
+          const r = await analyzeMetaAccount(cfg);
+          return json(res, r.ok ? 200 : 422, r);
+        } catch (e) {
+          return json(res, 502, { ok: false, error: e.message });
+        }
+      }
+      if (body.action === 'disconnect') {
+        const result = cfg.patch({ marketing: { meta: { accessToken: '', accountId: '' } } }, { source: 'marketing.disconnect' });
+        return json(res, result.ok ? 200 : 422, { ok: result.ok, ...marketingStatus(cfg) });
+      }
+      if (body.action !== 'save') return json(res, 400, { ok: false, error: 'action must be save, analyze or disconnect' });
+      const cur = cfg.get('marketing') || {};
+      const economics = {};
+      for (const key of ['price','cogs','shipping','fees','refundRate','targetProfit','dailyCap']) economics[key] = Number(body.economics?.[key]);
+      const meta = { accountId: String(body.accountId || ''), currency: String(body.currency || '').toUpperCase() };
+      if (body.accessToken) meta.accessToken = String(body.accessToken).trim();
+      const merged = { meta: { ...(cur.meta || {}), ...meta }, economics };
+      const issues = checkMarketingConfig(merged);
+      if (issues.length) return json(res, 422, { ok: false, error: issues.join(' ') });
+      const saved = cfg.patch({ marketing: { meta, economics } }, { source: 'marketing.panel' });
+      if (!saved.ok) return json(res, 422, { ok: false, error: saved.errors.map((e) => e.msg).join('; ') });
+      return json(res, 200, { ok: true, ...marketingStatus(cfg) });
+    }
     if (p === '/api/update' && req.method === 'GET') {
       return json(res, 200, { ok: true, version: VERSION, update: rt.update.info, current: VERSION });
     }
