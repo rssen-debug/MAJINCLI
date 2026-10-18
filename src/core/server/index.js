@@ -12,7 +12,7 @@ import { dirs, safeJoin } from '../paths.js';
 import { readHistory } from '../context.js';
 import { tasks, fileLocks, eta } from '../tasks.js';
 import { parseTaskCommand, statusText } from '../intent-tasks.js';
-import { analyzeMetaAccount, marketingStatus, checkMarketingConfig } from '../marketing.js';
+import { analyzeMetaAccount, marketingStatus, checkMarketingConfig, wantsMarketingSetup } from '../marketing.js';
 
 const SELF_DIR = (() => {
   try {
@@ -356,6 +356,18 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       if (!input) return json(res, 400, { ok: false, error: 'empty input', hint: 'send {input:"…"} (or messages:[{role:"user",content:"…"}])' });
       let session = String(body.session || 'desktop');
       const attachments = Array.isArray(body.attachments) ? body.attachments : [];
+      // First-use connection, solely for explicit ad-management requests.
+      // Asking for credentials is deterministic and costs ZERO model tokens.
+      // The token itself is collected by an authenticated form, not chat.
+      if (body.task == null && wantsMarketingSetup(input) && !marketingStatus(cfg).connected) {
+        const reply = 'I can analyze your Facebook/Instagram ads. First I need your Meta ad account and product costs. Complete the secure connection here; your token will not be sent to the AI model. No ads will be changed.';
+        if (noStreamFlag(body, url)) return json(res, 200, { ok: true, needsMarketingSetup: true, text: reply });
+        sseHead(res);
+        res.write('event: marketing_setup\ndata: ' + JSON.stringify({ type: 'marketing_setup', request: input }) + '\n\n');
+        res.write('event: answer\ndata: ' + JSON.stringify({ type: 'answer', text: reply }) + '\n\n');
+        res.write('event: done\ndata: ' + JSON.stringify({ ok: true, marketingSetup: true }) + '\n\n');
+        return res.end();
+      }
       /* Autopilot: an independent message can become its own task = its own
          session, and the engine serializes per session, so different tasks
          truly run in parallel with isolated history and per-task stop.
