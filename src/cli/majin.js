@@ -646,6 +646,13 @@ async function update() {
   if (info.asset) process.stdout.write(`installer   ${info.asset.name} (${(info.asset.size / 1024 / 1024).toFixed(1)} MB)\n`);
   else if (info.note) process.stdout.write(`note        ${info.note}\n`);
   if (info.url) process.stdout.write(`release     ${info.url}\n`);
+  /* linux/mac-install: ett klick ar Windows — sag det rent, med ratt nasta steg */
+  if (process.platform !== 'win32') {
+    const packaged = !!process.pkg || !!process.env.MAJIN_PACKAGED;
+    process.stdout.write(`platform    ${process.platform}: the one-click installer is Windows-only.\n`);
+    if (!packaged) process.stdout.write('            this checkout updates with: git pull && npm install && majin restart\n');
+    process.stdout.write('            the release page above always has what a new install needs.\n');
+  }
 }
 
 function help() {

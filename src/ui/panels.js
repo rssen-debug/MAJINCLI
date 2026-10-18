@@ -39,9 +39,11 @@ async function paintHeader(st) {
             note('updating now — MAJIN installs the new version and restarts itself. Keys, memory and settings carry over.');
             cu.innerHTML = 'update <b>restarting…</b>';
           } else if (r && r.error === 'windows_only') {
-            const d = await api('/update', { method: 'POST', body: { action: 'download' } });
-            note('MAJIN-Setup.exe is in ' + (d.file || 'your Downloads folder') + ' — run it to update.');
-            cu.innerHTML = 'update <b>ready</b>';
+            /* linux/mac: en Windows-EXE i Downloads-mappen hjalper ingen — oppna releasesidan */
+            const page = (r.releaseUrl) || (upd && upd.url) || 'https://github.com/rssen-debug/MAJINCLI/releases';
+            try { window.open(page, '_blank', 'noopener'); } catch { /* pop-up blocker — note below has the URL */ }
+            note('one-click install is Windows-only — the release page just opened: ' + page);
+            cu.innerHTML = 'update <b>page opened</b>';
           } else {
             throw new Error((r && r.error) || 'install failed');
           }

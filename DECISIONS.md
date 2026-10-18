@@ -98,6 +98,12 @@ allowed to contradict a test.
   sequential (the conservative side; mitigated by per-node usage recording
   feeding future estimates). Proof: `test/swarm.test.js` 8/8 including the
   fail-first judges; `bench --swarm` measured gain 66% on real file IO.
+- **Updates speak platform-truth and status-words.** One status field per
+  check result (disabled|error|up_to_date|available) and non-Windows systems
+  get the release page, never a stranded Windows installer. Cost: the
+  windows_only chip-click no longer offers a manual download anywhere (the
+  release page carries the same file - judged null loss, real gain).
+  Proof: test/livedelivery.test.js 1-3, 7.
 ## Avvisat
 
 - **"loadSafe / meaningful-diffs" as the race answer** (2026-10-18): classifying

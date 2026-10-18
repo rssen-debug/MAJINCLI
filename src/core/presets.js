@@ -41,6 +41,19 @@ export const PRESETS = {
     notes:
       'One JWT key, ~400 models, OpenAI-compatible. Model ids keep the vendor prefix: kilocode/anthropic/claude-sonnet-4.5. Ids ending in :free cost nothing. GET /models needs no key.',
   },
+  opencode: {
+    label: 'OpenCode Go',
+    kind: 'openai',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    /* Go-gatewayen vagrant utan session-header (400 MissingSessionID) — MAJIN
+       bärgr den at dig, liksom nyckelhanteringen: bara klistra in nyckeln. */
+    headers: { 'x-opencode-session': 'majin' },
+    keyEnv: 'OPENCODE_API_KEY',
+    apiKey: null,
+    models: ['glm-5.3-flash', 'qwen3.8-flash', 'deepseek-v4.1-flash', 'mimo-v2.6-flash', 'beam-free', 'longcat-2.5-preview-free', 'kimi-k2.6', 'grok-4.6'],
+    keyUrl: 'https://opencode.ai/docs/go/',
+    notes: 'OpenAI-compatible gateway with free/flash models; model list read live from its catalog (2026-10-18). Needs an active Go plan or Zen balance.',
+  },
   nous: {
     label: 'Nous Portal',
     kind: 'openai',

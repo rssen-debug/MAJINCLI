@@ -53,6 +53,15 @@ async function releaseSha256(slug, assetName, { token, fetchImpl } = {}) {
   }
 }
 
+/** One honest word for where the update chain stands right now. */
+export function statusFor(info, current) {
+  if (!info) return 'unknown';
+  if (info.skipped === 'disabled') return 'disabled';
+  if (info.error) return 'error';
+  if (!info.latest) return 'unknown';
+  return compareVersions(current, info.latest) < 0 ? 'available' : 'up_to_date';
+}
+
 export function repoSlug(cfg) {
   let raw = (cfg && cfg.get && cfg.get('updates.repo')) || DEFAULT_REPO;
   raw = String(raw).trim();
@@ -124,7 +133,7 @@ export async function checkForUpdate(o = {}) {
     fromCache: true,
     current,
   };
-  if (conf.check === false) return { ...cached, skipped: 'disabled', silent: true };
+  if (conf.check === false) return { ...cached, skipped: 'disabled', silent: true, status: 'disabled' };
   const hours = Number(conf.intervalHours) > 0 ? Number(conf.intervalHours) : 24;
   if (!o.force && cached.checkedAt && conf.checkedVersion === current && now - cached.checkedAt < hours * 3600 * 1000) {
     return { ...cached, skipped: 'too soon' };
@@ -143,17 +152,17 @@ export async function checkForUpdate(o = {}) {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (err) {
-    const info = { ...cached, error: err.name === 'TimeoutError' ? 'timed out' : err.message, checkedAt: cached.checkedAt, silent: true };
+    const info = { ...cached, error: err.name === 'TimeoutError' ? 'timed out' : err.message, checkedAt: cached.checkedAt, silent: true, status: 'error' };
     if (!o.silent) write(cfg, { ...info, error: err.message }, now, current);
     return info;
   }
-  if (res.status === 404) return { ...cached, error: 'no release published yet', checkedAt: now, silent: true };
-  if (!res.ok) return { ...cached, error: `github said ${res.status}`, silent: true };
+  if (res.status === 404) return { ...cached, error: 'no release published yet', checkedAt: now, silent: true, status: 'error' };
+  if (!res.ok) return { ...cached, error: `github said ${res.status}`, silent: true, status: 'error' };
   let body;
   try {
     body = await res.json();
   } catch {
-    return { ...cached, error: 'the release JSON could not be read', silent: true };
+    return { ...cached, error: 'the release JSON could not be read', silent: true, status: 'error' };
   }
   const assets = Array.isArray(body.assets) ? body.assets : [];
   const setup = assets.find((a) => a.name === SETUP_ASSET) || assets.find((a) => /\.exe$/i.test(a.name || ''));
@@ -168,6 +177,7 @@ export async function checkForUpdate(o = {}) {
     fromCache: false,
     current,
   };
+  info.status = statusFor(info, current);
   if (!setup && info.latest && compareVersions(current, info.latest) < 0) {
     info.note = `the release page has no ${SETUP_ASSET}; only the source tag is published`;
   }
@@ -222,7 +232,14 @@ export function parseManifestLine(text) {
  */
 export async function installSetup(o = {}) {
   if (process.platform !== 'win32') {
-    return { ok: false, error: 'windows_only', hint: 'one-click install needs Windows; download MAJIN-Setup.exe by hand' };
+    const cfgX = o.cfg || load();
+    const slugX = repoSlug(cfgX);
+    return {
+      ok: false,
+      error: 'windows_only',
+      hint: 'one-click install needs Windows; the release page has the app for your platform',
+      releaseUrl: `https://github.com/${slugX.owner}/${slugX.repo}/releases`,
+    };
   }
   const dl = await downloadSetup(o);
   if (!dl.ok) return dl;

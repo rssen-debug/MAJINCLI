@@ -552,6 +552,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
         // No-key local presets still need a usable local auth placeholder.
         apiKey: body.apiKey || preset?.apiKey || (/^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i.test(body.baseUrl || '') ? 'local' : ''),
         models: Array.isArray(body.models) && body.models.length ? body.models : preset?.models || [],
+        ...(preset?.headers ? { headers: preset.headers } : {}),
       };
       if (!entry.baseUrl && entry.kind !== 'mock') return json(res, 422, { ok: false, error: 'baseUrl is required for a custom provider' });
       /* ett tomt nyckelfalt ar inte "spara" — en vanlig manniska trycker pa
