@@ -1,5 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {readTikTokAds,readGoogleAds,channelStatus} from '../src/core/marketing-channels.js';
 import {Config,DEFAULTS,clone} from '../src/core/config.js';
 import {marketingTools} from '../src/core/tools/marketing.js';
@@ -96,8 +99,10 @@ test('marketing.report is a real, guarded tool with no ad mutation access',async
  assert.match(result.error.message,/Choose tiktok or google/);
 });
 
-test('Google and TikTok secrets are redacted from API-visible config',()=>{
- const cfg=new Config(clone(DEFAULTS));
+test('Google and TikTok secrets are redacted from API-visible config',(t)=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'majin-channel-test-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const cfg=new Config(clone(DEFAULTS),path.join(dir,'config.json'));
  const c=config();
  const saved=cfg.patch({marketing:{tiktok:c.tiktok,google:c.google}}, {dry:false});
  assert.equal(saved.ok,true);
