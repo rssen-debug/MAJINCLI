@@ -89,7 +89,7 @@ test('live: prepare fills + send submits + proof lands in history', { skip: !LIV
 
     /* 3 — send: click, proof, status, history */
     const sent = await run('jobs.send', { fp: app.fp });
-    assert.equal(sent.ok, true, JSON.stringify(sent).slice(0, 400));
+    assert.equal(sent.ok, true, JSON.stringify({ sent, saw: SAW }).slice(0, 900));
     assert.equal(sent.status, 'submitted');
     assert.ok(sent.proof.accepted && sent.proof.words.length >= 1, 'confirmation words seen');
     assert.ok(sent.proof.shot && fs.existsSync(sent.proof.shot), 'the screenshot exists on disk');

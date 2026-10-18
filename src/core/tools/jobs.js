@@ -324,7 +324,6 @@ export const jobTools = [
       }
       await new Promise((r) => setTimeout(r, 2300));
       try { await b.followNewTarget({ windowMs: 1200 }); } catch { /* single-page flow is fine */ }
-      const page = await b.eval(TEXT_SNIPPET).catch(() => ({ url: before.url, text: '' }));
       const proofDir = path.join(jobsDir(), 'proofs');
       await fsp.mkdir(proofDir, { recursive: true });
       let shotPath = null;
@@ -333,9 +332,19 @@ export const jobTools = [
         shotPath = path.join(proofDir, app.fp + '-' + Date.now() + '.png');
         await fsp.writeFile(shotPath, Buffer.from(shot.data, 'base64'));
       } catch { /* words can still prove it */ }
-      const proof = buildProof({ urlBefore: before.url, urlAfter: page.url, pageText: page.text || '', shotPath });
+      /* real portals answer at their own pace — read the page up to 3 s apart;
+         the proof bar never moves (confirmation WORDS or nothing) */
+      let page = { url: before.url, text: '' };
+      let proof = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        page = await b.eval(TEXT_SNIPPET).catch(() => ({ url: page.url || before.url, text: page.text || '' }));
+        proof = buildProof({ urlBefore: before.url, urlAfter: page.url, pageText: page.text || '', shotPath });
+        if (proof.accepted) break;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
       if (!proof.accepted) {
-        return { ok: false, error: { code: 'no_proof', message: 'clicked "' + (click.text || 'submit') + '" but no confirmation words appeared on the page — the application MAY NOT have been sent. It stays "waiting" until we see proof; check the screenshot before retrying: ' + String(shotPath || 'no screenshot') } };
+        const seen = String(page.text || '').replace(/\s+/g, ' ').slice(0, 200);
+        return { ok: false, error: { code: 'no_proof', message: 'clicked "' + (click.text || 'submit') + '" but no confirmation words appeared on the page — the application MAY NOT have been sent. It stays "waiting" until we see proof. Last page read: ' + (page.url || '?') + ' showing: "' + (seen || '(empty)') + '" · screenshot: ' + String(shotPath || 'none') } };
       }
       transition(app, 'submitted', { by: 'agent', evidence: { proof, clicked: click.text || null } });
       await upsertApplication(app);
