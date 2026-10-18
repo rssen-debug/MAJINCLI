@@ -346,11 +346,34 @@ async function config() {
         return process.stderr.write('JSON error: ' + e.message + '\n');
       }
     }
-    const { setPath } = await import('../core/config.js');
-    const next = cfg.json();
-    setPath(next, key, value);
-    const r = cfg.patch(topFromPath(key, value), { source: 'cli' });
-    if (!r.ok) return process.stderr.write('rejected: ' + r.errors.map((e) => `${e.path}: ${e.msg}`).join('; ') + '\n');
+    const patch = topFromPath(key, value);
+    // A running MAJIN owns its in-memory config. Editing the JSON from a
+    // second CLI process would race with the server and lose user settings.
+    // Route through the already authenticated local config endpoint instead.
+    const port = Number(flags.port || process.env.MAJIN_PORT || cfg.get('server.port'));
+    const running = await ping(port);
+    if (running) {
+      try {
+        const live = await post(port, '/api/config', running.token, patch);
+        if (!live.ok) {
+          process.stderr.write('rejected by running MAJIN: ' + (live.error || (live.errors || []).map((e) => e.path + ': ' + e.msg).join('; ')) + '\n');
+          process.exitCode = 1;
+          return;
+        }
+        process.stdout.write(`saved ${key} = ${JSON.stringify(value)}\n  in running MAJIN on port ${port}\n`);
+        return;
+      } catch (err) {
+        process.stderr.write('could not update running MAJIN: ' + err.message + '\n');
+        process.exitCode = 1;
+        return;
+      }
+    }
+    const r = cfg.patch(patch, { source: 'cli' });
+    if (!r.ok) {
+      process.stderr.write('rejected: ' + r.errors.map((e) => `${e.path}: ${e.msg}`).join('; ') + '\n');
+      process.exitCode = 1;
+      return;
+    }
     process.stdout.write(`saved ${key} = ${JSON.stringify(value)}\n  in ${cfg.file}\n`);
     return;
   }
