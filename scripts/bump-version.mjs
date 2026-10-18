@@ -59,6 +59,12 @@ export function applyBump(root, version) {
   fs.writeFileSync(verFile, next);
   changed.push('src/core/version.js');
 
+  const psFile = path.join(root, 'scripts', 'publish.ps1');
+  const ps = fs.readFileSync(psFile, 'utf8');
+  const nextPs = ps.replace(/\[string\]\$Version = '[^']+'/, `[string]$Version = '${version}'`);
+  if (nextPs !== ps) fs.writeFileSync(psFile, nextPs);
+  changed.push('scripts/publish.ps1');
+
   const issFile = path.join(root, 'installer', 'majin.iss');
   const iss = fs.readFileSync(issFile, 'utf8');
   const nextIss = iss.replace(/#define MyAppVersion "[^"]+"/, `#define MyAppVersion "${version}"`);

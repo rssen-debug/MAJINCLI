@@ -129,8 +129,10 @@ test('release-bump applicerar alla fyra versions-källor i verkliga filer', asyn
   fs.writeFileSync(path.join(dir, 'package-lock.json'), JSON.stringify({ name: 'x', version: '0.5.4', lockfileVersion: 3, packages: { '': { name: 'x', version: '0.5.4', dependencies: { a: '1.0.0' } }, 'node_modules/a': { version: '1.0.0' } } }, null, 2));
   fs.writeFileSync(path.join(dir, 'src', 'core', 'version.js'), "export const VERSION = '0.5.4';\n");
   fs.writeFileSync(path.join(dir, 'installer', 'majin.iss'), "#define MyAppVersion \"0.5.4\"\n[Setup]\n");
+  fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'scripts', 'publish.ps1'), "[string]$Version = '0.5.4',\n");
   const r = applyBump(dir, '0.5.5');
-  assert.equal(r.changed.length, 4, JSON.stringify(r.changed));
+  assert.equal(r.changed.length, 5, JSON.stringify(r.changed));
   assert.match(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'), /"version": "0\.5\.5"/);
   const lock = JSON.parse(fs.readFileSync(path.join(dir, 'package-lock.json'), 'utf8'));
   assert.equal(lock.version, '0.5.5');
@@ -138,4 +140,5 @@ test('release-bump applicerar alla fyra versions-källor i verkliga filer', asyn
   assert.equal(lock.packages['node_modules/a'].version, '1.0.0', 'dependency-versioner i locken rörs ALDRIG');
   assert.match(fs.readFileSync(path.join(dir, 'src', 'core', 'version.js'), 'utf8'), /VERSION = '0\.5\.5'/);
   assert.match(fs.readFileSync(path.join(dir, 'installer', 'majin.iss'), 'utf8'), /MyAppVersion "0\.5\.5"/);
+  assert.match(fs.readFileSync(path.join(dir, 'scripts', 'publish.ps1'), 'utf8'), /\$Version = '0\.5\.5'/);
 });
