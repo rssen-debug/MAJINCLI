@@ -49,6 +49,20 @@ ALL results are **read-only recommendations**, not verified profit. Meta pixel a
 
 **No campaigns, bids or budgets are written.** The daily ceiling is advisory only, NOT an enforced Meta Ads budget. Set campaign/account spending caps independently in Meta Ads Manager. Any future write actions need explicit human approval, tested diff/rollback and audit logging. No automatic scaling loop runs.
 
+## TikTok and Google Ads in the same chat (read-only)
+
+Ask **"MAJIN, analyze my TikTok Ads"** or **"MAJIN, analyze my Google Ads."** No new sidebar panels are added. If the account is not configured, a contextual secure form appears in the chat; never paste tokens into a normal conversation.
+
+- **TikTok Ads**: provide an authorized TikTok Business API access token, numeric advertiser ID and actual account currency. Uses TikTok's public Business Reporting API v1.3 (campaign-level spend, clicks, impressions). The currency is USER-REPORTED and not verified through the TikTok API, so comparisons across accounts require separate verification.
+- **Google Ads**: provide numeric customer ID, developer token from Google Ads Manager, authorized OAuth access token, account currency and optional manager login customer ID. Uses Google Ads REST API v25. Unlike an LLM provider API key, Google Ads requires its OWN Google developer token plus OAuth; **access tokens expire** and this implementation does NOT automatically perform the full OAuth authorization/refresh flow. You must obtain/refresh authorized credentials separately. The Google report requests a currency code for verification, and refuses mismatches.
+- The new `marketing.channel_report` tool fetches campaign spend/clicks/impressions; Google reported conversions are NOT necessarily purchases and must NOT be presented as confirmed WooCommerce profit. The report is bounded to a few pages and always read-only.
+- Both APIs require developer/account approval and reporting permissions. CI tests use mocked HTTP responses; a live test requires the user's real approved accounts. No new third-party npm package, background Python process, paid MCP subscription, or extra LLM request for metric calculation is required.
+- The existing MAJIN provider is used for *explaining* reports and generating marketing ideas, not for authenticated Google/TikTok API access.
+- Privacy: the contextual secure form sends token values to local authenticated MAJIN config, never to model messages. Local config remains unencrypted on disk; using a dedicated secret vault would be preferable in a future release.
+- No cross-platform ROAS or automatic "best winner" claims until WooCommerce orders, currency conversion and attribution are independently reconciled. The total budget of 50 SEK remains an advisory cash constraint; no ad campaigns are created, altered or billed by these tools.
+
+Upstream API documentation: https://github.com/tiktok/tiktok-business-api-sdk and https://github.com/Opteo/google-ads-api. MAJIN uses the native Node HTTP primitives rather than bundling bulky SDK dependencies; the implementations follow those published endpoint contracts.
+
 ## Known gaps
 
 - No WooCommerce reconciliation, refund sync, checkout tracking diagnosis or multichannel attribution yet.
