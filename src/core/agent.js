@@ -49,7 +49,7 @@ export class Agent {
     this.abort.get(session)?.abort();
   }
 
-  systemPrompt({ session, decision, turnPlan, attachments, readOnly = false }) {
+  systemPrompt({ session, decision, turnPlan, attachments, readOnly = false, aware = '' }) {
     const cfg = this.cfg;
     const tools = this.registry.list({ readOnly: Boolean(readOnly) });
     const groups = [...new Set(tools.map((t) => t.group))];
@@ -74,6 +74,11 @@ export class Agent {
       `ROUTING (job → model): ${Object.entries(routeSummary(cfg)).map(([k, v]) => `${k}:${v}`).join('  ')}`,
       `This turn: job=${decision.job} (confidence ${decision.confidence}), primary=${turnPlan.route?.ref || '?'}, ${turnPlan.moa?.enabled ? `MOA ${turnPlan.moa.width} references → aggregator ${turnPlan.moa.aggregator}` : 'MOA off for this kind of turn'}.`,
       `Guard: ${guard === 'off' ? 'OFF — no confirmations, you own the consequences' : 'asks only before irreversible actions'}.`,
+      /* Shared awareness (autopilot): the agent sees who else works on this
+         machine and which files they hold — it can plan around siblings
+         instead of colliding with them. Deterministic data from the task
+         registry; nothing here costs a token-generating roundtrip. */
+      aware ? `SIBLING TASKS ON THIS MACHINE (shared resources — do not touch the files another task holds; report yours so they can plan too):\n${aware}` : '',
       '',
       this.skills.prompt(),
       this.memory?.digest?.() || '',
@@ -111,7 +116,7 @@ export class Agent {
     return serial(opts.session || 'desktop', () => this._turnOnce(opts));
   }
 
-  async _turnOnce({ input, session = 'desktop', attachments = [], onEvent = () => {}, history = [], source = null, readOnly = false, model = null }) {
+  async _turnOnce({ input, session = 'desktop', attachments = [], onEvent = () => {}, history = [], source = null, readOnly = false, model = null, aware = '' }) {
     const cfg = this.cfg;
     const ctrl = new AbortController();
     this.abort.set(session, ctrl);
@@ -178,7 +183,7 @@ export class Agent {
       emit({ type: 'route', job: decision.job, confidence: decision.confidence, model: turnPlan.route?.ref, moa: turnPlan.moa, reasons: decision.reasons, alt: decision.alt, tiebreak: Boolean(decision.llmTiebreak) });
 
       /* 3) verktygsslingan */
-      const sys = this.systemPrompt({ session, decision, turnPlan, attachments, readOnly });
+      const sys = this.systemPrompt({ session, decision, turnPlan, attachments, readOnly, aware });
       const ctx = {
         ...this.shared,
         cfg,

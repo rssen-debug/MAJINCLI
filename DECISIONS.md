@@ -1,173 +1,115 @@
 # Decisions
 
-Why MAJIN is built the way it is. One entry per decision: **what we chose — why — what it cost —
-how it is proven**. This file exists so nobody re-argues these in a code review six months from
-now; if you change one, change the entry here in the same commit.
+Why MAJIN is built the way it is: **what we chose — why — what it cost — how it is proven**.
+If you change one of these, change the entry here in the same commit. Nothing in this file is
+allowed to contradict a test.
 
-## Product
+## Valt
 
-**A normal person has to be able to use it.** Not a developer with a terminal: pick the provider,
-paste the key, get going. Everything else — the 77 tools, the model chain, the schedule — is a
-bonus that must never be *required* to get the first answer. — Why: the brief is one person on a
-Windows laptop who has never opened PowerShell. — Cost: no CLI-only features allowed, so every
-capability needs a tool *and* a panel surface, which is why half the fixes land in `src/ui`. —
-Proof: `test/onboarding.test.js` starts from an empty data home and asserts the first message is
-answered in under 15 s; today it is 127 ms.
+- **A normal person has to be able to use it.** Pick the provider, paste the key, get going;
+  the 78 tools, the model chain and the schedule are bonuses, never requirements for the first
+  answer. Cost: no CLI-only features — every capability needs a tool *and* a panel surface.
+  Proof: `test/onboarding.test.js` answers the first message from an empty home in 127 ms
+  (limiet 15 s).
+- **A few things fully, rather than many halfway.** It answers, it touches the machine, it
+  remembers, it is reachable from a phone. Nothing else may degrade those four. Proof: `npm run
+  bench` (7 scripted real scenarios, pass) + the full suite against the same code path a
+  browser uses.
+- **The browser tab is the product; the CLI is the door opener.** UI routes delegate to the
+  tools (`/api/provider` runs `majin.provider`); onboarding tests drive HTTP endpoints, not
+  internals. Cost: API surfaces must stay in sync with the tools.
+- **Measure, then fix what the measurement showed.** Every fix starts from a number gathered
+  on a fresh `MAJIN_HOME` against a request-counting stand-in provider — never from reading
+  code and guessing. Proof. the onboarding wall: rejected key burned 4 retries in front of the
+  user before; 1 step / 33 ms afterwards.
+- **Write the failing test before the fix, ≤5 files per fix; when a fix wants more, the scope
+  is wrong.**
+- **Autopilot = task-as-session on top of the engine we already have.** `agent.turn` serializes
+  per session, so each independent message becoming its own task *session* yields real
+  parallelism, isolated history and per-task stop for free (`src/core/tasks.js`). A follow-up
+  message carries the task id and rejoins the same session — duplicates are structurally
+  impossible. Cost: one new module + server wiring; zero changes to the loop. Proof:
+  `test/tasks.test.js` A/E/B scenarios against the real engine (182/0 in the suite).
+- **Coordination is deterministic, never an LLM call.** Task registry, FIFO file locks
+  (owner = task session, re-entry, 30 s timeout), atomic tmp-then-rename writes. No hidden
+  model switching, no orchestrator model, no token spend on bookkeeping. Proof: lock FIFO/
+  timeout/re-entry tests + awareness text built from live registry state.
+- **Silent installs never launch the app from Inno.** `skipifsilent` stays on postinstall;
+  one-click-update relaunch is our own watchdog (`src/core/update.js`, PowerShell
+  `-EncodedCommand`, `%LOCALAPPDATA%\MAJIN\update-relaunch.log`). Why: Inno silent launches
+  hang the setup process — CI-proven twice (below, Avvisat). Cost: relaunch lives outside the
+  installer, so it must be watched on real Windows once (TODO). Proof: byte-verified script
+  decode test + green CI release (run 39111598323 → assets + full Windows smoke).
+- **A `.vbs` is never a launch target.** Shortcuts/autostart carry `wscript.exe` + the vbs as
+  argument (the user's CreateProcess **193** dialog); interactive postinstall uses
+  `runhidden` on the exe itself. Proof: stability test pins the launch-point pattern; Inno
+  compile would fail otherwise.
+- **One sentence, one place.** `explainError()` in `src/core/provider/chat.js` owns all failure
+  wording (`no_key|auth|billing|model|toobig|rate|unreachable|upstream|provider`) with
+  `retryable`/`needsKey`; no caller writes its own apology. Why: one failure reaches chat, SSE,
+  toast and `doctor` — four phrasings of one truth is how products start feeling sloppy.
+- **A permanent failure must not be retried** (401/402/403/404, missing key, over-long context);
+  429/5xx/network keep backoff.
+- **Never show the user the machinery.** No `Provider error after N failures`, no
+  `EVIDENCE FROM THIS TURN`, no raw model metadata in the window.
+- **The UI never hardcodes a provider list** (`GET /api/state` carries `presets`);
+  **an empty box is not a save** (`needsKeyFor()` is the one rule); **your own endpoint belongs
+  in the card, not in a config file** (address box, loopback/RFC1918 counts as yours);
+  **no model chain while setup is unfinished** (`needsSetup` turns MOA off for the turn).
+- **Shipped strings English; input may be anything.** `npm run i18n` gates `src/`, `scripts/`,
+  `install.ps1` (word list + åäö + allowlist for the deliberate Swedish input matchers);
+  comments/docs as Swedis as we like. New since 2026-10-18: the app itself must also *speak*
+  English by default (owner requirement).
+- **Deferred-but-chosen product order:** browser-use reliability, parallel agents (done,
+  backend), verification — then natural-language teamwork, ETA from real telemetry, the job
+  agent — *then* Living Missions. Not because Missions are uninteresting; because Missions on
+  unverified legs are a demo, not a product.
+- **Deliberately not done:** silent telemetry/key mirroring/"improvement" uploads (dataset has
+  *no upload code path*: `dataset.upload` is rejected by config validation); runtime rewriting
+  of MAJIN's own source (self-config edits *config* with backup+diff only); anything requiring
+  Windows Defender/firewall/service mutation; background multi-machine sync.
 
-**A few things fully, rather than many halfway.** MAJIN's promise is: it answers, it touches the
-machine, it remembers, it can be reached from a phone. Reverse engineering, dataset capture and the
-scheduler exist, but none of them is allowed to make the four promises worse. — Proof: `npm run
-bench` (7 scripted scenarios, verdict pass) and the suite of 97 tests, both run against the same
-code path a browser uses.
+## Avvisat
 
-**The browser tab is the product; the CLI is only a door opener.** `majin start|window|doctor|
-status|url|logs|config|pair|send|test`. Schedules, memory, skills, channels, dataset and RE work are
-instructed in chat or in the panel. — Why: an icon that opens a window is a thing a normal person
-can use; a command they must remember is not. — Cost: `POST /api/*` routes must stay in sync with
-the tools. — Proof: UI routes **delegate to the tool** (`/api/provider` runs `majin.provider`), and
-the onboarding tests drive the HTTP endpoints the panel uses, not internal functions.
+- **Direct `.vbs` as an Inno launch target (0.5.2 installer).** CreateProcess code 193 on the
+  user's real machine — a vbs is not a Win32 program. (Inno uses CreateProcess, not the shell;
+  Explorer double-click resolving the association is why desktop icons
+  *looked* fine.)
+- **Postinstall launch via wscript+vbs during silent install.** CI job log: "install silently"
+  → 17 min of silence → runner timeout; orphan `majin-win-x64` + `conhost`. Never again.
+- **Postinstall launch via `runhidden` exe during silent install.** Same hang, 18 min, same
+  orphan shape — the wscript was innocent; *launching at all* from silent Inno is the fault.
+- **`skipifsilent`-less postinstall as the silent-relaunch mechanism.** Same corpses as above;
+  relaunch now lives in the updater's watchdog, which is testable on any OS and leaves a log.
+- **Fifth-quote-cluster Inno escaping** (`"""{sys}\wscript.exe"" """{app}\..."""`): Inno
+  rejects interior 3-quote runs ("Mismatched or misplaced quotes", compile line 84). Quotes
+  only at parameter edges; literal interior quote = `""`; the final form is encoded in
+  `test/stability.test.js`.
+- **MOA default-on** (`moa.policy:'always'` in early versions): a fresh install burned ~3×
+  tokens on echoes of itself. External audit was right; default is `'off'`, opt-in only.
+- **The global `S.busy` gate as the parallelism story.** It prevents exactly zero backend
+  races (serialization already does per session) while making real multitasking impossible in
+  the window. Removal scheduled with the task-card UI (TODO Hög prioritet).
+- **Importing browser-use/computer-use frameworks wholesale** (Python ecosystems): would break
+  the "no Python dependency" rule from VNEXT §13. Patterns (Agent-Reach doctor, Playwright MCP
+  context isolation) are taken; frameworks are not.
+- **Re-tagging a published release.** Violates the owner's standing rule; a tag may only be
+  recreated while it has never produced release assets (used twice for v0.5.3 pre-release CI
+  iteration, then left alone).
 
-**Measure, then fix what the measurement showed.** Every fix in this repo starts from a number taken
-from a real run against a fresh home (`MAJIN_HOME` in a temp dir, a local stand-in provider that counts
-requests), never from reading code and guessing. — Proof this round: a rejected key burned four steps
-and four gateway calls and printed the retry count in the user's face (`Provider error after 4
-failures: 401: invalid or missing API key`); the first message on a virgin install leaked
-`EVIDENCE FROM THIS TURN` and `ANSWERS FROM 3 REFERENCES` as its answer; `save` with an empty box said
-"provider saved"; `kilocode` and `nous` were unreachable from the browser because the dropdown was a
-hardcoded list of 9.
+## Öppna frågor
 
-**Write the failing test before the fix, ≤5 files per fix.** The onboarding tests were committed in
-a red state (10 failures, each with the measured string in the assertion message) and only then made
-green; each of the three fixes below touches 3–4 files. When a fix wants more files, the scope is
-wrong, not the test.
-
-## Failure wording
-
-**One sentence, one place.** `explainError(err, route)` in `src/core/provider/chat.js` classifies
-every provider failure into `no_key | auth | billing | model | toobig | rate | unreachable |
-upstream | provider` and returns the sentence the user reads, plus `retryable` and `needsKey`. No
-caller writes its own apology. — Why: the same failure reaches a chat answer, an SSE `error` event,
-a toast and a `doctor` row; four phrasings of one truth is how products start to feel sloppy. —
-Cost: `errorKind`/`errorHint` had to be threaded through `loop.js` → `agent.js` → `/api/chat`, three
-extra fields on the result. — Proof: `test/onboarding.test.js` pins each kind's sentence and forbids
-the old shapes (`Provider error after`, `fetch failed`, `TypeError`).
-
-**A permanent failure must not be retried.** 401/402/403/404, a missing key and an over-long
-context stop the turn on the first attempt (`stop`), while 429/5xx and network errors keep the
-existing backoff. — Why: four calls to a door that will not open is not resilience, it is a slow
-error message and spent quota. — Proof: the stand-in provider counts hits; the test asserts
-`hits === 1` and `steps === 1`, and the whole turn under 5 s.
-
-**Never show the user the machinery.** `Provider error after N failures`, `EVIDENCE FROM THIS
-TURN`, `ANSWERS FROM 3 REFERENCES`, `Demo answer (mock):`, `QUESTION:` are all banned in assertions.
-The demo answer is now a sentence a person reads once and knows what to click.
-
-## Setup
-
-**The UI never hardcodes a provider list.** `GET /api/state` carries `presets` (`presetCard()` in
-`presets.js`). — Why: a list copied into `panels.js` rots silently; two presets were already
-unreachable. — Proof: the state test asserts every preset is present, with exactly the keys the card
-needs.
-
-**An empty box is not a save.** `needsKeyFor()` is the one rule (mock/demo no key, `ollama` and
-`lmstudio` ship a dummy, loopback and RFC1918 addresses are yours), used by both
-`majin.provider add` and `POST /api/provider`. Refusal writes nothing. — Why: a fake "saved" costs a
-beginner an evening of thinking they are broken. — Cost: a local OpenAI-compatible server on another
-LAN host with no auth has to type something in the key box — accepted, since guessing "no key needed"
-for arbitrary addresses is how you end up silently storing garbage.
-
-**Your own endpoint belongs in the card, not in a config file.** The address box next to the key
-covers Ollama/LM Studio/a box on the network; `POST /api/provider` writes it and the state card shows
-it back. — Proof: the HTTP test reads `config.json` from disk after the save (so a restart keeps it)
-and re-reads `/api/state`.
-
-**No model chain while the setup is unfinished.** `needsSetup` turns MOA off for the turn
-(`moa.skipped: 'setup'`). — Why: three references plus an aggregator against a mock is five
-echoes of the same string, and the aggregate text was landing in a first-time user's answer. — Cost:
-`test/agent.test.js` now seeds a dummy key so the MOA path stays covered; the fresh-install test
-asserts no `moa:*` events at all.
-
-## Language
-
-**Shipped strings in English, comments and docs in Swedish.** Anything the user, the model or a log
-line can see is English; the code that explains itself to the owner stays Swedish. Swedish survives
-only where it *matches* input (route words, job words, weekday names, the `/ja`·`/nej` channel
-commands). — Proof: `npm run i18n` (0 hits in 57 files) plus `test/i18n.test.js`, which also asserts
-the deliberate matchers are still there. Widening the detector's word list this round
-(`Notera Testa Kvar ange svara bort`) immediately found a dozen strings the old list had walked
-past — a Swedish approval prompt sent to Telegram and WhatsApp users, Swedish in tool results the
-model quotes back, and Swedish in `install.ps1`, which is the first thing a Windows user reads.
-A gate is only as good as its word list.
-
-## Deliberately not done (not forgotten)
-
-- **Browser rendering.** `src/ui/*` has never been opened in a browser by anyone in this sandbox.
-  The new picker, address box and error toasts are verified by source assertions and HTTP contract
-  tests only. The card needs one human click-through before the sentence "just paste your key" is
-  honest.
-- **Windows.** `majin-win-x64.exe`, `install.ps1` and the scheduled task are built and reviewed here
-  but never run on Windows (no wine/mingw, `pkg-fetch` has no `node20-win-*`); `dist/majin.cjs` is
-  rebuilt and re-checked before any claim, and every claim says "packaged build, Linux".
-- **Live provider, live Telegram/WhatsApp.** No egress to `*.deepseek.com`, `*.kilo.ai` or
-  `api.telegram.org` from here; the wire shape is verified against local stand-ins and the user gets
-  the one command that proves it for real.
-- **No provider-key encryption at rest, one token for the whole machine, no per-user auth.** The
-  config file is the vault; the token is the door. MAJIN is a personal agent on a personal machine.
-  The server binds `0.0.0.0` on purpose so a phone can reach it to pair, but `allowRemote:false`
-  means anything from outside loopback must carry the token, and `trustLocal:true` is only what lets
-  the local window in without one. Revisit before it ever faces a network.
-- **No database.** JSONL and small JSON files in the data home, append-only where it matters
-  (`usage.json`, the dataset). — Why: `majin` must be copyable by hand and greppable when it misbehave.
-- **Cost truth is partial by design.** Only DeepSeek has `pricing` entries; everything else reports
-  $0 with the TODO item open, rather than a table of guessed prices.
-
-## 2026-06-18
-- **Update repo migration in repoSlug (not a config migration pass):** the check
-  path is the only reader of updates.repo, so fixing it there covers CLI, server
-  and UI at once without a versioned config-migration framework we do not have.
-- **Rejected: auto-creating a desktop shortcut from the running app.** Would
-  bypass the user's installer choice and needs registry-free .lnk writing from
-  Node; UsePreviousTasks=no + unconditional Start Menu entry achieves the
-  guarantee inside Inno, the tool that owns shortcuts.
-
-## 2026-06-18 (kväll) — Imagination Engine slice 1
-- **imagine.js as a side-loaded module feeding off onEvent(), not a rewrite:**
-  the SSE stream already funnels through onEvent(); one guarded line hands the
-  same real events to the canvas. Deleting imagine.js breaks nothing (guards
-  are asserted in test).
-- **Native <details> for step payloads:** keyboard-accessible, zero JS,
-  textContent only (spec: the LLM never injects markup).
-- **CSS-only core animation:** GPU-cheap, reduced-motion media query stops the
-  pulse with no JS state; energy requirement of the spec met by construction.
-- **Skipped for now:** WebGL/Canvas orb (violates the energy rule for v1),
-  fake "thinking" shimmer (spec forbids fabricated activity).
-
-## 2026-06-18 (natt) — Phase B implementerad
-- **Onboarding driven av /api/state (needsSetup + presets):** servern vet redan
-  om installationen är o-setupad; wizarden är ett rent presentationslager.
-- **Nyckel/test/katalog via provider-toolen (add/test/models):** duplicerar
-  inget — samma actions agenter använder.
-- **Single-model = skriv samma ref till alla routes + moa.policy 'off':**
-  inget nytt konfig-flagga att hålla synkat; testet bevisar resolution per jobb.
-- **Fix innan leverans:** validatePatch kollade routes mot providers före merge
-  → samma-patch-kombinationer kuggade. Nu mot mergad data.
-
-## 2025-11 (v0.5.0) — Trust & Flow
-
-1. **`Config.get()` returnerar ALLTID en klon av objekt.** Anropare fick
-   lev referenser; mutationer gick förbi validering och skapade skillnader
-   minne↔disk. `raw()` är den enda medvetna live-byn.
-2. **Radering via undefined-sentinelen.** `merge()` är avsiktligt en ren
-   djup-merge (load-tiden ska defaults+människofil flätas per-provider).
-   All "ta bort"-logik SKA använda `{ key: undefined }`, aldrig en ny hel-
-   karta. Validatorn har en explicit regel för detta.
-3. **MOA 'off' by default.** Multi-modell-spend är opt-in — punkt.
-4. **Per-session serialisering.** `agent.turn()` köar på sessionsnyckel;
-   olika sessioner är parallella. Ingen lås-hierarki behövs eftersom kön
-   är per nyckel.
-5. **Bygget får aldrig skeppa default-ikon.** Tyst resedit-fail = hårt fel.
-6. **Uppdaterings-installer hashas:** bytes-över-tråden mot releasens
-   publicerade `.sha256`. Misslyckad match = filen sparas aldrig.
-7. **Agent-Reach utvärderat, ej importerat.** Bra mönster (doctor-health,
-   zero-key-backends) loggat i TODO; ingen Python-dependency introduceras
-   (VNEXT §13 står fast).
+- **Natural-language agent control** ("agent 2, hjälp agent 1"): deterministic parse over live
+  task ids first — but when a sentence fits two tasks, who breaks the tie? Candidate: task the
+  user most recently addressed, else ask once. No decision yet.
+- **ETA granularity.** Per-tool timings are already measurable; the open question is which
+  unit of work aggregates well enough across tasks to predict ("28/100 jobb" is a queue, not a
+  clock). Needs recorded telemetry from real runs before design.
+- **Browser-context resource model.** Files lock cleanly by path; a browser context is not a
+  path. Candidates: a named-resource lock per provider-site domain; count-based pool keyed by
+  `channel:browser`. Decided when browser hardening starts (next phase).
+- **Handoff cost.** Reassigning an agent to a sibling's task needs the sibling's plan + state
+  summary; how much do we copy vs re-derive? Test with the first real teamwork run.
+- **Living Missions data model.** One persistent goal holding many tasks + decision points —
+  is it a task with children, or a new object? Deferred until the teamwork phase proves what
+  the primitives should be.

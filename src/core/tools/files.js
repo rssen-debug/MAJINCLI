@@ -9,6 +9,28 @@ import { spawn } from 'node:child_process';
 import { def } from './registry.js';
 import { entropy, strings as extract } from '../binary/strings.js';
 import { dirs } from '../paths.js';
+import { fileLocks } from '../tasks.js';
+
+/* Two tasks, one file: whoever asks second QUEUES on that file alone (FIFO,
+   30 s guard against a crashed owner) — the rest of the autopilot keeps
+   running. Writes go tmp-then-rename so a reader never meets a torn file and
+   a killed task never leaves one. Owner = the task's session id, which the
+   runtime already passes through ctx on every tool call. */
+async function locked(abs, session, fn) {
+  const owner = session || 'process';
+  const release = await fileLocks.acquire(abs, owner);
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
+async function writeAtomic(abs, data) {
+  const tmp = `${abs}.tmp-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+  await fsp.writeFile(tmp, data);
+  await fsp.rename(tmp, abs);
+}
 
 const IGNORE = new Set(['node_modules', '.git', 'dist', 'build', '.next', '__pycache__', '.venv', 'target', '.cache', 'Library', 'AppData', '$RECYCLE.BIN', 'System Volume Information', '.pnpm-store', 'venv']);
 
@@ -118,11 +140,14 @@ export const fileTools = [
     params: { path: 'string: target file', content: 'string: the full file content', append: 'boolean: append instead of overwriting' },
     async run({ path: p, content = '', append = false }, ctx) {
       const { abs } = resolveIn(ctx, p);
-      await fsp.mkdir(path.dirname(abs), { recursive: true });
-      await fsp.writeFile(abs, String(content), { flag: append ? 'a' : 'w' });
-      const size = sizeOf(abs);
-      ctx.bus?.emit?.('file.write', { path: abs, bytes: size });
-      return { result: `wrote ${abs} (${size} bytes)`, meta: { path: abs, bytes: size }, summary: `wrote ${path.basename(abs)}` };
+      return locked(abs, ctx.session, async () => {
+        await fsp.mkdir(path.dirname(abs), { recursive: true });
+        if (append) await fsp.writeFile(abs, String(content), { flag: 'a' });
+        else await writeAtomic(abs, String(content));
+        const size = sizeOf(abs);
+        ctx.bus?.emit?.('file.write', { path: abs, bytes: size });
+        return { result: `wrote ${abs} (${size} bytes)`, meta: { path: abs, bytes: size }, summary: `wrote ${path.basename(abs)}` };
+      });
     },
   }),
 
@@ -138,8 +163,12 @@ export const fileTools = [
     },
     async run({ path: p, edits = [], dry = false }, ctx) {
       const { abs } = resolveIn(ctx, p);
-      const before = await fsp.readFile(abs, 'utf8');
-      let after = before;
+      /* the whole read-modify-write runs under the file's lock: two agents
+         patching the same file can never interleave their diffs. A dry run
+         touches nothing, so it stays lock-free. */
+      const applyAll = async () => {
+        const before = await fsp.readFile(abs, 'utf8');
+        let after = before;
       const log = [];
       for (const e of edits) {
         const find = String(e.find ?? e.old ?? '');
@@ -153,9 +182,11 @@ export const fileTools = [
         after = after.split(find).join(replace);
         log.push({ find: find.slice(0, 60), replace: replace.slice(0, 60), count });
       }
-      if (!dry) await fsp.writeFile(abs, after);
-      const diff = simpleDiff(before, after);
-      return { result: `${dry ? 'DRY-RUN ' : ''}${path.basename(abs)}: ${log.map((l) => `${l.count}× "${l.find}"`).join(', ')}\n${diff}`, meta: { edits: log, applied: !dry }, summary: `${edits.length} edits${dry ? ' (dry run)' : ''} in ${path.basename(abs)}` };
+        if (!dry) await writeAtomic(abs, after);
+        const diff = simpleDiff(before, after);
+        return { result: `${dry ? 'DRY-RUN ' : ''}${path.basename(abs)}: ${log.map((l) => `${l.count}× "${l.find}"`).join(', ')}\n${diff}`, meta: { edits: log, applied: !dry }, summary: `${edits.length} edits${dry ? ' (dry run)' : ''} in ${path.basename(abs)}` };
+      };
+      return dry ? applyAll() : locked(abs, ctx.session, applyAll);
     },
   }),
 
@@ -285,8 +316,10 @@ export const fileTools = [
     async run({ from, to, overwrite = false }, ctx) {
       const a = resolveIn(ctx, from);
       const b = resolveIn(ctx, to);
-      await fsp.cp(a.abs, b.abs, { recursive: true, force: Boolean(overwrite), errorOnExist: !overwrite });
-      return { result: `kopierrade ${a.abs} → ${b.abs}`, summary: `kopierrade ${a.bare}` };
+      return locked(b.abs, ctx.session, async () => {
+        await fsp.cp(a.abs, b.abs, { recursive: true, force: Boolean(overwrite), errorOnExist: !overwrite });
+        return { result: `kopierrade ${a.abs} → ${b.abs}`, summary: `kopierrade ${a.bare}` };
+      });
     },
   }),
 

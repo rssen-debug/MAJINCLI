@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { bus } from '../log.js';
 import { dirs, safeJoin } from '../paths.js';
 import { readHistory } from '../context.js';
+import { tasks, fileLocks } from '../tasks.js';
 
 const SELF_DIR = (() => {
   try {
@@ -142,6 +143,9 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
 
     /* ---------- state ---------- */
     if (p === '/api/state') return json(res, 200, rt.state({ includeTools: url.searchParams.get('tools') !== '0' }));
+    /* the autopilot dashboard feed: who works on what, and who holds which
+       file right now. Zero-LLM data, cheap enough to poll. */
+    if (p === '/api/tasks') return json(res, 200, { ok: true, tasks: tasks.snapshot(), locks: fileLocks.heldList() });
     if (p === '/api/update' && req.method === 'GET') {
       return json(res, 200, { ok: true, version: VERSION, update: rt.update.info, current: VERSION });
     }
@@ -252,27 +256,55 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const last = Array.isArray(body.messages) ? body.messages.filter((m) => m && m.role === 'user').slice(-1)[0] : null;
       const input = String(body.input || body.text || body.prompt || body.content || (last && last.content) || '').trim();
       if (!input) return json(res, 400, { ok: false, error: 'empty input', hint: 'send {input:"…"} (or messages:[{role:"user",content:"…"}])' });
-      const session = String(body.session || 'desktop');
+      let session = String(body.session || 'desktop');
       const attachments = Array.isArray(body.attachments) ? body.attachments : [];
+      /* Autopilot: an independent message can become its own task = its own
+         session, and the engine serializes per session, so different tasks
+         truly run in parallel with isolated history and per-task stop.
+         A follow-up message (body.task) rejoins the SAME session instead —
+         it can never spawn an accidental duplicate. body.autopilot=true opts
+         an API caller into a fresh task; the classic session path is tracked
+         in the registry too, without changing its behaviour. */
+      const follow = body.task != null ? tasks.sessionOf(body.task) : null;
+      if (body.task != null && !follow) return json(res, 404, { ok: false, error: `unknown task: ${body.task}`, hint: 'tasks expire when done for 6h — start a new one instead' });
+      let task;
+      if (follow) {
+        task = tasks.get(body.task);
+        session = follow;
+        tasks.setStatus(task.id, 'running');
+      } else {
+        task = tasks.create({ input, source: body.source || 'ui' });
+        if (body.autopilot === true) session = task.session;
+        else task.session = session; // observe-only: one name, one behaviour
+      }
+      const track = (ev) => tasks.event(task.id, ev.type, null);
       const noStream = body.stream === false || body.stream === 'false'
         || ['false', '0'].includes(String(url.searchParams.get('stream') || '').toLowerCase());
       if (noStream) {
-        const r = await agent.turn({ input, session, attachments, source: 'api' });
-        return json(res, 200, { ok: !r.error, ...r });
+        const r = await agent.turn({ input, session, attachments, source: 'api', onEvent: track, aware: tasks.awareText({ excludeId: task.id }) });
+        tasks.setStatus(task.id, r.error ? 'error' : 'done');
+        return json(res, 200, { ok: !r.error, task: task.id, ...r });
       }
       sseHead(res);
       const ac = new AbortController();
       res.on('close', () => ac.abort());
+      res.write(`event: task\ndata: ${JSON.stringify({ task: task.id, session, followup: Boolean(follow) })}\n\n`);
       try {
         const r = await agent.turn({
           input,
           session,
           attachments,
           source: 'ui',
-          onEvent: (ev) => res.write(`event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`),
+          aware: tasks.awareText({ excludeId: task.id }),
+          onEvent: (ev) => {
+            track(ev);
+            res.write(`event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`);
+          },
         });
-        res.write(`event: done\ndata: ${JSON.stringify({ ok: !r.error, steps: r.steps, tools: r.tools?.length || 0, usage: r.usage, moa: r.moa, job: r.job })}\n\n`);
+        tasks.setStatus(task.id, r.error ? 'error' : 'done');
+        res.write(`event: done\ndata: ${JSON.stringify({ ok: !r.error, task: task.id, steps: r.steps, tools: r.tools?.length || 0, usage: r.usage, moa: r.moa, job: r.job })}\n\n`);
       } catch (err) {
+        tasks.setStatus(task.id, 'error');
         res.write(`event: error\ndata: ${JSON.stringify({ message: err.message, hint: err.hint || null })}\n\n`);
       }
       return res.end();
@@ -281,8 +313,12 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     /* ---------- skrivningar ---------- */
     if (p === '/api/chat/stop' && req.method === 'POST') {
       const body = await readJson(req);
-      agent.stop(String(body.session || 'desktop'));
-      return json(res, 200, { ok: true });
+      /* stopping ONE task: everything else keeps running (autopilot test E) */
+      const sess = body.task != null ? tasks.sessionOf(body.task) : String(body.session || 'desktop');
+      if (body.task != null && !sess) return json(res, 404, { ok: false, error: `unknown task: ${body.task}` });
+      agent.stop(sess);
+      if (body.task != null) tasks.stop(body.task);
+      return json(res, 200, { ok: true, session: sess });
     }
     if (p === '/api/config' && (req.method === 'PATCH' || req.method === 'POST')) {
       const patch = await readJson(req);

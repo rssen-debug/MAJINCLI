@@ -1,0 +1,222 @@
+/** MAJIN — the autopilot core: one registry for every running task, plus the
+ * resource locks that stop two tasks from mangling one file.
+ *
+ * Why this module exists, in one paragraph: `agent.turn` already serializes
+ * per SESSION (two turns on one session must never split each other's context
+ * or half-write the shared history file), so an independent user message wants
+ * its own session — then parallel execution, isolated history and per-task
+ * stop all come free from the engine we already have. What was missing is the
+ * registry that names those sessions ("task t-x9s-3"), tracks what they are
+ * doing, and the locks that keep them from colliding on the machine. All of
+ * this is deterministic: queues, state and mutexes — zero LLM calls, zero
+ * hidden model switching, zero extra cost.
+ *
+ * The state machine is deliberately boring:
+ *
+ *      create → running ⇄ paused
+ *                     ⇄ waiting      (a resource or a user approval blocks it)
+ *                 └──────────────► done | error | stopped   (terminal)
+ *
+ * Every transition is timestamped. A task is addressable by id for its whole
+ * life — a follow-up message to an existing task is routed to the same
+ * session (and therefore the same serialized agent), never a duplicate.
+ */
+
+const MAX_EVENTS = 200;
+const TERMINAL = new Set(['done', 'error', 'stopped']);
+const STATUSES = new Set(['running', 'paused', 'waiting', 'done', 'error', 'stopped']);
+
+let seq = 0;
+
+export class TaskRegistry {
+  constructor() {
+    this.byId = new Map(); // id → task
+  }
+
+  /** Start tracking a new independent task. Returns the public record. */
+  create({ input = '', source = 'ui', task = null } = {}) {
+    const id = task || `t-${Date.now().toString(36)}-${++seq}`;
+    if (this.byId.has(id)) throw new Error(`task id already exists: ${id}`);
+    const now = Date.now();
+    const rec = {
+      id,
+      session: `task:${id}`, // session id handed to agent.turn — isolation rides on this
+      input: String(input).slice(0, 160),
+      source,
+      status: 'running',
+      created: now,
+      updated: now,
+      events: [],
+    };
+    this.byId.set(id, rec);
+    return rec;
+  }
+
+  get(id) {
+    return this.byId.get(String(id || '')) || null;
+  }
+
+  /** The session an existing task belongs to — follow-up routing uses this. */
+  sessionOf(id) {
+    const t = this.get(id);
+    return t ? t.session : null;
+  }
+
+  list() {
+    return [...this.byId.values()].sort((a, b) => b.created - a.created);
+  }
+
+  active() {
+    return this.list().filter((t) => !TERMINAL.has(t.status));
+  }
+
+  setStatus(id, status) {
+    const t = this.get(id);
+    if (!t) throw new Error(`unknown task: ${id}`);
+    if (!STATUSES.has(status)) throw new Error(`unknown status: ${status}`); // garbage never survives — even on terminal tasks
+    if (TERMINAL.has(t.status)) return t; // terminal tasks never move again
+    t.status = status;
+    t.updated = Date.now();
+    return t;
+  }
+
+  stop(id) {
+    const t = this.get(id);
+    if (!t) throw new Error(`unknown task: ${id}`);
+    if (!TERMINAL.has(t.status)) {
+      t.status = 'stopped';
+      t.updated = Date.now();
+    }
+    return t;
+  }
+
+  /** Keep a capped, timestamped trail of what the task emitted. */
+  event(id, type, data = null) {
+    const t = this.get(id);
+    if (!t || TERMINAL.has(t.status)) return;
+    t.events.push({ type: String(type), data, at: Date.now() });
+    if (t.events.length > MAX_EVENTS) t.events.splice(0, t.events.length - MAX_EVENTS);
+    /* coarse status from the event stream — approvals make a task WAIT, and
+       the next real step puts it back to work. No LLM involved. */
+    if (type === 'approval' || type === 'resource:wait') t.status = 'waiting';
+    else if (type === 'step' || type === 'tool' || type === 'delta') t.status = 'running';
+    t.updated = Date.now();
+  }
+
+  prune({ olderThanMs = 6 * 3600e3 } = {}) {
+    const cut = Date.now() - olderThanMs;
+    for (const [id, t] of this.byId) {
+      if (TERMINAL.has(t.status) && t.updated < cut) this.byId.delete(id);
+    }
+  }
+
+  /** What the API and the sibling-awareness prompt show. Files come from the
+      locks so an agent sees who holds what right now, not who said they would. */
+  snapshot() {
+    return this.list().map((t) => ({
+      id: t.id,
+      status: t.status,
+      input: t.input,
+      source: t.source,
+      created: t.created,
+      updated: t.updated,
+      locks: fileLocks.heldBy(t.session),
+      last: t.events.length ? t.events[t.events.length - 1].type : null,
+    }));
+  }
+
+  /** One compact line per active task, for the system prompt. Empty when quiet. */
+  awareText({ limit = 8, excludeId = null } = {}) {
+    const act = this.active().filter((t) => t.id !== excludeId).slice(0, limit);
+    if (!act.length) return '';
+    const lines = act.map((t) => {
+      const locks = fileLocks.heldBy(t.session);
+      const holding = locks.length ? `, holds ${locks.map((l) => base(l)).join('+')}` : '';
+      return `${t.id} [${t.status}] ${t.input.slice(0, 60)}${holding}`;
+    });
+    return lines.join('\n');
+  }
+}
+
+/** A resource lock per absolute path: FIFO waiters, owner re-entry, and a
+ * timeout so a crashed owner cannot park a file forever. Waiting happens per
+ * resource ONLY — a task queued on one file never blocks its other work, and
+ * never blocks another task that needs a different file. */
+export class FileLocks {
+  constructor() {
+    this.held = new Map();  // abs → { owner, since, count }
+    this.queue = new Map(); // abs → [resolve callbacks]
+  }
+
+  norm(key) {
+    return String(key || '').replace(/\\/g, '/');
+  }
+
+  async acquire(key, owner, { timeoutMs = 30000 } = {}) {
+    const k = this.norm(key);
+    const cur = this.held.get(k);
+    if (cur && cur.owner === owner) {
+      cur.count += 1; // same owner re-entering its own lock is safe
+      return () => this._releaseOne(k, owner);
+    }
+    if (!cur) {
+      this.held.set(k, { owner, since: Date.now(), count: 1 });
+      return () => this._releaseOne(k, owner);
+    }
+    /* someone else holds it: queue. One task waiting on ONE resource, everything
+       else keeps moving. */
+    return new Promise((resolve, reject) => {
+      const q = this.queue.get(k) || [];
+      const timer = setTimeout(() => {
+        const rest = (this.queue.get(k) || []).filter((w) => w !== waiter);
+        if (rest.length) this.queue.set(k, rest);
+        else this.queue.delete(k);
+        reject(new Error(`file lock timeout after ${timeoutMs}ms: ${k} (held by ${cur.owner})`));
+      }, timeoutMs);
+      const waiter = () => {
+        clearTimeout(timer);
+        this.held.set(k, { owner, since: Date.now(), count: 1 });
+        resolve(() => this._releaseOne(k, owner));
+      };
+      waiter.timer = timer;
+      q.push(waiter);
+      this.queue.set(k, q);
+    });
+  }
+
+  _releaseOne(k, owner) {
+    const cur = this.held.get(k);
+    if (!cur || cur.owner !== owner) return;
+    cur.count -= 1;
+    if (cur.count > 0) return;
+    this.held.delete(k);
+    const q = this.queue.get(k) || [];
+    const next = q.shift(); // FIFO — the one who waited longest gets it
+    if (q.length) this.queue.set(k, q);
+    else this.queue.delete(k);
+    if (next) next();
+  }
+
+  heldBy(owner) {
+    return [...this.held.entries()].filter(([, v]) => v.owner === owner).map(([k]) => k);
+  }
+
+  heldList() {
+    return [...this.held.entries()].map(([k, v]) => ({ path: k, owner: v.owner, since: v.since }));
+  }
+}
+
+const base = (p) => String(p).split('/').pop();
+
+/** Process-wide instances, like serialize.js: there is exactly one machine,
+    so there is exactly one registry and one lock table. */
+export const tasks = new TaskRegistry();
+export const fileLocks = new FileLocks();
+
+/** tests + diagnostics only */
+export function _resetAutopilot() {
+  tasks.byId.clear();
+  fileLocks.held.clear();
+  for (const q of fileLocks.queue.values()) for (const w of q) clearTimeout(w.timer);
+  fileLocks.queue.clear();
+}
