@@ -23,3 +23,19 @@ test('a pull request runs the real Windows build and smoke verifier without crea
   assert.match(wf, /if: \$\{\{ github\.event_name == 'workflow_dispatch'.*github\.event_name == 'push' \}\}/);
   assert.doesNotMatch(wf, /github\.com\/rssen-debug\/slurps\/releases/);
 });
+
+
+test('Windows verification prints version-safe publishing steps and never advertises an old repo', () => {
+  const ps = read('scripts/build-on-windows.ps1');
+  assert.doesNotMatch(ps, /rssen-debug\/slurps|v0\.1\.1|gh release create/, 'stale releases and wrong repo must never be recommended');
+  assert.match(ps, /\$Ci\) \{[\s\S]{0,130}pull request does not publish a GitHub release/, 'CI smoke tests do not publish releases');
+  assert.match(ps, /scripts\\publish\.ps1 -Version \$appVersion -Branch main/, 'publishing delegates to the existing safe script with current version');
+  assert.match(ps, /Get-Content \(Join-Path \$root 'package\.json'\)/, 'version is read from package.json rather than hardcoded');
+});
+
+test('CI actions use maintained Node 24-based action releases', () => {
+  const wf = read('.github/workflows/build-exe.yml');
+  assert.doesNotMatch(wf, /checkout@v4|setup-node@v4/, 'Node 20 based GitHub actions are deprecated');
+  assert.match(wf, /actions\/checkout@v5/);
+  assert.match(wf, /actions\/setup-node@v6/);
+});

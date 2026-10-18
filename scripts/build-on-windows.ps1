@@ -320,9 +320,15 @@ Write-Host ("  icon removed : " + $installState.iconGone)
 Write-Host ("  log          : " + $log)
 if ($fails -eq 0) {
   Write-Host "`n  MAJIN-Setup.exe is verified on this machine.`n" -ForegroundColor Green
-  Write-Host '  to publish it (needs gh, and the repo must exist on GitHub):'
-  Write-Host "    gh release create v0.1.1 '$setupExe' --title 'MAJIN 0.1.1' --notes-file NOTES.md"
-  Write-Host "    curl.exe -L -o MAJIN-Setup.exe https://github.com/rssen-debug/slurps/releases/download/v0.1.1/MAJIN-Setup.exe"
+  if ($Ci) {
+    Write-Host '  CI smoke test only: a pull request does not publish a GitHub release.'
+  } else {
+    $appVersion = [string]((Get-Content (Join-Path $root 'package.json') -Raw | ConvertFrom-Json).version)
+    Write-Host '  To publish a new version, first bump the app version and merge to main.'
+    Write-Host '  Then run this command from a clean checkout of main:'
+    Write-Host "    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\publish.ps1 -Version $appVersion -Branch main"
+    Write-Host "  Only after CI succeeds: https://github.com/rssen-debug/MAJINCLI/releases/tag/v$appVersion"
+  }
   Write-Host ''
   exit 0
 }
