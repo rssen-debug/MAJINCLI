@@ -27,8 +27,18 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 - **94 tools** (was 92). CI live step now also runs `test/jobs.live.test.js`.
 
 ### Fixat
+- **`openFor` navigated to `about:blank` on every tool reuse** (since the browser
+  foundation): `Page.navigate` returns at initiation, not arrival, so read-after-
+  open was an eval-vs-navigation coin flip — green twice, red twice, depending on
+  the runner's mood. The live gate caught the flake signature (both suites red in
+  the same minute, zero DOM): reuse now returns the handle without navigating,
+  and `goto` waits for the document before asking it anything. Source-pinned so
+  the race cannot return.
 - `extractContact` link capture returned the `www` group instead of the URL
   (linkedin/github always null) — found by the test.
+- jobs.live audit before first CI run: prepare is exec-level and would hang the
+  guard in the headless runner; both tools test-side auto-approved (risks stay
+  pinned).
 
 ### Verifierat
 - `node --test test/jobs.test.js` → 11 pass, 0 fail (state machine, dedupe,

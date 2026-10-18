@@ -208,11 +208,15 @@ async function httpJson(url, { timeoutMs = 5000 } = {}) {
 
 
 /** Launch (or reuse) the browser for ONE agent session and navigate it. */
-export async function openFor({ session, url = 'about:blank', headless = true, cfgGet = null, pool = null, exe = null, wsFactory = null } = {}) {
+export async function openFor({ session, url = null, headless = true, cfgGet = null, pool = null, exe = null, wsFactory = null } = {}) {
   session = String(session || 'default');
   const existing = sess.get(session);
   if (existing) {
-    await existing.goto(url);
+    /* reuse = obtain the handle, NOT navigate. Ever since f022c04 this
+       defaulted to 'about:blank' and raced the user's page away — tool
+       chaining (open → read → fill → click) lived or died on eval-vs-navigate
+       luck. Pinned by test: no goto here without an explicit url. */
+    if (url && url !== 'about:blank') await existing.goto(url);
     return existing;
   }
   const thePool = pool || createBrowserPool({ max: Number(cfgGet?.('browser.maxInstances')) || 3 });
@@ -273,6 +277,15 @@ export async function openFor({ session, url = 'about:blank', headless = true, c
   b.goto = async (u) => {
     await send('Page.enable');
     await send('Page.navigate', { url: u });
+    /* Page.navigate returns at initiation, never at arrival — wait until the
+       document actually answers, else every read-after-nav is a coin flip */
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      try {
+        const state = await b.eval('document.readyState');
+        if (state === 'interactive' || state === 'complete') break;
+      } catch { /* mid-navigation throws are normal */ }
+    }
     /* evidence first: report what the PAGE says happened, not what we asked for */
     const rs = await b.eval('document.readyState');
     const meta = await b.eval('(() => ({ url: location.href, title: document.title }))()');

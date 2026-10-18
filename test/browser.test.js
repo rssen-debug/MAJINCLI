@@ -110,3 +110,14 @@ test('the browser tools are registered with guard-approved risks and loop-journa
   assert.equal(r.ok, false);
   assert.equal(r.error.code, 'browser_closed');
 });
+
+test('openFor reuse never navigates the page away (the eval-vs-goto coin flip)', async () => {
+  /* the flake that ate two CI runs: reuse called goto('about:blank') on every
+     subsequent tool call; whether read returned h1 or void was a race. Source
+     pin: the reuse branch may only goto for an explicit, non-blank url. */
+  const src = (await import('node:fs')).readFileSync(new URL('../src/core/browser.js', import.meta.url), 'utf8');
+  const reuse = src.slice(src.indexOf('const existing = sess.get(session)'), src.indexOf('const thePool'));
+  assert.match(reuse, /if \(url && url !== 'about:blank'\)\s+await existing\.goto\(url\)/, 'reuse navigates ONLY on explicit url');
+  assert.doesNotMatch(reuse, /url = 'about:blank'/, 'no silent default navigation target');
+  assert.match(src, /Page\.navigate[\s\S]{0,400}document\.readyState/, 'goto waits for the document before asking questions');
+});
