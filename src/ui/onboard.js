@@ -314,10 +314,11 @@
 
   window.MAJIN_ONBOARD = {
     reopen() {
-      const st = OB.st || (window.S && window.S.st);
+      const st = (window.S && window.S.st) || OB.st;
       if (st) open(st);
     },
     maybe(st) {
+      OB.st = st;
       if (OB.shown) return;
       /* a dismissed wizard must not trap the user: Skip for now suppresses
          the auto-open for THIS session only — it always comes back on a
