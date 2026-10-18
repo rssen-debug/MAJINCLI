@@ -188,7 +188,7 @@ export const SUBMIT_SNIPPET = `(() => {
       }
     }
   }
-  if (!best) return { clicked: false, why: 'no control looked like a submit button' };
+  if (!best) return { clicked: false, why: 'no control looked like a submit button', candidates: cands.length, texts: cands.slice(0, 8).map((el) => text(el).slice(0, 40)) };
   best.scrollIntoView({ block: 'center' });
   const label = text(best).slice(0, 80);
   best.click();

@@ -72,7 +72,7 @@ test('live: open → read → fill → click-submit (server saw it) → read res
 
     /* 2 — read: the page's own text, not our assumption */
     const read = await T['browser.read'].run({ selector: 'h1' }, ctx);
-    assert.ok(read.ok && read.result.includes('mini application'), `read mismatch: ${read.result}`);
+    assert.ok(read.ok && read.result && read.result.includes('mini application'), `read mismatch: ${JSON.stringify(read)}`);
 
     /* 3 — fill: the page must KEEP the value */
     fs.mkdirSync(path.join(home, 'ws'), { recursive: true });

@@ -311,11 +311,16 @@ export const jobTools = [
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'the prepare browser was closed — jobs.prepare again to rebuild the exact form state' } };
       const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
       const before = await b.eval(TEXT_SNIPPET).catch(() => ({ url: '' }));
-      const click = await b.eval(SUBMIT_SNIPPET);
+      let click = await b.eval(SUBMIT_SNIPPET);
       if (!click || !click.clicked) {
-        transition(app, 'failed', { by: 'agent', evidence: { error: 'no submit control found on the form' } });
+        await new Promise((r) => setTimeout(r, 1500));
+        const again = await b.eval(SUBMIT_SNIPPET).catch(() => null);
+        if (again && again.clicked) click = again;
+      }
+      if (!click || !click.clicked) {
+        transition(app, 'failed', { by: 'agent', evidence: { error: 'no submit control found on the form', candidates: click && click.candidates, texts: click && click.texts } });
         await upsertApplication(app);
-        return { ok: false, error: { code: 'no_submit', message: 'no control on the page looked like a submit button', hint: 'the form may need you in a windowed browser — jobs.prepare with headless:false and finish by hand' } };
+        return { ok: false, error: { code: 'no_submit', message: 'no control on the page looked like a submit button (' + (click ? click.candidates + ' candidates: ' + JSON.stringify(click.texts || []) : 'eval failed') + ')', hint: 'the form may need you in a windowed browser — jobs.prepare with headless:false and finish by hand' } };
       }
       await new Promise((r) => setTimeout(r, 2300));
       try { await b.followNewTarget({ windowMs: 1200 }); } catch { /* single-page flow is fine */ }
