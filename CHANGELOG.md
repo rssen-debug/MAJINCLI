@@ -27,6 +27,10 @@ without saying so explicitly. Version tags map 1:1 to git tags.
   modellbyte-handoff, checkpoint efter full restart). Fail-first var 3 röda innan fixen.
 - Fullsvit 319/0/7, i18n grön, bench 7/7 oförändrad (p50 49ms).
 - Live-rerun mot qwen3:0.6b: mission 3/3 med heuristik-fallback (oförändrat beteende).
+- Live-rerun mot opencode Go free (longcat-2.5-preview-free) vidare: mission gate foerut missed
+  inline-numrering (1) (2) (3) → vanlig turn; nu: **3 worker_start + 3 worker_done + mission-event**
+  redder samme input. Proof: mission.test.js 7/7 (fail-first 1 roed innan), suite 321/0/7.
+  Ceres (1801, dvaer vp) / Vesuvius (AD 79) / Pacific (63 milj. sq mi).
 
 ### Fixat (tillägg samma kväll — opencode Go live)
 - **`majin.provider add` droppade preset-headers.** Gateway-presets som opencode

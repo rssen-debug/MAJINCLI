@@ -130,3 +130,30 @@ test('agent.turn: enkelfråga tas ALDRIG den mission-vägen (GENESIS ZERO intakt
   assert.match(r.text || '', /Stockholm/);
   await rt.shutdown();
 });
+
+test('inline-numrerede lister udloser også mission (bug: radbrudnende krav missade)', () => {
+  const cases = [
+    'I need three things: (1) name one asteroid, (2) name one volcano, (3) name one ocean.',
+    'Research three things and report back: 1) find the population of Tokyo 2) find the newest Mars rover 3) name the deepest ocean trench.',
+    'Todo: (a) write the report (b) compress the folder (c) send the summary',
+  ];
+  for (const input of cases) {
+    const r = shouldMission(input);
+    assert.ok(r.mission, `ska utlosa mission pa inline-nummering: ${input.slice(0, 60)}... (fick "${r.reason}")`);
+    assert.ok(/item|segment/i.test(r.reason), `reason ska forklara matchen, fick "${r.reason}"`);
+  }
+  const no = shouldMission('Read the report, summarize it.');
+  assert.equal(no.mission, false, 'tva små korta far aldrig klaring mission');
+});
+
+test('compiler-fallback for inline-listor: sma modeller som inte kan JSON delar anda upp missionen', async () => {
+  const { compileMission } = await import('../src/core/mission.js');
+  const cfg = await (await import('../src/core/config.js')).load();
+  cfg.patch({ models: { routes: { tasks: 'demo/demo-fast' } }, providers: { demo: { kind: 'mock', apiKey: 'demo' } } }, { persist: false });
+  setScript('mission:compile', [{ text: 'igenkanlig: ingen json, bara dannor!' }]);
+  const graph = await compileMission('Help woth three things: (1) name one asteroid, (2) name one volcano, (3) name one ocean.', { cfg });
+  assert.equal(graph.kind, 'mission', JSON.stringify(graph).slice(0, 160));
+  assert.equal(graph.origin, 'heuristic-fallback', 'markerar at reserven gav grafen');
+  assert.equal(graph.nodes.length, 3, JSON.stringify(graph.nodes.map((n) => n.input)));
+  assert.ok(/asteroid/.test(graph.nodes[0].input) && /ocean/.test(graph.nodes[2].input));
+});

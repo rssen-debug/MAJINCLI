@@ -6,6 +6,19 @@ allowed to contradict a test.
 
 ## Valt
 
+- **Inline-lista utlöser också mission.** Människor skriver "(1) x, (2) y, (3) z"
+  i EN rad lika ofta som de radbrutar en lista; den radbrudna ankar-heuristikken
+  gick förebi alla numreringar inuti en rad, så compilern såg dem aldrig.
+  Nu extraheras inline-items deterministiskt (samma marker-familj, steg-stigande
+  sekvens från 1/a, minst 3 items, så att decimaler och struntord stoppas)
+  — utan modell-kall. Cost: en extra regex-pass per turn (~0,01 ms); payoff:
+  mission trigger täcker en av de vanligaste människoformuleringarna av mål.
+  Proof: `test/mission.test.js` fail-first röd före, grön efter; live-run på
+  opencode Go visade exakt samma input → 3 worker_start + 3 worker_done + mission.
+- **Compiler-fallbacken for inline-listor följer samma extraktion.** En mission
+  triggad av inline-lista får aldrig degraderas tillbaka för att modellen bara
+  kan text. Utrostring: heuristicNodes delar inline-items samma väg som line-list.
+
 - **Preset-headrar hljer med verktyg-vagen, inte bara UI.** `majin.provider add` med preset
   kopierar preset `headers` in i config (opencode Go gatewayen 400:ar utan x-opencode-session).
   Cost: inget; payoff: agenter kan onboarda gateway-presets utan att användaren måste öppna
