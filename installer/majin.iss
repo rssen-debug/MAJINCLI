@@ -87,7 +87,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Filename: "{app}\{#MyAppExeName}"; Parameters: "start --no-window"; Description: "Start {#MyAppName} now"; WorkingDir: "{app}"; Flags: nowait postinstall runhidden skipifsilent
 ; runhidden on the exe itself — NO wscript in this chain (a .vbs is not a Win32
 ; program, that was the user's CreateProcess 193). And skipifsilent STAYS:
-; CI-proven twice in the v0.5.4 runs that a silent install which starts the
+; CI-proven twice in the v0.5.3 runs that a silent install which starts the
 ; app from postinstall hangs the setup process until the job timeout kills it
 ; (orphan majin-win-x64 + conhost in the job log). Silent-update relaunch is
 ; instead the updater's own PowerShell watchdog in src/core/update.js —
