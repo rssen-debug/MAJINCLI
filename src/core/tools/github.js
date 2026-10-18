@@ -132,7 +132,7 @@ function native(cmd, args, cwd, timeoutMs=120_000) {
     let out='',err='',complete=false,killed=false,child;
     const finish=(result)=>{if(complete)return;complete=true;clearTimeout(timer);resolve(result)};
     try{child=spawn(cmd,args,{cwd,windowsHide:true,stdio:['ignore','pipe','pipe'],
-      env:{...process.env,CI:'1',NO_COLOR:'1',npm_config_audit:'false',npm_config_fund:'false'}});}
+      env:{...Object.fromEntries(['PATH','Path','HOME','USERPROFILE','APPDATA','LOCALAPPDATA','TEMP','TMP','SYSTEMROOT','SystemRoot','WINDIR','NODE_OPTIONS'].filter(k=>k!=='NODE_OPTIONS' && process.env[k]).map(k=>[k,process.env[k]])),CI:'1',NO_COLOR:'1',npm_config_audit:'false',npm_config_fund:'false'}});}
     catch(e){return resolve({ok:false,exitCode:-1,reason:e.message})}
     const timer=setTimeout(()=>{killed=true;child.kill?.('SIGKILL')},timeoutMs);
     timer.unref?.();
