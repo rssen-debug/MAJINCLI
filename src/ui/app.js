@@ -257,7 +257,7 @@ async function send(text) {
   S.busy = true;
   S.t0 = Date.now();
   $('send').classList.add('busy');
-  $('send').textContent = 'STOP';
+  $('send').textContent = 'Stop';
   setStatus('working…');
   const ac = new AbortController();
   S.abort = ac;
@@ -299,7 +299,7 @@ async function send(text) {
     S.busy = false;
     S.abort = null;
     $('send').classList.remove('busy');
-    $('send').textContent = 'RUN';
+    $('send').textContent = 'Send →';
     setStatus('ready');
     refresh(true);
   }
@@ -954,7 +954,7 @@ function showWelcome() {
   const title = document.createElement('h2');
   title.append(document.createTextNode('What can I help you '));
   const strong = document.createElement('strong');
-  strong.textContent = 'create?';
+  strong.textContent = 'achieve?';
   title.append(strong);
   welcome.append(title);
   const sub = document.createElement('p');
