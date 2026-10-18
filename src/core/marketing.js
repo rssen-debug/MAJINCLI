@@ -36,7 +36,7 @@ export function marketingStatus(cfg) {
   const envMatch = /^\{env:([A-Z0-9_]+)\}$/.exec(key);
   const tokenReady = envMatch ? Boolean(process.env[envMatch[1]]) : Boolean(key.trim());
   return {
-    connected: tokenReady && Boolean(c.meta?.accountId),
+    connected: tokenReady && checkMarketingConfig(c).length === 0,
     accountId: c.meta?.accountId || '',
     currency: c.meta?.currency || '',
     economics: c.economics || {},
@@ -180,4 +180,16 @@ export async function analyzeMetaAccount(cfg, opts = {}) {
   const settings = cfg.get('marketing') || {};
   const rows = await fetchMetaInsights(settings, opts);
   return analyzeMarketing(rows, settings);
+}
+
+// This is a small deterministic intent filter, not an extra LLM call.
+// It only handles explicit requests to operate on advertising, not generic
+// educational questions such as "what is marketing?".
+export function wantsMarketingSetup(input) {
+  const s = String(input || '').trim().toLowerCase();
+  if (s.length > 6000) return false;
+  const platform = /\b(meta|facebook|instagram|fb)\b/.test(s);
+  const adWords = /(ads|annonser|annons|kampanj|campaign|reklam|marknadsföring|marketing)/.test(s);
+  const actionable = /(analy[sz]|optim|sköt|hantera|granska|marknadsför|annonser|köp|reklam|kör|starta|förbättra|manage|run|improve|audit|review)/.test(s);
+  return (platform && adWords && actionable) || (/(mina annonser|min facebook-marknadsföring|my facebook ads|my meta ads)/.test(s) && actionable);
 }
