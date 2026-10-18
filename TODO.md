@@ -12,11 +12,13 @@ autopilot/teamwork/dashboard additions).
   pause/resume (registry states exist; the loop does not), and a live `/api/tasks` deck for
   channel-started tasks. Natural-language routing stays in Medel until the parse is designed.
   *(källa: master brief §"TRUE PARALLEL AUTOPILOT")*
-- **Browser-use robustness.** Playwright path already exists; it is NOT verified for real work:
-  stuck loops, retries, recovery, per-agent isolated browser contexts (locks for browser
-  instances the way files are locked now), checkbox/form/upload handling, screenshot evidence
-  before "done". *(källa: master brief §2B + §"the honest grid" — "browser-use: inte
-  färdigverifierat")*
+- **Browser-use — foundation done 2026-10-18.** CDP, six tools, slot pool, loop guard,
+  evidence-everywhere, all deterministic parts tested (189/0). Remaining for the full claim:
+  (1) wire a real Chrome/Edge agent turn into CI Windows (headless — click + fill on a test
+  page, screenshot proof), (2) `browser.upload` (DOM.setFileInputFiles) for CV-type flows,
+  (3) smarttab: follow the first navigation after a click even when it is a new target,
+  (4) recovery cookbook in the system prompt (read → narrower selector → shot → ask).
+  *(källa: master brief §2B)*
 - **Cost truth.** `pricing` only has DeepSeek entries — every other provider reports $0 by
   design. Kilo/OpenRouter `/models` answers carry per-model pricing: import it during model
   discovery instead of curating by hand, then slice-2's cost chip + the real budget cap

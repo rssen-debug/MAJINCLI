@@ -67,6 +67,14 @@ allowed to contradict a test.
   surface a browser here cannot smoke-test. Cost: parallel answers live inside their cards
   instead of being merged into the vertical timeline — acceptable until the first human round
   says otherwise.
+- **Browser-use = CDP against the browser already installed.** No bundled Chromium, no
+  Playwright dependency, no Python: Node≥22's built-in fetch+WebSocket speaks the DevTools
+  Protocol. One window + one profile per agent session (isolation by construction, never
+  shared tabs), fleet cap via the existing task locks, a deterministic 3-identical-actions
+  loop guard, and evidence (page words, stuck values, real screenshots) in every tool answer.
+  Cost: less API sugar than Playwright (we hand-roll ~6 well-chosen primitives instead of 200
+  methods); a CDP wire test against a real browser is still owed on CI Windows. Proof:
+  `test/browser.test.js` 6/6; `no-dead-tools` 4/4 at 84 tools.
 - **Deferred-but-chosen product order:** browser-use reliability, parallel agents (done,
   backend), verification — then natural-language teamwork, ETA from real telemetry, the job
   agent — *then* Living Missions. Not because Missions are uninteresting; because Missions on
@@ -97,6 +105,7 @@ allowed to contradict a test.
 - **The global `S.busy` gate as the parallelism story.** It prevents exactly zero backend
   races (serialization already does per session) while making real multitasking impossible in
   the window. Removal scheduled with the task-card UI (TODO Hög prioritet).
+- **Bundling Playwright/Chromium** (≈300 MB engine in a 97 MB install): same reason as below, plus it would leave two click-paths to maintain.
 - **Importing browser-use/computer-use frameworks wholesale** (Python ecosystems): would break
   the "no Python dependency" rule from VNEXT §13. Patterns (Agent-Reach doctor, Playwright MCP
   context isolation) are taken; frameworks are not.

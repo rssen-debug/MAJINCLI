@@ -5,6 +5,38 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (browser-use foundation) — the agent drives the browser that is already on the machine
+
+### Ändrat
+- **New module `src/core/browser.js`** — CDP (Chrome DevTools Protocol) over Node≥22's built-in
+  `fetch`+`WebSocket`, against the Chrome or Edge the user already has. No npm dependency,
+  no bundled rendering engine, no Python. Everything WebSocket-shaped is lazily constructed, so
+  the module loads on older runtimes and fails with a sentence, not a crash.
+- **Six tools** (`browser.open/read/click/fill/shot/close`, group `web`): one window with one
+  profile directory per agent session (isolation by construction — two agents never share a tab),
+  global fleet cap via the task-layer locks (`browser.maxInstances`, default 3 — a fourth session
+  queues honestly), `exec`-risk labeling so guarded mode asks before acting.
+- **Deterministic loop guard**: `journal.guard()` throws on the third identical consecutive
+  browser action — the stuck-42-retries pattern dies in code, not in retries with better luck.
+- **Evidence in every answer**: click returns element tag+text and the URL after the click,
+  fill returns that the value stuck in the page, read returns the page's own words, shot saves
+  a real PNG in the workspace. Nothing reports "done" on faith.
+- Tool count 78 → **84** (pins moved accordingly).
+
+### Fixat
+- Browser-use existed only as "open the user's default browser" (`majin.ui`) — the brief's
+  agent-driven click/fill/verify did not exist at all. Now it does, with autopilot-safe
+  isolation (test G requirement) designed in from the first line.
+
+### Verifierat
+- `node --test`: **189 pass / 0 fail / 4 skipped**. `test/browser.test.js` 6/6: loop guard
+  (3-in-a-row throws, intervening action resets, sessions isolated), slot pool (FIFO claim,
+  honest "all busy" on cap-exceeded, idempotent re-claim, full release), discovery tables
+  (platform candidates, honest null), closed-fleet answers sentences.
+- `node --test test/no-dead-tools.test.js`: 4/4 — all six tools complete + model-visible.
+- NOT yet verified against a real browser end-to-end on CI Windows (chromium-headless agent
+  turn) — tracked in TODO Hög prioritet; the CDP wire is thin but unproven by suite.
+
 ## 2026-10-18 (autopilot UI) — the S.busy wall is down
 
 ### Ändrat

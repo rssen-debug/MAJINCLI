@@ -30,6 +30,8 @@ export const DEFAULTS = {
   version: 1,
   name: 'MAJIN',
   workspace: null,
+  /* browser-use: one window per agent task, a capped fleet for the whole machine */
+  browser: { maxInstances: 3, rpcTimeoutMs: 20000 },
   persona: {
     identity:
       "MAJIN — a personal agent running directly on the user's own machine (Windows first). You talk briefly, in the language the user writes in, and you never explain what you are about to do before you have done it.",

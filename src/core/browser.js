@@ -1,0 +1,307 @@
+/** MAJIN — real browser-use over the Chrome DevTools Protocol.
+ *
+ * Design contract (DECISIONS.md): we control the browser the user already
+ * HAS (Edge ships with every Windows, Chrome elsewhere) instead of shipping
+ * a bundled rendering engine or a Python framework. Node ≥ 22's built-in
+ * fetch + WebSocket are enough to speak CDP; everything WebSocket-shaped
+ * in this module is lazily created at first real use so the module loads on
+ * older runtimes too — a browser action on such a runtime gets a human
+ * sentence, not a crash.
+ *
+ * AUTOPILOT rules baked in (master brief):
+ *   - Every agent session owns its OWN browser instance with its OWN
+ *     profile directory — two agents can never click in each other's tabs
+ *     (test G), because they never share a surface.
+ *   - Concurrent instances are capped (config browser.maxInstances, the
+ *     slots are process-wide and locked); a fourth session queues instead
+ *     of spawning a splash of windows.
+ *   - Loop guard: the same action signature three times in a row with the
+ *     same outcome = we are stuck; the tool throws an honest error rather
+ *     than clicking itself into seventy identical failures.
+ *   - Evidence before confidence: every action tool answers with the page's
+ *     own words (element text, value that stuck, URL the click produced),
+ *     never a bare "done".
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { dirs } from './paths.js';
+import { fileLocks } from './tasks.js';
+
+/* ------------------------------ loop guard ------------------------------ */
+
+export class LoopJournal {
+  constructor({ window = 8 } = {}) {
+    this.window = window;
+    this.bySession = new Map();
+  }
+
+  /** A signature is (tool, target, args). Throws LoopStuckError after three
+      identical consecutive actions with the same outcome — deterministic,
+      zero-LLM stuck-loop detection. */
+  guard(session, signature, outcome = '') {
+    const k = String(session || 'default');
+    const list = this.bySession.get(k) || [];
+    const last3 = list.slice(-2);
+    if (last3.length === 2 && last3.every((e) => e.sig === signature && e.outcome === outcome)) {
+      throw new Error(
+        `browser loop detected: "${signature}" already ran 3 times in a row with the same result — change the approach (new selector, new step, or ask the user) instead of clicking it a fourth time`,
+      );
+    }
+    list.push({ sig: signature, outcome, at: Date.now() });
+    if (list.length > this.window) list.splice(0, list.length - this.window);
+    this.bySession.set(k, list);
+  }
+
+  acts(session) {
+    return [...(this.bySession.get(String(session || 'default')) || [])];
+  }
+}
+
+export const journal = new LoopJournal();
+
+/* --------------------------- browser discovery --------------------------- */
+
+/** Candidate executables per platform, in sanity order. Kept as data so a
+    test can read the table without touching the filesystem. */
+export function browserCandidates(platform = process.platform, env = process.env) {
+  if (platform === 'win32') {
+    const pf = env['ProgramFiles'] || 'C:\\Program Files';
+    const pfx = env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+    const local = env.LOCALAPPDATA || 'C:\\Users\\user\\AppData\\Local';
+    return [
+      `${pfx}\\Microsoft\\Edge\\Application\\msedge.exe`,
+      `${pf}\\Microsoft\\Edge\\Application\\msedge.exe`,
+      `${pf}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${pfx}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${local}\\Google\\Chrome\\Application\\chrome.exe`,
+    ];
+  }
+  if (platform === 'darwin') {
+    return ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge', '/usr/bin/chromium'];
+  }
+  return ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/snap/bin/chromium', '/usr/bin/microsoft-edge'];
+}
+
+export function findBrowser(candidates = browserCandidates()) {
+  for (const c of candidates) if (fs.existsSync(c)) return c;
+  return null;
+}
+
+/* ------------------------------ slot pool -------------------------------- */
+
+/** maxInstances concurrent browsers, process-wide. Slots are fileLocks on
+    `browser:slot:N` — a waiting agent waits for a SLOT to free, never for
+    every other task (same semantics as file conflicts). */
+export function createBrowserPool({ locks = fileLocks, max = 3 } = {}) {
+  const held = new Map(); // session → { slot, release }
+  return {
+    async claim(session, { timeoutMs = 0 } = {}) {
+      const k = String(session || 'default');
+      if (held.has(k)) return held.get(k).slot;
+      for (let n = 1; n <= max; n += 1) {
+        try {
+          const release = await locks.acquire(`browser:slot:${n}`, k, { timeoutMs });
+          const rec = { slot: n, release };
+          held.set(k, rec);
+          return n;
+        } catch {
+          /* slot busy — try the next */
+        }
+      }
+      throw new Error(`all ${max} browser instances are busy — finish or close one of the running browser tasks and try again`);
+    },
+    release(session) {
+      const rec = held.get(String(session || 'default'));
+      if (rec) {
+        rec.release();
+        held.delete(String(session || 'default'));
+      }
+      return Boolean(rec);
+    },
+    slotOf(session) {
+      return held.get(String(session || 'default'))?.slot || null;
+    },
+    count: () => held.size,
+    max: () => max,
+  };
+}
+
+/* ------------------------------ CDP client ------------------------------- */
+
+const RPC_TIMEOUT_MS = 20000;
+
+async function wsConnect(wsUrl, factory) {
+  const make = factory || ((u) => new globalThis.WebSocket(u));
+  if (typeof make !== 'function' || (factory == null && typeof globalThis.WebSocket !== 'function')) {
+    throw new Error('this runtime has no built-in WebSocket (needs node ≥22 — the packaged MAJIN exe already has one)');
+  }
+  const ws = make(wsUrl);
+  await new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('browser debug port never answered (10 s)')), 10000);
+    ws.onopen = () => {
+      clearTimeout(t);
+      resolve();
+    };
+    ws.onerror = () => {
+      clearTimeout(t);
+      reject(new Error('could not open the browser debug connection'));
+    };
+  });
+  return ws;
+}
+
+function cdpRpc(ws) {
+  let id = 0;
+  const waiting = new Map();
+  ws.onmessage = (msg) => {
+    let ev;
+    try {
+      ev = JSON.parse(typeof msg.data === 'string' ? msg.data : String(msg.data));
+    } catch {
+      return;
+    }
+    const w = waiting.get(ev.id);
+    if (w) {
+      waiting.delete(ev.id);
+      if (ev.error) w.reject(new Error(ev.error.message || 'CDP error'));
+      else w.resolve(ev.result || {});
+    }
+  };
+  return (method, params = {}, { timeoutMs = RPC_TIMEOUT_MS, sessionId = null } = {}) => {
+    id += 1;
+    ws.send(JSON.stringify(sessionId ? { id, method, params, sessionId } : { id, method, params }));
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => {
+        waiting.delete(id);
+        reject(new Error(`CDP timeout after ${timeoutMs}ms on ${method}`));
+      }, timeoutMs);
+      waiting.set(id, {
+        resolve: (v) => {
+          clearTimeout(t);
+          resolve(v);
+        },
+        reject: (e) => {
+          clearTimeout(t);
+          reject(e);
+        },
+      });
+    });
+  };
+}
+
+/* --------------------------- browser session ----------------------------- */
+
+const sess = new Map(); // sessionId (agent session) → live browser, own window + own profile
+
+function profileFor(session) {
+  return path.join(dirs.cache, 'browser-' + String(session).replace(/[^\w.-]/g, '_'));
+}
+
+async function httpJson(url, { timeoutMs = 5000 } = {}) {
+  const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), redirect: 'follow' });
+  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  return r.json();
+}
+
+
+
+/** Launch (or reuse) the browser for ONE agent session and navigate it. */
+export async function openFor({ session, url = 'about:blank', headless = true, cfgGet = null, pool = null, exe = null, wsFactory = null } = {}) {
+  session = String(session || 'default');
+  const existing = sess.get(session);
+  if (existing) {
+    await existing.goto(url);
+    return existing;
+  }
+  const thePool = pool || createBrowserPool({ max: Number(cfgGet?.('browser.maxInstances')) || 3 });
+  const slot = await thePool.claim(session);
+  const bin = exe || findBrowser();
+  if (!bin) {
+    thePool.release(session);
+    throw new Error('found no Chrome or Edge on this machine — install one of them and MAJIN can drive it');
+  }
+  const profile = profileFor(`${session}-s${slot}`);
+  fs.mkdirSync(profile, { recursive: true });
+  const port = randomPort();
+  const args = [
+    `--remote-debugging-port=${port}`,
+    `--user-data-dir=${profile}`,
+    '--no-first-run', '--no-default-browser-check', '--disable-popup-blocking',
+  ];
+  if (headless !== false) args.push('--headless=new');
+  args.push('about:blank');
+  const proc = spawn(bin, args, { detached: false, stdio: 'ignore' });
+  const base = `http://127.0.0.1:${port}`;
+  let version = null;
+  const deadline = Date.now() + 10000;
+  while (Date.now() < deadline) {
+    try {
+      version = await httpJson(`${base}/json/version`, { timeoutMs: 1200 });
+      break;
+    } catch {
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+  if (!version || !version.webSocketDebuggerUrl) {
+    try { if (!proc.killed) proc.kill(); } catch { /* gone */ }
+    thePool.release(session);
+    throw new Error('the browser debug port never came up — the browser may be blocked by a policy on this machine');
+  }
+  const ws = await wsConnect(version.webSocketDebuggerUrl, wsFactory);
+  const cdp = cdpRpc(ws);
+  const sendRaw = ({ sessionId = null, method, params = {} }, opts = null) =>
+    cdp(method, params, { sessionId, ...(opts || {}) });
+
+  /* flat-mode attach: protocol messages carry the sessionId on the same
+     websocket — the modern CDP layout, no nested sendMessageToTarget */
+  const { targetId } = await cdp('Target.createTarget', { url: 'about:blank' });
+  const { sessionId } = await cdp('Target.attachToTarget', { targetId, flatten: true });
+  const send = (method, params = {}, opts = null) => sendRaw({ sessionId, method, params }, opts);
+
+  const close = () => {
+    try { ws.close(); } catch { /* gone */ }
+    try { if (!proc.killed) proc.kill(); } catch { /* gone */ }
+    thePool.release(session);
+    sess.delete(session);
+  };
+  const b = { session, sessionId, send, goto: null, eval: null, close, proc, slot };
+  b.goto = async (u) => {
+    await send('Page.enable');
+    await send('Page.navigate', { url: u });
+    /* evidence first: report what the PAGE says happened, not what we asked for */
+    const rs = await b.eval('document.readyState');
+    const meta = await b.eval('(() => ({ url: location.href, title: document.title }))()');
+    return { readyState: rs, ...meta };
+  };
+  b.eval = async (expression) => {
+    const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+    if (r.exceptionDetails) throw new Error(String(r.exceptionDetails.text || 'evaluate threw'));
+    return r.result ? r.result.value : undefined;
+  };
+  await b.goto(url);
+  sess.set(session, b);
+  return b;
+}
+
+const randomPort = () => 49152 + Math.floor(Math.random() * 12000);
+
+export function isOpen(session) {
+  return sess.has(String(session || 'default'));
+}
+
+/** Close this task's browser (if any) and hand its slot back to the fleet. */
+export function closeFor(session) {
+  const b = sess.get(String(session || 'default'));
+  if (!b) return false;
+  try { b.close?.(); } catch { /* gone */ }
+  return true;
+}
+
+/** tests + diagnostics only */
+export function _resetBrowser() {
+  for (const b of sess.values()) { try { b.close?.(); } catch { /* gone */ } }
+  sess.clear();
+  journal.bySession.clear();
+}
