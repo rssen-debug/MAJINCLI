@@ -70,7 +70,7 @@ export function analyzeMarketing(rows, settings) {
   if (economics.targetCpa <= 0) return { ok: false, errors: ['No room for acquisition cost after costs and minimum profit reserve.'] };
   const expectedCurrency = settings.meta.currency;
   const returnedCurrencies = [...new Set(rows.map((r) => String(r.account_currency || '').toUpperCase()).filter(Boolean))];
-  if (returnedCurrencies.length !== 1 || returnedCurrencies[0] !== expectedCurrency) {
+  if (rows.length && (returnedCurrencies.length !== 1 || returnedCurrencies[0] !== expectedCurrency)) {
     return { ok: false, errors: ['Meta account currency is missing or differs from ' + expectedCurrency + '. Refusing to compare unverified currency values.'] };
   }
   const campaigns = rows.map((r) => {
@@ -130,7 +130,7 @@ export function analyzeMarketing(rows, settings) {
       overAdvisoryCap: avgDailySpend > settings.economics.dailyCap,
     },
     campaigns,
-    safety: 'Read-only. No campaigns, bids, or budgets changed. Budget cap is an advisory comparison, not an enforced Meta Ads spending limit.',
+    safety: 'Read-only. No campaigns, bids, or budgets changed. Budget cap is an advisory comparison, not an enforced Meta Ads spending limit.' + (rows.length ? '' : ' No campaign data exists yet; reporting currency could not be independently verified.'),
     nextStep: 'Verify orders and refunds in your shop; review proposals manually before making any Meta changes.',
   };
 }
