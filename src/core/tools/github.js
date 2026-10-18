@@ -122,8 +122,80 @@ export async function githubResearch({ action = 'search', query = '', repo = '',
   return value;
 }
 
+/**
+ * Mandatory local quality gate for MAJIN self-extension. No shell strings,
+ * no auto commit, no network, no PR or merge. Subprocess execution requires
+ * the standard user authorization from the tool registry (risk=exec).
+ */
+function native(cmd, args, cwd, timeoutMs=120_000) {
+  return new Promise(resolve=>{
+    let out='',err='',complete=false,killed=false,child;
+    const finish=(result)=>{if(complete)return;complete=true;clearTimeout(timer);resolve(result)};
+    try{child=spawn(cmd,args,{cwd,windowsHide:true,stdio:['ignore','pipe','pipe'],
+      env:{...process.env,CI:'1',NO_COLOR:'1',npm_config_audit:'false',npm_config_fund:'false'}});}
+    catch(e){return resolve({ok:false,exitCode:-1,reason:e.message})}
+    const timer=setTimeout(()=>{killed=true;child.kill?.('SIGKILL')},timeoutMs);
+    timer.unref?.();
+    const append=(chunk,stream)=>{const cur=stream==='out'?out:err;const next=(cur+String(chunk)).slice(-6500);if(stream==='out')out=next;else err=next;};
+    child.stdout?.on('data',c=>append(c,'out'));
+    child.stderr?.on('data',c=>append(c,'err'));
+    child.on('error',e=>finish({ok:false,exitCode:-1,reason:e.message}));
+    child.on('close',code=>finish({ok:code===0&&!killed,exitCode:code,killed,
+      stdout:out.slice(-2800),stderr:err.slice(-1800)}));
+  });
+}
+export async function verifyCapability({dir='',runTests=false}={}, {nativeRun=native,cwd=process.cwd()}={}) {
+  const root=path.resolve(dir||cwd);
+  const git=await nativeRun('git',['rev-parse','--show-toplevel'],root,12000);
+  if(!git.ok)return {ok:false,reason:'Not a Git checkout. Clone MAJIN to a worktree before writing code.'};
+  const top=path.resolve(String(git.stdout||'').trim());
+  if(top!==root)return {ok:false,reason:'Point dir to the Git checkout root (not a subdirectory).'};
+  const branch=await nativeRun('git',['branch','--show-current'],root,12000);
+  const current=String(branch.stdout||'').trim();
+  if(!branch.ok||!current||['main','master'].includes(current))return {
+    ok:false,reason:'Refusing to modify/test an unreviewed feature directly on main. Create a separate branch first.',branch:current,
+  };
+  const files=await nativeRun('git',['status','--porcelain','-uno'],root,12000);
+  if(!files.ok)return {ok:false,reason:'Cannot read Git worktree status.'};
+  const manifest=await nativeRun(process.execPath,['-e',
+    "const fs=require('node:fs');const p=require('./package.json');process.exit(p.name==='majin'&&fs.existsSync('scripts/parse-all.js')&&fs.existsSync('test')?0:1)"],root,12000);
+  if(!manifest.ok)return {ok:false,reason:'Not a MAJIN source checkout with the expected test harness.'};
+  const filesChanged=String(files.stdout||'').trim().split('\n').filter(Boolean).length;
+  const report={ok:true,repoRoot:root,branch:current,filesChanged,steps:[],checksRun:runTests?'all':'none',
+    warning: 'An automated test gate is necessary but does not prove third-party code safety or real-world performance. Do not merge without human approval and review.'};
+  if(!runTests)return report;
+  const steps=[['parse',process.execPath,['scripts/parse-all.js']],['i18n',process.execPath,['scripts/i18n-check.mjs']],['unit',process.execPath,['--test']]];
+  for(const [label,exe,args] of steps){
+    const res=await nativeRun(exe,args,root,120000);
+    report.steps.push({name:label,ok:res.ok,exitCode:res.exitCode,timedOut:Boolean(res.killed),
+      details:String(res.ok?res.stdout||'':res.stderr||res.stdout||res.reason||'').slice(-1600)});
+    if(!res.ok){report.ok=false;report.reason=label+' verification failed; do not commit, push or merge.';break;}
+  }
+  const after=await nativeRun('git',['branch','--show-current'],root,12000);
+  if(String(after.stdout||'').trim()!==current){report.ok=false;report.reason='Git branch changed during verification; another agent may be operating on the checkout.';}
+  return report;
+}
+
 export const githubTools = [
   def({
+    name:'github.verify',
+    group:'github',
+    risk:'exec',
+    desc:'Self-extension quality gate: on a dedicated MAJIN Git feature branch, verify source checkout and optionally RUN REAL parse, localization and Node test suites with timeouts. Never automatically installs packages, pushes, publishes, merges or trades. Call after implementing a new capability; if ANY check fails, fix before preparing a reviewable PR. Requires execution approval.',
+    params:{
+      dir:'string: absolute MAJIN Git checkout root (optional, defaults to working directory)',
+      runTests:'boolean: run all checks, default false for cheap preflight',
+    },
+    async run({dir='',runTests=false}){
+      try{
+        const r=await verifyCapability({dir,runTests:Boolean(runTests)});
+        return {ok:r.ok,result:JSON.stringify(r,null,2),
+          ...(r.ok?{}:{error:{code:'verification_failed',message:r.reason||'Verification failed'}}),
+          meta:{branch:r.branch||null,checksRun:r.checksRun||'none'},
+          summary:r.ok?'MAJIN feature branch verified; '+r.checksRun+' checks':'MAJIN capability verification failed. Do not merge.'};
+      }catch(e){return {ok:false,error:{code:'verify_error',message:e.message}};}
+    },
+  }),  def({
     name: 'github.research',
     group: 'github',
     risk: 'read',
