@@ -267,3 +267,18 @@ test('update checks point at the live repo, and a legacy default is migrated', (
   assert.equal(migrated.repo, 'MAJINCLI', 'the old archived repo no longer swallows update checks');
   assert.deepEqual(writes, [['updates.repo', 'rssen-debug/MAJINCLI']], 'and the fix is persisted so it only happens once');
 });
+
+test('the silent-update relaunch is a real watchdog script, byte-verified', () => {
+  const pid = 4711;
+  const encoded = U.relaunchCommand(pid);
+  /* decode exactly the way PowerShell -EncodedCommand will read it */
+  const script = Buffer.from(encoded, 'base64').toString('utf16le');
+  const fresh = U.relaunchScript(pid);
+  assert.equal(script, fresh, 'base64 roundtrip must be lossless — a mangled watchdog silently never relaunches the app');
+  assert.match(script, /Get-Process -Id 4711/, 'it waits for the installer process');
+  assert.match(script, /AddMinutes\(15\)/, 'a give-up deadline so it never lingers');
+  assert.match(script, /Stop-Process -Force/, 'leftover exes are cleaned before start');
+  assert.match(script, /majin-win-x64\.exe/, 'it targets the installed exe');
+  assert.match(script, /'start','--no-window'/, 'it starts the new build the same way the launcher does');
+  assert.match(script, /update-relaunch\.log/, 'every step is logged — a failed relaunch must be debuggable');
+});

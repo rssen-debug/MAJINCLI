@@ -230,7 +230,43 @@ export async function installSetup(o = {}) {
   const child = spawn(dl.file, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'], { detached: true, stdio: 'ignore' });
   child.on('error', () => {});
   child.unref();
+  /* v0.5.3 lesson, CI-proven twice (jobs 117623334287 + run 39111598323): an
+     Inno [Run] postinstall entry that actually starts the app during a SILENT
+     install hangs the setup process until GitHub kills the job, with or
+     without wscript in the chain. So the installer never launches the app in
+     silent mode; THIS watchdog does. It outlives us (shutdown follows), waits
+     for the installer to die, cleans leftovers, then starts the new exe. */
+  if (child.pid) {
+    const ps = spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-EncodedCommand', relaunchCommand(child.pid)], {
+      detached: true, stdio: 'ignore', windowsHide: true,
+    });
+    ps.on('error', () => {});
+    ps.unref();
+  }
   return { ok: true, file: dl.file };
+}
+
+/* The silent-update relaunch, detached from Inno and from us. EncodedCommand
+ * (base64 of UTF-16LE) dodges every quoting layer on the way. Everything the
+ * watchdog does lands in %LOCALAPPDATA%\MAJIN\update-relaunch.log so a
+ * failed relaunch is forever debuggable instead of "the app just vanished". */
+export function relaunchScript(installerPid) {
+  return [
+    "$log = Join-Path $env:LOCALAPPDATA 'MAJIN\\update-relaunch.log'",
+    "$exe = Join-Path $env:ProgramFiles 'MAJIN\\majin-win-x64.exe'",
+    "'--- ' + (Get-Date -Format o) + ' relaunch watchdog, installer pid " + installerPid + "' | Out-File $log -Append",
+    '$deadline = (Get-Date).AddMinutes(15)',
+    'while (Get-Process -Id ' + installerPid + " -ErrorAction SilentlyContinue) { if ((Get-Date) -gt $deadline) { 'installer took >15 min, giving up' | Out-File $log -Append; exit 1 }; Start-Sleep -Seconds 2 }",
+    "'installer exited' | Out-File $log -Append",
+    'Start-Sleep -Seconds 2',
+    "Get-Process -Name 'majin-win-x64' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue",
+    'Start-Sleep -Seconds 2',
+    "if (Test-Path $exe) { Start-Process -WindowStyle Hidden -FilePath $exe -ArgumentList 'start','--no-window'; 'relaunched ' + $exe | Out-File $log -Append } else { 'MISSING ' + $exe + ' - relaunch skipped' | Out-File $log -Append; exit 1 }",
+  ].join('; ');
+}
+
+export function relaunchCommand(installerPid) {
+  return Buffer.from(relaunchScript(installerPid), 'utf16le').toString('base64');
 }
 
 export async function downloadSetup(o = {}) {

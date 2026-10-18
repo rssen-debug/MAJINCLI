@@ -8,12 +8,18 @@ unless stated otherwise; nothing here claims a Windows or browser run.
 Användarrapporterat på riktig Windows: `Setup — Unable to execute file
 C:\Program Files\MAJIN\MAJIN.vbs — CreateProcess failed, code 193`.
 En .vbs är ingen Win32-exe; Inno Setups postinstall körde `CreateProcess`
-direkt på den. Start-meny, skrivbord och autostart går nu via
-`wscript.exe "{app}\MAJIN.vbs"` med M-ikonen kvar — postinstall kör i
-stället exen direkt med `runhidden` (CI-bevis: en postinstall-wscript
-hängde den tysta installationen i 17 minuter på runnern; Inno döljer
-konsolen lika bra själv). Test låser: ingen launchpoint får någonsin
-peka rakt på vbs:en, och postinstall är runhidden-exe.
+direkt på den (193-dialogen i användarens skärmdump). Start-meny, skrivbord
+och autostart går nu via `wscript.exe "{app}\MAJIN.vbs"` med M-ikonen kvar.
+Men viktigare lärde CI oss den tunga lektionen (17+18-minuters häng, två
+reproducerade körningar): en tyst installation som startar appen från
+Innos postinstall hänger setup-processen tills jobbet dödas. Därför:
+postinstall startar appen (runhidden, dold) bara i interaktiva
+installationer — aldrig i tysta. One-click-uppdateringens omstart sköts i
+stället av updaters egen PowerShell-watchdog (src/core/update.js):
+väntar ut installern, städar rester, startar nya exen och loggar allt i
+%LOCALAPPDATA%\MAJIN\update-relaunch.log. Tester: ingen launchpoint
+pekar rakt på vbs:en, watchdog-scriptet veriferas byte för byte genom
+base64-dekodning (samma väg PowerShell läser det).
 
 Samma runda: `skipifsilent` på postinstall betydde att den **tysta**
 one-click-uppdateringen (VERYSILENT) stängde appen utan att starta den igen

@@ -84,12 +84,15 @@ Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; Value
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "MAJIN"; ValueData: """{sys}\wscript.exe"" ""{app}\MAJIN.vbs"""; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Parameters: "start --no-window"; Description: "Start {#MyAppName} now"; WorkingDir: "{app}"; Flags: nowait postinstall runhidden
-; runhidden on the exe itself — NO wscript in this chain (CI v0.5.3 evidence:
-; a postinstall wscript left the silent install hanging 17 min on the runner;
-; Inno can hide the console on its own, and .vbs is only for Explorer shortcuts)
-; (no skipifsilent: a silent in-app update must relaunch MAJIN itself,
-;  otherwise the one-click update leaves the app dead and looks broken)
+Filename: "{app}\{#MyAppExeName}"; Parameters: "start --no-window"; Description: "Start {#MyAppName} now"; WorkingDir: "{app}"; Flags: nowait postinstall runhidden skipifsilent
+; runhidden on the exe itself — NO wscript in this chain (a .vbs is not a Win32
+; program, that was the user's CreateProcess 193). And skipifsilent STAYS:
+; CI-proven twice in the v0.5.3 runs that a silent install which starts the
+; app from postinstall hangs the setup process until the job timeout kills it
+; (orphan majin-win-x64 + conhost in the job log). Silent-update relaunch is
+; instead the updater's own PowerShell watchdog in src/core/update.js —
+; our code, our log file at %LOCALAPPDATA%\MAJIN\update-relaunch.log,
+; and testable on any OS.
 
 [UninstallRun]
 ; Stop the running program before its files go, instead of leaving an orphan

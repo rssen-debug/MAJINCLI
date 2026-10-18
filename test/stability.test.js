@@ -139,7 +139,7 @@ test('no console window: hidden launch everywhere, Inno only CreateProcesses rea
   assert.match(iss, /ValueData:.*?wscript[.]exe/, 'autostart registry goes via wscript.exe too');
   assert.ok(!iss.includes('Filename: "{app}' + B + 'MAJIN.vbs"'), 'nothing may CreateProcess the vbs directly — that is exactly the 193 dialog');
   assert.match(iss, /postinstall runhidden/, "postinstall launches the exe itself hidden — never wscript inside Inno's silent chain (17-min hang, CI-proven)");
-  assert.ok(!iss.includes('postinstall skipifsilent'), 'silent updates must relaunch the app — skipifsilent kills the one-click update');
+  assert.match(iss, /postinstall runhidden skipifsilent/, 'skipifsilent MUST stay: CI-proven twice (17+18 min hangs) that a silent install starting the app from Inno hangs the setup process — one-click-update relaunch is the updater watchdog\'s job (src/core/update.js)');
 });
 
 test('a real Quit exists on the main window (two-step, stops the server)', () => {
