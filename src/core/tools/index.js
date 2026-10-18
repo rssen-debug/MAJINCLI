@@ -11,9 +11,11 @@ import { reTools } from './re.js';
 import { majinTools } from './majin.js';
 import { agentTools } from './agent.js';
 import { jobTools } from './jobs.js';
+import { marketingTools } from './marketing.js';
+import { githubTools } from './github.js';
 import { approvals } from '../guard.js';
 
-export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...reTools, ...majinTools, ...agentTools, ...jobTools];
+export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...reTools, ...majinTools, ...agentTools, ...jobTools, ...marketingTools, ...githubTools];
 
 export function buildRegistry(ctx) {
   if (!ctx.approvals) ctx.approvals = approvals;

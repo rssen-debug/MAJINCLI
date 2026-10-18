@@ -12,6 +12,7 @@ import { dirs, safeJoin } from '../paths.js';
 import { readHistory } from '../context.js';
 import { tasks, fileLocks, eta } from '../tasks.js';
 import { parseTaskCommand, statusText } from '../intent-tasks.js';
+import { analyzeMetaAccount, marketingStatus, checkMarketingConfig, wantsMarketingSetup } from '../marketing.js';
 
 const SELF_DIR = (() => {
   try {
@@ -212,6 +213,37 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     /* the autopilot dashboard feed: who works on what, and who holds which
        file right now. Zero-LLM data, cheap enough to poll. */
     if (p === '/api/tasks') return json(res, 200, { ok: true, tasks: tasks.snapshot(), locks: fileLocks.heldList(), telemetry: eta.summary() });
+    /* Credentials never become agent tool arguments or model-visible data.
+       Existing MAJIN bearer auth is required above this point. */
+    if (p === '/api/marketing') {
+      if (req.method === 'GET') return json(res, 200, { ok: true, ...marketingStatus(cfg) });
+      if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method not allowed' });
+      const body = await readJson(req);
+      if (body.action === 'analyze') {
+        try {
+          const r = await analyzeMetaAccount(cfg);
+          return json(res, r.ok ? 200 : 422, r);
+        } catch (e) {
+          return json(res, 502, { ok: false, error: e.message });
+        }
+      }
+      if (body.action === 'disconnect') {
+        const result = cfg.patch({ marketing: { meta: { accessToken: '', accountId: '' } } }, { source: 'marketing.disconnect' });
+        return json(res, result.ok ? 200 : 422, { ok: result.ok, ...marketingStatus(cfg) });
+      }
+      if (body.action !== 'save') return json(res, 400, { ok: false, error: 'action must be save, analyze or disconnect' });
+      const cur = cfg.get('marketing') || {};
+      const economics = {};
+      for (const key of ['price','cogs','shipping','fees','refundRate','targetProfit','dailyCap']) economics[key] = Number(body.economics?.[key]);
+      const meta = { accountId: String(body.accountId || ''), currency: String(body.currency || '').toUpperCase() };
+      if (body.accessToken) meta.accessToken = String(body.accessToken).trim();
+      const merged = { meta: { ...(cur.meta || {}), ...meta }, economics };
+      const issues = checkMarketingConfig(merged);
+      if (issues.length) return json(res, 422, { ok: false, error: issues.join(' ') });
+      const saved = cfg.patch({ marketing: { meta, economics } }, { source: 'marketing.panel' });
+      if (!saved.ok) return json(res, 422, { ok: false, error: saved.errors.map((e) => e.msg).join('; ') });
+      return json(res, 200, { ok: true, ...marketingStatus(cfg) });
+    }
     if (p === '/api/update' && req.method === 'GET') {
       return json(res, 200, { ok: true, version: VERSION, update: rt.update.info, current: VERSION });
     }
@@ -324,6 +356,19 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       if (!input) return json(res, 400, { ok: false, error: 'empty input', hint: 'send {input:"…"} (or messages:[{role:"user",content:"…"}])' });
       let session = String(body.session || 'desktop');
       const attachments = Array.isArray(body.attachments) ? body.attachments : [];
+      // First-use connection, solely for explicit ad-management requests.
+      // Asking for credentials is deterministic and costs ZERO model tokens.
+      // The token itself is collected by an authenticated form, not chat.
+      if (body.task == null && wantsMarketingSetup(input) && !marketingStatus(cfg).connected) {
+        const reply = 'I can analyze your Facebook/Instagram ads. First I need your Meta ad account and product costs. Complete the secure connection here; your token will not be sent to the AI model. No ads will be changed.';
+        if (noStreamFlag(body, url)) return json(res, 200, { ok: true, needsMarketingSetup: true, text: reply });
+        sseHead(res);
+        res.write('event: delta\ndata: ' + JSON.stringify({ type: 'delta', text: reply }) + '\n\n');
+        res.write('event: answer\ndata: ' + JSON.stringify({ type: 'answer', text: reply }) + '\n\n');
+        res.write('event: marketing_setup\ndata: ' + JSON.stringify({ type: 'marketing_setup', request: input }) + '\n\n');
+        res.write('event: done\ndata: ' + JSON.stringify({ ok: true, marketingSetup: true }) + '\n\n');
+        return res.end();
+      }
       /* Autopilot: an independent message can become its own task = its own
          session, and the engine serializes per session, so different tasks
          truly run in parallel with isolated history and per-task stop.

@@ -191,6 +191,12 @@ export const DEFAULTS = {
     autoOpen: true,
   },
   budget: { mode: 'track', monthlyUsd: 0, warnAt: 0.8 },
+  // Analysis-only Meta Ads integration. The access token stays local and
+  // is always redacted by GET /api/config; use an env reference if preferred.
+  marketing: {
+    meta: { accountId: '', currency: '', accessToken: '{env:MAJIN_META_ACCESS_TOKEN}' },
+    economics: { price: 0, cogs: 0, shipping: 0, fees: 0, refundRate: 0, targetProfit: 0, dailyCap: 0 },
+  },
   // Spelas endast in när användaren uttryckligen bett om det. Uppladdning finns inte som
   // kodväg alls — export är ett medvetet steg, ingen tyst dataflöde från en privat maskin.
   dataset: {
@@ -537,6 +543,25 @@ export function validatePatch(patch, current) {
     if (patch.dataset.include && isPlain(patch.dataset.include)) {
       for (const k of Object.keys(patch.dataset.include)) {
         if (!['answer', 'toolArgs', 'plan'].includes(k)) errors.push({ path: `dataset.include.${k}`, msg: 'unknown include key. Allowed: answer, toolArgs, plan' });
+      }
+    }
+  }
+  if (isPlain(patch.marketing)) {
+    for (const k of Object.keys(patch.marketing)) {
+      if (!['meta', 'economics'].includes(k)) errors.push({ path: 'marketing.' + k, msg: 'unknown marketing key' });
+    }
+    if (isPlain(patch.marketing.meta)) {
+      for (const k of Object.keys(patch.marketing.meta)) {
+        if (!['accountId', 'currency', 'accessToken'].includes(k)) errors.push({ path: 'marketing.meta.' + k, msg: 'unknown Meta setting' });
+      }
+      const m = patch.marketing.meta;
+      if (m.accountId !== undefined && m.accountId !== '' && !/^(act_)?[0-9]{3,25}$/.test(String(m.accountId))) errors.push({ path: 'marketing.meta.accountId', msg: 'enter a Meta ad account ID' });
+      if (m.currency !== undefined && m.currency !== '' && !/^[A-Z]{3}$/.test(String(m.currency))) errors.push({ path: 'marketing.meta.currency', msg: 'use an uppercase ISO currency code' });
+    }
+    if (isPlain(patch.marketing.economics)) {
+      for (const [k, v] of Object.entries(patch.marketing.economics)) {
+        if (!['price','cogs','shipping','fees','refundRate','targetProfit','dailyCap'].includes(k)) errors.push({ path: 'marketing.economics.' + k, msg: 'unknown economics setting' });
+        else if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || (k === 'refundRate' && v > 1)) errors.push({ path: 'marketing.economics.' + k, msg: 'must be a finite nonnegative number (refundRate 0..1)' });
       }
     }
   }
