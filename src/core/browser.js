@@ -249,7 +249,9 @@ export async function openFor({ session, url = 'about:blank', headless = true, c
     thePool.release(session);
     throw new Error('the browser debug port never came up — the browser may be blocked by a policy on this machine');
   }
-  const ws = await wsConnect(version.webSocketDebuggerUrl, wsFactory);
+  let ws = null;
+  try {
+    ws = await wsConnect(version.webSocketDebuggerUrl, wsFactory);
   const cdp = cdpRpc(ws);
   const sendRaw = ({ sessionId = null, method, params = {} }, opts = null) =>
     cdp(method, params, { sessionId, ...(opts || {}) });
@@ -258,6 +260,12 @@ export async function openFor({ session, url = 'about:blank', headless = true, c
      websocket — the modern CDP layout, no nested sendMessageToTarget */
   const { targetId } = await cdp('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await cdp('Target.attachToTarget', { targetId, flatten: true });
+  const close = () => {
+    try { ws.close(); } catch { /* gone */ }
+    try { if (!proc.killed) proc.kill(); } catch { /* gone */ }
+    thePool.release(session);
+    sess.delete(session);
+  };
   const b = { session, sessionId, send: null, goto: null, eval: null, close, proc, slot };
   /* send reads b.sessionId EVERY call — smarttab can re-wire it later */
   const send = (method, params = {}, opts = null) => sendRaw({ sessionId: b.sessionId, method, params }, opts);
@@ -298,7 +306,16 @@ export async function openFor({ session, url = 'about:blank', headless = true, c
     }
     return { followed: false };
   };
-  return b;
+    return b;
+  } catch (e) {
+    /* safety net: a browser exists by now — never leak the process/ws/slot,
+       whatever broke between spawn and a working session */
+    try { ws?.close(); } catch { /* gone */ }
+    try { if (!proc.killed) proc.kill(); } catch { /* gone */ }
+    thePool.release(session);
+    sess.delete(session);
+    throw e;
+  }
 }
 
 const randomPort = () => 49152 + Math.floor(Math.random() * 12000);
