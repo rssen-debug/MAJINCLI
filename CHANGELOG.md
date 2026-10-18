@@ -58,8 +58,10 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 - `npm test` → **208 pass, 0 fail, 7 skipped** · i18n 0/75 · `npm run check` 105/105.
 - The end-to-end submit chain (fake employer site → posted fields → thanks words
   → status submitted, screenshot on disk) is pinned in `test/jobs.live.test.js`
-  and is **CI-gated from the next build — verdict pending dispatch below**; until
-  then it is honestly: written, locally skip-verified, not yet observed by CI.
+  and **CI-observed green on the real Windows runner 2026-10-18 (run
+  39 126 567 525)**. On the way there the hard gate caught — in order — a guard
+  hang, an eval-vs-goto race, a stale-target `about:blank` wire, and the
+  type=url silent-cancel; all fixed above, all before any user could meet them.
 
 ## 2026-10-18 (job agent, slice 1: the pipeline is real)
 

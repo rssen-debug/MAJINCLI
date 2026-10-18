@@ -42,8 +42,10 @@ autopilot/teamwork/dashboard additions).
   *(källa: master brief §"LIVE VISUAL AGENT DASHBOARD & SMART ETA")*
 - **Job-search agent — pipeline + submit SLICES SHIPPED 2026-10-18** (state machine,
   dedupe = pipeline file, deterministic CV match, Platsbanken live-verified,
-  `jobs.prepare` form-fill with exact preview, `jobs.send` destructive-gated with
-  mandatory proof — no confirmation words, no "submitted"). 94 tools. Remaining:
+  `jobs.prepare` form-fill with exact preview + validity flags, `jobs.send`
+  destructive-gated with mandatory proof — no confirmation words, no
+  "submitted"), all CI-oBserved on the Windows live gate (run 39 126 567 525).
+  94 tools. Remaining:
   pipeline status cards in the UI, Seek/AU adapters, the email-application path
   (currently refused honestly), the scheduled autonomous round on schedule.js,
   and checkbox/privacy-consent field roles in the form classifier.
