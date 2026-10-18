@@ -15,12 +15,23 @@ Costs, selling price and ad spend must use the **same currency**. Convert before
 
 No AI-token usage is needed for the first-use question or for calculating the marketing metrics. The selected AI model is used only for reasoning about the analysis and other normal MAJIN tasks.
 
+## 50 SEK example: zero-spend-first, no new UI
+
+Say in the normal MAJIN chat: **"Help me market wearmeoften.com with a TOTAL budget of 50 SEK. Start with free ways to get real orders, then tell me what you would need before testing ads."**
+
+The new read-only `marketing.plan` tool constructs a seven-day organic-first experiment, computes break-even cost-per-order from real unit economics when known, identifies missing facts, and preserves the full 50 SEK when a meaningful paid test cannot be justified. It does not use any additional LLM requests itself. MAJIN can use your already-selected provider to write marketing copy or explain findings, but those ordinary model calls can still cost tokens. Ad spend and provider tokens are **separate costs**.
+
+A single purchase with positive margin might mathematically recover 50 SEK of ad spend, but the purchase is **not guaranteed**, and such a tiny result does not validate an advertising algorithm. Prices, currency and cost assumptions are user-reported until verified.
+
+No automatic campaign creation or budget changes are exposed. "50 SEK maximum" is a proposed **TOTAL** experiment allowance, not a daily Meta cap. To restrict actual billing, set limits inside Meta Ads Manager.
+
 ## Chat tools
 
+- **marketing.plan** — build a conservative 0- or 50-SEK total-budget launch plan, organic creative tests, conversion checklist, meaningful shopping metrics and evidence gates. No Meta API key required.
 - **marketing.status** — show connection and settings without secret values.
 - **marketing.analyze** — fetch last-7-day Meta Ads Insights and compute campaign CPA, after-spend attributed contribution, conservative recommendations and a comparison to the advisory daily spend ceiling.
 
-Same calculations power the local Marketing panel. Meta Graph Marketing API v23.0, max five pages and 20-second request timeout.
+The Meta Insights calculations are available inside the chat. No separate marketing panel. Meta Graph Marketing API v23.0, max five pages and 20-second request timeout.
 
 ## What profit-first really means
 

@@ -2,7 +2,7 @@
    Startar en riktig process på en udda port, samma kodväg som en webbläsare använder. */
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -214,8 +214,8 @@ test('/api/state and /api/config: right shape and redacted keys', async () => {
   const st = JSON.parse((await get(`/api/state?t=${TOKEN}`)).body);
   assert.equal(st.version, JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version, 'the app must report the version it was released as');
   assert.equal(st.name, 'MAJIN');
-  assert.equal(st.tools.length, 97, 'state must list every tool');
-  assert.equal(JSON.parse((await get(`/api/state?tools=0&t=${TOKEN}`)).body).tools.count, 97);
+  assert.equal(st.tools.length, 98, 'state must list every tool');
+  assert.equal(JSON.parse((await get(`/api/state?tools=0&t=${TOKEN}`)).body).tools.count, 98);
   assert.ok(st.groups.reverse.length >= 20, 'groups for the UI');
   assert.equal(st.guard.mode, 'confirm', 'the default mode is confirm');
   assert.ok(Array.isArray(st.routes) && st.routes.some((r) => r.job === 'tasks' && r.ref), 'the route table must exist');
@@ -272,6 +272,24 @@ test('Meta marketing setup happens conversationally with ZERO model call or perm
   const state = (await get('/api/marketing?t=' + TOKEN)).body;
   assert.doesNotMatch(state, /dont-leak-this-meta-key/);
   assert.equal(JSON.parse(state).mode,'analysis_only');
+});
+
+test('CLI config set while MAJIN runs goes through the live server and survives restart', async () => {
+  const marker='cli-live-ownership-test';
+  const cmd=spawnSync(process.execPath, [path.join(ROOT,'src/cli/majin.js'),'config','set','name',marker], {
+    cwd:ROOT,
+    env:{...process.env,MAJIN_HOME:home,MAJIN_PORT:String(PORT),MAJIN_TOKEN:TOKEN},
+    encoding:'utf8',
+    timeout:15000,
+  });
+  assert.equal(cmd.status,0, 'CLI exited without success: '+cmd.stderr+'\n'+cmd.stdout);
+  assert.match(cmd.stdout,/running MAJIN/, 'second process must delegate change to live runtime');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(home,'config.json'),'utf8')).name,marker,'disk config must contain marker');
+  const live=JSON.parse((await get('/api/state?t='+TOKEN)).body);
+  assert.equal(live.name,marker,'running server must have same config value');
+  const restore=await get('/api/config?t='+TOKEN, {method:'PATCH',
+    headers:{'content-type':'application/json'},body:JSON.stringify({name:'MAJIN'})});
+  assert.equal(restore.status,200);
 });
 
 test('/api/chat: demo answer without stream, 400 on empty input', async () => {

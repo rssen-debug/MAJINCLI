@@ -4,8 +4,35 @@
  */
 import { def } from './registry.js';
 import { marketingStatus, analyzeMetaAccount } from '../marketing.js';
+import { microMarketingPlan } from '../marketing-plan.js';
 
 export const marketingTools = [
+  def({
+    name: 'marketing.plan',
+    group: 'marketing',
+    risk: 'read',
+    desc: 'Plan affordable store marketing from the TOTAL cash budget (even 50 SEK), without ads API keys or extra LLM calls. Computes order break-even math and a concrete organic-first 7-day launch plan with real evidence checks. NEVER starts ads, invents conversions or spends money. Call this for "market my website" or "I have 50 kr" BEFORE requesting Meta Ads credentials.',
+    params: {
+      site: 'string: public store website URL or hostname (optional)',
+      totalBudget: 'number: TOTAL maximum ad-spend budget, NOT daily (required, can be 0)',
+      currency: 'string: 3-letter currency of the budget and item costs (default configured currency or SEK)',
+      product: 'object: optional {name,price,cogs,shipping,fees,refundRate,targetProfit} actual unit economics',
+      trackingReady: 'boolean: whether user reports purchase tracking configured (not verified)',
+      reportedPastOrders: 'number: user-reported historical real orders (optional)',
+      historicalCpa: 'number: user-reported past acquisition cost per buyer in SAME currency (optional)',
+    },
+    required: ['totalBudget'],
+    async run(args, ctx) {
+      try {
+        const plan = microMarketingPlan(args, ctx.cfg?.get('marketing') || {});
+        return { result: JSON.stringify(plan, null, 2),
+          meta: { totalBudget:plan.totalBudget, currency:plan.currency, paidAdsRecommended:plan.paidAdsRecommended, analysisOnly:true },
+          summary: 'Seven-day ' + plan.currency + ' ' + plan.totalBudget + ' marketing plan; no ad spend or model calls for calculation' };
+      } catch (err) {
+        return { ok:false, error:{ code:'marketing_plan_invalid', message:err.message } };
+      }
+    },
+  }),
   def({
     name: 'marketing.status',
     group: 'marketing',
