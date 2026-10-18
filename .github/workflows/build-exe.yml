@@ -170,15 +170,27 @@ jobs:
       # run dies with "Artifact storage quota has been hit" -- an infrastructure
       # failure that would otherwise look like a build failure. Release assets are
       # not counted against that quota, so the file goes there instead.
-      - name: decide whether this version needs publishing
+      - name: determine new version release on main
         id: release_target
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $version = (node -p "require('./package.json').version").Trim()
-          if ($version -notmatch '^\d+\.\d+\.\d+
+          $ver = (node -p "require('./package.json').version").Trim()
+          $tag = "v$ver"
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json"; "User-Agent" = "MAJIN" }
+          $publish = 'true'
+          try {
+            Invoke-RestMethod -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" -Headers $headers -TimeoutSec 15 | Out-Null
+            $publish = 'false'
+          } catch {
+            $status = [int]$_.Exception.Response.StatusCode
+            if ($status -ne 404) { throw "Release check failed ($status)" }
+          }
+          Add-Content $env:GITHUB_OUTPUT "publish=$publish"
+          Add-Content $env:GITHUB_OUTPUT "tag=$tag"
+      - name: hash the artifacts
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.keep_exe || github.event_name == 'push' }}
         shell: pwsh
         run: |
@@ -196,68 +208,6 @@ jobs:
           # a tag push reuses that tag; a manual run makes its own dev tag
           tag_name: ${{ steps.release_target.outputs.tag || (github.ref_type == 'tag' && github.ref_name) || format('exe-v{0}', github.run_number) }}
           name: ${{ steps.release_target.outputs.tag && format('MAJIN {0}', steps.release_target.outputs.tag) || (github.ref_type == 'tag' && format('MAJIN {0}', github.ref_name)) || format('MAJIN exe (run {0})', github.run_number) }}
-          body: |
-            Two files, both unsigned, both no-admin:
-
-            - **MAJIN-Setup.exe** (~40 MB) — the real installer: desktop icon, Start-menu entry, optional
-              autostart, optional "majin" on PATH, and an uninstaller in Add/Remove programs. Nothing else is
-              needed afterwards: no terminal, no Node, no git
-            - **majin-setup.exe** (~0.5 MB) — the tiny stub for a machine that already has node; it installs into
-              `%LOCALAPPDATA%\MAJIN`, fetches node if you have none, and puts a MAJIN icon on the Desktop.
-              `--print` shows the three commands it would run. Verify it: `certutil -hashfile majin-setup.exe SHA256`
-            - **majin-win-x64.exe** (~80 MB) — the single-file build, nothing installed at all
-
-            Double-click either to start MAJIN, or open a terminal in the folder and run:
-
-                .\majin-win-x64.exe start
-
-            Unsigned, so Windows may warn once (More info -> Run anyway).
-            Or download it with curl:
-
-                curl.exe -L -o majin-win-x64.exe https://github.com/rssen-debug/MAJINCLI/releases/latest/download/majin-win-x64.exe
-          files: |
-            dist/installer/MAJIN-Setup.exe
-            dist/installer/MAJIN-Setup.exe.sha256
-            dist/setup/majin-setup.exe
-            dist/majin-win-x64.exe
-            dist/majin-win-x64.exe.sha256
-          # the installer is always there; the single-file exe only when pkg worked
-          fail_on_unmatched_files: false
-          generate_release_notes: true
-) { throw "invalid release version $version" }
-          $tag = "v$version"
-          $url = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$tag"
-          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json"; "User-Agent" = "MAJIN-release-check" }
-          $publish = "true"
-          try {
-            Invoke-RestMethod -Uri $url -Headers $headers -TimeoutSec 15 | Out-Null
-            $publish = "false"
-            Write-Output "Release $tag already exists; never overwrite it."
-          } catch {
-            $code = [int]$_.Exception.Response.StatusCode
-            if ($code -ne 404) { throw "Could not check existing release ($code): $_" }
-            Write-Output "No existing release for $tag; the verified main build may publish it."
-          }
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "publish=$publish"
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "tag=$tag"
-      - name: hash the artifacts
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.keep_exe || github.event_name == 'push' }}
-        shell: pwsh
-        run: |
-          foreach ($f in @('dist/installer/MAJIN-Setup.exe', 'dist/majin-win-x64.exe')) {
-            if (Test-Path $f) {
-              $h = (Get-FileHash -Algorithm SHA256 $f).Hash.ToLower()
-              Set-Content -NoNewline "$f.sha256" "$h  $(Split-Path $f -Leaf)"
-              Write-Output "sha256 $f = $h"
-            }
-          }
-      - name: release the exe
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.keep_exe || github.event_name == 'push' }}
-        uses: softprops/action-gh-release@v2
-        with:
-          # a tag push reuses that tag; a manual run makes its own dev tag
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('exe-v{0}', github.run_number) }}
-          name: ${{ github.ref_type == 'tag' && format('MAJIN {0}', github.ref_name) || format('MAJIN exe (run {0})', github.run_number) }}
           body: |
             Two files, both unsigned, both no-admin:
 
