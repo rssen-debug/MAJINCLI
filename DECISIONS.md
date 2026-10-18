@@ -115,11 +115,16 @@ allowed to contradict a test.
 
 ## Öppna frågor
 
-- **Natural-language agent control** ("agent 2, hjälp agent 1"): deterministic parse over live
-  task ids first — but when a sentence fits two tasks, who breaks the tie? Candidate: task the
-  user most recently addressed, else ask once. No decision yet.
-- **ETA granularity.** Per-tool timings are already measurable; the open question is which
-  unit of work aggregates well enough across tasks to predict ("28/100 jobb" is a queue, not a
+- **Ambiguity tiebreak for NL control.** Shipped stance: a sentence matching two live tasks is
+  refused with a plain-words error ("which one?"), never guessed. Candidate if it annoys:
+  task the user most recently addressed, else ask once. (DECIDED 2026-10-18 unless UX says
+  otherwise.)
+- ~~**ETA granularity**~~ **DECIDED 2026-10-18**: per-tool measured ms → interval
+  {avg, lo, hi} after n≥2 runs of the same tool; null answer is valid. Card-level
+  aggregation is a display problem, not a prediction model.
+- **Pause mechanics.** Shipped pause is abrupt (stop mid-turn + status `paused`; resume says
+  "Continue from the step ..."). A graceful "finish the current tool call, then hold" pause is
+  the open refinement — loop.js has no safe-point concept yet.
   clock). Needs recorded telemetry from real runs before design.
 - **Browser live-gate cadence.** `test/browser.live.test.js` runs in CI with `continue-on-error: true` until green across consecutive runs — then flips to a hard gate. Open question: is the local form server deterministic enough for a Windows runner (port races, first-run Edge profile popups)? Watched on the next two builds.
 - **Browser-context resource model.** Files lock cleanly by path; a browser context is not a

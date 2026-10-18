@@ -30,13 +30,13 @@ autopilot/teamwork/dashboard additions).
 
 ## Medel
 
-- **Natural-language agent routing** ("agent 2, hjälp agent 1", "pausa hemsidan och hjälp
-  jobbsökningen"): deterministic command parse over live task ids first (no LLM for routing),
-  LLM tiebreak only behind the single-model rule; context handoff = sibling summary from the
-  registry, restart-less reassignment. *(källa: master brief §"DYNAMIC AGENT TEAMWORK" — 13
-  requirements)*
-- **ETA engine on real telemetry**: per-tool/per-step timings recorded in the registry, intervals
-  only ("4–8 min"), "hard to estimate" when data is thin — never invented percentages.
+- ~~**Natural-language agent routing**~~ **SHIPPED 2026-10-18** (deterministic parse over live
+  refs: stop/pause/resume/assist/status, zero model calls — see CHANGELOG). Remaining: compound
+  sentences ("pausa hemsidan OCH hjälp jobbsökningen" in one line), LLM tiebreak behind the
+  single-model rule (today ambiguity is an honest error sentence, never a guess).
+- ~~**ETA engine on real telemetry**~~ **BACKEND SHIPPED 2026-10-18** (per-tool ms from real
+  `tool_result` events, intervals after 2 runs, `null` = "hard to estimate"). Remaining:
+  surface the interval on the task cards in the UI and aggregate per-task step progress.
   *(källa: master brief §"LIVE VISUAL AGENT DASHBOARD & SMART ETA")*
 - **Job-search agent** as tools + skills on top of the verified browser layer: search → match
   against CV → dedupe memory → status cards (found/matched/started/waiting/submitted/failed) →

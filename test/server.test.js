@@ -156,6 +156,26 @@ test('token: query, header, cookie — and refusal from outside', async () => {
   }
 });
 
+test('fleet commands through /api/chat are deterministic (zero model calls, plain words)', async () => {
+  const one = async (input) => {
+    const r = await fetch(base('/api/chat?t=' + TOKEN), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + TOKEN },
+      body: JSON.stringify({ input, stream: false }),
+    });
+    return { status: r.status, json: JSON.parse(await r.text()) };
+  };
+  const st = await one('visa alla agenter');
+  assert.equal(st.status, 200);
+  assert.equal(st.json.ok, true);
+  assert.match(st.json.text, /No agents are running/, 'an empty fleet says so to your face');
+  const bad = await one('stoppa agent 9');
+  assert.equal(bad.json.ok, false);
+  assert.match(String(bad.json.error), /no agents are running/, 'unknown agents are honest, never guessed (empty fleet says so outright)');
+  const help9 = await one('hjälp agent 9');
+  assert.equal(help9.json.ok, false, 'assist to a ghost is refused too');
+});
+
 test('/api/state and /api/config: right shape and redacted keys', async () => {
   const st = JSON.parse((await get(`/api/state?t=${TOKEN}`)).body);
   assert.equal(st.version, JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version, 'the app must report the version it was released as');

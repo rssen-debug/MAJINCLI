@@ -5,6 +5,33 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (teamwork: NL fleet commands + real ETA telemetry)
+
+### Ändrat
+- **Natural-language fleet routing** (`src/core/intent-tasks.js`, new): sentences like
+  "pausa hemsidan", "agent 2, hjälp agent 1", "alla hjälpa jobbsökningen", "visa alla
+  agenter" are parsed **deterministically over live task refs** (ordinals "första/andra/
+  tredje", "agent N", name stems) — zero model calls for stop/pause/resume/assist/status.
+  Anything that is not a fleet command falls through to the model untouched.
+- **`/api/chat` intercepts fleet commands** when no explicit task is addressed: stop = the
+  task's own stop; pause = stop + status `paused`; resume/assist = a brief fired into the
+  SAME session in the background (assist fans out to every other running agent on "alla").
+  Non-commands still create/continue tasks exactly as before.
+- **Real ETA telemetry** (`EtaMetrics` in `tasks.js`): every `tool_result` records its
+  measured ms under the tool name (ring of 100). `estimate()` returns an **interval**
+  {n, avgMs, loMs, hiMs} only after two real runs of the same tool, otherwise null —
+  "hard to estimate" is a valid answer, invented numbers are not. Exposed at
+  `/api/tasks` under `telemetry`.
+
+### Fixat
+- None (new capability).
+
+### Verifierat
+- `node --test test/intent-tasks.test.js` → 4 pass, 0 fail (incl. empty-fleet honesty).
+- `node --test test/server.test.js` → 9 pass, 0 fail (fleet commands over real HTTP).
+- `npm test` → **196 pass, 0 fail, 5 skipped** (5 = env-gated browser live suite).
+- `npm run i18n` → 0 Swedish literals / 70 files (parser vocab allowed as input data).
+
 ## 2026-10-18 (browser-use: upload + smarttab + the live wire)
 
 ### Ändrat

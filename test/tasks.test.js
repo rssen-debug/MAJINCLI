@@ -165,3 +165,17 @@ test('B: two agents patch the same file — no lost edit, no torn diff', async (
   assert.match(final, /rad två är BETA/, 'second patch landed — nothing lost');
   assert.equal(fileLocks.heldList().length, 0, 'no lock leaked');
 });
+
+test('ETA: two runs minimum, intervals not fake precision, garbage rejected', async () => {
+  const { EtaMetrics } = await import('../src/core/tasks.js');
+  const m = new EtaMetrics();
+  assert.equal(m.estimate('web.fetch'), null, 'silence before any measurement');
+  m.record('web.fetch', 1200);
+  assert.equal(m.estimate('web.fetch'), null, 'one sample is not an estimate');
+  m.record('web.fetch', 1400);
+  const e = m.estimate('web.fetch');
+  assert.ok(e && e.avgMs === 1300 && e.loMs === 1200 && e.hiMs === 1400, `interval from real data: ${JSON.stringify(e)}`);
+  m.record('web.fetch', -5); m.record('web.fetch', NaN); m.record('', 100); m.record('x'.repeat(0), null);
+  assert.equal(m.byTool.get('web.fetch').n, 2, 'garbage never enters the model');
+  assert.equal(m.summary()['web.fetch'].runs, 2);
+});

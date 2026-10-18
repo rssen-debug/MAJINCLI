@@ -42,6 +42,7 @@ const DIACRITIC = /[åäöÅÄÖ]/;
 const ALLOW = [
   'words: [', 'JOBS_SV', 'använd anvand use', 'const stop = new Set(', 'match: \'/(',
   'could not parse', 'const map = { amp', 'Exempel', 'glöm',
+  "resolveRef(ref ||",  // parser-fallback ordinal words are Swedish INPUT vocabulary
   'path.join(homedir, ',  // desktop folder names we look for, not messages (Skrivbord)
 ];
 

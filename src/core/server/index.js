@@ -10,7 +10,8 @@ import { fileURLToPath } from 'node:url';
 import { bus } from '../log.js';
 import { dirs, safeJoin } from '../paths.js';
 import { readHistory } from '../context.js';
-import { tasks, fileLocks } from '../tasks.js';
+import { tasks, fileLocks, eta } from '../tasks.js';
+import { parseTaskCommand, statusText } from '../intent-tasks.js';
 
 const SELF_DIR = (() => {
   try {
@@ -27,6 +28,71 @@ const SELF_DIR = (() => {
 const UI_CANDIDATES = [path.resolve(SELF_DIR, 'ui'), path.resolve(SELF_DIR, '../../ui'), path.join(path.dirname(process.execPath), 'ui'), path.resolve(process.cwd(), 'src/ui')];
 const UI_DIR = UI_CANDIDATES.find((d) => fs.existsSync(path.join(d, 'index.html'))) || UI_CANDIDATES[0];
 const MAX_BODY = 64 * 1024 * 1024;
+
+/* ------------------------- deterministic fleet commands ------------------ */
+function noStreamFlag(body, url) {
+  return body.stream === false || body.stream === 'false'
+    || ['false', '0'].includes(String(url.searchParams.get('stream') || '').toLowerCase());
+}
+
+/* A fleet command never touches the model: stop is an AbortController call,
+   status is the registry, pauses/resumes/assists are follow-up turns into
+   ALREADY-EXISTING sessions, so every context survives unbroken. Long turns
+   run in the background; the dashboard (/api/tasks) is where you watch them. */
+async function executeTaskCommand(cmd, { agent }) {
+  const live = tasks.activeOldestFirst();
+  switch (cmd.action) {
+    case 'status':
+      return { ok: true, action: 'status', text: statusText(live) };
+    case 'stop': {
+      if (!cmd.target.ok) return { ok: false, error: cmd.target.error, text: cmd.target.error };
+      const t = cmd.target.task;
+      agent.stop(t.session);
+      tasks.stop(t.id);
+      return { ok: true, action: 'stopped', task: t.id, text: `Agent ${t.id} stopped ("${t.input.slice(0, 60)}"). The others keep working.` };
+    }
+    case 'pause': {
+      if (!cmd.target.ok) return { ok: false, error: cmd.target.error, text: cmd.target.error };
+      const t = cmd.target.task;
+      agent.stop(t.session);
+      tasks.setStatus(t.id, 'paused');
+      return { ok: true, action: 'paused', task: t.id, text: `Agent ${t.id} paused — its whole context is kept. Say "resume agent ${live.indexOf(t) + 1}" (or its id) to continue it.` };
+    }
+    case 'resume': {
+      if (!cmd.target.ok) return { ok: false, error: cmd.target.error, text: cmd.target.error };
+      const t = cmd.target.task;
+      tasks.setStatus(t.id, 'running');
+      agent.turn({ input: 'Continue from the step you were on when you paused. Do not restart from zero — the earlier context in this session is the shared state of work.', session: t.session, source: 'fleet-resume', aware: tasks.awareText({ excludeId: t.id }), onEvent: (ev) => tasks.event(t.id, ev.type, null) })
+        .then((r) => tasks.setStatus(t.id, r.error ? 'error' : 'done'))
+        .catch(() => tasks.setStatus(t.id, 'error'));
+      return { ok: true, action: 'resuming', task: t.id, text: `Agent ${t.id} is working again from where it paused.` };
+    }
+    case 'assist': {
+      if (!cmd.target.ok) return { ok: false, error: cmd.target.error, text: cmd.target.error };
+      const t = cmd.target.task;
+      let helpers;
+      if (!cmd.helper.ok) {
+        return { ok: false, error: cmd.helper.error, text: cmd.helper.error };
+      } else if (cmd.helper.all) {
+        helpers = live.filter((h) => h.id !== t.id); // "alla hjälpa X" / bare "hjälp X" = every other active agent
+      } else {
+        helpers = [cmd.helper.task];
+      }
+      helpers = helpers.filter((h) => h.id !== t.id);
+      if (!helpers.length) return { ok: false, error: 'no helper available — only the target agent is running', text: 'no helper available — only the target agent is running' };
+      const brief = `The user has asked you to HELP agent ${t.id} with its task: "${t.input}". That agent is already working on the whole. Take a concrete, separable part of it — divide the labour so nothing is done twice (the workspace is shared; the file locks stop duplicate writes, respecting them is your job too). Say at the start which part you take, then work.`;
+      for (const h of helpers) {
+        tasks.setStatus(h.id, 'running');
+        agent.turn({ input: brief, session: h.session, source: 'fleet-assist', aware: tasks.awareText({ excludeId: h.id }), onEvent: (ev) => tasks.event(h.id, ev.type, null) })
+          .then((r) => tasks.setStatus(h.id, r.error ? 'error' : 'done'))
+          .catch(() => tasks.setStatus(h.id, 'error'));
+      }
+      return { ok: true, action: 'assist', task: t.id, helpers: helpers.map((h) => h.id), text: `${helpers.length === 1 ? 'Agent ' + helpers[0].id : helpers.length + ' agents'} is now helping ${t.id} with "${t.input.slice(0, 50)}".` };
+    }
+    default:
+      return { ok: false, error: `unknown fleet action: ${cmd.action}`, text: `unknown fleet action: ${cmd.action}` };
+  }
+}
 import { VERSION } from '../version.js';
 
 const MIME = {
@@ -145,7 +211,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     if (p === '/api/state') return json(res, 200, rt.state({ includeTools: url.searchParams.get('tools') !== '0' }));
     /* the autopilot dashboard feed: who works on what, and who holds which
        file right now. Zero-LLM data, cheap enough to poll. */
-    if (p === '/api/tasks') return json(res, 200, { ok: true, tasks: tasks.snapshot(), locks: fileLocks.heldList() });
+    if (p === '/api/tasks') return json(res, 200, { ok: true, tasks: tasks.snapshot(), locks: fileLocks.heldList(), telemetry: eta.summary() });
     if (p === '/api/update' && req.method === 'GET') {
       return json(res, 200, { ok: true, version: VERSION, update: rt.update.info, current: VERSION });
     }
@@ -265,6 +331,18 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
          it can never spawn an accidental duplicate. body.autopilot=true opts
          an API caller into a fresh task; the classic session path is tracked
          in the registry too, without changing its behaviour. */
+      /* deterministic fleet commands run BEFORE the model ever sees them
+         (no LLM for routing — the task ids are right here in memory) */
+      const cmd = body.task == null ? parseTaskCommand(input, tasks.activeOldestFirst()) : null;
+      if (cmd) {
+        const report = await executeTaskCommand(cmd, { agent });
+        if (noStreamFlag(body, url)) return json(res, 200, report);
+        sseHead(res);
+        res.write(`event: route\ndata: ${JSON.stringify({ job: 'fleet', model: 'none', deterministic: true })}\n\n`);
+        res.write(`event: answer\ndata: ${JSON.stringify({ text: report.text || JSON.stringify(report), meta: { fleet: cmd.action, task: (report.task||report.target||null) } })}\n\n`);
+        res.write('event: done\ndata: ' + JSON.stringify({ ok: !report.error }) + '\n\n');
+        return res.end();
+      }
       const follow = body.task != null ? tasks.sessionOf(body.task) : null;
       if (body.task != null && !follow) return json(res, 404, { ok: false, error: `unknown task: ${body.task}`, hint: 'tasks expire when done for 6h — start a new one instead' });
       let task;
@@ -277,7 +355,10 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
         if (body.autopilot === true) session = task.session;
         else task.session = session; // observe-only: one name, one behaviour
       }
-      const track = (ev) => tasks.event(task.id, ev.type, null);
+      const track = (ev) => {
+        tasks.event(task.id, ev.type, null);
+        if (ev.type === 'tool_result' && ev.tool && Number.isFinite(ev.ms)) eta.record(ev.tool, ev.ms);
+      };
       const noStream = body.stream === false || body.stream === 'false'
         || ['false', '0'].includes(String(url.searchParams.get('stream') || '').toLowerCase());
       if (noStream) {

@@ -70,6 +70,11 @@ export class TaskRegistry {
     return this.list().filter((t) => !TERMINAL.has(t.status));
   }
 
+  /** agent 1 = the FIRST thing the user asked for — creation order, not recency */
+  activeOldestFirst() {
+    return this.active().sort((a, b) => a.created - b.created);
+  }
+
   setStatus(id, status) {
     const t = this.get(id);
     if (!t) throw new Error(`unknown task: ${id}`);
@@ -213,10 +218,53 @@ const base = (p) => String(p).split('/').pop();
 export const tasks = new TaskRegistry();
 export const fileLocks = new FileLocks();
 
+/** ETA from REAL telemetry only: per-tool timings observed by this very
+    process. Two samples minimum before we say anything at all, intervals
+    instead of fake precision, and "hard to estimate" when data is thin —
+    the master brief forbids invented percentages. */
+export class EtaMetrics {
+  constructor({ perTool = 100 } = {}) {
+    this.perTool = perTool;
+    this.byTool = new Map(); // tool → { n, totalMs, samples[ms] }
+  }
+
+  record(tool, ms) {
+    if (!tool || !Number.isFinite(ms) || ms < 0 || ms > 3600e3) return; // garbage never enters the model
+    const k = String(tool);
+    const m = this.byTool.get(k) || { n: 0, totalMs: 0, samples: [] };
+    m.n += 1;
+    m.totalMs += ms;
+    m.samples.push(ms);
+    if (m.samples.length > this.perTool) m.samples.shift();
+    this.byTool.set(k, m);
+  }
+
+  /** null when there is not enough data to be honest; else a min–avg–max
+      interval from the last observations. */
+  estimate(tool) {
+    const m = this.byTool.get(String(tool || ''));
+    if (!m || m.n < 2) return null;
+    const s = [...m.samples].sort((a, b) => a - b);
+    const lo = s[0];
+    const hi = s[s.length - 1];
+    const avg = Math.round(m.totalMs / m.n);
+    return { tool: String(tool), n: m.n, avgMs: avg, loMs: lo, hiMs: hi };
+  }
+
+  summary() {
+    const out = {};
+    for (const [tool, m] of this.byTool) out[tool] = { runs: m.n, avgMs: Math.round(m.totalMs / m.n) };
+    return out;
+  }
+}
+
+export const eta = new EtaMetrics();
+
 /** tests + diagnostics only */
 export function _resetAutopilot() {
   tasks.byId.clear();
   fileLocks.held.clear();
   for (const q of fileLocks.queue.values()) for (const w of q) clearTimeout(w.timer);
   fileLocks.queue.clear();
+  eta.byTool.clear();
 }
