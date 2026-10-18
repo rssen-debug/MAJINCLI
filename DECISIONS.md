@@ -115,6 +115,12 @@ allowed to contradict a test.
 
 ## Öppna frågor
 
+- ~~**Job dedupe identity**~~ **DECIDED 2026-10-18**: fingerprint = canonical URL
+  (tracking params stripped, real id params kept, case/diacritics-folded
+  title+company fallback). The pipeline file IS the dedupe memory — one place where
+  "seen" lives, one truth for the agent and the user. Cost: two postings of the
+  same real job (apply-direct vs board) with different urls are two applications;
+  acceptable, they are different submission channels anyway.
 - ~~**Card telemetry source**~~ **DECIDED 2026-10-18**: the card's own clock + the card's
   own `tool_result` events (elapsed, count, self-measured average). Globally aggregated
   intervals may enrich later via `/api/tasks`, but a predicted total finish time is not
@@ -136,6 +142,10 @@ allowed to contradict a test.
 - **Browser-context resource model.** Files lock cleanly by path; a browser context is not a
   path. Candidates: a named-resource lock per provider-site domain; count-based pool keyed by
   `channel:browser`. Decided when browser hardening starts (next phase).
+- **Job submission form model.** Portal forms vary wildly (multi-step, iframes, file
+  drops). Candidates: per-site recipes (fragile, curated) vs generic field-role
+  detection (label/aria/input-type driven, robust-ish). An angry question for the
+  submit slice — Decide with the first real employer form, not from a chair.
 - **Handoff cost.** Reassigning an agent to a sibling's task needs the sibling's plan + state
   summary; how much do we copy vs re-derive? Test with the first real teamwork run.
 - **Living Missions data model.** One persistent goal holding many tasks + decision points —

@@ -5,6 +5,39 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (job agent, slice 1: the pipeline is real)
+
+### Ändrat
+- **Job-search foundation** (`src/core/jobs/` new): the application state machine
+  found → matched → started → waiting → submitted/failed (+ skipped). Illegal moves
+  throw plain words; `failed` demands a WHY, `submitted` demands PROOF, terminal
+  means terminal ("done is done"). Proof-bearing pipeline stored at
+  `<MAJIN_HOME>/jobs/applications.json`; a torn store reads as empty, never fatal.
+- **Dedupe = the pipeline itself**: fingerprint from canonical URL (tracking junk
+  stripped, real job-id params kept) with a title+company fallback folded for case
+  and diacritics. A job seen once is a job never re-shown.
+- **Deterministic CV-match** with an honest basis: site-tagged skill demands
+  (must_have 1.0 / nice_to_have 0.5) when the site provides them, else the ad's own
+  words; null = "cannot score this CV", never an invented score. Swedish/English
+  skill vocabulary lives behind `svlex(...)` (input data, exempt from the i18n gate).
+- **Platsbanken adapter** (public JobTech Dev API, no key): parser built from the
+  production wire shape observed today; errors come back shaped, never thrown.
+- **7 new tools → 92**: `jobs.search`, `jobs.match`, `jobs.list`, `jobs.start`,
+  `jobs.skip`, `jobs.cv.set`, `jobs.cv.show` — params in the house string-shorthand.
+
+### Fixat
+- Matcher's label→canon mapping: `'js' ⊂ 'node js'` promoted *javascript* and
+  `.net ⊂ kubernetes` promoted *csharp* — now longest whole-word synonym wins;
+  both traps pinned by test. (Found by the test I wrote before trusting it.)
+- `normalizeUrl` stripped trailing slashes only after the query string; the slash
+  lives on the pathname (also pinned).
+
+### Verifierat
+- `node --test test/jobs.test.js` → 7 pass, 0 fail, 1 skipped (live gate).
+- `MAJIN_JOBS_LIVE=1 node --test test/jobs.test.js` → 8/8, real Platsbanken
+  round-trip green in the sandbox (one-time proof; CI does not gamble on the site).
+- `npm test` → 204 pass, 0 fail, 6 skipped · `npm run i18n` 0/74 · `npm run check` 103/103.
+
 ## 2026-10-18 (ETA lands on the task cards — and the missing wire it exposed)
 
 ### Ändrat

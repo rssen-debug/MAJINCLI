@@ -10,9 +10,10 @@ import { webTools } from './web.js';
 import { reTools } from './re.js';
 import { majinTools } from './majin.js';
 import { agentTools } from './agent.js';
+import { jobTools } from './jobs.js';
 import { approvals } from '../guard.js';
 
-export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...reTools, ...majinTools, ...agentTools];
+export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...reTools, ...majinTools, ...agentTools, ...jobTools];
 
 export function buildRegistry(ctx) {
   if (!ctx.approvals) ctx.approvals = approvals;
