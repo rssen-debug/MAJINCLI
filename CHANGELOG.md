@@ -5,6 +5,23 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (kväll, del 3) — Del 1D: crash-resume without duplicate side effects
+
+### Ändrat
+- **`src/core/effects.js` (new):** per-session side-effect journal (`<sid>.journal.jsonl`),
+  `planResume`/`recoverTask` decide in CODE which steps may run after a crash:
+  journal + external evidence (sha256 of the file) both must agree; tampered or
+  missing evidence lands in `uncertain` and never in blind-retry. Explicit actions:
+  resume | retry | cancel | startFresh (journal archived on fresh start).
+- **Wired, not dead code:** `fs.write` events now carry their session; the runtime
+  journals every write with the real post-write content hash.
+
+### Verifierat
+- `node --test test/resume.test.js` → 6/6 (fail-discriminating proven: sabotaging the
+  hash compare turns test 3 red; restored = green).
+- Suite 329/0/7, i18n 3/3, bench unchanged (7/7, p50 43ms).
+- Matrix: 39 → 41/100 (Del 1: 8/10).
+
 ## 2026-10-18 (kväll, del 2) — Completion matrix: honest baseline under the 100-point directive
 
 ### Ändrat

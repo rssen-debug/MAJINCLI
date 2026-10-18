@@ -145,7 +145,7 @@ export const fileTools = [
         if (append) await fsp.writeFile(abs, String(content), { flag: 'a' });
         else await writeAtomic(abs, String(content));
         const size = sizeOf(abs);
-        ctx.bus?.emit?.('file.write', { path: abs, bytes: size });
+        ctx.bus?.emit?.('file.write', { path: abs, bytes: size, session: ctx.session || null, taskId: ctx.taskId || null });
         return { result: `wrote ${abs} (${size} bytes)`, meta: { path: abs, bytes: size }, summary: `wrote ${path.basename(abs)}` };
       });
     },

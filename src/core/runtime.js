@@ -36,6 +36,22 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
   const registry = buildRegistry(ctx);
 
   const agent = new Agent({ cfg, registry, memory, skills, usage, bus, shared: ctx });
+  /* Del 1D: every fs.write lands in the session journal with the same truth the
+     tool logged — a crash never makes us write the same file twice. */
+  (async () => {
+    try {
+      const { recordEffect, sha256 } = await import('./effects.js');
+      const nodeFs = (await import('node:fs')).default;
+      bus.on('file.write', (ev) => {
+        try {
+          if (!ev || !ev.session || !ev.path) return;
+          let hash = null;
+          try { hash = sha256(nodeFs.readFileSync(ev.path)); } catch { /* transient */ }
+          recordEffect(ev.session, { kind: 'fs.write', target: ev.path, hash, status: 'completed' });
+        } catch { /* journaling must never break the tool loop */ }
+      });
+    } catch { /* effects får aldrig stoppa runtime */ }
+  })();
   ctx.agent = agent;
   ctx.pause = () => agent.pause();
   ctx.resume = () => agent.resume();
