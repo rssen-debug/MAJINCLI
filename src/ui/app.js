@@ -136,6 +136,11 @@ function moaGauge(ev) {
 function onEvent(ev) {
   if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.onEvent(ev); // Live Agent Vision — real events only
   switch (ev.type) {
+    case 'marketing_setup':
+      // Private, one-time credential question inline in the conversation.
+      // NEVER paste Meta tokens into /api/chat or agent history.
+      if (window.MAJIN_MARKETING) window.MAJIN_MARKETING.show(ev.request);
+      break;
     case 'route':
       $('c-route').innerHTML = 'route <b>' + esc(ev.job) + '</b> → ' + esc((ev.model || '?').split('/').pop()) + (ev.confidence != null && ev.confidence < 0.45 ? ' <span style="color:var(--warn)">?</span>' : '');
       $('c-route').classList.add('live');
