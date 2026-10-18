@@ -81,7 +81,7 @@ Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; Value
 
 [Registry]
 ; The autostart task, and only that one: no Run-key write when it is not ticked.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "MAJIN"; ValueData: """{sys}\wscript.exe"" """{app}\MAJIN.vbs"""; Flags: uninsdeletevalue; Tasks: autostart
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "MAJIN"; ValueData: """{sys}\wscript.exe"" ""{app}\MAJIN.vbs"""; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
 Filename: "{sys}\wscript.exe"; Parameters: """{app}\MAJIN.vbs"""; Description: "Start {#MyAppName} now"; WorkingDir: "{app}"; Flags: nowait postinstall
