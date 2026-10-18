@@ -140,6 +140,10 @@ allowed to contradict a test.
 - **Pause mechanics.** Shipped pause is abrupt (stop mid-turn + status `paused`; resume says
   "Continue from the step ..."). A graceful "finish the current tool call, then hold" pause is
   the open refinement — loop.js has no safe-point concept yet.
+- ~~**Resume channel**~~ **DECIDED 2026-10-18**: resume rides the reply path
+  (follow-up with a continue-brief into the same session) — it streams onto the
+  exact card that paused it, no second engine path. The NL "resume agent N"
+  command stays for channels, unchanged.
 - ~~**Browser live-gate cadence**~~ **DECIDED 2026-10-18**: two consecutive green runs
   (39 119 535 069 + 39 120 606 397) and one real bug caught on run one — the local form
   server is deterministic enough for the Windows runner. `continue-on-error` removed;

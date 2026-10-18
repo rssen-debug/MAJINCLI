@@ -5,6 +5,36 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (autopilot UI: cards you can talk to)
+
+### Ändrat
+- **Reply-to-this-agent on every card**: the card owns a reply row
+  (Enter or ↩ send). The follow-up rejoins the SAME task session server-side
+  (`body.task` routing, pre-existing) and streams onto the very card you typed
+  against — never a new task, never the wrong one.
+- **⏸/▶ buttons per card**: pause = new `/api/tasks/action` endpoint
+  (running-only, else a plain-words refusal; registry moves for real). Resume
+  deliberately rides the reply path with a continue-brief — it streams onto the
+  card for free and needs zero second engine path.
+- **Live "agents at work" deck** over the chat: every running/waiting/paused
+  task from `/api/tasks` — including channel-started ones with no card —
+  status dot, age, tool count, 5 s poll, hides when quiet. Real registry data
+  only.
+- Stream discipline: a paused card's SSE closing no longer masquerades as
+  "done" (rec.paused freeze), and finish/stop hides the pause button cleanly.
+
+### Fixat
+- Endpoint body arrived as a Buffer (`body.task === undefined`) — refusal
+  discipline test caught it; `readJson` now.
+
+### Verifierat
+- `node --test test/server.test.js` → 10 pass, 0 fail (failing-first guard test:
+  unknown task / unknown action / wrong-state refusals over real HTTP + the
+  live pause path when the demo provider leaves one running).
+- `npm test` → 212 pass, 0 fail, 7 skipped · i18n 0/75 · parse 105/105.
+- Visual click-through (reply row, ⏸/▶, deck) is Windows-human-round material:
+  stated, not skipped — no DOM harness exists here.
+
 ## 2026-10-18 (job agent, slice 2: prepare + send — with proof or nothing)
 
 ### Ändrat

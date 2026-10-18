@@ -244,6 +244,25 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       if (!saved.ok) return json(res, 422, { ok: false, error: saved.errors.map((e) => e.msg).join('; ') });
       return json(res, 200, { ok: true, ...marketingStatus(cfg) });
     }
+    if (p === '/api/tasks/action' && req.method === 'POST') {
+      /* card buttons (⏸/▶): pause runs through the same engine as the NL
+         command; resume is the chat follow-up path client-side (streams onto
+         the card for free) — the endpoint is the pause half + refusals. */
+      const body2 = await readJson(req);
+      const t = tasks.get(String(body2.task || ''));
+      if (!t) return json(res, 200, { ok: false, error: 'unknown task: ' + (body2.task || '(none)') });
+      if (body2.action === 'pause') {
+        if (t.status !== 'running' && t.status !== 'waiting') {
+          return json(res, 200, { ok: false, error: 'agent ' + t.id + ' is ' + t.status + ' — only running agents pause' });
+        }
+        return json(res, 200, await executeTaskCommand({ action: 'pause', target: { ok: true, task: t } }, { agent }));
+      }
+      if (body2.action === 'resume') {
+        if (t.status !== 'paused') return json(res, 200, { ok: false, error: 'agent ' + t.id + ' is ' + t.status + ' — only paused agents resume' });
+        return json(res, 200, await executeTaskCommand({ action: 'resume', target: { ok: true, task: t } }, { agent }));
+      }
+      return json(res, 200, { ok: false, error: 'unknown action: ' + JSON.stringify(body2.action || null) + ' (pause|resume)' });
+    }
     if (p === '/api/update' && req.method === 'GET') {
       return json(res, 200, { ok: true, version: VERSION, update: rt.update.info, current: VERSION });
     }

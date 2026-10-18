@@ -6,11 +6,10 @@ autopilot/teamwork/dashboard additions).
 
 ## Hög prioritet
 
-- **Autopilot UI: done 2026-10-18 except the follow-up surface** — cards live in chat
-  (status/stop/stream pinned by contract test; human click-through still in the round below).
-  Remaining: click a card → "reply to this task" (routing `body.task` exists server-side),
-  pause/resume (registry states exist; the loop does not), and a live `/api/tasks` deck for
-  channel-started tasks. Natural-language routing stays in Medel until the parse is designed.
+- ~~**Autopilot UI follow-up surface**~~ **SHIPPED 2026-10-18** (reply-to-this-agent rows,
+  ⏸/▶ per card via `/api/tasks/action`, live "agents at work" deck — see CHANGELOG).
+  Remaining: human click-through in the Windows round below; resumed runs now stream
+  onto the card they were paused from, by design.
   *(källa: master brief §"TRUE PARALLEL AUTOPILOT")*
 - **Browser-use — foundation done 2026-10-18.** CDP, six tools, slot pool, loop guard,
   evidence-everywhere, all deterministic parts tested (189/0). Remaining for the full claim:

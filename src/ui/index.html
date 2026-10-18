@@ -168,6 +168,17 @@ body.simple #b-stop{display:none}
 @media (max-width:600px){.preview-frame{height:360px}.preview-panel{margin:8px 0}}
 .ob-rm{ margin-top:4px; font-size:10.5px; color:var(--err,#e05555); background:none; border:0; cursor:pointer; text-align:left; padding:0 }
 .ob-price{ font-size:10px; color:var(--dim,#a98); margin-left:8px }
+.deck{border-bottom:1px solid var(--line);padding:6px 14px;font-family:var(--mono);font-size:10.5px;color:var(--dim);background:var(--bg2)}
+.deck-title{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--cy);margin-bottom:2px}
+.deck-row{padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.deck-row b{color:var(--ink)}
+.deck-dot{margin-right:4px}
+.task-foot{display:flex;gap:6px;margin-top:8px}
+.task-foot .task-reply{flex:1;background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--ink);font:12px var(--sans);padding:6px 8px}
+.task-foot .task-reply:focus{outline:none;border-color:var(--cy)}
+.task-foot .task-send,.task-head .task-pause{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--dim);font:11px var(--mono);padding:4px 8px;cursor:pointer}
+.task-foot .task-send:hover,.task-head .task-pause:hover{color:var(--ink);border-color:var(--cy)}
+.task-status.st-paused{color:var(--warn);border-color:var(--warn)}
 </style>
 </head>
 <body class="simple">

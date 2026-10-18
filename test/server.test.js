@@ -176,6 +176,40 @@ test('fleet commands through /api/chat are deterministic (zero model calls, plai
   assert.equal(help9.json.ok, false, 'assist to a ghost is refused too');
 });
 
+test('/api/tasks/action: guard discipline over real HTTP (unknown, wrong state, unknown action)', async () => {
+  // demo-providern = den lokala stand-in: ett ärligt task faktiskt Skapat via API:t
+  await fetch(base('/api/config?t=' + TOKEN), { method: 'PATCH', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + TOKEN }, body: JSON.stringify({ models: { provider: 'demo', routes: { chat: 'demo/demo-fast' } } }) });
+  const made = await fetch(base('/api/chat?t=' + TOKEN), { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + TOKEN }, body: JSON.stringify({ input: 'kort-paustest', autopilot: true, stream: false }) });
+  assert.equal(made.status, 200);
+  const task = JSON.parse(await made.text()).task;
+  assert.ok(task, 'the chat endpoint handed us a real task id');
+  const act = async (id, action) => {
+    const r = await fetch(base('/api/tasks/action?t=' + TOKEN), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + TOKEN },
+      body: JSON.stringify({ task: id, action }),
+    });
+    return JSON.parse(await r.text());
+  };
+  const bad = await act('nonsense-task', 'pause');
+  assert.equal(bad.ok, false, 'unknown tasks are refused');
+  const bogus = await act(task, 'explode');
+  assert.equal(bogus.ok, false);
+  assert.match(String(bogus.error), /unknown action/, 'unknown actions are named, not swallowed');
+  const st = await fetch(base('/api/tasks?t=' + TOKEN), { headers: { authorization: 'Bearer ' + TOKEN } });
+  const mine = JSON.parse(await st.text()).tasks.find((x) => x.id === task);
+  assert.ok(mine, 'the task is in the registry');
+  const pauseRes = await act(task, 'pause');
+  if (mine.status === 'done' || mine.status === 'error') {
+    assert.equal(pauseRes.ok, false, 'pause on a finished task refuses in plain words');
+    assert.match(String(pauseRes.error), new RegExp('is ' + mine.status));
+  } else {
+    assert.equal(pauseRes.ok, true, 'pause on a live task works');
+  }
+  const resumeWrong = await act(task, 'resume');
+  assert.equal(resumeWrong.ok, false, 'resume on a non-paused task refuses');
+});
+
 test('/api/state and /api/config: right shape and redacted keys', async () => {
   const st = JSON.parse((await get(`/api/state?t=${TOKEN}`)).body);
   assert.equal(st.version, JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version, 'the app must report the version it was released as');

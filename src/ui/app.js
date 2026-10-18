@@ -319,55 +319,114 @@ async function stop() {
    Status vocabulary = the registry's: working · waiting · done · error ·
    stopped — nothing here is invented client-side. */
 
-const P_STATUS = { working: '🔧 working', waiting: '⏳ waiting', done: '✅ done', error: '❌ error', stopped: '🟥 stopped' };
+const P_STATUS = { working: '🔧 working', waiting: '⏳ waiting', paused: '⏸ paused', done: '✅ done', error: '❌ error', stopped: '🟥 stopped' };
+
+/* one SSE stream drives one card: first message creates the task, follow-ups
+   rejoin it (payload.task), resume IS a follow-up with a continue-brief. */
+async function driveCard(rec, payload) {
+  rec.abort = new AbortController();
+  try {
+    const r = await fetch('/api/chat?t=' + encodeURIComponent(TOKEN), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + TOKEN },
+      body: JSON.stringify(payload),
+      signal: rec.abort.signal,
+    });
+    if (!r.ok || !r.body) throw new Error('server ' + r.status);
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const raw = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        let name = '';
+        let data = '';
+        for (const line of raw.split('\n')) {
+          if (line.startsWith('event: ')) name = line.slice(7);
+          else if (line.startsWith('data: ')) data = line.slice(6);
+        }
+        if (!data) continue;
+        let ev;
+        try { ev = JSON.parse(data); } catch { continue; }
+        if (name === 'done') { finishTask(rec, ev); continue; }
+        taskEvent(rec, name, ev);
+      }
+    }
+    if (!rec.finished && !rec.paused) finishTask(rec, { ok: true });
+  } catch (e) {
+    if (e.name === 'AbortError' || rec.finished || rec.paused) { /* stopped/paused on purpose */ }
+    else { rec.status = 'error'; paintTaskState(rec, 'error; '+e.message); }
+  }
+}
 
 function parallelTask(input) {
   addMsg('user', 'YOU · PARALLEL', input);
   $('input').value = '';
   autoGrow();
   const card = taskCard({ label: '🧵 launching…', status: 'waiting' });
-  const rec = { card, input, id: null, text: '', last: '', painted: 0, finished: false, toolCount: 0, toolMs: 0, abort: new AbortController() };
+  const rec = { card, input, id: null, text: '', last: '', painted: 0, finished: false, paused: false, toolCount: 0, toolMs: 0, abort: new AbortController() };
+  card.rec = rec;
   telJoin(rec);
-  (async () => {
-    try {
-      const r = await fetch('/api/chat?t=' + encodeURIComponent(TOKEN), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + TOKEN },
-        body: JSON.stringify({ input, autopilot: true }),
-        signal: rec.abort.signal,
-      });
-      if (!r.ok || !r.body) throw new Error('server ' + r.status);
-      const reader = r.body.getReader();
-      const dec = new TextDecoder();
-      let buf = '';
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        let i;
-        while ((i = buf.indexOf('\n\n')) >= 0) {
-          const raw = buf.slice(0, i);
-          buf = buf.slice(i + 2);
-          let name = '';
-          let data = '';
-          for (const line of raw.split('\n')) {
-            if (line.startsWith('event: ')) name = line.slice(7);
-            else if (line.startsWith('data: ')) data = line.slice(6);
-          }
-          if (!data) continue;
-          let ev;
-          try { ev = JSON.parse(data); } catch { continue; }
-          if (name === 'done') { finishTask(rec, ev); continue; }
-          taskEvent(rec, name, ev);
-        }
-      }
-      if (!rec.finished) finishTask(rec, { ok: true });
-    } catch (e) {
-      if (e.name === 'AbortError' || rec.finished) { /* user stopped it */ }
-      else { rec.status = 'error'; paintTaskState(rec, 'error; '+e.message); }
-    }
-  })();
+  driveCard(rec, { input, autopilot: true });
   return true;
+}
+
+/* follow-up into the SAME task session (the card's history, not a new task) */
+function replyToTask(rec, text, { quiet = false } = {}) {
+  if (!rec || !rec.id || !String(text || '').trim()) return;
+  rec.paused = false;
+  if (rec.finished) {
+    rec.finished = false;
+    rec.endAt = null;
+    rec.card.stopb.disabled = false;
+    rec.card.m.classList.remove('task-done', 'task-bad');
+    telJoin(rec);
+  }
+  rec.status = 'working';
+  paintTaskState(rec, quiet ? 'continuing from where it paused…' : 'reading your reply…');
+  if (!quiet) {
+    rec.text += '\n\n**you:** ' + text + '\n\n';
+    paintTaskText(rec, true);
+  }
+  driveCard(rec, { input: String(text), task: rec.id });
+}
+
+async function pauseTask(rec) {
+  if (!rec || !rec.id) return;
+  rec.card.pauseb.disabled = true;
+  try {
+    const r = await api('/tasks/action', { method: 'POST', body: { task: rec.id, action: 'pause' } });
+    if (r && r.ok) {
+      rec.paused = true;
+      rec.status = 'paused';
+      paintTaskState(rec, 'paused — the whole context is kept');
+      telLeave(rec);
+      paintTel(rec);
+      paintPauseBtn(rec);
+    } else {
+      paintTaskState(rec, 'could not pause: ' + ((r && r.error) || 'server said no'));
+    }
+  } catch (e) {
+    paintTaskState(rec, 'could not pause: ' + e.message);
+  }
+  rec.card.pauseb.disabled = false;
+}
+
+function resumeTask(rec) {
+  paintPauseBtn(rec);
+  /* resume = the continue follow-up: it streams onto this very card */
+  replyToTask(rec, 'Continue from the step you were on when you paused. Do not restart from zero — the earlier context in this session is the shared state of work.', { quiet: true });
+}
+
+function paintPauseBtn(rec) {
+  rec.card.pauseb.textContent = rec.status === 'paused' ? '▶ resume' : '⏸ pause';
+  rec.card.pauseb.onclick = () => (rec.status === 'paused' ? resumeTask(rec) : pauseTask(rec));
+  rec.card.pauseb.style.display = rec.finished ? 'none' : '';
 }
 
 function taskCard({ label, status }) {
@@ -375,16 +434,31 @@ function taskCard({ label, status }) {
   const head = el('div', 'task-head');
   const idl = el('span', 'task-id', esc(label));
   const st = el('span', 'task-status st-waiting', esc(P_STATUS[status] || status));
+  const pauseb = el('button', 'task-pause', '⏸ pause');
   const stopb = el('button', 'task-stop', '⏹ stop');
   const act = el('div', 'task-act kv', '…');
   const tel = el('div', 'task-tel', '');
   const ans = el('div', 'body task-ans', '');
-  head.append(idl, st, stopb);
-  m.append(head, act, tel, ans);
+  const foot = el('div', 'task-foot');
+  const rinput = el('input', 'task-reply');
+  rinput.placeholder = 'reply to this agent…';
+  const rbtn = el('button', 'task-send', '↩ send');
+  foot.append(rinput, rbtn);
+  head.append(idl, st, pauseb, stopb);
+  m.append(head, act, tel, ans, foot);
   $('scroller').append(m);
   scroll();
-  const card = { m, idl, st, stopb, act, tel, ans };
+  const card = { m, idl, st, pauseb, stopb, act, tel, ans, foot, rinput, rbtn };
   stopb.onclick = () => stopTask(card.rec);
+  const sendReply = () => {
+    const text = rinput.value.trim();
+    if (!text || !card.rec) return;
+    rinput.value = '';
+    replyToTask(card.rec, text);
+  };
+  rbtn.onclick = sendReply;
+  rinput.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); } };
+  pauseb.onclick = () => pauseTask(card.rec);
   return card;
 }
 
@@ -504,6 +578,7 @@ function finishTask(rec, doneEv) {
   paintTel(rec);
   paintTaskText(rec, true);
   rec.card.stopb.disabled = true;
+  paintPauseBtn(rec);
   rec.card.m.classList.add(rec.status === 'done' ? 'task-done' : 'task-bad');
   refresh && refresh(true);
 }
@@ -523,6 +598,49 @@ async function stopTask(rec) {
   rec.card.m.classList.add('task-bad');
   rec.abort.abort();
 }
+
+/* ------------------------------ live deck --------------------------------
+   A slim strip over the chat: every RUNNING/WAITING/Paused task from the
+   backend registry — including ones started from channels where no card
+   exists. Real data only; it hides when the machine is quiet. */
+const deck = { el: null, timer: null };
+
+function deckEnsure() {
+  if (deck.el) return deck.el;
+  deck.el = el('section', 'deck', '');
+  deck.el.hidden = true;
+  const main = $('main');
+  if (main) main.insertBefore(deck.el, main.firstChild);
+  return deck.el;
+}
+
+function deckRow(t) {
+  const dot = t.status === 'running' ? '🟢' : t.status === 'paused' ? '⏸' : '🟡';
+  const age = fmtDur((t.status === 'running' || t.status === 'waiting' ? Date.now() : t.updated) - t.created);
+  const tools = t.toolsRun ? ' · ' + t.toolsRun + ' tools' : '';
+  return '<div class="deck-row"><span class="deck-dot">' + dot + '</span> <b>' + esc(t.id) + '</b> ' + esc((t.input || '').slice(0, 70)) +
+    ' <span class="kv">' + esc(t.status) + ' · ⏱ ' + age + tools + '</span></div>';
+}
+
+async function deckTick() {
+  const elx = deckEnsure();
+  let d = null;
+  try {
+    d = await (await fetch('/api/tasks?t=' + encodeURIComponent(TOKEN), { headers: { authorization: 'Bearer ' + TOKEN } })).json();
+  } catch { d = null; }
+  const active = d && Array.isArray(d.tasks) ? d.tasks.filter((t) => ['running', 'waiting', 'paused'].includes(t.status)) : [];
+  if (!active.length) { elx.hidden = true; return; }
+  elx.hidden = false;
+  elx.innerHTML = '<div class="deck-title">agents at work: ' + active.length + '</div>' + active.map(deckRow).join('');
+  scroll();
+}
+
+function deckStart() {
+  deckEnsure();
+  deckTick();
+  if (!deck.timer) deck.timer = setInterval(deckTick, 5000);
+}
+document.addEventListener('DOMContentLoaded', deckStart);
 
 /* ------------------------------- approvals ------------------------------ */
 function approvalCard(ev) {
