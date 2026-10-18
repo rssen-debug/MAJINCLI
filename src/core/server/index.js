@@ -13,6 +13,7 @@ import { readHistory } from '../context.js';
 import { tasks, fileLocks, eta } from '../tasks.js';
 import { parseTaskCommand, statusText } from '../intent-tasks.js';
 import { analyzeMetaAccount, marketingStatus, checkMarketingConfig, wantsMarketingSetup } from '../marketing.js';
+import { channelStatus } from '../marketing-channels.js';
 
 const SELF_DIR = (() => {
   try {
@@ -215,6 +216,32 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     if (p === '/api/tasks') return json(res, 200, { ok: true, tasks: tasks.snapshot(), locks: fileLocks.heldList(), telemetry: eta.summary() });
     /* Credentials never become agent tool arguments or model-visible data.
        Existing MAJIN bearer auth is required above this point. */
+    if (p === '/api/marketing/channel') {
+      const state = () => channelStatus(cfg.get('marketing') || {});
+      if (req.method === 'GET') return json(res, 200, {ok:true,channels:state()});
+      if (req.method !== 'POST') return json(res,405,{ok:false,error:'method not allowed'});
+      const body=await readJson(req);
+      const platform=String(body.platform||'').toLowerCase();
+      if(!['google','tiktok'].includes(platform))return json(res,400,{ok:false,error:'platform must be google or tiktok'});
+      if(body.action!=='save' && body.action!=='disconnect')return json(res,400,{ok:false,error:'action must be save or disconnect'});
+      const patch=body.action==='disconnect'?
+        platform==='tiktok'?{advertiserId:'',accessToken:''}:{customerId:'',accessToken:'',developerToken:''}:
+        platform==='tiktok'?
+          {advertiserId:String(body.advertiserId||'').trim(),currency:String(body.currency||'').toUpperCase(),
+            ...(body.accessToken?{accessToken:String(body.accessToken).trim()}: {})}:
+          {customerId:String(body.customerId||'').trim(),currency:String(body.currency||'').toUpperCase(),
+            loginCustomerId:String(body.loginCustomerId||'').trim(),
+            ...(body.accessToken?{accessToken:String(body.accessToken).trim()}:{}),
+            ...(body.developerToken?{developerToken:String(body.developerToken).trim()}: {})};
+      if(body.action==='save'){
+        if(!/^[A-Z]{3}$/.test(patch.currency))return json(res,422,{ok:false,error:'Use the currency shown in the ad account, e.g. SEK or USD.'});
+        if(!/^[0-9]{3,25}$/.test(String(platform==='tiktok'?patch.advertiserId:patch.customerId)))return json(res,422,{ok:false,error:'Enter a valid numeric ad account ID.'});
+        for(const key of ['accessToken','developerToken'])if(patch[key] && patch[key].length>8192)return json(res,422,{ok:false,error:'Credential is unexpectedly long.'});
+      }
+      const saved=cfg.patch({marketing:{[platform]:patch}},{source:'marketing.connect'});
+      if(!saved.ok)return json(res,422,{ok:false,error:saved.errors.map(e=>e.msg).join('; ')});
+      return json(res,200,{ok:true,channels:state(),note:'Credentials saved locally, but the platform has NOT yet verified this authorization. No ads changed.'});
+    }
     if (p === '/api/marketing') {
       if (req.method === 'GET') return json(res, 200, { ok: true, ...marketingStatus(cfg) });
       if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method not allowed' });
@@ -378,6 +405,24 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       // First-use connection, solely for explicit ad-management requests.
       // Asking for credentials is deterministic and costs ZERO model tokens.
       // The token itself is collected by an authenticated form, not chat.
+      // Only explicit management/report requests trigger a contextual, private
+      // connection step. Generic advice ("what is TikTok Ads?") stays normal chat.
+      const askChannel=/(^|[\s,.!?])(tiktok|google)\s*(ads|annonser|annons|reklam|marketing|marknadsf)/i.exec(input);
+      const wantsChannelWork=/(analy[sz]|granska|optim|sköt|hantera|marknadsför|visa|rapport|kör|starta|connect|koppla|reconnect|återanslut|manage|run|audit|review|my ads|mina annonser)/i.test(input);
+      const platform=askChannel&&wantsChannelWork?askChannel[2].toLowerCase():null;
+      const forceConnect=/(reconnect|koppla om|anslut igen|byt nyckel|connect again|återanslut)/i.test(input);
+      if(body.task==null&&platform&&(!channelStatus(cfg.get('marketing')||{})[platform].configured||forceConnect)){
+        const reply=platform==='google'
+          ?'To read your Google Ads reports I need your Google Ads customer ID, developer token and an authorized OAuth access token. Enter them privately below; Google OAuth tokens expire and no ads will be changed.'
+          :'To read TikTok Ads reports I need your advertiser ID and an authorized TikTok Business API token. Enter them privately below; no ads will be changed.';
+        if(noStreamFlag(body,url))return json(res,200,{ok:true,needsMarketingChannelSetup:platform,text:reply});
+        sseHead(res);
+        res.write('event: delta\n'+'data: '+JSON.stringify({type:'delta',text:reply})+'\n\n');
+        res.write('event: answer\n'+'data: '+JSON.stringify({type:'answer',text:reply})+'\n\n');
+        res.write('event: marketing_channel_setup\n'+'data: '+JSON.stringify({type:'marketing_channel_setup',platform,request:input})+'\n\n');
+        res.write('event: done\n'+'data: '+JSON.stringify({ok:true,channelSetup:platform})+'\n\n');
+        return res.end();
+      }
       if (body.task == null && wantsMarketingSetup(input) && !marketingStatus(cfg).connected) {
         const reply = 'I can analyze your Facebook/Instagram ads. First I need your Meta ad account and product costs. Complete the secure connection here; your token will not be sent to the AI model. No ads will be changed.';
         if (noStreamFlag(body, url)) return json(res, 200, { ok: true, needsMarketingSetup: true, text: reply });

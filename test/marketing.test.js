@@ -106,7 +106,7 @@ test('local config supports redaction; marketing tools are present, read-only', 
   assert.ok(!JSON.stringify(cfg.redacted()).includes('private-test-token'));
   assert.ok(marketingStatus(cfg).connected);
   const names = ALL_TOOLS.filter((x)=>x.group==='marketing');
-  assert.deepEqual(names.map((x)=>x.name).sort(), ['marketing.analyze','marketing.plan','marketing.status']);
+  assert.deepEqual(names.map((x)=>x.name).sort(), ['marketing.analyze','marketing.channel_report','marketing.plan','marketing.status']);
   assert.ok(names.every((x)=>x.risk==='read'));
   const status = await names.find((x)=>x.name==='marketing.status').run({}, {cfg});
   assert.ok(!status.result.includes('private-test-token'));

@@ -136,6 +136,10 @@ function moaGauge(ev) {
 function onEvent(ev) {
   if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.onEvent(ev); // Live Agent Vision — real events only
   switch (ev.type) {
+    case 'marketing_channel_setup':
+      // Platform-specific credentials stay in secure inline form, never the model.
+      if (window.MAJIN_MARKETING) window.MAJIN_MARKETING.showChannel(ev.platform,ev.request);
+      break;
     case 'marketing_setup':
       // Private, one-time credential question inline in the conversation.
       // NEVER paste Meta tokens into /api/chat or agent history.

@@ -4,9 +4,31 @@
  */
 import { def } from './registry.js';
 import { marketingStatus, analyzeMetaAccount } from '../marketing.js';
+import { channelStatus, readTikTokAds, readGoogleAds } from '../marketing-channels.js';
 import { microMarketingPlan } from '../marketing-plan.js';
 
 export const marketingTools = [
+  def({
+    name: 'marketing.channel_report',
+    group: 'marketing',
+    risk: 'read',
+    desc: 'Fetch live campaign-level spend/click/impression reports from TikTok Ads or Google Ads using authorized locally configured platform-specific credentials. READ ONLY, NEVER changes ads. Distinguishes Google reported conversions from actual shop purchases, and cannot prove profit. If missing credentials, request a secure in-chat platform connection. No extra LLM requests for report calculations.',
+    params: {platform:'string: tiktok or google'},
+    required:['platform'],
+    async run(args,ctx){
+      try{
+        const config=ctx.cfg.get('marketing')||{};
+        const platform=String(args.platform||'').toLowerCase();
+        const report=platform==='tiktok'?await readTikTokAds(config)
+          :platform==='google'?await readGoogleAds(config)
+          :null;
+        if(!report)return {ok:false,error:{code:'platform',message:'Choose tiktok or google; Meta is covered by marketing.analyze.'}};
+        return {result:JSON.stringify(report,null,2),
+          meta:{platform,analysisOnly:true,modelCalls:0,currencyVerified:report.currencyVerified},
+          summary:platform+' campaign report retrieved; no ad budgets changed'};
+      }catch(e){return {ok:false,error:{code:'channel_report',message:e.message},summary:'Ad report unavailable — check the platform authorization'};}
+    },
+  }),
   def({
     name: 'marketing.plan',
     group: 'marketing',
@@ -41,8 +63,9 @@ export const marketingTools = [
     params: {},
     async run(_args, ctx) {
       const s = marketingStatus(ctx.cfg);
+      const channels = channelStatus(ctx.cfg.get('marketing') || {});
       return {
-        result: JSON.stringify(s, null, 2) + '\nIf Meta is not connected, tell the user to say: Analyze my Facebook ads. MAJIN will ask for the required data safely inside the chat.',
+        result: JSON.stringify({meta:s,channels},null,2)+'\nFor TikTok or Google Ads, ask the user to request those channels in the chat. An authorized ad account and platform-specific credentials are required. No credentials should be pasted into the conversation.',
         meta: { connected: s.connected, mode: s.mode },
         summary: s.connected ? 'Meta account configured, read-only insights available' : 'Meta not connected',
       };
