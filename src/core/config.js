@@ -230,7 +230,7 @@ export const DEFAULTS = {
   },
 };
 
-const SECRET_KEYS = /(^|\.)(apikey|key|token|secret|bottoken|accesstoken|password|appsecret|verifytoken)$/i;
+const SECRET_KEYS = /(^|\.)(apikey|key|token|secret|bottoken|accesstoken|developertoken|password|appsecret|verifytoken)$/i;
 const ENV_REF = /^\{env:([A-Z0-9_]+)\}$/i;
 
 /* ------------------------------- utils ----------------------------------- */
