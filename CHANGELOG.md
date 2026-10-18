@@ -5,6 +5,44 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (config race: the disk wins, tombstones stay dead)
+
+### Ändrat
+- **`cfg.patch()` applies on the freshest disk state, not on stale memory.**
+  The file is shared truth (CLI + server can both live), and every mutation
+  already goes through patch — so re-reading costs one file-read per patch and
+  nothing can silently revert another process's write.
+- **Tombstones** (patch value `undefined` = delete) are remembered per-process
+  and re-applied after every disk merge, so a removal by this process is never
+  resurrected by another merge — while keys added by other processes still
+  arrive.
+- Disk-backed patches re-run the full `load()` pipeline on the file: DEFAULTS
+  fill + `expandEnv`, so a partial file behaves byte-identically to a boot.
+- Boot-time `MAJIN_TOKEN`/`MAJIN_PORT` can never be clobbered by an older
+  value wandering in from a disk merge.
+
+### Fixat
+- **CI installer-verify regression (runs 39128429043 → 39129558163)**: the
+  running server's update-check saved its stale in-memory config over the
+  marker the verify script's `config set` had just written — restart read
+  defaults back and the step failed *config did not survive the restart*.
+- **Self-inflicted during the fix (test-caught, never shipped)**:
+  (1) merging DEFAULTS into the patch base resurrected tombstoned keys —
+  `remove provider` brought the provider back two patches later;
+  (2) skipping `expandEnv` in the base turned the literal string
+  `{env:DEEPSEEK_API_KEY}` into a "real" key — route fallback died and the
+  demo-chat test 401:ed against the real DeepSeek API.
+  Both proven with clean A/B replays before the final form.
+
+### Verifierat
+- Race one-liner (two cfg objects, interleaved patches) → marker + update both
+  survive: `node -e …` → "RACE-TSL: OK".
+- `node --test test/config.test.js` → 13 pass, 0 fail (three new pins:
+  fresh-disk-wins, tombstone-no-resurrect, env-refs-stay-expanded — written
+  failing-first).
+- `node --test test/server.test.js` → 11 pass, 0 fail · `npm test` →
+  238 pass, 0 fail, 7 skipped · i18n 0/80 · parse 113/113.
+
 ## 2026-10-18 (cost truth: prices import themselves, the cap bites)
 
 ### Ändrat

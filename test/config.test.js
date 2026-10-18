@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { DEFAULTS, merge, clone, redact, validatePatch, toRegex, Config, isPlain, JOBS } from '../src/core/config.js';
+import { DEFAULTS, merge, clone, redact, validatePatch, toRegex, Config, isPlain, JOBS, hasKey } from '../src/core/config.js';
 
 function tmpHome(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-cfg-'));
@@ -145,4 +145,59 @@ test('öppen router-modell-id med snedstreck löser rätt provider', (t) => {
   assert.equal(r.providerName, 'openrouter');
   assert.equal(r.model, 'deepseek/deepseek-v4-pro');
   assert.equal(r.baseUrl, 'https://openrouter.ai/api/v1');
+});
+
+
+/* patch() is the ONLY door to the config file, and the file is shared truth:
+   another process (the CLI, a second server) may write while we run. Regression
+   pins for the 2026-10-18 CI-verified race trilogy:
+   - a stale in-memory patch must NOT obliterate a fresh disk write
+   - tombstones (undefined = delete by THIS process) must NOT be resurrected by
+     the disk-merge with DEFAULTS
+   - env-expanded refs ({env:X}) must stay expanded through the disk round-trip
+*/
+test('patch applies on top of the freshest disk (stale holder cannot erase a CLI write)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-race-'));
+  const file = path.join(dir, 'c.json');
+  const stale = new Config(clone(DEFAULTS), file);
+  const fresh = new Config(clone(DEFAULTS), file);
+  fresh.save(); // skapa filen
+  const r1 = fresh.patch({ name: 'cli-marker-proof' }, { source: 'cli' });
+  assert.equal(r1.ok, true);
+  const r2 = stale.patch({ updates: { lastCheck: '1970' } }, { source: 'update-check' });
+  assert.equal(r2.ok, true);
+  const disk = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.equal(disk.name, 'cli-marker-proof', 'the CLI write must survive a stale holder patching another key');
+  assert.equal(disk.updates.lastCheck, '1970', 'the stale patch still lands');
+});
+
+test('tombstones: deleting a provider in-process never resurrects it via the disk merge', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-tomb-'));
+  const file = path.join(dir, 'c.json');
+  const cfg = new Config(clone(DEFAULTS), file);
+  cfg.save();
+  const r1 = cfg.patch({ providers: { ollama: undefined } });
+  assert.equal(r1.ok, true);
+  assert.equal((cfg.get('providers') || {}).ollama, undefined, 'gone in memory');
+  const r2 = cfg.patch({ updates: { notes: 'unrelated' } });
+  assert.equal(r2.ok, true);
+  assert.equal((cfg.get('providers') || {}).ollama, undefined, 'gone in memory after a second patch (was resurrected by merge-with-DEFAULTS before the fix)');
+  const disk = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.equal(disk.providers.ollama, undefined, 'gone on disk');
+});
+
+test('the disk round-trip keeps env-refs expanded — {env:X} never becomes a "real key"', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-envrt-'));
+  delete process.env.DEEPSEEK_API_KEY; // buggen kräver att variabeln saknas
+  const file = path.join(dir, 'c.json');
+  const cfg = new Config(clone(DEFAULTS), file);
+  cfg.save();
+  const r = cfg.patch({ name: 'roundtrip' });
+  assert.equal(r.ok, true);
+  const post = cfg.get('providers').deepseek;
+  /* load() expanderar '{env:X}' till '' när variabeln saknas — efter en
+     disk-baserad patch MÅSTE samma sak gälla, annars läser resolveModel
+     literalen som en äkta nyckel (A/B-bevisad 401-bugg 2026-10-18) */
+  assert.equal(post.apiKey, '', 'expanded exactly like load() does — never the literal');
+  assert.equal(hasKey(post), false, 'treated as keyless, so route fallback can engage');
 });

@@ -321,6 +321,8 @@ export class Config {
     this.file = file;
     this.subs = new Set();
     this.errors = [];
+    /* paths denna process raderade med undefined i patch — skydd mot återuppståndelse */
+    this.tombstones = new Set();
   }
 
   get(key) {
@@ -347,8 +349,45 @@ export class Config {
     const diff = flattenDiff(this.data, obj);
     if (errors.length) return { ok: false, errors, diff };
     if (dry) return { ok: true, errors: [], diff, preview: merge(this.data, obj) };
+    /* Skivan är delad sanning: en annan process (CLI, andra servern) kan skriva
+       medan vi är uppe. Applicera patchen ovanpå den färskaste filen — men
+       respektera tombstones: nycklar som DENNA process medvetet raderade
+       (undefined i patch) får aldrig återuppstå via en disc-merge med DEFAULTS
+       (CI-bevisat: provider-remove väckte raderade providrar; en motriktning
+       bevisad i run 39128429043: update-check raderade CLI-markören). */
+    let base = this.data;
+    try {
+      if (this.file && fs.existsSync(this.file)) {
+        const onDisk = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+        if (isPlain(onDisk)) {
+          /* samma pipeline som load(): DEFAULTS fyller i, sedan expandEnv —
+             annan blir '{env:X}'-literaler "sanna nycklar" i resolveModel
+             och fallback-vägen dör (A/B-bevisat: turner 401:ade via literalen) */
+          base = expandEnv(merge(clone(DEFAULTS), onDisk));
+          for (const t of this.tombstones) {
+            const parts = t.split('.');
+            let node = base;
+            for (let i = 0; i < parts.length - 1 && node; i++) node = node[parts[i]];
+            if (node && Object.prototype.hasOwnProperty.call(node, parts.at(-1))) delete node[parts.at(-1)];
+          }
+        }
+      }
+    } catch { /* oläsbar disk → skriv det vi har */ }
     const prev = this.data;
-    this.data = merge(this.data, obj);
+    this.data = merge(base, obj);
+    const walk = (node, prefix) => {
+      if (!isPlain(node)) return;
+      for (const [k, v] of Object.entries(node)) {
+        const p = prefix ? prefix + '.' + k : k;
+        if (v === undefined) this.tombstones.add(p);
+        else if (isPlain(v)) walk(v, p);
+      }
+    };
+    walk(obj, '');
+    /* miljövariabler kör alltid före fil — en disk-merge med äldre värden får
+       aldrig tyst riva MAJIN_PORT/MAJIN_TOKEN som processen startades med */
+    if (process.env.MAJIN_TOKEN && String(process.env.MAJIN_TOKEN).trim()) this.data.server.token = String(process.env.MAJIN_TOKEN).trim();
+    if (Number.isFinite(Number(process.env.MAJIN_PORT))) this.data.server.port = Number(process.env.MAJIN_PORT);
     this.errors = [];
     this.save();
     for (const fn of this.subs) {

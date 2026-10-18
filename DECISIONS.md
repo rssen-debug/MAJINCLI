@@ -91,7 +91,15 @@ allowed to contradict a test.
 
 ## Avvisat
 
-- **Direct `.vbs` as an Inno launch target (0.5.2 installer).** CreateProcess code 193 on the
+- **"loadSafe / meaningful-diffs" as the race answer** (2026-10-18): classifying
+  a config file by how much it deviates from DEFAULTS solved nothing — the
+  CLI/server race needed a write-path fix, not a judgement. Dropped before
+  commit; the diff idea survives only as the tombstone registry.
+- **Raw disk (no DEFAULTS, no expandEnv) as patch base** (2026-10-18): failed
+  two configs at once — partial fixture files lost their defaults, and
+  `{env:X}` literals turned into phantom keys. The base must be the exact
+  `load()` pipeline re-run on the fresh file.
+**Direct `.vbs` as an Inno launch target (0.5.2 installer).** CreateProcess code 193 on the
   user's real machine — a vbs is not a Win32 program. (Inno uses CreateProcess, not the shell;
   Explorer double-click resolving the association is why desktop icons
   *looked* fine.)
@@ -150,6 +158,15 @@ allowed to contradict a test.
   Cost: prices for providers without pricing in `/models` stay unknown... which is the
   point: unknown is never reported as $0, it is counted (`unpricedCount`) and treated
   as PAID under a spending cap. Proof: `test/pricing.test.js` 6/6.
+- ~~**Whose truth is the config file**~~ **DECIDED 2026-10-18**: the disk, at the
+  moment of the patch. Readers may be stale; writers never are. Cost: one
+  file-read per patch (negligible) + the tombstone rule below. Proof: the
+  CI failure chain that unearthed it, and the three config.test pins.
+- **Deletions are process-scoped tombstones, not global ones.** A key this
+  process deleted (undefined in a patch) stays deleted across ITS future
+  merges; a key it never heard of and another process added must still arrive.
+  Anything stronger (tombstones persisted to disk) would resurrect the very
+  DEFAULTS-refill problem preset providers already have on boot.
 - ~~**Does the budget cap stop anything**~~ **DECIDED 2026-10-18**: yes, since today —
   `budget.mode 'cap'` refuses the call in the loop preflight, BEFORE it costs. Free
   routes (0/0 price, mock, own server on loopback/RFC1918) still answer. Rejection is a
