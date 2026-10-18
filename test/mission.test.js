@@ -10,7 +10,7 @@ import fs from 'node:fs';
 
 process.env.MAJIN_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-mission-'));
 
-const { shouldMission, compileMission } = await import('../src/core/mission.js');
+const { shouldMission, compileMission, runMission } = await import('../src/core/mission.js');
 const { createRuntime } = await import('../src/core/runtime.js');
 const { setScript } = await import('../src/core/provider/mock.js');
 
@@ -156,4 +156,70 @@ test('compiler-fallback for inline-listor: sma modeller som inte kan JSON delar 
   assert.equal(graph.origin, 'heuristic-fallback', 'markerar at reserven gav grafen');
   assert.equal(graph.nodes.length, 3, JSON.stringify(graph.nodes.map((n) => n.input)));
   assert.ok(/asteroid/.test(graph.nodes[0].input) && /ocean/.test(graph.nodes[2].input));
+});
+
+
+/* ---- Reality Engine: verify->repair mot fil-artefakter ---- */
+
+test('mission verify->repair: en worker som PASTAAR att den skrivit en fil men inte gjort det markeras som MISSLYCKAD (inte ok)', async () => {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-msverify-'));
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  rt.cfg.patch({
+    models: { provider: 'demo', routes: { tasks: 'demo/demo-fast', tools: 'demo/demo-fast', chat: 'demo/demo-fast' } },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
+    guard: { mode: 'off' }, moa: { policy: 'off' },
+    workspace: ws,
+  }, { persist: false });
+  const dag = JSON.stringify({ nodes: [
+    { id: 'p1', input: 'write the file alpha.txt with a two-line poem', deps: [], estMs: 1000 },
+    { id: 'p2', input: 'report the number of moons of mars and nothing more', deps: [], estMs: 1000 },
+  ] });
+  setScript('mission:compile', [{ text: dag }]);
+  /* sub:tasks-scripten konsumeras strengt i ordning vid capOverride=1:
+     p1 lyger (ingen tool-call, ingen fil), repair lyger igen, p2 svarar aert. */
+  setScript('sub:tasks', [
+    { text: 'Klart! alpha.txt är nu skriven.' },                 /* p1 första — ljuger */
+    { text: 'alpha.txt är DEFINITIVT skriven nu, lovar.' },      /* p1 repair — ljuger igen */
+    { text: 'Mars has two moons: Phobos and Deimos.' },          /* p2 */
+  ]);
+  const m = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'msverify', input: '1. write the file alpha.txt with a two-line poem\n2. report the number of moons of mars and nothing more', emit: () => {}, capOverride: 1 });
+  assert.equal(m.kind, 'mission', JSON.stringify(m).slice(0, 200));
+  assert.equal(m.okCount, 1, `p1 ska ha markerats fel, inte ok: ${JSON.stringify(m.textSummary)}`);
+  assert.equal(m.failCount, 1, 'failCount ska vara 1 (p1 misslyckades ärligen)');
+  assert.match(m.textSummary[0], /verification failed|missing or empty/, `p1-linjen ska bära verifieringsfelet: ${m.textSummary[0]}`);
+  assert.match(m.textSummary[1], /not independently verifiable/, `p2-linjen ska sakna artifactens hävdan: ${m.textSummary[1]}`);
+  assert.ok(!fs.existsSync(path.join(ws, 'alpha.txt')), 'lögnern ska aldrig bli till sanning i missionen');
+  await rt.shutdown();
+});
+
+test('mission verify: en worker som VALIDt skriver filen (fs.write) faar VERIFIED-markering; repair kan riva en onyttig loogn', async () => {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-msverify2-'));
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  rt.cfg.patch({
+    models: { provider: 'demo', routes: { tasks: 'demo/demo-fast', tools: 'demo/demo-fast', chat: 'demo/demo-fast' } },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
+    guard: { mode: 'off' }, moa: { policy: 'off' },
+    workspace: ws,
+  }, { persist: false });
+  const dag = JSON.stringify({ nodes: [
+    { id: 'p1', input: 'write the file beta.txt with one greeting line', deps: [], estMs: 1000 },
+    { id: 'p2', input: 'write the file gamma.txt with one number line', deps: [], estMs: 1000 },
+  ] });
+  setScript('mission:compile', [{ text: dag }]);
+  setScript('sub:tasks', [
+    { text: 'beta.txt är skapad.' },                                   /* p1 lyger först */
+    { toolCalls: [{ name: 'fs.write', args: { path: 'beta.txt', content: 'hej från repair' } }] },  /* repair-runda: gör på riktigt */
+    { text: 'beta.txt verifierad skriven.' },                          /* repair-svar */
+    { toolCalls: [{ name: 'fs.write', args: { path: 'gamma.txt', content: '42' } }] }, /* p2 direkt av亨利 */
+    { text: 'gamma.txt klar.' },
+  ]);
+  const m = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'msverify2', input: '1. write the file beta.txt with one greeting line\n2. write the file gamma.txt with one number line', emit: () => {}, capOverride: 1 });
+  assert.equal(m.failCount, 0, `inget ska faila: ${JSON.stringify(m.textSummary)}`);
+  assert.equal(m.okCount, 2);
+  assert.equal(m.verifiedCount, 2, 'bägge artefakt-claim ska kunna verifieras');
+  assert.equal(m.repairedCount, 1, 'p1 skampta reparerats och verifierats');
+  assert.match(m.textSummary[0], /VERIFIED|verified|after repair/i, m.textSummary[0]);
+  assert.ok(fs.readFileSync(path.join(ws, 'beta.txt'), 'utf8').includes('repair'), 'repair skrev filen på riktigt');
+  assert.equal(fs.readFileSync(path.join(ws, 'gamma.txt'), 'utf8'), '42', 'p2:s innehåll landade');
+  await rt.shutdown();
 });

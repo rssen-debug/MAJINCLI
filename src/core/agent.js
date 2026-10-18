@@ -320,9 +320,9 @@ export class Agent {
               memory: this.memory,
             });
             if (m.kind === 'mission') {
-              emit({ type: 'mission', nodes: m.nodes, workers: m.workers, okCount: m.okCount, failCount: m.failCount, blockedCount: m.blockedCount });
+              emit({ type: 'mission', nodes: m.nodes, workers: m.workers, okCount: m.okCount, failCount: m.failCount, blockedCount: m.blockedCount, verifiedCount: m.verifiedCount, repairedCount: m.repairedCount });
               const text = [
-                `Mission done — ${m.okCount}/${m.nodes} parts ok` + (m.failCount ? `, ${m.failCount} failed` : '') + (m.blockedCount ? `, ${m.blockedCount} blocked` : '') + `. ${m.workers} workers decided by the analyzer (code, not the model).`,
+                `Mission done — ${m.okCount}/${m.nodes} parts ok` + (m.failCount ? `, ${m.failCount} failed` : '') + (m.blockedCount ? `, ${m.blockedCount} blocked` : '') + (m.verifiedCount ? ` (${m.verifiedCount} verified in the workspace${m.repairedCount ? `, ${m.repairedCount} after repair` : ''})` : '') + `. ${m.workers} workers decided by the analyzer (code, not the model).`,
                 '',
                 ...m.textSummary,
               ].join('\n');

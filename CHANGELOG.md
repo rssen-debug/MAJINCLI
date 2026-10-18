@@ -27,6 +27,14 @@ without saying so explicitly. Version tags map 1:1 to git tags.
   modellbyte-handoff, checkpoint efter full restart). Fail-first var 3 röda innan fixen.
 - Fullsvit 319/0/7, i18n grön, bench 7/7 oförändrad (p50 49ms).
 - Live-rerun mot qwen3:0.6b: mission 3/3 med heuristik-fallback (oförändrat beteende).
+- Reality Engine v1 (mission-scan): mission kunde tidigare deklarera sig klar på en
+  workers ord. NU verifieras varje del som HLlar bara att ha skrivit en fil i
+  verkligheten; sammanfattningen markerar [VERIFIED: path, N bytes]
+  och fail-raknaren airlig legenden. Live-bevis mot opencode Go free:
+  "write asteroids.txt + volcanoes.txt" → workers kallade fs.write, verifieraren
+  latte filerna, summary = "2 verified in the workspace" (Ceres 5 bytes,
+  Mount Etna 10 bytes). Fail-first bevisat (test 8/9 roda pa pre-fix med
+  okCount=2 for loogna workers), svit 323/0/7, i18n 3/3, live 36 s.
 - Live-rerun mot opencode Go free (longcat-2.5-preview-free) vidare: mission gate foerut missed
   inline-numrering (1) (2) (3) → vanlig turn; nu: **3 worker_start + 3 worker_done + mission-event**
   redder samme input. Proof: mission.test.js 7/7 (fail-first 1 roed innan), suite 321/0/7.
