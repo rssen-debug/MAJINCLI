@@ -6,6 +6,16 @@ allowed to contradict a test.
 
 ## Valt
 
+- **En mission-deklaration är aldrig sanning förrän verifieraren kunnat peka
+  på filen i workspace.** `findClaimedArtifact` (deterministisk: write-verb +
+  filnamespattern) plockar fram claimade artefakter, `verifyClaimedArtifact`
+  behåller bara parts som kan bevisas, EN repair-runda med exakt felavgoerande
+  gar tillbaka, och mission-summan fick aerliga verified/repaired-raknare.
+  Cost: +1 extrarund per claimed-part (bara vid looogn); payoff: "Mission done"
+  aer bevisdokument, inte beroring. Proof: test 8/9 fail-first roda pa pre-fix
+  (loogna markerades ok: okCount var 2), groena efter; live opencode-run 36 s
+  med 2/2 VERIFIED i workspace.
+
 - **Inline-lista utlöser också mission.** Människor skriver "(1) x, (2) y, (3) z"
   i EN rad lika ofta som de radbrutar en lista; den radbrudna ankar-heuristikken
   gick förebi alla numreringar inuti en rad, så compilern såg dem aldrig.

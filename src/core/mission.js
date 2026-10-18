@@ -63,6 +63,50 @@ export function shouldMission(input) {
   return { mission: false, reason: 'single objective' };
 }
 
+/* REALITY ENGINE step 1 (mission-scale): a part that onsker claim a workspace
+   artifact (fs.write-niva) ska inte kunna deklarera sig klar utan att filen
+   faktiskt finns. Deterministisk verifierare — ingen modellkall. */
+import nodeFs from 'node:fs';
+import nodePath from 'node:path';
+import { dirs as missionDirs } from './paths.js';
+
+const WRITE_VERB_RE = /(skriv|skapa|spara|write|creat|save|generat|produc|build|bygg)/i;
+const FILE_TOKEN_RE = /([A-Za-z0-9_\-.\u00e5\u00e4\u00f6\/]{1,80}\.[A-Za-z0-9]{1,5})\b/g;
+
+/** plockar ut det fil-targeten som delen PASSTAAR att den ska skriva */
+export function findClaimedArtifact(input) {
+  const t = String(input || '');
+  if (!WRITE_VERB_RE.test(t)) return null;
+  const hits = [];
+  for (const m of t.matchAll(FILE_TOKEN_RE)) {
+    const tok = m[1];
+    if (/^https?|www\./i.test(tok)) continue;
+    if (!/\.[a-z0-9]{1,5}$/i.test(tok)) continue;
+    hits.push(tok.replace(/^\.*\/+/, ''));
+  }
+  return hits.length ? hits[0] : null;
+}
+
+export function missionWorkspace(cfg) {
+  return nodePath.resolve(cfg?.get?.('workspace') || missionDirs.workspace || process.cwd());
+}
+
+/** verifierar att pAsstaadd fil finns + har innehall (0 bytes = inte skriven) */
+export function verifyClaimedArtifact(claimed, { cfg }) {
+  if (!claimed) return { verifiable: false };
+  const root = missionWorkspace(cfg);
+  const abs = nodePath.resolve(root, claimed);
+  const rel = nodePath.relative(root, abs);
+  if (rel.startsWith('..') || nodePath.isAbsolute(rel)) {
+    return { verifiable: true, ok: false, reason: 'path escapes the workspace', path: claimed };
+  }
+  try {
+    const st = nodeFs.statSync(abs);
+    if (st.isFile() && st.size > 0) return { verifiable: true, ok: true, path: claimed, abs, size: st.size };
+  } catch { /* missing */ }
+  return { verifiable: true, ok: false, reason: 'file missing or empty after run', path: claimed };
+}
+
 const COMPILE_SYS = `You extract a SMALL parallel task graph from a goal. Reply with ONLY the JSON, no prose, no fences.
 Schema: {"nodes":[{"id":"snake_case","input":"<self-contained worker instruction>","deps":[],"estMs":30000}]}
 Rules: 2-6 nodes. deps = ids that must finish first; [] when independent. estMs: honest wall estimate in ms (20000-60000 typical model-work). Every input must be self-contained - a worker sees ONLY its own input. Never include secrets or file paths you were not given.`;
@@ -164,6 +208,48 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
     onEvent: (e) => emit({ ...e, mission: true }),
   });
   const parts = [...r.results.values()];
+
+  /* VERIFY→REPAIR (max 1 per del, maskin i koden): pAsstaadda artefakter mAste
+     kunna pekas ut i workspace efter kastning, annars aer delen ärligt misslyckad. */
+  let verifiedCount = 0;
+  let repairedCount = 0;
+  for (let i = 0; i < compiled.nodes.length; i++) {
+    const n = compiled.nodes[i];
+    const p = parts[i];
+    if (!p || p.ok !== true) continue;
+    const claimed = findClaimedArtifact(n.input);
+    if (!claimed) continue;
+    let vr = verifyClaimedArtifact(claimed, { cfg });
+    if (vr.ok) { p.verified = vr; verifiedCount += 1; continue; }
+    /* repair: EN runda med exakt feedback om vad verifieraren hittade */
+    emit({ type: 'mission_verify_fail', id: n.id, path: claimed, reason: vr.reason });
+    let claim = null;
+    try {
+      const repairInput = `${n.input}\n\n[VERIFICATION FAILED — you claimed the file "${claimed}" was written, but it does not exist in the workspace after your run (${vr.reason}). Do it FOR REAL now: call the fs.write tool exactly against "${claimed}" and report the path. Do not claim the file is written until the tool has actually confirmed the write.]`;
+      const value = await worker({ ...n, input: repairInput }, { signal: null });
+      vr = verifyClaimedArtifact(claimed, { cfg });
+      if (vr.ok) {
+        p.value = value;
+        p.verified = vr;
+        p.repaired = true;
+        repairedCount += 1;
+        verifiedCount += 1;
+        emit({ type: 'mission_repaired', id: n.id, path: claimed, size: vr.size });
+      } else {
+        p.ok = false;
+        p.error = `verification failed: "${claimed}" ${vr.reason}${p.error ? ' | worker: ' + p.error : ''}`;
+        r.failCount += 1;
+        r.okCount -= 1;
+        emit({ type: 'mission_verify_failed', id: n.id, path: claimed, reason: vr.reason });
+      }
+    } catch (err) {
+      p.ok = false;
+      p.error = `verification/repair error: ${String(err && err.message || err).slice(0, 220)}`;
+      r.failCount += 1;
+      r.okCount -= 1;
+    }
+  }
+
   return {
     kind: 'mission',
     compiled,
@@ -172,11 +258,14 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
     okCount: r.okCount,
     failCount: r.failCount,
     blockedCount: r.blockedCount,
+    verifiedCount,
+    repairedCount,
     workers: analysis.workers,
     nodes: compiled.nodes.length,
     textSummary: parts.map((p, i) => {
       const n = compiled.nodes[i];
-      if (p && p.ok === true) return `✓ ${n.id}: ${String(p.value?.text || '').slice(0, 220)}`;
+      if (p && p.ok === true && p.verified) return `✓ ${n.id}: ${String(p.value?.text || '').slice(0, 220)} [VERIFIED: ${p.verified.path}, ${p.verified.size} bytes${p.repaired ? ', after repair' : ''}]`;
+      if (p && p.ok === true) return `✓ ${n.id}: ${String(p.value?.text || '').slice(0, 220)} [reported, not independently verifiable]`;
       if (p && p.ok === false) return `✗ ${n.id}: ${p.error}`;
       if (p && p.blocked) return `↷ ${n.id}: blocked — ${p.reason}`;
       return `? ${n.id}: unknown`;
