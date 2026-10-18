@@ -121,3 +121,12 @@ test('openFor reuse never navigates the page away (the eval-vs-goto coin flip)',
   assert.doesNotMatch(reuse, /url = 'about:blank'/, 'no silent default navigation target');
   assert.match(src, /Page\.navigate[\s\S]{0,400}document\.readyState/, 'goto waits for the document before asking questions');
 });
+
+test('followNewTarget never follows the stale initial tab (the about:blank wire)', async () => {
+  /* CI evidence 2026-10-18: every click rewired the session to the initial
+     blank tab, and reads came back from a void — urlAfter 'about:blank' while
+     the server had already seen the real submit. Rule: tabs born after spawn. */
+  const src = (await import('node:fs')).readFileSync(new URL('../src/core/browser.js', import.meta.url), 'utf8');
+  assert.match(src, /knownTabs\s*:\s*new Set\(bornTabs/, 'birth tabs are remembered');
+  assert.match(src, /spawnTarget = targetInfos\.find\(\(t\) => t\.type === 'page' && t\.targetId !== targetId && !t\.attached && !b\.knownTabs\.has\(t\.targetId\)\)/, 'only post-birth tabs are followable');
+});

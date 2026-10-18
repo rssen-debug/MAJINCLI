@@ -264,13 +264,16 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
      websocket — the modern CDP layout, no nested sendMessageToTarget */
   const { targetId } = await cdp('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await cdp('Target.attachToTarget', { targetId, flatten: true });
+  /* remember every tab alive AT BIRTH — headless keeps an initial about:blank
+     tab around forever, and it is NOT ours to follow later (CI, twice). */
+  const { targetInfos: bornTabs = [] } = await cdp('Target.getTargets');
   const close = () => {
     try { ws.close(); } catch { /* gone */ }
     try { if (!proc.killed) proc.kill(); } catch { /* gone */ }
     thePool.release(session);
     sess.delete(session);
   };
-  const b = { session, sessionId, send: null, goto: null, eval: null, close, proc, slot };
+  const b = { session, sessionId, send: null, goto: null, eval: null, close, proc, slot, knownTabs: new Set(bornTabs.map((t) => t.targetId)) };
   /* send reads b.sessionId EVERY call — smarttab can re-wire it later */
   const send = (method, params = {}, opts = null) => sendRaw({ sessionId: b.sessionId, method, params }, opts);
   b.send = send;
@@ -306,7 +309,8 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     while (Date.now() < deadline) {
       const { targetInfos = [] } = await cdp('Target.getTargets');
       const mine = targetInfos.find((t) => t.targetId === targetId);
-      const spawnTarget = targetInfos.find((t) => t.type === 'page' && t.targetId !== targetId && !t.attached);
+      /* a NEW tab, born after our spawn — never the stale initial blank tab */
+      const spawnTarget = targetInfos.find((t) => t.type === 'page' && t.targetId !== targetId && !t.attached && !b.knownTabs.has(t.targetId));
       if (spawnTarget) {
         const { sessionId: s2 } = await cdp('Target.attachToTarget', { targetId: spawnTarget.targetId, flatten: true });
         b.sessionId = s2;

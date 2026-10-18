@@ -27,6 +27,10 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 - **94 tools** (was 92). CI live step now also runs `test/jobs.live.test.js`.
 
 ### Fixat
+- **`followNewTarget` rewired sessions to the stale initial `about:blank` tab** —
+  the wire evidence (server saw /thanks, browser read about:blank) said the click
+  worked and the READS went to the wrong tab. Rule now: only tabs born AFTER
+  spawn are followable (`knownTabs` snapshot at birth), source-pinned.
 - **`openFor` navigated to `about:blank` on every tool reuse** (since the browser
   foundation): `Page.navigate` returns at initiation, not arrival, so read-after-
   open was an eval-vs-navigation coin flip — green twice, red twice, depending on
