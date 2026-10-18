@@ -6,6 +6,19 @@ allowed to contradict a test.
 
 ## Valt
 
+- **Sessionskontext = disk, alltid.** Agentturnen läser historiken från disk (240 meddelanden)
+  om callern inte skickar den — aldrig verslailla mekanismer (cache, maps). Cost: en fil-läsning
+  per tur (~0,1 ms); payoff: modellen kan aldrig tappa sammanhanget mellan meddelanden, oavsett
+  vilken väg (chat-API, tasks, handoff) den kom in genom. Proof: `test/handoff.test.js` rött
+  före, grönt efter.
+- **Handoff = filen, inte en hemlig kanal.** Checkpointen är `<session>.handoff.json` +
+  `<session>.plan.json` bredvid historiken — läsbar, diffbar, överlever restart och
+  runtime-byte, och två agenter behöver aldrig prata direkt. Cost: extra disk-skriv
+  per plan/händelse; generisk: vilken kompatibel modell som helst kan plocka upp den.
+- **Handoff injiceras medvetet EN gång** (consume-märke `consumed: true`) — aldrig som tyst
+  system-litteratur, och aldrig i dubbelkopia. Uppmaningen är explicit: "continue, do NOT restart".
+
+
 - **A normal person has to be able to use it.** Pick the provider, paste the key, get going;
   the 78 tools, the model chain and the schedule are bonuses, never requirements for the first
   answer. Cost: no CLI-only features — every capability needs a tool *and* a panel surface.

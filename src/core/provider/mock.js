@@ -6,6 +6,15 @@
 import { bus } from '../log.js';
 
 const scripts = new Map();
+const calls = [];
+
+/* test/verify-krok: vad skulle ha skickats pa traden, exakt */
+export function lastCalls() {
+  return calls.map((c) => ({ ...c }));
+}
+export function resetCalls() {
+  calls.length = 0;
+}
 
 export function setScript(session, steps) {
   scripts.set(session, [...steps]);
@@ -14,6 +23,7 @@ export function setScript(session, steps) {
 export async function mockComplete(o) {
   const { messages = [], onEvent, job } = o;
   const key = o.mockKey || job || 'default';
+  calls.push({ key, messages: messages.map((m) => ({ role: m.role, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) })) });
   const scripted = scripts.get(key);
   const last = [...messages].reverse().find((m) => m.role === 'user');
   const q = textOf(last?.content);

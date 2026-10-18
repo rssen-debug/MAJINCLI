@@ -6,6 +6,14 @@ autopilot/teamwork/dashboard additions).
 
 ## Hög prioritet
 
+- ~~**Persistent Session & Agent Handoff Engine**~~ **SHIPPED 2026-10-18 kväll**
+  (agent.js handoff/consumeHandoff/planSnapshot + disk-first history-load,
+  `<sid>.plan.json`/`<sid>.handoff.json` bredvid historikfilen).
+  Proof: handoff.test 4/4 (röd före, grön efter), fullsvit 319/0/7.
+  Remaining: UI-yta för "byt modell mitt i samtalet" (väljs automatiskt av
+  handoff-flödet), handoff-knapp i chat, restart-welcome efter krasch.
+  *(källa: användarklagan 2026-10-18 — modellen glömde tidigare meddelanden)*
+
 - ~~**GRAND ARCHITECT mission compiler + chat-wired HYPERSWARM**~~
   **SHIPPED 2026-10-18** (`src/core/mission.js`, agent gate, work-conserving
   runSwarm with transitive blocked propagation, diagnostics skeleton).
