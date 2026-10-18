@@ -507,6 +507,50 @@ export const majinTools = [
   }),
 
   def({
+    name: 'majin.doctor',
+    group: 'majin',
+    risk: 'read',
+    desc: 'Health check, human style: every capability gets OK / why-not / how-to-fix. Use it when something feels off, before the user asks you to guess. No network calls — it reads config and reports, then points at the exact tool or card that fixes each problem.',
+    params: {},
+    examples: ['majin.doctor({})'],
+    async run(_args, ctx) {
+      const cfg = ctx.cfg;
+      const lines = [];
+      const status = cfg.providerStatus();
+      const ready = status.filter((p) => p.ready && p.kind !== 'mock');
+      const routes = cfg.routeTable();
+      /* 1) AI key: the one thing everything hangs on */
+      if (ready.length) {
+        lines.push(`OK    ai-key    ${ready.length} provider(s) can answer (${ready.map((p) => p.name).join(', ')})`);
+      } else {
+        lines.push('FIX   ai-key    no real provider has a key — MAJIN can only fake answers. Fix: paste a key in the wizard (», » model chip) or majin.provider({action:"add",name:"deepseek",apiKey:"sk-…"})');
+      }
+      /* 2) routes must land on providers that can ANSWER */
+      const names = new Set(ready.map((p) => p.name));
+      const dead = routes.filter((r) => !names.has(r.ref.split('/')[0]) && !String(r.ref).startsWith('demo/'));
+      if (!dead.length) lines.push(`OK    routes    all ${routes.length} routes point at providers that can answer`);
+      else lines.push(`FIX   routes    ${dead.length} route(s) point at a provider with no working key (${dead.slice(0, 4).map((r) => r.job + '→' + r.ref).join(', ')}). Fix: open the model chip and pick one model — every route follows it.`);
+      /* 3) single-model sanity: MOA must be a choice, not an accident */
+      const policy = cfg.get('moa.policy');
+      if (policy === 'off') lines.push('OK    moa      off — one model, no hidden multi-call cost');
+      else lines.push(`NOTE  moa      policy '${policy}' — every answer calls several models (costs multiply). If that was not your idea: MOA chip in the header, or majin.moa({action:"off"}).`);
+      /* 4) memory + scheduler exist at all */
+      const memCount = ctx.memory?.stats?.()?.lines;
+      lines.push(memCount !== undefined ? `OK    memory    ${memCount} stored line(s)` : 'NOTE  memory    memory service not attached in this context — restart the app if it stays away');
+      /* 5) channels (optional by design) */
+      const ch = ctx.channels?.status?.() || {};
+      const on = Object.entries(ch).filter(([, v]) => v && v.online).map(([k]) => k);
+      lines.push(on.length ? `OK    channels  ${on.join(', ')} online` : 'OK    channels  none configured (optional — desktop always works)');
+      /* 6) guard mode */
+      const mode = cfg.get('guard.mode');
+      lines.push(`OK    guard     mode '${mode}'`);
+      const broken = lines.filter((l) => l.startsWith('FIX')).length;
+      const verdict = broken === 0 ? 'HEALTHY — every checked piece is in place.' : (broken === 1 ? 'ONE THING needs attention — see the FIX line.' : `${broken} things need attention — see the FIX lines.`);
+      return { result: verdict + '\n\n' + lines.join('\n'), meta: { verdict, broken, lines }, summary: verdict };
+    },
+  }),
+
+  def({
     name: 'majin.selftest',
     group: 'majin',
     risk: 'read',

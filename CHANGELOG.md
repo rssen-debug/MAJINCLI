@@ -3,6 +3,25 @@
 Notable changes on `arena/e223e8b9-slurps` (PR #1). Newest first. Verified in the Linux sandbox
 unless stated otherwise; nothing here claims a Windows or browser run.
 
+## 0.5.2 — majin.doctor + kontraktet "inga döda tools" (78 tools, alla levande)
+
+**`majin.doctor`** — människovänd hälsokoll inspirerad av Agent-Reach:s
+`doctor`-mönster. Inga nätverksanrop, alltid svar: per kapacitet
+`OK` / `FIX` / `NOTE` med exakt vilket verktyg eller kort som lagar problemet
+("no provider has a key → majin.provider({action:"add"...})"). Användbara
+verktyg föder använda verktyg.
+
+**Meta-testet `no-dead-tools`** låser i CI att VARENDA tool i registret:
+komplett (namn/grupp/desc/JSON-schema/run/risk), modell-synligt via
+`registry.schemas()` (det flöde som matar provider-API:t — exakt paritet
+krävs), och filter-säkert i readOnly-läge. 78 tools, noll döda — nu och
+för all framtid.
+
+Repo-granskningen (14 länkar): alla existerar, alla är Python/TS-*mönster*.
+Agent-Reach:s doctor+zero-key-läsning och Bekanta-mönstren är omfamnade;
+browser-use et al. är bibliotek som skulle bryta "ingen Python-dependency"
+(VNEXT §13) — mönstren tas, inte ramverken.
+
 ## 0.5.1 — hotfix: ikon-fixen funkar på Windows också + checksum-filerna kommer med
 
 v0.5.0's "vägra skeppa default-ikon" var rätt inställning avslöjade det riktiga
