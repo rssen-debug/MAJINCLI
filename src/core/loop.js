@@ -10,6 +10,20 @@ import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute } from './pricing.js';
 
+/*
+ * Väljer vilka scheman modellen får se detta steg. Standard: hela den synliga
+ * ytan (oförändrat beteende). Slår agent.toolSubset på blir det deterministiskt
+ * urval per turn (se agent.toolSelection) — urvalet och storleken raporteras
+ * ärligt i steg-händelsen så inget spar visas utan mätning.
+ */
+function pickSchemas(registry, ctx) {
+  const all = registry.schemas({ readOnly: Boolean(ctx?.readOnly) });
+  const names = ctx?.toolSubsetNames;
+  if (!Array.isArray(names) || !names.length) return all;
+  const wanted = new Set(names.filter((n) => registry.has(n)));
+  return all.filter((t) => wanted.has(t.name));
+}
+
 export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = () => {}, signal, maxSteps, usage, ctx, allowTools = true, label = 'agent' }) {
   const agent = cfg.get('agent') || {};
   const limit = Number(maxSteps) || agent.maxSteps || 40;
@@ -42,7 +56,8 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       onEvent({ type: 'error', label, where: 'budget', message: human, kind: 'budget' });
       return { text: human, steps, toolLog, usage: tally, error: 'budget cap reached', errorKind: 'budget', fatal: true, stopReason: 'budget' };
     }
-    onEvent({ type: 'step', label, step: steps, of: limit, job: stepJob, model: route.ref, escalated });
+    const sentTools = allowTools ? pickSchemas(registry, ctx) : [];
+    onEvent({ type: 'step', label, step: steps, of: limit, job: stepJob, model: route.ref, escalated, toolsSent: sentTools.length, toolChars: sentTools.reduce((a, t) => a + t.description.length + JSON.stringify(t.parameters).length, 0) });
 
     let res;
     try {
@@ -50,7 +65,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         route,
         job: `${label}:${stepJob}`,
         messages,
-        tools: allowTools ? registry.schemas({ readOnly: Boolean(ctx?.readOnly) }) : [],
+        tools: sentTools,
         toolChoice: allowTools ? undefined : 'none',
         stream: true,
         maxTokens: agent.maxTokens || 6000,

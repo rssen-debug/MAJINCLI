@@ -5,6 +5,30 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (GENESIS ZERO: the loop sends 97% less tool-schema — measured, then flipped)
+
+### Ändrat
+- **`agent.toolSubset: true` ar nu standard.** Loopen skickar inte langre alla 103
+  scheman till modellen varje turn. Per turn valjer `agent.toolSelection()` en
+   deterministisk liten subset ur `Registry.search(input)` — noll LLM-tokens
+  for urvalet — plus ALLTID `tools.search` som flyktvag, sa modellen sjalv kan
+  hamta resten utan att gissa namn.
+- **Steg-events biter ratttvis**: `step`-eventen bar nu `toolsSent` och
+  `toolChars` — exakt vad som skickades over ledningen den kallelden.
+- **Bench-matning sjalvforbjudna**: `node scripts/bench.mjs --subset` kor varje
+  scenario dubbelt (all-scheman vs subset) och bokforr paritet + teckensbesparing.
+- **Prompten arlig i bada lagen**: subset-pa talar om de synliga scheman
+  utvalts och namner flyktvagen; subset-av forblir "all 103 always on".
+
+### Verifierat
+- `node scripts/bench.mjs --subset` → **-97% schema-char** (1,012,066 → 25,835
+  tecken totalt, paritet 7/7: bada lagen passsar alla 7 scenarier, millisekunder
+  inom brus). Detailj per scenario: 97-98% sparat.
+- `node --test test/subset.test.js` → 5 pass (skrevs fail-first; pins: readOnly-
+  respekt, determinism, okand-input-flyktvag, riktig fil-skrivning i subset-mode).
+- `npm test` → 288 pass, 0 fail, 7 skipped · i18n 0/85 · parse 126/126.
+- Bench utan flagga (`node scripts/bench.mjs`) → 7/7 green oforandrat.
+
 ## 2026-10-18 (GENESIS OMEGA fas 1: capabilities märkta + dynamisk verktygsplockning)
 
 ### Ändrat

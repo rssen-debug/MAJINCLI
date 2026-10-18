@@ -25,13 +25,13 @@ autopilot/teamwork/dashboard additions).
   `unpricedCount/unpricedRefs` so a silently-$0 month is impossible to miss. Remaining:
   slice-2's per-task cost chip in the UI, and eur/sek display.
   *(källa: master brief §2E)*
-- **GENESIS OMEGA — universal capability-composition.** Phase 1 SHIPPED 2026-10-18:
-  `cap/1` manifest per tool, deterministic `Registry.search`, the `tools.search`
-  meta-tool and the system prompt pointing models at it. Next slices, in order of
-  evidence value: (2) loop sends the relevant tool subset instead of all 103 — only
-  after a bench.mjs before/after measurement justifies it (open question in
-  DECISIONS), (3) mission compiler above the existing loop, (4) model capability
-  profiler, (5) skill compiler. Do NOT build a parallel engine — extend this one.
+- **GENESIS OMEGA — universal capability-composition.** Phase 1 SHIPPED 2026-10-18
+  (cap/1 manifests, Registry.search, tools.search). **Phase 2 SHIPPED 2026-10-18:
+  loop sends the measured-relevant subset — -97% schema chars, parity 7/7, flipped
+  to default.** Next: (3) mission compiler above the existing loop, (4) model
+  capability profiler, (5) skill compiler, (6) watch real-model turns for
+  tools.search escape-hatch frequency — if it fires constantly, tune the selector,
+  don't refund the feature. Do NOT build a parallel engine — extend this one.
   *(källa: master brief §GENESIS OMEGA directive)*
 - **Windows/browser human round on top of the CI smoke.** CI now installs/runs/uninstalls on
   real Windows every build — and, as of the config-race fix (commit f6869bc, run 39134332080),

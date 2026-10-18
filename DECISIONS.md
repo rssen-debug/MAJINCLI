@@ -128,12 +128,15 @@ allowed to contradict a test.
 
 ## Öppna frågor
 
-- **Ska loopen skicka RELEVANTA verktygsscheman i stället för alla 103 till modellen?**
-  Nu vann som ligger kvar: alla schemas i varje turn. search() finns men används
-  på modellens initiativ, inte åt den. En subset-variant (topp-N via search(job)
-  + tools.search som flyktning) sparar direkt tokens men riskerar att verktyg
-  utanför subsetet blir osynliga. Besked efter benchmark: bench.mjs före/efter
-  på samma turn, annars ryker loopen utan bevis på vinst.
+- ~~**Ska loopen skicka RELEVANTA verktygsscheman i stället för alla 103 till modellen?**~~
+  **BESLUTAT 2026-10-18**: ja — subset ar standard nu. Mål-villkoret var
+  uppmatt paritet + raknad besparing innan flipp; bench fyllde det
+  (-97% schema-char, paritet 7/7). Limitation som star kvar: paritet mäts mot
+  en SCRIPTAD mock, sa "selector-blindness" (modellen ser inte verktyget den
+  behovde) kan inte observeras har — den risk mitigeras av flyktvagen
+  tools.search och av capability.test.js som pinnar search-rankingen. Om
+  verkliga modeller visar returvag-ofel: rulla tillbaka via agent.toolSubset=false
+  (en rad, redan testad).
 
 - ~~**Job dedupe identity**~~ **DECIDED 2026-10-18**: fingerprint = canonical URL
   (tracking params stripped, real id params kept, case/diacritics-folded

@@ -27,6 +27,11 @@ const flag = (name, def = undefined) => {
 const asJson = Boolean(flag('json', false));
 const turns = Math.max(1, Number(flag('turns', 1)) || 1);
 const only = flag('scenario');
+/* --subset: kor varje scenario tva ganger — en dar loopen skickar ALLA scheman
+   (dagens standard) och en dar agent.toolSubset bara skickar det deterministiska
+   urvalet. toolChars i steg-eventen ar tecknen som faktiskt skickas till
+   modellen (namn+beskrivning+JSON-schema per kallel). */
+const withSubset = Boolean(flag('subset', false));
 
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-bench-'));
 process.env.MAJIN_HOME = home;
@@ -143,6 +148,7 @@ async function main() {
   const results = [];
   for (const sc of SCENARIOS) {
     if (only && sc.name !== only && !sc.name.startsWith(only)) continue;
+    for (const subsetMode of (withSubset ? [false, true] : [false])) {
     for (let turn = 0; turn < turns; turn += 1) {
       for (const [name, text] of Object.entries(sc.seed || {})) fs.writeFileSync(path.join(WS, name), text);
       if (sc.seedBin?.['suspect.exe']) {
@@ -170,6 +176,7 @@ async function main() {
       for (const k of ['moa-ref-0', 'moa-ref-1', 'moa-ref-2', 'final:aggregator', 'final:moa', 'final:escalate']) setScript(k, [{ text: finalText }]);
       if (sc.guard) rt.cfg.patch({ guard: { mode: sc.guard } }, { persist: false });
 
+      if (withSubset) rt.cfg.patch({ agent: { toolSubset: subsetMode } }, { persist: false });
       const evs = [];
       approvalHits = 0;
       const approvals = [];
@@ -216,8 +223,15 @@ async function main() {
         check(`config ${sc.expect.config.path}=${sc.expect.config.value}`, got === sc.expect.config.value, `got ${got}`);
       }
 
+      const stepEvs = evs.filter((e) => e.type === 'step');
+      const toolChars = stepEvs.reduce((a, e) => a + (e.toolChars || 0), 0);
+      const toolsSent = stepEvs.length ? Math.max(...stepEvs.map((e) => e.toolsSent || 0)) : 0;
+
       results.push({
         scenario: sc.name,
+        mode: withSubset ? (subsetMode ? 'subset' : 'all') : 'all',
+        toolChars,
+        toolsSent,
         turn,
         ms: Math.round(ms),
         steps: out?.steps ?? 0,
@@ -228,16 +242,20 @@ async function main() {
         checks,
       });
     }
+    }
   }
 
   const per = new Map();
   for (const r of results) {
-    const list = per.get(r.scenario) || [];
+    const key = withSubset ? r.scenario + '@' + r.mode : r.scenario;
+    const list = per.get(key) || [];
     list.push(r);
-    per.set(r.scenario, list);
+    per.set(key, list);
   }
   const rows = [...per.entries()].map(([name, list]) => ({
     scenario: name,
+    mode: list[0].mode,
+    toolChars: list[0].toolChars,
     runs: list.length,
     pass: list.filter((x) => x.ok).length,
     msAvg: Math.round(list.reduce((a, b) => a + b.ms, 0) / list.length),
@@ -247,12 +265,40 @@ async function main() {
     steps: +(list.reduce((a, b) => a + b.steps, 0) / list.length).toFixed(2),
     events: list[0].events,
   }));
+  /* subset-sammanfattning: paritet + teckenbesparing, alltid bada tva —
+     en besparing utan paritet (eller tvartom) ar en halv sanning. */
+  let subsetSummary = null;
+  if (withSubset) {
+    const names = new Set(results.map((r) => r.scenario));
+    const pairs = [];
+    let charsAll = 0, charsSub = 0, parOk = 0;
+    for (const n of names) {
+      const a = results.filter((r) => r.scenario === n && r.mode === 'all');
+      const b = results.filter((r) => r.scenario === n && r.mode === 'subset');
+      const ca = a.reduce((x, r) => x + r.toolChars, 0) / Math.max(1, a.length);
+      const cb = b.reduce((x, r) => x + r.toolChars, 0) / Math.max(1, b.length);
+      charsAll += ca; charsSub += cb;
+      const ok = a.every((r) => r.ok) && b.every((r) => r.ok);
+      if (ok) parOk += 1;
+      pairs.push({ scenario: n, passBothModes: ok, charsAll: Math.round(ca), charsSub: Math.round(cb), savedPct: ca ? Math.round((1 - cb / ca) * 100) : 0 });
+    }
+    subsetSummary = {
+      scenarios: names.size,
+      parityPassed: parOk,
+      toolCharsAll: Math.round(charsAll),
+      toolCharsSubset: Math.round(charsSub),
+      savedPct: charsAll ? Math.round((1 - charsSub / charsAll) * 100) : 0,
+      pairs,
+    };
+  }
+
   const usage = rt.usage.summary();
   const verdict = {
     at: new Date().toISOString(),
     node: process.version,
     platform: `${process.platform}/${process.arch}`,
     turns,
+    subset: subsetSummary,
     scenarios: rows,
     totals: {
       runs: results.length,
@@ -272,11 +318,19 @@ async function main() {
   if (!process.env.MAJIN_BENCH_KEEP) fs.rmSync(home, { recursive: true, force: true });
   else process.stdout.write(`bench home kept: ${home}\n`);
 
+  if (subsetSummary && !asJson) {
+    process.stdout.write('\nsubset measurement (schema chars handed to the model per turn):\n');
+    for (const pr of subsetSummary.pairs) {
+      process.stdout.write('  ' + pr.scenario.padEnd(18) + String(pr.charsAll).padStart(7) + ' -> ' + String(pr.charsSub).padStart(6) + '  saved ' + String(pr.savedPct).padStart(3) + '%  paritet ' + (pr.passBothModes ? 'OK' : 'NEJ') + '\n');
+    }
+    process.stdout.write('  ' + 'TOTALT'.padEnd(18) + String(subsetSummary.toolCharsAll).padStart(7) + ' -> ' + String(subsetSummary.toolCharsSubset).padStart(6) + '  saved ' + String(subsetSummary.savedPct).padStart(3) + '%  paritet ' + subsetSummary.parityPassed + '/' + subsetSummary.scenarios + '\n');
+  }
+
   if (asJson) {
     process.stdout.write(JSON.stringify(verdict, null, 2) + '\n');
   } else {
     const pad = (s, n) => String(s).padEnd(n);
-    process.stdout.write(`\nMAJIN bench — mock provider, ${turns} turn(s) per scenario\n`);
+    process.stdout.write(`\nMAJIN bench — mock provider, ${turns} turn(s) per scenario${withSubset ? ' (all vs subset)' : ''}\n`);
     process.stdout.write(`${pad('scenario', 18)}${pad('pass', 7)}${pad('avg', 8)}${pad('p50', 8)}${pad('p95', 8)}${pad('tools', 7)}${pad('steps', 7)}events\n`);
     process.stdout.write('-'.repeat(72) + '\n');
     for (const r of rows) {
