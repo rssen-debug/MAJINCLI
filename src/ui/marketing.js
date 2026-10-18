@@ -1,149 +1,119 @@
-/* MAJIN Marketing — beginner-friendly, local-first Meta Ads dashboard.
- * No chart hallucinations, no mutation endpoints, no token in chat/history.
+/* MAJIN Marketing: secure, contextual conversation step.
+ * Render NOTHING until the user asks to work on ads. No dashboard, no panels.
+ * Token goes directly to authenticated /api/marketing; never to /api/chat or LLM.
  */
 (function () {
   'use strict';
-  const root = document.getElementById('marketing');
-  if (!root) return;
-  function node(tag, text) {
+  let active = null;
+  const $ = (tag, text) => {
     const e = document.createElement(tag);
-    if (text !== undefined) e.textContent = String(text);
+    if (text != null) e.textContent = String(text);
     return e;
-  }
-  function line(label, input) {
-    const wrap = node('label');
-    wrap.style.cssText = 'display:flex;flex-direction:column;gap:3px;margin:7px 0;font-size:12px';
-    wrap.append(node('span', label), input);
-    return wrap;
-  }
-  function field(type, placeholder) {
-    const e = node('input');
+  };
+  function input(type, hint) {
+    const e = $('input');
     e.type = type;
-    e.placeholder = placeholder || '';
-    e.style.cssText = 'width:100%;box-sizing:border-box;padding:8px 9px;font-size:13px;min-height:36px';
+    e.placeholder = hint || '';
+    e.autocomplete = 'off';
+    e.style.cssText = 'width:100%;box-sizing:border-box;padding:10px 12px;min-height:42px;font:14px inherit;border-radius:10px;max-width:100%';
+    if (type === 'number') { e.min = '0'; e.step = '0.01'; e.inputMode = 'decimal'; }
     return e;
   }
-  function amount(placeholder) {
-    const e = field('number', placeholder);
-    e.min = '0';
-    e.step = '0.01';
-    return e;
+  function labeled(target, label, type, hint, required = false) {
+    const wrap = $('label');
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:5px;margin:10px 0;font-size:13px';
+    const cap = $('span', label);
+    const field = input(type, hint);
+    field.required = required;
+    wrap.append(cap, field);
+    target.append(wrap);
+    return field;
   }
-  const heading = node('div', 'Meta Ads · profit-first analysis');
-  heading.style.cssText = 'font-size:13px;font-weight:700;margin:8px 0';
-  const status = node('p', 'Loading…');
-  status.style.cssText = 'font-size:12px;line-height:1.5';
-  const acct = field('text', 'act_123456789');
-  const curr = field('text', 'USD or SEK');
-  const token = field('password', 'Paste Meta Marketing API access token');
-  token.autocomplete = 'off';
-  const price = amount('39.00');
-  const cogs = amount('10.00');
-  const shipping = amount('5.00');
-  const fees = amount('2.00');
-  const refunds = amount('5');
-  refunds.max = '100';
-  const profit = amount('5.00');
-  const cap = amount('10.00');
-  const fields = [
-    ['Ad account ID', acct], ['Account currency', curr], ['Meta API access token (saved locally, never shown)', token],
-    ['Selling price per order', price], ['Product + fulfillment cost', cogs], ['Extra shipping cost', shipping],
-    ['Payment/platform fees per order', fees], ['Expected refund rate (%)', refunds],
-    ['Minimum profit per order', profit], ['Planned maximum ad spend per day', cap],
-  ];
-  const form = node('div');
-  for (const [label, input] of fields) form.append(line(label, input));
-  const btnRow = node('div');
-  btnRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:7px;margin:10px 0';
-  const save = node('button', 'Save connection');
-  const analyze = node('button', 'Analyze last 7 days');
-  const disconnect = node('button', 'Disconnect');
-  for (const b of [save, analyze, disconnect]) {
-    b.style.cssText = 'font-size:12px;padding:7px 9px;min-height:36px';
-    btnRow.append(b);
+  async function show(prompt) {
+    // Chat activity triggers this securely. Never create a permanent Marketing panel.
+    if (active?.isConnected) active.remove();
+    const scroller = document.getElementById('scroller');
+    if (!scroller) return;
+    const card = $('section');
+    active = card;
+    card.className = 'msg marketing-connection';
+    card.setAttribute('aria-label', 'Connect Meta Ads securely');
+    card.style.cssText = 'margin:12px 0;padding:15px;max-width:620px;border:1px solid var(--line,#666);border-radius:14px;background:var(--bg2,#1b1b24)';
+    const title = $('h3', 'Connect your Facebook / Instagram ads');
+    title.style.cssText = 'font:600 16px inherit;margin:0 0 5px';
+    const hint = $('p', 'To understand which ads can earn money, I need your Meta account and the profit margin per order. Do this once, then I can analyze the ads for you.');
+    hint.style.cssText = 'font-size:13px;line-height:1.55;opacity:.85;margin:0 0 10px';
+    const fields = $('form');
+    const account = labeled(fields,'Meta ad account ID','text','act_123456789',true);
+    const currency = labeled(fields,'Ad account currency','text','SEK or USD',true);
+    const key = labeled(fields,'Meta Ads access token — private','password','Paste Meta API token',false);
+    const price = labeled(fields,'Product selling price','number','e.g. 345',true);
+    const cogs = labeled(fields,'Product cost including fulfillment','number','e.g. 90',true);
+    const daily = labeled(fields,'Your planned daily ad spend limit','number','e.g. 30',true);
+    const extras = $('details');
+    const exp = $('summary','Other costs (optional)');
+    extras.append(exp);
+    const shipping = labeled(extras,'Extra shipping cost per order','number','0');
+    const fees = labeled(extras,'Fees per order','number','0');
+    const refunds = labeled(extras,'Expected refund rate (%)','number','0');
+    const profit = labeled(extras,'Minimum retained profit per order','number','auto: reserve 20%');
+    fields.append(extras);
+    const privacy = $('p','Your token is sent only to MAJIN on your computer, not included in your chat or AI-model request. A saved key is stored locally, not encrypted. MAJIN never changes ads or spends money here.');
+    privacy.style.cssText='font-size:11px;opacity:.8;line-height:1.5';
+    const status = $('p','');
+    status.setAttribute('aria-live','polite');
+    status.style.cssText='font-size:12px;white-space:pre-wrap';
+    const actions=$('div');
+    actions.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-top:12px';
+    const save=$('button','Connect & analyze');
+    save.type='submit';
+    save.style.cssText='min-height:42px;padding:8px 14px;font-size:13px';
+    const cancel=$('button','Not now');
+    cancel.type='button';
+    cancel.style.cssText='min-height:42px;padding:8px 14px;font-size:13px';
+    cancel.onclick=()=>card.remove();
+    actions.append(save,cancel);
+    fields.append(privacy,status,actions);
+    card.append(title,hint,fields);
+    scroller.append(card);
+    scroller.scrollTop=scroller.scrollHeight;
+    try {
+      const state = await api('/marketing');
+      account.value=state.accountId||'';
+      currency.value=state.currency||'';
+      const e=state.economics||{};
+      for (const [k,el] of [['price',price],['cogs',cogs],['shipping',shipping],['fees',fees],['dailyCap',daily],['targetProfit',profit]])
+        if (Number(e[k])>0) el.value=e[k];
+      if(Number(e.refundRate)>0) refunds.value=+(e.refundRate*100).toFixed(2);
+    } catch { /* disconnected is expected */ }
+    fields.onsubmit=async (event)=>{
+      event.preventDefault();
+      save.disabled=true;
+      status.textContent='Saving connection securely…';
+      try {
+        const economics={
+          price:Number(price.value),cogs:Number(cogs.value),shipping:Number(shipping.value||0),fees:Number(fees.value||0),
+          refundRate:Number(refunds.value||0)/100,targetProfit:Number(profit.value||0),dailyCap:Number(daily.value),
+        };
+        await api('/marketing',{method:'POST',body:{
+          action:'save',accountId:account.value.trim(),currency:currency.value.trim().toUpperCase(),
+          ...(key.value.trim()?{accessToken:key.value.trim()}:{}),economics,
+        }});
+        key.value='';
+        const current=await api('/marketing');
+        if (!current.connected) {
+          status.textContent='The account settings were saved, but I still need a valid Meta Ads token. Please paste one above.';
+          return;
+        }
+        status.textContent='✓ Connection settings saved. I am starting the analysis. No ad spend will be changed.';
+        card.remove();
+        // This is the original user instruction, NOT the token or form values.
+        setTimeout(()=>{ if(typeof send==='function') send(String(prompt||'Analyze my Meta ads').slice(0,1500)); },0);
+      } catch(e) {
+        key.value='';
+        status.textContent='Could not connect: '+String(e.message||e);
+      } finally { save.disabled=false; }
+    };
   }
-  const output = node('div');
-  output.style.cssText = 'font-size:12px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere';
-  const caveat = node('p', 'Read-only. MAJIN never buys ads or changes budgets. Numbers are based on Meta-attributed events, not independently verified shop orders. Currency must match the ad account.');
-  caveat.style.cssText = 'font-size:11px;opacity:.8;line-height:1.5';
-  root.replaceChildren(heading, status, form, btnRow, output, caveat);
-  const fmt = (v, curr) => v == null ? '—' : Number(v).toFixed(2) + ' ' + curr;
-  function fail(e) { output.textContent = '⚠ ' + (e.message || String(e)); }
-  function loading(value) { save.disabled = analyze.disabled = disconnect.disabled = value; }
-  async function load() {
-    const r = await api('/marketing');
-    status.textContent = r.connected
-      ? '✓ Meta credentials saved (' + r.accountId + '). Click Analyze to verify live access; no spending permission used.'
-      : 'Connect a Meta Ads account and enter your product costs.';
-    acct.value = r.accountId || '';
-    curr.value = r.currency || '';
-    const e = r.economics || {};
-    for (const [name, el] of [['price',price],['cogs',cogs],['shipping',shipping],['fees',fees],['targetProfit',profit],['dailyCap',cap]]) {
-      el.value = Number(e[name] || 0) || '';
-    }
-    refunds.value = e.refundRate ? Number((e.refundRate * 100).toFixed(2)) : '';
-    token.value = '';
-  }
-  save.onclick = async () => {
-    loading(true);
-    output.textContent = 'Saving securely in MAJIN local configuration…';
-    try {
-      const economics = {
-        price: Number(price.value), cogs: Number(cogs.value), shipping: Number(shipping.value),
-        fees: Number(fees.value), refundRate: Number(refunds.value) / 100,
-        targetProfit: Number(profit.value), dailyCap: Number(cap.value),
-      };
-      await api('/marketing', { method: 'POST', body: {
-        action: 'save', accountId: acct.value.trim(), currency: curr.value.trim().toUpperCase(),
-        ...(token.value.trim() ? { accessToken: token.value.trim() } : {}), economics,
-      } });
-      token.value = '';
-      output.textContent = '✓ Saved locally. Click Analyze last 7 days when ready.';
-      await load();
-    } catch (e) { token.value = ''; fail(e); }
-    finally { loading(false); }
-  };
-  analyze.onclick = async () => {
-    loading(true);
-    output.textContent = 'Reading Meta Ads Insights…';
-    try {
-      const r = await api('/marketing', { method: 'POST', body: { action: 'analyze' } });
-      if (!r.ok) throw new Error((r.errors || []).join(' ') || r.error || 'analysis failed');
-      const t = r.totals;
-      const messages = [
-        '7 DAYS · ' + r.currency + ' · attributed data',
-        'Ad spend: ' + fmt(t.spend, r.currency),
-        'Attributed purchases: ' + t.purchases,
-        'Attributed CPA: ' + fmt(t.attributedCpa, r.currency),
-        'Estimated contribution after ad spend: ' + fmt(t.estimatedContribution, r.currency),
-        'Break-even CPA: ' + fmt(r.economics.breakEvenCpa, r.currency),
-        'Target CPA: ' + fmt(r.economics.targetCpa, r.currency),
-        'Average daily spend: ' + fmt(t.observedAvgDailySpend, r.currency) +
-          ' / advisory limit: ' + fmt(t.advisoryDailyCap, r.currency),
-        t.overAdvisoryCap ? '⚠ Observed spend is ABOVE your advisory daily cap.' : '',
-        '',
-      ];
-      for (const c of r.campaigns) {
-        messages.push(c.name + ' · ' + c.decision.replaceAll('_', ' '));
-        messages.push('  Spend ' + fmt(c.spend,r.currency) + ' · purchases ' + c.purchases + ' · CPA ' + fmt(c.cpa,r.currency));
-        messages.push('  ' + c.explanation);
-      }
-      if (!r.campaigns.length) messages.push('No campaign rows were returned for the past 7 days.');
-      messages.push('', '⚠ These purchases are Meta-attributed signals, not verified WooCommerce sales.',
-        'No ad settings or budgets were changed.');
-      output.textContent = messages.filter((x) => x !== '').join('\n');
-    } catch (e) { fail(e); }
-    finally { loading(false); }
-  };
-  disconnect.onclick = async () => {
-    if (!window.confirm('Disconnect Meta Ads from this MAJIN installation?')) return;
-    loading(true);
-    try {
-      await api('/marketing', { method: 'POST', body: { action: 'disconnect' } });
-      output.textContent = 'Meta disconnected.';
-      await load();
-    } catch (e) { fail(e); }
-    finally { loading(false); }
-  };
-  load().catch(fail);
+  window.MAJIN_MARKETING={show};
 })();
