@@ -15,7 +15,7 @@
     e.type = type;
     e.placeholder = hint || '';
     e.autocomplete = 'off';
-    e.style.cssText = 'width:100%;box-sizing:border-box;padding:10px 12px;min-height:42px;font:14px inherit;border-radius:10px;max-width:100%';
+    e.style.cssText = 'width:100%;box-sizing:border-box;padding:10px 12px;min-height:42px;font-size:14px;font-family:inherit;border-radius:10px;max-width:100%';
     if (type === 'number') { e.min = '0'; e.step = '0.01'; e.inputMode = 'decimal'; }
     return e;
   }
@@ -40,7 +40,7 @@
     card.setAttribute('aria-label', 'Connect Meta Ads securely');
     card.style.cssText = 'margin:12px 0;padding:15px;max-width:620px;border:1px solid var(--line,#666);border-radius:14px;background:var(--bg2,#1b1b24)';
     const title = $('h3', 'Connect your Facebook / Instagram ads');
-    title.style.cssText = 'font:600 16px inherit;margin:0 0 5px';
+    title.style.cssText = 'font-size:16px;font-weight:600;margin:0 0 5px';
     const hint = $('p', 'To understand which ads can earn money, I need your Meta account and the profit margin per order. Do this once, then I can analyze the ads for you.');
     hint.style.cssText = 'font-size:13px;line-height:1.55;opacity:.85;margin:0 0 10px';
     const fields = $('form');
