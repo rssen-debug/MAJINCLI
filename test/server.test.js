@@ -196,6 +196,50 @@ test('/api/state and /api/config: right shape and redacted keys', async () => {
   assert.ok(unknown.body.includes('nope'), 'the unknown key must be named in the error');
 });
 
+test('Meta marketing setup happens conversationally with ZERO model call or permanent panel', async () => {
+  const page = await get('/index.html');
+  assert.doesNotMatch(page.body, /<h3>MARKETING<\/h3>/, 'no permanent marketing UI');
+  assert.match(page.body, /\/marketing\.js/, 'contextual secure connection UI is shipped');
+  const formSrc = (await get('/marketing.js')).body;
+  assert.match(formSrc, /window\.MAJIN_MARKETING/);
+  assert.doesNotMatch(formSrc, /id="marketing"/);
+  const chat = async (stream) => {
+    const res = await fetch(base('/api/chat?t=' + TOKEN), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ input: 'MAJIN optimera mina Facebook ads kampanjer', stream }),
+    });
+    return { status: res.status, text: await res.text() };
+  };
+  const plain = await chat(false);
+  assert.equal(plain.status, 200);
+  const data = JSON.parse(plain.text);
+  assert.equal(data.needsMarketingSetup, true);
+  assert.ok(!data.text.includes('sk-test-seed'));
+  const sse = await chat(true);
+  assert.equal(sse.status, 200);
+  assert.match(sse.text, /event: marketing_setup/);
+  assert.match(sse.text, /event: answer/);
+  assert.doesNotMatch(sse.text, /private-test-token|sk-test-seed/);
+
+  const metaToken = 'dont-leak-this-meta-key';
+  const req = await get('/api/marketing?t=' + TOKEN, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      action: 'save', accountId: 'act_1234567', currency: 'USD', accessToken: metaToken,
+      economics: { price: 50, cogs: 10, shipping: 3, fees: 2, refundRate: 0.05, targetProfit: 10, dailyCap: 15 },
+    }),
+  });
+  assert.equal(req.status, 200, req.body.slice(0,300));
+  assert.doesNotMatch(req.body, /dont-leak-this-meta-key/);
+  assert.equal(JSON.parse(req.body).connected, true);
+  const saved = (await get('/api/config?t=' + TOKEN)).body;
+  assert.doesNotMatch(saved, /dont-leak-this-meta-key/, 'Meta token must be masked in config API');
+  const state = (await get('/api/marketing?t=' + TOKEN)).body;
+  assert.doesNotMatch(state, /dont-leak-this-meta-key/);
+  assert.equal(JSON.parse(state).mode,'analysis_only');
+});
+
 test('/api/chat: demo answer without stream, 400 on empty input', async () => {
   const sw = await get(`/api/config?t=${TOKEN}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ models: { provider: 'demo', routes: { chat: 'demo/demo-fast' } } }) });
   assert.equal(sw.status, 200, JSON.stringify(sw.body).slice(0, 200));
