@@ -19,7 +19,7 @@
 #define MyAppName "MAJIN"
 ; the build passes /DMyAppVersion=<package.json version>; keep a fallback for hand runs
 #ifndef MyAppVersion
-  #define MyAppVersion "0.5.2"
+  #define MyAppVersion "0.5.3"
 #endif
 #define MyAppPublisher "rssen-debug"
 #define MyAppURL "https://github.com/rssen-debug/MAJINCLI"
@@ -70,9 +70,9 @@ Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesnte
 [Icons]
 ; The window itself is opened by the program (its own app window, not a browser
 ; tab), so the icon only has to start it.
-Name: "{group}\{#MyAppName}"; Filename: "{app}\MAJIN.vbs"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "MAJIN — your own agent, no console attached"
+Name: "{group}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\MAJIN.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "MAJIN — your own agent, no console attached"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\MAJIN.vbs"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\MAJIN.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
 ; Only ever the per-user PATH, and only the bin folder: no file associations, no
@@ -81,10 +81,12 @@ Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; Value
 
 [Registry]
 ; The autostart task, and only that one: no Run-key write when it is not ticked.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "MAJIN"; ValueData: """{app}\{#MyAppExeName}"" start --no-window"; Flags: uninsdeletevalue; Tasks: autostart
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "MAJIN"; ValueData: """{sys}\wscript.exe"" """{app}\MAJIN.vbs"""; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
-Filename: "{app}\MAJIN.vbs"; Description: "Start {#MyAppName} now"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+Filename: "{sys}\wscript.exe"; Parameters: """{app}\MAJIN.vbs"""; Description: "Start {#MyAppName} now"; WorkingDir: "{app}"; Flags: nowait postinstall
+; (no skipifsilent: a silent in-app update must relaunch MAJIN itself,
+;  otherwise the one-click update leaves the app dead and looks broken)
 
 [UninstallRun]
 ; Stop the running program before its files go, instead of leaving an orphan

@@ -124,8 +124,14 @@ test('no console window: the user launches through the hidden VBS', () => {
   assert.match(vbs, /Wscript\.Shell/, 'hidden shell launcher');
   assert.match(vbs, /Run .* 0, False/, 'window style 0 = invisible');
   const iss = read('installer/majin.iss');
-  assert.match(iss, /Filename: "\{app\}\\MAJIN\.vbs"/, 'both shortcuts point at the hidden launcher');
-  assert.doesNotMatch(iss, /Name: "\{autodesktop\}[^"]*"; Filename: "\{app\}\\\{#MyAppExeName\}"/, 'the desktop shortcut no longer boots a console');
+  /* CreateProcess code 193 (v0.5.1, user-reported): a .vbs is NOT a Win32
+     program — no launch point may target it directly. The whole fleet goes
+     via wscript.exe with the vbs as an argument */
+  const needle = 'Filename: "{sys}' + String.fromCharCode(92) + 'wscript.exe"';
+  const launches = iss.split(needle).length - 1;
+  assert.ok(launches >= 3, `wscript.exe must be the launcher at every entry point (${launches}/≥3: start menu, desktop, postinstall, autostart)`);
+  assert.ok(!iss.includes('Filename: "{app}' + String.fromCharCode(92) + 'MAJIN.vbs"'), 'nothing may target the vbs directly — that is exactly the 193 dialog');
+  assert.ok(!iss.includes('postinstall skipifsilent'), 'silent updates must relaunch the app — skipifsilent kills the one-click update');
 });
 
 test('a real Quit exists on the main window (two-step, stops the server)', () => {

@@ -3,6 +3,21 @@
 Notable changes on `arena/e223e8b9-slurps` (PR #1). Newest first. Verified in the Linux sandbox
 unless stated otherwise; nothing here claims a Windows or browser run.
 
+## 0.5.3 — hotfix: installationen kan starta MAJIN igen + tyst one-click-update startar om appen
+
+Användarrapporterat på riktig Windows: `Setup — Unable to execute file
+C:\Program Files\MAJIN\MAJIN.vbs — CreateProcess failed, code 193`.
+En .vbs är ingen Win32-exe; Inno Setups postinstall körde `CreateProcess`
+direkt på den. Start-menyn, skrivbordet, autostart och postinstall kör nu
+alla `wscript.exe "{app}\MAJIN.vbs"` med M-ikonen kvar. Test låser:
+ingen launchpoint får någonsin peka rakt på vbs:en igen.
+
+Samma runda: `skipifsilent` på postinstall betydde att den **tysta**
+one-click-uppdateringen (VERYSILENT) stängde appen utan att starta den igen
+— efter en lyckad uppdatering såg MAJIN död ut. Flaggan är borta: uppdatera
+inne i appen → installern kör tyst → MAJIN startar av sig själv. Det är
+kedjan som hela tiden var tänkt.
+
 ## 0.5.2 — majin.doctor + kontraktet "inga döda tools" (78 tools, alla levande)
 
 **`majin.doctor`** — människovänd hälsokoll inspirerad av Agent-Reach:s
