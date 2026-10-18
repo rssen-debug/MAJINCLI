@@ -167,7 +167,9 @@ test('the wizard can be reopened, and removing providers is one click in it', ()
   const src = read('src/ui/onboard.js');
   assert.match(src, /reopen\(\)/, 'setup is a place you can return to');
   assert.match(src, /action: 'remove', name: p\.name/, 'providers can be removed from the same cards');
-  assert.match(src, /configured ✓ — click to change the key/, 'configured providers say so — changing the key is obvious');
+  assert.match(src, /is already connected/, 'configured providers are recognized before asking for a key');
+  assert.match(src, /Replace the saved key/, 'changing a key remains possible in advanced setup');
+  assert.match(src, /Forget .* connection/, 'removing a provider remains possible without a crowded provider grid');
 });
 
 test('parallel tools paint parallel rows — no result lands on the wrong step', () => {
