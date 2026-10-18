@@ -363,8 +363,9 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
         const reply = 'I can analyze your Facebook/Instagram ads. First I need your Meta ad account and product costs. Complete the secure connection here; your token will not be sent to the AI model. No ads will be changed.';
         if (noStreamFlag(body, url)) return json(res, 200, { ok: true, needsMarketingSetup: true, text: reply });
         sseHead(res);
-        res.write('event: marketing_setup\ndata: ' + JSON.stringify({ type: 'marketing_setup', request: input }) + '\n\n');
+        res.write('event: delta\ndata: ' + JSON.stringify({ type: 'delta', text: reply }) + '\n\n');
         res.write('event: answer\ndata: ' + JSON.stringify({ type: 'answer', text: reply }) + '\n\n');
+        res.write('event: marketing_setup\ndata: ' + JSON.stringify({ type: 'marketing_setup', request: input }) + '\n\n');
         res.write('event: done\ndata: ' + JSON.stringify({ ok: true, marketingSetup: true }) + '\n\n');
         return res.end();
       }
