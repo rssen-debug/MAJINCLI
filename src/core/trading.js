@@ -4,6 +4,7 @@
  * Upstream TauricResearch/TradingAgents is Apache-2.0; not vendored or installed.
  */
 import { spawn } from 'node:child_process';
+import os from 'node:os';
 
 const round = x => Math.round((x + Number.EPSILON) * 100) / 100;
 const number = x => typeof x === 'number' && Number.isFinite(x) && x >= 0;
@@ -119,7 +120,7 @@ export async function tradingResearch({budget,currency='USD',symbol,date=''}={},
   const ticker=String(symbol||'').trim().toUpperCase();
   if(!ticker||!SYMBOL.test(ticker))throw new Error('Ask the user which ticker to research. Capital alone does not identify an investment.');
   const day=String(date||today());
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||Number.isNaN(Date.parse(day))||day>today())throw new Error('Choose a valid, non-future analysis date.');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||Number.isNaN(Date.parse(day))||new Date(day+'T00:00:00Z').toISOString().slice(0,10)!==day||day>today())throw new Error('Choose a valid, non-future analysis date.');
   const chosen=researchProvider(cfg);
   const python=process.env.MAJIN_TRADING_PYTHON||(process.platform==='win32'?'python':'python3');
   const crypto=/^(BTC|ETH|SOL|DOGE|XRP|ADA|LTC|AVAX)-USD$/.test(ticker);
@@ -132,7 +133,7 @@ export async function tradingResearch({budget,currency='USD',symbol,date=''}={},
     let finished=false,output='',timedOut=false,overflow=false,child;
     let timer;
     const done=r=>{if(finished)return;finished=true;clearTimeout(timer);resolve(r)};
-    try{child=spawnImpl(python,['-I','-c',PYTHON_BRIDGE,ticker,day,crypto?'crypto':'stock'],{env,stdio:['ignore','pipe','pipe'],windowsHide:true});}
+    try{child=spawnImpl(python,['-E','-c',PYTHON_BRIDGE,ticker,day,crypto?'crypto':'stock'],{env,cwd:os.tmpdir(),stdio:['ignore','pipe','pipe'],windowsHide:true});}
     catch{return done({ok:false,error:'Python 3.11+ interpreter unavailable. Install the optional TradingAgents package only if desired.'})}
     timer=setTimeout(()=>{timedOut=true;child.kill?.('SIGKILL')},Math.min(120_000,Math.max(1000,timeoutMs)));
     timer.unref?.();
