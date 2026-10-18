@@ -189,7 +189,7 @@ export function wantsMarketingSetup(input) {
   const s = String(input || '').trim().toLowerCase();
   if (s.length > 6000) return false;
   const platform = /\b(meta|facebook|instagram|fb)\b/.test(s);
-  const adWords = /(ads|annonser|annons|kampanj|campaign|reklam|marknadsföring|marketing)/.test(s);
-  const actionable = /(analy[sz]|optim|sköt|hantera|granska|marknadsför|annonser|köp|reklam|kör|starta|förbättra|manage|run|improve|audit|review)/.test(s);
-  return (platform && adWords && actionable) || (/(mina annonser|min facebook-marknadsföring|my facebook ads|my meta ads)/.test(s) && actionable);
+  const adWords = /(ads|annonser|annons|kampanj|campaign|reklam|marknadsf\u00f6ring|marketing)/.test(s);
+  const actionable = /(analy[sz]|optim|sk\u00f6t|hantera|granska|marknadsf\u00f6r|annonser|k\u00f6p|reklam|k\u00f6r|starta|f\u00f6rb\u00e4ttra|manage|run|improve|audit|review)/.test(s);
+  return (platform && adWords && actionable) || (/(mina annonser|min facebook-marknadsf\u00f6ring|my facebook ads|my meta ads)/.test(s) && actionable);
 }
