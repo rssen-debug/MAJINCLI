@@ -6,6 +6,11 @@ allowed to contradict a test.
 
 ## Valt
 
+- **Preset-headrar hljer med verktyg-vagen, inte bara UI.** `majin.provider add` med preset
+  kopierar preset `headers` in i config (opencode Go gatewayen 400:ar utan x-opencode-session).
+  Cost: inget; payoff: agenter kan onboarda gateway-presets utan att användaren måste öppna
+  UI-panelen. Proof: `test/provider-flow.test.js` rött före (headers saknades), grönt efter.
+
 - **Sessionskontext = disk, alltid.** Agentturnen läser historiken från disk (240 meddelanden)
   om callern inte skickar den — aldrig verslailla mekanismer (cache, maps). Cost: en fil-läsning
   per tur (~0,1 ms); payoff: modellen kan aldrig tappa sammanhanget mellan meddelanden, oavsett

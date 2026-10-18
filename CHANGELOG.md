@@ -28,6 +28,23 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 - Fullsvit 319/0/7, i18n grön, bench 7/7 oförändrad (p50 49ms).
 - Live-rerun mot qwen3:0.6b: mission 3/3 med heuristik-fallback (oförändrat beteende).
 
+### Fixat (tillägg samma kväll — opencode Go live)
+- **`majin.provider add` droppade preset-headers.** Gateway-presets som opencode
+  Go kräver skall-headern `x-opencode-session` för routning; den kopierades bara
+  på UI-spåret, inte på verktyg-spåret (det enda spår användaren når via chat).
+  All opencode-nyckel som lagts till via chat hade alltså 400:at. Nu plattger
+  båda spåren — headrarna följer med till config. Proof: `test/provider-flow.test.js`
+  rött före (assert på saknad header), grönt efter.
+
+### Verifierat (tillägg — live mot Go-gatewayen)
+- GET /models med nyckel: 37 modeller, free-modellerna verkar.
+- Direct-wire mot `longcat-2.5-preview-free` (7 856 ms) och `beam-free` (551 ms):
+  båda svarar korrekt ("Mars is a planet in our solar system.").
+- Full MAJIN turn ×2 med opencode på chat/tasks/tools: "what is 17×3" → 51,
+  sedan "the result you just gave, plus 9" → **60** — handoff-motorn biter
+  även mot kraftfull live-cloud, allt utan att röka CI-sviten (319/0/7, later
+  i18n grön, bench oförändrad).
+
 ## 2026-10-18 (GRAND ARCHITECT: the mission compiler ships — chat drives HYPERSWARM in code + measured scheduler fixes)
 
 ### Ändrat
