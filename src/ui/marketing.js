@@ -115,5 +115,66 @@
       } finally { save.disabled=false; }
     };
   }
-  window.MAJIN_MARKETING={show};
+
+  async function showChannel(platform,prompt) {
+    if (!['tiktok','google'].includes(platform)) return;
+    if(active?.isConnected)active.remove();
+    const scroller=document.getElementById('scroller');
+    if(!scroller)return;
+    const card=$('section');
+    active=card;
+    card.className='msg marketing-connection';
+    card.setAttribute('aria-label','Secure '+platform+' Ads connection');
+    card.style.cssText='margin:12px 0;padding:15px;max-width:620px;border:1px solid var(--line,#666);border-radius:14px;background:var(--bg2,#1b1b24)';
+    const isGoogle=platform==='google';
+    const title=$('h3',isGoogle?'Connect Google Ads':'Connect TikTok Ads');
+    title.style.cssText='font-size:16px;font-weight:600;margin:0 0 8px';
+    const caption=$('p',isGoogle?
+      'Google Ads requires an ad account ID, developer token and authorized OAuth access token. OAuth access tokens expire; this form does not create a Google OAuth app for you.':
+      'TikTok Ads requires an advertiser ID and a TikTok Business API access token for that account.');
+    caption.style.cssText='font-size:13px;line-height:1.55';
+    const form=$('form');
+    const account=labeled(form,isGoogle?'Google Ads customer ID':'TikTok advertiser ID','text',isGoogle?'1234567890':'7123456789012345678',true);
+    const currency=labeled(form,'Actual ad account currency','text','SEK / USD',true);
+    const login=isGoogle?labeled(form,'Manager login customer ID (if required)','text','optional'):null;
+    const access=labeled(form,'Authorized access token — private','password','Enter token in this secure field');
+    const developer=isGoogle?labeled(form,'Developer token — private','password','Google Ads developer token'):null;
+    const note=$('p','Saved to local MAJIN config (not encrypted). Tokens never enter chat or AI-model prompts. Read-only reporting. A successful save does NOT prove the platform accepted the token.');
+    note.style.cssText='font-size:11px;opacity:.8;line-height:1.55';
+    const status=$('p','');status.setAttribute('aria-live','polite');
+    const actions=$('div');actions.style.cssText='display:flex;gap:8px;flex-wrap:wrap';
+    const ok=$('button','Save & read report');ok.type='submit';
+    const cancel=$('button','Not now');cancel.type='button';cancel.onclick=()=>card.remove();
+    for(const b of [ok,cancel]){b.style.cssText='min-height:42px;padding:8px 14px;font-size:13px';actions.append(b);}
+    form.append(note,status,actions);card.append(title,caption,form);scroller.append(card);scroller.scrollTop=scroller.scrollHeight;
+    try{
+      const state=await api('/marketing/channel');
+      const prev=state.channels?.[platform];
+      if(prev){account.value=prev.accountId||'';currency.value=prev.currency||'';}
+    }catch{/* new connection */}
+    form.onsubmit=async ev=>{
+      ev.preventDefault();ok.disabled=true;status.textContent='Saving private connection…';
+      try{
+        const payload={
+          action:'save',platform,currency:currency.value.trim().toUpperCase(),
+          ...(isGoogle?{customerId:account.value.trim(),loginCustomerId:login.value.trim()}:{advertiserId:account.value.trim()}),
+          ...(access.value.trim()?{accessToken:access.value.trim()}:{}),
+          ...(developer&&developer.value.trim()?{developerToken:developer.value.trim()}:{}),
+        };
+        await api('/marketing/channel',{method:'POST',body:payload});
+        access.value='';if(developer)developer.value='';
+        const state=await api('/marketing/channel');
+        if(!state.channels?.[platform]?.configured){
+          status.textContent='Settings saved; I still need a valid access token'+(isGoogle?' and developer token':'')+'.';
+          return;
+        }
+        status.textContent='Saved. Starting a read-only report. No ad spend changes.';
+        card.remove();
+        // Resend only the ORIGINAL request, never access tokens or form data.
+        setTimeout(()=>{if(typeof send==='function')send(String(prompt||('Analyze my '+platform+' ads')).slice(0,1500));},0);
+      }catch(e){access.value='';if(developer)developer.value='';status.textContent='Could not save: '+String(e.message||e);}
+      finally{ok.disabled=false;}
+    };
+  }
+  window.MAJIN_MARKETING={show,showChannel};
 })();
