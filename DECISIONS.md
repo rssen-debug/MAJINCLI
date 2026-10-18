@@ -6,6 +6,12 @@ allowed to contradict a test.
 
 ## Valt
 
+- **Scoring comes from reproduction commands, never from the changelog.** Every row in
+  `docs/COMPLETION_MATRIX.md` starts UNVERIFIED (0 pts) until the evidence exists; the
+  informal 61% estimate is retired; a regression revokes already-awarded points.
+  Cost: the scoreboard moves more slowly; payoff: the number always means exactly
+  what the code proves on current main.
+
 - **En mission-deklaration är aldrig sanning förrän verifieraren kunnat peka
   på filen i workspace.** `findClaimedArtifact` (deterministisk: write-verb +
   filnamespattern) plockar fram claimade artefakter, `verifyClaimedArtifact`

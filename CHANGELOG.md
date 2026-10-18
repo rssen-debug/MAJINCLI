@@ -5,6 +5,17 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (kväll, del 2) — Completion matrix: honest baseline under the 100-point directive
+
+### Ändrat
+- **`docs/COMPLETION_MATRIX.md` (new).** All 100 acceptance points evaluated row-by-row strictly
+  on evidence (reproduction command per row) against main v0.5.8 `2c5f308`.
+  Score: **39/100** — the 61-estimate was informal and is retired per the directive; rows are
+  PASS only with reproducible proof, and a regression revokes already-awarded points.
+
+### Verifierat
+- Evidence inventory: `ls test/` (47 files); main suite at `2c5f308` = 323 pass / 0 fail / 7 skipped.
+
 ## 2026-10-18 (kväll) — Persistent Session & Agent Handoff Engine
 
 ### Fixat
