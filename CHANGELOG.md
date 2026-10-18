@@ -5,6 +5,51 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (GRAND ARCHITECT: the mission compiler ships — chat drives HYPERSWARM in code + measured scheduler fixes)
+
+### Ändrat
+- **`src/core/mission.js` (new).** `shouldMission(input)`: deterministic
+  heuristic — 2+ list items, 3+ action segments, 3+ comma verb items.
+  `compileMission`: ONE model call asking for strict JSON DAG, then ALL
+  decisions by code. New fallback: when the model cannot produce JSON
+  (real small local models like qwen3:0.6b), a deterministic list-extraction
+  builds the graph instead — marked `origin: heuristic-fallback`.
+- **Chat wiring.** `agent._turnOnce` mission gate after routing, before the
+  tool loop: multi-part goals compile to a DAG, `analyzeSwarm` (code)
+  decides worker count, `runSwarm` executes via the proven `subagentWorker`,
+  and the result arrives as one aggregated honest summary
+  (`Mission done — N/M parts ok`). Any failure falls back to a normal turn —
+  a mission can never crash a conversation.
+- **`runSwarm` rewritten as a WORK-CONSERVING scheduler.** Free capacity is
+  assigned runnable work immediately (no batch waits); a `started`-set makes
+  duplicate launches structurally impossible; `AbortSignal` is honored with
+  honest `cancelled` markings; deadline exists.
+- **Multi-level blocked dependencies now propagate transitively.** If dep(a)
+  fails, then both c(a) and d(c) and e(d) are marked blocked with reasons —
+  nothing waits forever. Proof: the regression test hung >180 s before the
+  fix, terminates in ~1 ms after.
+- **Privacy-first diagnostics (`src/core/diagnostics.js`).** allowlist-only
+  events, local ring log ALWAYS, transmission NEVER unless explicitly
+  `diagnostics.analytics:true` AND an https endpoint is configured. Unknown
+  fields are dropped loudly, payload capped, no prompts/keys/filenames — by
+  schema, not by redaction.
+- Bench: `node scripts/bench.mjs --mission` prints an honest mission summary
+  (mock latencies) every run.
+
+### Verifierat
+- `test/swarm.test.js` 10/10 (2 new REGRESSION tests: timeout-hung bug
+  proven >180 s pre-fix; work-conserving 841 ms → ~0 gap).
+- `test/mission.test.js` 5/5 fail-first: shouldMission parser, cycle/limit
+  rejection, heuristic-fallback mission, agent chat turned mission with 3
+  workers + mission event, single-question never missions.
+- `test/diagnostics.test.js` 5/5.
+- LIVE against real model: Ollama qwen3:0.6b CPU — chat input
+  "1. say asteroid 2. say volcano 3. say eclipse" → mission, 3 workers
+  chosen by code, 3 worker_start events + mission event, 3/3 ok, 96 s wall
+  (small local model answers are thin, the PIPELINE is the proof).
+- Suite 313 pass / 0 fail / 7 skipped (pending final count in CI); i18n
+  guard clean; bench 7/7 unchanged.
+
 ## 2026-10-18 (LIVE DELIVERY: update-chain status, linux/mac answers, opencode provider, release-bump)
 
 ### Ändrat

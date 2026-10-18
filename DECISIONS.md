@@ -104,6 +104,20 @@ allowed to contradict a test.
   windows_only chip-click no longer offers a manual download anywhere (the
   release page carries the same file - judged null loss, real gain).
   Proof: test/livedelivery.test.js 1-3, 7.
+- **Mission decisions belong to code; models fill content.** shouldMission,
+  graph validation (acyclic, max 6), worker count and scheduling are all
+  deterministic. The model only PROPOSES the DAG JSON, and when it cannot
+  (small local models), a deterministic list-extraction takes over - marked
+  honestly as heuristic-fallback. Cost: free-form goals without any list
+  structure stay single-agent (conservative, no forced splitting).
+  Proof: test/mission.test.js 2-5; live qwen3:0.6b run 2026-10-18.
+- **The swarm scheduler is work-conserving.** Capacity never idles while
+  runnable work exists; blocked deps propagate transitively so no node waits
+  forever. Cost: per-node timing interleaves more (acceptable; isolation is
+  per-session subagent). Proof: test/swarm.test.js REGRESSION 9+10.
+- **Diagnostics are opt-in, allowlisted, local-first.** No automatic uploads
+  ever; endpoint required AND analytics:true. Cost: near real-time product
+  insight is deferred until a backend exists. Proof: test/diagnostics.test.js.
 ## Avvisat
 
 - **"loadSafe / meaningful-diffs" as the race answer** (2026-10-18): classifying

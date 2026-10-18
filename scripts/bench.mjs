@@ -37,6 +37,8 @@ const withSubset = Boolean(flag('subset', false));
    plus en inducerad resolve-delay som explicit star for modell-rundturstiden.
    Texten sager precis vad som ar simulerat. */
 const withSwarm = Boolean(flag('swarm', false));
+/* --mission: maler mission mot normal turn (wall + paritet, mock-route) */
+const withMission = Boolean(flag('mission', false));
 
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-bench-'));
 process.env.MAJIN_HOME = home;
@@ -317,6 +319,30 @@ async function main() {
     console.log(`  sequential wall   : ${swarmSummary.sequentialWallMs} ms`);
     console.log(`  swarm wall        : ${swarmSummary.swarmWallMs} ms  (gain ${swarmSummary.gainedPct}%)`);
     console.log(`  honesty note      : each node did REAL file IO (${r.results.get('w1').value.ioCount} files written+read) plus ${simulatedLatencyMs} ms induced latency standing in for model round trips (real calls are typically seconds, so this UNDERSTATES the gain).`);
+  }
+
+  /* GRAND ARCHITECT-matning: multi-delat mal via mission-VADjen vs normal turn */
+  if (withMission) {
+    const { runMission } = await import('../src/core/mission.js');
+    const missionDag = JSON.stringify({ nodes: [
+      { id: 'r1', input: 'write three facts about mars into a note', deps: [], estMs: 30000 },
+      { id: 'r2', input: 'write three facts about venus into a note', deps: [], estMs: 30000 },
+      { id: 'r3', input: 'summarize research notes into a report', deps: ['r1', 'r2'], estMs: 30000 },
+    ] });
+    const { setScript } = await import('../src/core/provider/mock.js');
+    setScript('mission:compile', [{ text: missionDag }]);
+    setScript('sub:tasks', [{ text: 'mars note done' }, { text: 'venus note done' }, { text: 'report done' }]);
+    const rt2 = rt;
+    const t1 = performance.now();
+    const m = await runMission({ cfg: rt2.cfg, registry: rt2.registry, session: 'bench-mission', input: 'research mars, research venus, then write the summary report', emit: () => {} });
+    const missionWall = performance.now() - t1;
+    console.log('\n== GRAND ARCHITECT mission measurement (mock route, honest latencies) ==');
+    console.log(`  mission kind    : ${m.kind}`);
+    console.log(`  workers (code)  : ${m.workers}  compiled nodes: ${m.nodes}`);
+    console.log(`  ok/fail/blocked : ${m.okCount}/${m.failCount}/${m.blockedCount}`);
+    console.log(`  wall            : ${Math.round(missionWall)} ms (includes 1 compile call + ${m.nodes} subagent turns, all mock)`);
+    console.log(`  analysis reason : ${m.analysis.reason}`);
+    console.log(`  verdict         : ${m.kind === 'mission' && m.okCount === m.nodes ? 'mission works end-to-end' : 'needs a look'}`);
   }
 
   /* subset-sammanfattning: paritet + teckenbesparing, alltid bada tva —

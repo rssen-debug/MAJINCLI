@@ -150,3 +150,49 @@ test('subagentWorker kör verkliga subagent-turner parallellt (mock-route, inga 
   assert.ok(wall < 4000, `tre parallella mock-turner ska vara snabba: ${wall.toFixed(0)}ms`);
   await rt.shutdown();
 });
+
+/* REGRESSION 2026-10-18 (GRAND ARCHITECT-skivan):
+   Bugg 1 — multi-niva-blockerade beroenden vantade FOR EVIGT i 5ms-loopen:
+   a failar => c(a) blockerades men d(c=>...) hittade ingen failad dep. */
+test('REGRESSION: blockerade noder bubblar genom hela kedjan, inget vantar for evigt', async () => {
+  const t0 = performance.now();
+  const r = await runSwarm({
+    nodes: [
+      { id: 'a', deps: [], run: async () => { throw new Error('plan kan inte djuparel'); } },
+      { id: 'c', deps: ['a'], run: async () => ({ never: 'skriv aldrig av alla koppar' }) },
+      { id: 'd', deps: ['c'], run: async () => ({ never: 'djupast var' }) },
+      { id: 'e', deps: ['d'], run: async () => ({ never: 'ytterst' }) },
+    ],
+    cap: 2,
+  });
+  const wall = performance.now() - t0;
+  assert.ok(wall < 2000, `kedjan ska dö direkt, inte vänta: vägg ${wall.toFixed(0)}ms`);
+  assert.equal(r.results.get('a').ok, false);
+  for (const id of ['c', 'd', 'e']) {
+    assert.equal(r.results.get(id).blocked, true, `${id}: blockerad även indirekt`);
+    assert.match(r.results.get(id).reason || '', /dependency|failed/i, `${id}: ärlig orsak`);
+  }
+  assert.equal(r.blockedCount, 3);
+  assert.equal(r.okCount, 0);
+});
+
+/* REGRESSION: batch-wait ersatt av work-conserving schemalaggare.
+   Med cap 2: fast(60ms) + slow(900ms) + c(deps:fast) — c ska starta nar fast
+   ar klar (work conserving), inte nar slow batchen gruvar sig. */
+test('REGRESSION: ledig kapacitet tilldelas omedelbart nagot körbart — aldrig tom väntan', async () => {
+  const times = {};
+  const rec = (k) => () => { times[k] = performance.now(); };
+  const settle = (ms) => new Promise((r) => setTimeout(r, ms));
+  await runSwarm({
+    nodes: [
+      { id: 'fast', deps: [], run: async () => { await settle(60); rec('fast-end')(); } },
+      { id: 'slow', deps: [], run: async () => { await settle(900); rec('slow-end')(); } },
+      { id: 'c', deps: ['fast'], run: async () => { rec('c-start')(); await settle(30); } },
+    ],
+    cap: 2,
+  });
+  const gap = times['c-start'] - times['fast-end'];
+  assert.ok(times['c-start'] != null, 'c kordes');
+  assert.ok(gap < 250, `c startade ${gap.toFixed(0)}ms efter fast — work-conserving maste ligga nara noll (batchv:e skulle ge ~840+)`);
+  assert.ok(times['slow-end'] > times['fast-end'] + 400, 'slow sprang oavbruet parallellt');
+});
