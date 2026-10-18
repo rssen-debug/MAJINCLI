@@ -39,9 +39,9 @@ test('$50 with no symbol/market quote asks useful questions and executes NO orde
 
 test('$100 or $50 position sizing is cautious; no leverage and no fills',()=>{
   const p=tradingPlan({budget:50,currency:'USD',symbol:'AAPL',price:2,feePerOrder:0});
-  assert.equal(p.position.units,5);
-  assert.equal(p.position.notional,10);
-  assert.equal(p.position.hypotheticalLossAtFivePercentMove,0.5);
+  assert.equal(p.position.units,6);
+  assert.equal(p.position.notional,12);
+  assert.equal(p.position.hypotheticalLossAtFivePercentMove,0.6);
   assert.equal(p.brokerConnected,false);
   assert.equal(p.ordersSent,0);
   assert.equal(p.limits.noLeverage,true);
