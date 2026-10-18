@@ -40,16 +40,15 @@ autopilot/teamwork/dashboard additions).
   live `/api/tasks` deck for CHANNEL-started tasks (registry telemetry is already in the
   payload), and surfacing the global per-tool interval on cards when n is decent.
   *(källa: master brief §"LIVE VISUAL AGENT DASHBOARD & SMART ETA")*
-- **Job-search agent — FOUNDATION SHIPPED 2026-10-18** (state machine with mandatory
-  failure-why + submission-proof, dedupe memory = the pipeline file, deterministic CV
-  match with honest basis, Platsbanken SE adapter live-verified, 92 tools). Remaining
-  (the honest core): browser-driven form-fill + `jobs.submit` — always approval-gated,
-  proof attached (confirmation url / thanks-page words / screenshot) — status cards,
-  Seek+LinkedIn/AU adapters, and the scheduled autonomous round on top of schedule.js.
-  Research assets used as patterns only: Agent-Reach, Playwright MCP,
-  MadsLorentzen/ai-job-search (no second framework, no Python).
-  *(källa: master brief §"VIKTIGT TILLÄGG" — 10 requirements; ships inside the Windows
-  installer by construction — it is core tools, not a side script)*
+- **Job-search agent — pipeline + submit SLICES SHIPPED 2026-10-18** (state machine,
+  dedupe = pipeline file, deterministic CV match, Platsbanken live-verified,
+  `jobs.prepare` form-fill with exact preview, `jobs.send` destructive-gated with
+  mandatory proof — no confirmation words, no "submitted"). 94 tools. Remaining:
+  pipeline status cards in the UI, Seek/AU adapters, the email-application path
+  (currently refused honestly), the scheduled autonomous round on schedule.js,
+  and checkbox/privacy-consent field roles in the form classifier.
+  *(källa: master brief §"VIKTIGT TILLÄGG" — 10 requirements; ships inside the
+  Windows installer by construction)*
 - **Imagination Engine slices 2–4** (cost chip per task, Living Canvas, Preview/Working/Verified
   labels) and slices 5–8 longer scope — gates: cheap-model E2E, keyboard pass, CPU/mem budget,
   all prior tests green. Spec `docs/IMAGINATION.md`.

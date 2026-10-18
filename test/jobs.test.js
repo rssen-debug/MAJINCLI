@@ -139,17 +139,19 @@ test('store: roundtrip + corrupt-file safety (a torn store is empty, never fatal
 
 test('jobs tools: registered, right risks, cv.set/show work end-to-end', async () => {
   const { toolCount, buildRegistry } = await import('../src/core/tools/index.js');
-  assert.equal(toolCount(), 92, '92 tools, none disabled');
+  assert.equal(toolCount(), 94, '94 tools, none disabled');
   const cfg = { get: () => 0, set: () => {} };
   const reg = buildRegistry({ cfg });
   const names = reg.list().map((t) => t.name);
-  for (const t of ['jobs.search', 'jobs.match', 'jobs.list', 'jobs.start', 'jobs.skip', 'jobs.cv.set', 'jobs.cv.show']) {
+  for (const t of ['jobs.search', 'jobs.match', 'jobs.list', 'jobs.start', 'jobs.skip', 'jobs.cv.set', 'jobs.cv.show', 'jobs.prepare', 'jobs.send']) {
     assert.ok(names.includes(t), `${t} is registered`);
   }
   const risks = Object.fromEntries(reg.list().map((t) => [t.name, t.risk]));
   assert.equal(risks['jobs.search'], 'read');
   assert.equal(risks['jobs.cv.set'], 'write');
   assert.equal(risks['jobs.start'], 'write');
+  assert.equal(risks['jobs.prepare'], 'exec');
+  assert.equal(risks['jobs.send'], 'destructive', 'every submission asks — that is the whole point');
   const set = await reg.exec('jobs.cv.set', { text: 'CV: JavaScript developer, react, node, svenska, engelska' }, { session: 'jest' });
   const out = JSON.parse(set.result); // exec caps to the result envelope — fields ride inside
   assert.equal(set.ok, true, JSON.stringify(set));
@@ -167,4 +169,54 @@ test('live: real Platsbanken search end-to-end', { skip: process.env.MAJIN_JOBS_
   assert.equal(r.ok, true, JSON.stringify(r.error));
   assert.ok(r.jobs.length >= 1, 'real hits come back');
   assert.ok(r.jobs[0].title && r.jobs[0].url, 'canonical fields are populated');
+});
+
+test('formfill: generic field roles — no site recipes, words decide', async () => {
+  const { classifyField } = await import('../src/core/jobs/formfill.js');
+  assert.equal(classifyField({ tag: 'input', type: 'email', label: 'E-post', name: 'candidate[email]' }).role, 'email');
+  assert.equal(classifyField({ tag: 'input', type: 'tel', aria: 'Telefonnummer' }).role, 'phone');
+  assert.equal(classifyField({ tag: 'input', type: 'text', label: 'Ditt namn' }).role, 'name');
+  assert.equal(classifyField({ tag: 'input', type: 'file' }).role, 'cv', 'a bare file input in a form wants the CV');
+  assert.equal(classifyField({ tag: 'input', type: 'file', label: 'Ladda upp ditt CV här' }).role, 'cv');
+  assert.equal(classifyField({ tag: 'textarea', label: 'Personligt brev' }).role, 'coverletter');
+  assert.equal(classifyField({ tag: 'input', type: 'url', label: 'LinkedIn-profil' }).role, 'linkedin');
+  assert.equal(classifyField({ tag: 'input', type: 'hidden', name: 'csrf' }).role, 'ignore', 'hidden is never an answer');
+  assert.equal(classifyField({ tag: 'input', type: 'text', name: 'x_9kq' }).get ? 'x' : classifyField({ tag: 'input', type: 'text', name: 'x_9kq' }).role, 'other', 'wordless mystery stays "other", never guessed');
+  // traps: longest whole-word must win over substring bait
+  assert.equal(classifyField({ tag: 'input', type: 'text', label: 'Phone model preference' }).role, 'phone');
+  assert.notEqual(classifyField({ tag: 'input', type: 'text', label: 'Internet speed (Mbit)' }).role, 'linkedin', 'internet contains "in" — whole-word only');
+});
+
+test('formfill: contact extraction finds the real thing, never invents', async () => {
+  const { extractContact } = await import('../src/core/jobs/formfill.js');
+  const c = extractContact('Anna Svensson\nanna.svensson@example.se\n073-123 45 67\nlinkedin.com/in/annasv\ngithub.com/annasv-codes');
+  assert.equal(c.email, 'anna.svensson@example.se');
+  assert.ok(c.phone && c.phone.includes('073'));
+  assert.equal(c.linkedin, 'linkedin.com/in/annasv');
+  assert.equal(c.github, 'github.com/annasv-codes');
+  const none = extractContact('bara text utan kontaktinfo');
+  assert.equal(none.email, null, 'no email in the CV says null, not a guess');
+  assert.equal(none.phone, null);
+});
+
+test('formfill: proof = confirmation words; a redirect alone proves nothing', async () => {
+  const { buildProof } = await import('../src/core/jobs/formfill.js');
+  const good = buildProof({ urlBefore: 'https://x.se/apply', urlAfter: 'https://x.se/thanks', pageText: 'TACK FÖR DIN ANSÖKAN! Vi återkommer inom två veckor.' });
+  assert.equal(good.accepted, true);
+  assert.equal(good.kind, 'url+words');
+  assert.ok(good.words.length >= 2, 'both phrases counted');
+  const wordsOnly = buildProof({ urlBefore: 'https://x.se/apply', urlAfter: 'https://x.se/apply', pageText: 'Your application has been submitted.' });
+  assert.equal(wordsOnly.accepted, true);
+  assert.equal(wordsOnly.kind, 'words', 'SPA confirms in place — words without a url move are still proof');
+  const movedOnly = buildProof({ urlBefore: 'https://x.se/apply', urlAfter: 'https://x.se/step2', pageText: 'step 2 of 4 — tell us about your salary' });
+  assert.equal(movedOnly.accepted, false, 'the portal moved but confirmed nothing — the move is not proof');
+  assert.equal(movedOnly.kind, 'none');
+});
+
+test('formfill: planValue never invents contact data', async () => {
+  const { planValue } = await import('../src/core/jobs/formfill.js');
+  assert.equal(planValue('email', { profile: { email: 'a@b.se' } }), 'a@b.se');
+  assert.equal(planValue('phone', { profile: {} }), null, 'missing phone is null, never a made-up number');
+  assert.equal(planValue('cv', {}), '__cv__', 'the file sentinel');
+  assert.equal(planValue('other', { profile: { email: 'a@b.se' } }), null);
 });

@@ -14,7 +14,42 @@ import { resolveIn } from './files.js';
 import fs from 'node:fs';
 import { searchPlatsbanken } from '../jobs/platsbanken.js';
 import { createApplication, transition, scoreCv, cvSkills } from '../jobs/model.js';
-import { loadCv, saveCv, loadApplications, saveApplications, upsertApplication } from '../jobs/store.js';
+import { loadCv, saveCv, loadApplications, saveApplications, upsertApplication, cvPath, jobsDir } from '../jobs/store.js';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
+import { openFor, isOpen } from '../browser.js';
+import { classifyField, planValue, extractContact, buildProof, SCAN_SNIPPET, SUBMIT_SNIPPET, TEXT_SNIPPET } from '../jobs/formfill.js';
+
+/* ---- submit-slice helpers (mirror browser.fill/browser.upload's CDP flow,
+   deliberately local: the job tools must not reach into another group's
+   tool definitions to borrow half a body). ---- */
+async function fillOne(b, sel, value) {
+  const selJson = JSON.stringify(String(sel));
+  const valJson = JSON.stringify(String(value ?? ''));
+  return b.eval('(() => {' +
+    'const el = document.querySelector(' + selJson + ');' +
+    'if (!el) { return { found: false }; }' +
+    'el.focus();' +
+    "const proto = el.tagName === 'SELECT' ? window.HTMLSelectElement.prototype : (el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype);" +
+    "const setter = Object.getOwnPropertyDescriptor(proto, 'value') && Object.getOwnPropertyDescriptor(proto, 'value').set;" +
+    'if (setter) { setter.call(el, ' + valJson + '); } else { el.value = ' + valJson + '; }' +
+    "el.dispatchEvent(new Event('input', { bubbles: true }));" +
+    "el.dispatchEvent(new Event('change', { bubbles: true }));" +
+    'return { found: true, stuck: el.value === ' + valJson + ', value: String(el.value).slice(0, 60) };' +
+  '})()');
+}
+
+async function attachFile(b, sel, abs) {
+  await b.send('DOM.enable');
+  const { root } = await b.send('DOM.getDocument');
+  const { nodeId } = await b.send('DOM.querySelector', { nodeId: root.nodeId, selector: String(sel) });
+  if (!nodeId) return { ok: false };
+  await b.send('DOM.setFileInputFiles', { files: [abs], nodeId });
+  const selJson = JSON.stringify(String(sel));
+  return b.eval('(() => { const el = document.querySelector(' + selJson + ');' +
+    ' const f = el && el.files && el.files[0]; return f ? { ok: true, name: f.name, size: f.size } : { ok: false }; })()');
+}
+
 
 const pick = (apps, fp) => {
   const app = apps[fp];
@@ -193,6 +228,113 @@ export const jobTools = [
         text: full ? cv.text.slice(0, 12000) : undefined,
         summary: `CV: ${cv.text.length} chars, ${cvSkills(cv.text).length} skills recognized`,
       };
+    },
+  }),
+  def({
+    name: 'jobs.prepare',
+    group: 'jobs',
+    risk: 'exec',
+    desc: 'Open a job application form in your task\u2019s own browser, fill every field we can honestly map (contact details from the CV + any answers you pass, the CV file itself), and move the application to "waiting". Returns the EXACT preview of what jobs.send would send — review it, then send.',
+    params: {
+      fp: 'string: the application fingerprint from jobs.search or jobs.list',
+      name: 'string: your name — the CV is never name-guessed (optional)',
+      email: 'string: override the CV email (optional)',
+      phone: 'string: override the CV phone (optional)',
+      city: 'string: your city (optional)',
+      linkedin: 'string: your LinkedIn url (optional)',
+      github: 'string: your github/portfolio url (optional)',
+      website: 'string: your website (optional)',
+      coverLetter: 'string: cover letter text for the message field (optional)',
+      headless: 'boolean: run the browser headless (default true, optional)',
+    },
+    required: ['fp'],
+    run: async ({ fp, headless = true, coverLetter = '', ...answers }, ctx) => {
+      const apps = await loadApplications();
+      const app = pick(apps, fp);
+      if (['submitted', 'skipped'].includes(app.status)) {
+        return { ok: false, error: { code: 'done_is_done', message: 'this application is ' + app.status + ' — done is done', hint: 'jobs.list shows the whole pipeline' } };
+      }
+      if (!app.apply || !app.apply.url) {
+        return { ok: false, error: { code: 'no_apply_url', message: app.apply && app.apply.email ? 'this job applies by EMAIL (' + app.apply.email + ') — the email path is a different handshake and is honestly not built yet' : 'this job has no application url captured', hint: 'email applications: next slice; jobs.list shows what we know' } };
+      }
+      const cv = await loadCv();
+      const session = ctx.session || 'default';
+      const b = await openFor({ session, url: app.apply.url, headless: headless !== false, cfgGet: (k) => ctx.cfg.get(k) });
+      const fields = await b.eval(SCAN_SNIPPET);
+      const profile = { ...(cv ? extractContact(cv.text) : {}), ...Object.fromEntries(Object.entries(answers).filter(([, v]) => v)) };
+      const preview = [];
+      const gaps = [];
+      for (const f of fields) {
+        const { role, why } = classifyField(f);
+        if (role === 'ignore') continue;
+        if (role === 'cv') {
+          if (!cv) { gaps.push({ role, label: f.label || f.name, why: 'no CV saved for the file input' }); continue; }
+          const up = await attachFile(b, f.sel, cvPath());
+          preview.push({ role, label: f.label || f.name || '(file input)', filled: Boolean(up && up.ok), value: up && up.ok ? 'file: ' + up.name : null, note: why });
+          continue;
+        }
+        const value = planValue(role, { profile, coverLetter });
+        if (value == null) { gaps.push({ role, label: f.label || f.name, why }); continue; }
+        const r = await fillOne(b, f.sel, value);
+        preview.push({ role, label: f.label || f.name || f.sel, filled: Boolean(r && r.stuck), value: r && r.stuck ? String(value).slice(0, 60) : null, note: r && !r.stuck ? 'the page rejected the value' : why });
+      }
+      if (app.status !== 'waiting') {
+        if (app.status !== 'started') transition(app, 'started', { by: 'agent', evidence: { note: 'preparing the application form' } });
+        transition(app, 'waiting', { by: 'agent', evidence: { preview } });
+      }
+      await upsertApplication(app);
+      return {
+        ok: true,
+        fp: app.fp,
+        status: 'waiting',
+        preview,
+        gaps,
+        summary: 'form prepared: ' + preview.filter((x) => x.filled).length + '/' + preview.length + ' fields filled' + (gaps.length ? ', ' + gaps.length + ' need you' : '') + ' — review the preview, then jobs.send ' + fp,
+      };
+    },
+  }),
+
+  def({
+    name: 'jobs.send',
+    group: 'jobs',
+    risk: 'destructive',
+    desc: 'SUBMIT a prepared application (status "waiting"). This is the real thing: it clicks the form\u2019s submit control and then DEMANDS proof — confirmation words on the result page, saved screenshot, url. No proof = no "submitted": the status stays waiting for YOU to check, because an unsent application marked sent is the worst lie this product can tell.',
+    params: { fp: 'string: the application fingerprint (must be "waiting" — run jobs.prepare first)' },
+    required: ['fp'],
+    run: async ({ fp }, ctx) => {
+      const apps = await loadApplications();
+      const app = pick(apps, fp);
+      if (app.status !== 'waiting') {
+        return { ok: false, error: { code: 'not_prepared', message: 'this application is "' + app.status + '", not waiting — jobs.prepare fills the form first, you review, then send', hint: app.status === 'submitted' ? 'it is already submitted — done is done' : 'run jobs.prepare ' + fp } };
+      }
+      const session = ctx.session || 'default';
+      if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'the prepare browser was closed — jobs.prepare again to rebuild the exact form state' } };
+      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
+      const before = await b.eval(TEXT_SNIPPET).catch(() => ({ url: '' }));
+      const click = await b.eval(SUBMIT_SNIPPET);
+      if (!click || !click.clicked) {
+        transition(app, 'failed', { by: 'agent', evidence: { error: 'no submit control found on the form' } });
+        await upsertApplication(app);
+        return { ok: false, error: { code: 'no_submit', message: 'no control on the page looked like a submit button', hint: 'the form may need you in a windowed browser — jobs.prepare with headless:false and finish by hand' } };
+      }
+      await new Promise((r) => setTimeout(r, 2300));
+      try { await b.followNewTarget({ windowMs: 1200 }); } catch { /* single-page flow is fine */ }
+      const page = await b.eval(TEXT_SNIPPET).catch(() => ({ url: before.url, text: '' }));
+      const proofDir = path.join(jobsDir(), 'proofs');
+      await fsp.mkdir(proofDir, { recursive: true });
+      let shotPath = null;
+      try {
+        const shot = await b.send('Page.captureScreenshot', { format: 'png' });
+        shotPath = path.join(proofDir, app.fp + '-' + Date.now() + '.png');
+        await fsp.writeFile(shotPath, Buffer.from(shot.data, 'base64'));
+      } catch { /* words can still prove it */ }
+      const proof = buildProof({ urlBefore: before.url, urlAfter: page.url, pageText: page.text || '', shotPath });
+      if (!proof.accepted) {
+        return { ok: false, error: { code: 'no_proof', message: 'clicked "' + (click.text || 'submit') + '" but no confirmation words appeared on the page — the application MAY NOT have been sent. It stays "waiting" until we see proof; check the screenshot before retrying: ' + String(shotPath || 'no screenshot') } };
+      }
+      transition(app, 'submitted', { by: 'agent', evidence: { proof, clicked: click.text || null } });
+      await upsertApplication(app);
+      return { ok: true, fp: app.fp, status: 'submitted', proof, summary: 'application submitted — proof: ' + proof.words.join(' / ') + (proof.shot ? ' · shot saved' : '') };
     },
   }),
 ];

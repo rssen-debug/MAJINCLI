@@ -20,7 +20,7 @@ export const STATUS = Object.freeze(['found', 'matched', 'started', 'waiting', '
 const TERMINAL = new Set(['submitted', 'skipped']);
 
 const NEXT = Object.freeze({
-  found: new Set(['matched', 'skipped', 'failed']),
+  found: new Set(['matched', 'started', 'skipped', 'failed']), // started directly = the user's own override
   matched: new Set(['started', 'skipped', 'failed']),
   started: new Set(['waiting', 'submitted', 'failed', 'skipped']),
   waiting: new Set(['submitted', 'failed', 'skipped']),
@@ -121,7 +121,7 @@ export function fingerprint(job) {
    regression-test can pin exactly why. Languages keep their native folds. */
 /* svlex = swedish-ish INPUT vocabulary for matching — exempt from the
    shipped-strings-English gate on purpose (input may be anything). */
-const svlex = (canon, syns) => [canon, syns];
+export const svlex = (canon, syns) => [canon, syns];
 const SYNONYMS = [
   svlex('javascript', ['javascript', 'js', 'es6', 'ecmascript']),
   svlex('typescript', ['typescript', 'ts']),

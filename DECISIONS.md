@@ -60,6 +60,11 @@ allowed to contradict a test.
   `install.ps1` (word list + åäö + allowlist for the deliberate Swedish input matchers);
   comments/docs as Swedis as we like. New since 2026-10-18: the app itself must also *speak*
   English by default (owner requirement).
+- **A submission without proof is not a submission.** `jobs.send` clicks, then
+  demands confirmation words + saves a screenshot; the machine refuses
+  `submitted` without evidence and leaves the status `waiting` with plain words
+  instead. Same family as "no fake progress" — the pipeline is a ledger, not a
+  mood board.
 - **Parallel tasks render as cards, not as a second transcript.** The blessed single-stream
   chat stays byte-identical; parallel tasks own a card each (status chip, activity line,
   streaming body, stop button) and their events never touch the main-turn globals.
@@ -142,10 +147,13 @@ allowed to contradict a test.
 - **Browser-context resource model.** Files lock cleanly by path; a browser context is not a
   path. Candidates: a named-resource lock per provider-site domain; count-based pool keyed by
   `channel:browser`. Decided when browser hardening starts (next phase).
-- **Job submission form model.** Portal forms vary wildly (multi-step, iframes, file
-  drops). Candidates: per-site recipes (fragile, curated) vs generic field-role
-  detection (label/aria/input-type driven, robust-ish). An angry question for the
-  submit slice — Decide with the first real employer form, not from a chair.
+- ~~**Job submission form model**~~ **DECIDED 2026-10-18**: generic field-role
+  detection (whole-word vocabulary over label/aria/placeholder/name + hard type
+  gates — a file input is never a phone). Zero site recipes SHIPPED; recipes are
+  permitted only as fallbacks behind the classifier when a real counterexample
+  arrives, never as the front door. Proof: substring-trap pins
+  (`js ⊂ node js`, `.net ⊂ kubernetes`, `internet ⊄ linkedin`) in
+  `test/jobs.test.js`.
 - **Handoff cost.** Reassigning an agent to a sibling's task needs the sibling's plan + state
   summary; how much do we copy vs re-derive? Test with the first real teamwork run.
 - **Living Missions data model.** One persistent goal holding many tasks + decision points —

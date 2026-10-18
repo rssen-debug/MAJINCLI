@@ -112,6 +112,8 @@ jobs:
       - name: browser tools must work against a real browser (live e2e, observed)
         # HARD GATE since 2026-10-18: green twice in a row (39 119 535 069 +
         # 39 120 606 397 — and it caught a real openFor bug on its first run).
+        # Now also the job submit slice end-to-end (fake employer → posted →
+        # thanks-words → status submitted, proof on disk).
         # The runner has Edge + node 22; the test serves a local form page,
         # submits it, proves the upload from the input element, and closes.
         shell: pwsh
@@ -119,7 +121,7 @@ jobs:
           MAJIN_BROWSER_LIVE: '1'
         run: |
           $env:MAJIN_HOME = "$env:GITHUB_WORKSPACE\.livedemo"
-          node --test test/browser.live.test.js
+          node --test test/browser.live.test.js test/jobs.live.test.js
 
       - name: the installer must install, run, survive a restart and uninstall
         # One verifier for CI and for a person's own laptop: the same script the

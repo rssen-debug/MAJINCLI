@@ -5,6 +5,40 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (job agent, slice 2: prepare + send — with proof or nothing)
+
+### Ändrat
+- **`jobs.prepare`**: opens the application form in the task's own browser context,
+  detects fields *generically* (label/aria/placeholder/name words + type gates —
+  zero site recipes), fills what can honestly be mapped (contact from the CV,
+  overrides as args, the CV file attached to file inputs), and moves the
+  application to `waiting`. The answer is the EXACT preview of what would be sent,
+  plus a `gaps` list of what still needs a human.
+- **`jobs.send`** (risk `destructive` — the guard asks every time in the default
+  confirm mode, which is precisely the brief's "approval before every submission"):
+  clicks the likeliest submit control by vocabulary, then **demands proof**:
+  confirmation words on the result page (sv+en), a saved screenshot in
+  `jobs/proofs/`, the resulting URL. Accepted → `submitted` with the proof in the
+  history. NOT accepted → the status stays `waiting` and the error says so in
+  plain words — an unsent application marked sent is the worst lie this product
+  can tell.
+- Decoration day: `found → started` is now legal (the user's own override), an
+  unsend without preparation is refused, a done application refuses resend.
+- **94 tools** (was 92). CI live step now also runs `test/jobs.live.test.js`.
+
+### Fixat
+- `extractContact` link capture returned the `www` group instead of the URL
+  (linkedin/github always null) — found by the test.
+
+### Verifierat
+- `node --test test/jobs.test.js` → 11 pass, 0 fail (state machine, dedupe,
+  match, formfill classification incl. substring traps, proof discipline).
+- `npm test` → **208 pass, 0 fail, 7 skipped** · i18n 0/75 · `npm run check` 105/105.
+- The end-to-end submit chain (fake employer site → posted fields → thanks words
+  → status submitted, screenshot on disk) is pinned in `test/jobs.live.test.js`
+  and is **CI-gated from the next build — verdict pending dispatch below**; until
+  then it is honestly: written, locally skip-verified, not yet observed by CI.
+
 ## 2026-10-18 (job agent, slice 1: the pipeline is real)
 
 ### Ändrat
