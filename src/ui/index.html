@@ -52,6 +52,21 @@ button.danger{color:var(--bad);border-color:var(--bad)}
 .msg.err .body{color:var(--bad);border-left:1px solid var(--bad);padding-left:11px}
 .msg pre{background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:8px 10px;overflow:auto;font-size:11.5px;white-space:pre-wrap}
 .msg code{background:var(--bg2);padding:1px 4px;border-radius:4px}
+/* parallel task cards (autopilot) — one card per running agent */
+.msg.task{border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:linear-gradient(180deg,var(--bg2),transparent)}
+.task-head{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px}
+.task-id{color:var(--cy);max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task-status{margin-left:auto;padding:2px 8px;border-radius:999px;font-size:10.5px;border:1px solid var(--line);color:var(--dim)}
+.task-status.st-working{color:var(--cy);border-color:var(--cy)}
+.task-status.st-waiting{color:var(--warn);border-color:var(--warn)}
+.task-status.st-done{color:var(--ok);border-color:var(--ok)}
+.task-status.st-error,.task-status.st-stopped{color:var(--bad);border-color:var(--bad)}
+.task-stop{margin-left:6px;background:none;border:1px solid var(--bad);color:var(--bad);border-radius:6px;padding:1px 8px;cursor:pointer;font-size:10.5px}
+.task-stop:disabled{opacity:.35;cursor:default}
+.task-act{margin-top:5px;font-size:11px;opacity:.85}
+.task-ans{margin-top:7px}
+.msg.task.task-done{border-color:var(--ok)}
+.msg.task.task-bad{border-color:var(--bad)}
 .tools{display:flex;flex-wrap:wrap;gap:5px;margin:4px 0 0}
 .tl{border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-size:11px;color:var(--dim);background:var(--bg2);cursor:pointer}
 .tl.run{color:var(--cy);border-color:var(--cy)}.tl.bad{color:var(--bad);border-color:var(--bad)}.tl.good{color:var(--ok)}

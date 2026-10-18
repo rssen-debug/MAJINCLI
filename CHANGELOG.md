@@ -5,6 +5,36 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (autopilot UI) — the S.busy wall is down
+
+### Ändrat
+- **The chat no longer blocks while MAJIN works.** In `src/ui/app.js` the gate
+  `if (!input || S.busy) return false;` is replaced: a new message sent during
+  a running task becomes its own parallel task (POST `{autopilot:true}`), and
+  slash commands (incl. `/stop`) reach the engine even while busy.
+- **Task cards in the chat.** Every parallel message gets a card with the
+  server's task id, live status (working/waiting/done/error/stopped — the
+  registry's vocabulary), rolling activity line (route/step/tool), streaming
+  answer text (~6 paints/s), and its own ⏹ stop button that posts
+  `{task: rec.id}` to `/api/chat/stop` and aborts only its own stream.
+- Cards read the real SSE `event: NAME` lines (the classic parser looked at
+  `data:` only) so the UI binds the resumed stream to the exact task id the
+  server named — a stopped second task can never kill the first.
+- App language is English in the new surface (plus repo-wide i18n gate holds).
+
+### Fixat
+- The long-standing single-stream assumption (`S.busy`, `S.abort`, `S.cur`)
+  made a second message vanish silently or freeze the composer — measured in
+  code, now pinned by a stability test.
+
+### Verifierat
+- `node --test`: **183 pass / 0 fail / 4 skipped**; `npm run i18n`:
+  0 Swedish literals in 68 files; `node --check src/ui/app.js` clean;
+  contract test pins: no `S.busy` gate, `{autopilot:true}` send,
+  stop-by-task-id, task-event binding, all status styles present in the
+  palette. UI painting is *not* browser-rendered here (coverage = string
+  contract + server wiring); first human click-check is listed in TODO.
+
 ## 2026-10-18 — v0.5.3 shipped + autopilot core (backend) on `main`
 
 ### Ändrat

@@ -142,6 +142,19 @@ test('no console window: hidden launch everywhere, Inno only CreateProcesses rea
   assert.match(iss, /postinstall runhidden skipifsilent/, 'skipifsilent MUST stay: CI-proven twice (17+18 min hangs) that a silent install starting the app from Inno hangs the setup process — one-click-update relaunch is the updater watchdog\'s job (src/core/update.js)');
 });
 
+test('autopilot UI: a new message never waits for a running task, and every parallel task is stoppable', () => {
+  const app = read('src/ui/app.js');
+  assert.ok(!app.includes('if (!input || S.busy) return false;'), 'the global S.busy wall must stay down — a second message spawns a task instead of being swallowed');
+  assert.match(app, /if \(S\.busy\) return parallelTask\(input\);/, 'the busy-branch routes into a new independent task');
+  assert.match(app, /autopilot: true/, 'parallel messages ask the server for a fresh task (own session + history)');
+  assert.match(app, /body: \{ task: rec\.id \}/, 'a task is stopped BY ID — the first task must never die with the second');
+  assert.match(app, /event: task|name === 'task'/, 'the UI binds the resumed stream to the task the server named');
+  const html = read('src/ui/index.html');
+  for (const st of ['working', 'waiting', 'done', 'error']) {
+    assert.ok(html.includes('st-' + st), `task status ${st} exists in the palette`);
+  }
+});
+
 test('a real Quit exists on the main window (two-step, stops the server)', () => {
   const html = read('src/ui/index.html');
   assert.match(html, /id="b-quit"/, 'the power button is in the header');

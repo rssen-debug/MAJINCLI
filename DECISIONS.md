@@ -60,6 +60,13 @@ allowed to contradict a test.
   `install.ps1` (word list + åäö + allowlist for the deliberate Swedish input matchers);
   comments/docs as Swedis as we like. New since 2026-10-18: the app itself must also *speak*
   English by default (owner requirement).
+- **Parallel tasks render as cards, not as a second transcript.** The blessed single-stream
+  chat stays byte-identical; parallel tasks own a card each (status chip, activity line,
+  streaming body, stop button) and their events never touch the main-turn globals.
+  Why: a full multi-stream refactor of `S.cur/S.tools/S.gauge` is maximal-risk surgery in a
+  surface a browser here cannot smoke-test. Cost: parallel answers live inside their cards
+  instead of being merged into the vertical timeline — acceptable until the first human round
+  says otherwise.
 - **Deferred-but-chosen product order:** browser-use reliability, parallel agents (done,
   backend), verification — then natural-language teamwork, ETA from real telemetry, the job
   agent — *then* Living Missions. Not because Missions are uninteresting; because Missions on

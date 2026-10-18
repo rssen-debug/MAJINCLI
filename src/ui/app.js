@@ -230,11 +230,16 @@ async function send(text) {
   if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.reset(); // a new run gets a fresh canvas
 
   const input = String(text || '').trim();
-  if (!input || S.busy) return false;
+  if (!input) return false;
   if (input[0] === '/') {
     const ok = await command(input);
     if (ok) return true;
   }
+  /* AUTOPILOT: a task is already running on this chat — this new message is
+     an independent task, it gets its own agent, card and stop button and
+     must NEVER wait for the first one. The /stop command above still reaches
+     the running task. */
+  if (S.busy) return parallelTask(input);
   addMsg('user', 'DU', input);
   $('input').value = '';
   autoGrow();
@@ -298,6 +303,170 @@ async function stop() {
   } catch {
     /* */
   }
+}
+
+/* --------------------------- parallel autopilot ---------------------------
+   One independent message while the main task runs = one more agent. Each
+   parallel task owns its card, its SSE stream, its stop button; the classic
+   single-task path above is byte-identical. Server side: {autopilot:true}
+   names a fresh task (own session/history); the first SSE event is
+   event: task with the id we must address for stopping it.
+   Status vocabulary = the registry's: working · waiting · done · error ·
+   stopped — nothing here is invented client-side. */
+
+const P_STATUS = { working: '🔧 working', waiting: '⏳ waiting', done: '✅ done', error: '❌ error', stopped: '🟥 stopped' };
+
+function parallelTask(input) {
+  addMsg('user', 'YOU · PARALLEL', input);
+  $('input').value = '';
+  autoGrow();
+  const card = taskCard({ label: '🧵 launching…', status: 'waiting' });
+  const rec = { card, input, id: null, text: '', last: '', painted: 0, finished: false, abort: new AbortController() };
+  (async () => {
+    try {
+      const r = await fetch('/api/chat?t=' + encodeURIComponent(TOKEN), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + TOKEN },
+        body: JSON.stringify({ input, autopilot: true }),
+        signal: rec.abort.signal,
+      });
+      if (!r.ok || !r.body) throw new Error('server ' + r.status);
+      const reader = r.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          const raw = buf.slice(0, i);
+          buf = buf.slice(i + 2);
+          let name = '';
+          let data = '';
+          for (const line of raw.split('\n')) {
+            if (line.startsWith('event: ')) name = line.slice(7);
+            else if (line.startsWith('data: ')) data = line.slice(6);
+          }
+          if (!data) continue;
+          let ev;
+          try { ev = JSON.parse(data); } catch { continue; }
+          if (name === 'done') { finishTask(rec, ev); continue; }
+          taskEvent(rec, name, ev);
+        }
+      }
+      if (!rec.finished) finishTask(rec, { ok: true });
+    } catch (e) {
+      if (e.name === 'AbortError' || rec.finished) { /* user stopped it */ }
+      else { rec.status = 'error'; paintTaskState(rec, 'error; '+e.message); }
+    }
+  })();
+  return true;
+}
+
+function taskCard({ label, status }) {
+  const m = el('div', 'msg task');
+  const head = el('div', 'task-head');
+  const idl = el('span', 'task-id', esc(label));
+  const st = el('span', 'task-status st-waiting', esc(P_STATUS[status] || status));
+  const stopb = el('button', 'task-stop', '⏹ stop');
+  const act = el('div', 'task-act kv', '…');
+  const ans = el('div', 'body task-ans', '');
+  head.append(idl, st, stopb);
+  m.append(head, act, ans);
+  $('scroller').append(m);
+  scroll();
+  const card = { m, idl, st, stopb, act, ans };
+  stopb.onclick = () => stopTask(card.rec);
+  return card;
+}
+
+function paintTaskState(rec, note) {
+  if (!rec.card) return;
+  const cls = 'task-status st-' + (rec.status in P_STATUS ? rec.status : 'waiting');
+  rec.card.st.className = cls;
+  rec.card.st.textContent = P_STATUS[rec.status] || rec.status;
+  if (note) rec.card.act.textContent = note;
+}
+
+function paintTaskText(rec, force) {
+  const now = Date.now();
+  if (!force && now - rec.painted < 150) return; // ~6 paints/s, not per token
+  rec.painted = now;
+  rec.card.ans.innerHTML = md(rec.text);
+  scroll();
+}
+
+function taskEvent(rec, name, ev) {
+  if (name === 'task') {
+    rec.id = ev.task;
+    rec.session = ev.session;
+    rec.card.idl.textContent = '🧵 ' + rec.id;
+    rec.card.rec = rec;
+    rec.status = 'working';
+    paintTaskState(rec, 'agent started (own session: ' + rec.session + ')');
+    return;
+  }
+  switch (ev.type) {
+    case 'route':
+      rec.status = 'working';
+      paintTaskState(rec, 'job ' + (ev.job || '?') + ' · model ' + String(ev.model || '?').split('/').pop());
+      break;
+    case 'step':
+      paintTaskState(rec, 'step ' + ev.step + '/' + ev.of + (rec.last ? ' · ' + rec.last : ''));
+      break;
+    case 'tool':
+    case 'tool:start':
+      rec.last = 'tool ' + (ev.name || ev.tool || '?');
+      paintTaskState(rec, rec.last);
+      break;
+    case 'tool_result':
+      rec.last = (ev.ok ? '✓ ' : '✗ ') + (ev.summary || ev.tool || '');
+      paintTaskState(rec, rec.last);
+      break;
+    case 'approval':
+      rec.status = 'waiting'; paintTaskState(rec, 'waiting for your approval — see the approval card');
+      break;
+    case 'delta':
+      rec.text += ev.text || '';
+      paintTaskText(rec);
+      break;
+    case 'answer':
+      if (ev.text) rec.text = ev.text;
+      paintTaskText(rec, true);
+      break;
+    case 'error':
+      rec.status = 'error';
+      rec.text += '\n\n**' + (ev.message || 'error') + '**' + (ev.hint ? ' — ' + ev.hint : '');
+      paintTaskText(rec, true);
+      break;
+    default:
+      break;
+  }
+}
+
+function finishTask(rec, doneEv) {
+  if (rec.finished) return;
+  rec.finished = true;
+  rec.status = doneEv.ok === false || rec.status === 'error' ? 'error' : 'done';
+  paintTaskState(rec, (doneEv.steps ? doneEv.steps + ' steg · ' : '') + (doneEv.usage && doneEv.usage.costUsd ? '$' + doneEv.usage.costUsd.toFixed(4) + ' · ' : '') + 'done');
+  paintTaskText(rec, true);
+  rec.card.stopb.disabled = true;
+  rec.card.m.classList.add(rec.status === 'done' ? 'task-done' : 'task-bad');
+  refresh && refresh(true);
+}
+
+async function stopTask(rec) {
+  if (!rec || !rec.id) return;
+  rec.card.stopb.disabled = true;
+  try {
+    await api('/chat/stop', { method: 'POST', body: { task: rec.id } });
+  } catch { /* keep */ }
+  rec.status = 'stopped';
+  rec.finished = true;
+  paintTaskState(rec, 'stopped on request');
+  rec.card.m.classList.add('task-bad');
+  rec.abort.abort();
 }
 
 /* ------------------------------- approvals ------------------------------ */

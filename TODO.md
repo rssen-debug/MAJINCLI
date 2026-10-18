@@ -6,14 +6,12 @@ autopilot/teamwork/dashboard additions).
 
 ## Hög prioritet
 
-- **Autopilot UI — the S.busy wall comes down.** The registry + resource locks + task-aware
-  `/api/chat` shipped this round (backend, tested), but the window still blocks a new message
-  while a turn runs (`src/ui/app.js` `S.busy`). Replace it with task cards: every independent
-  message starts a task (send `autopilot: true`, consume the `event: task`), follow-ups carry the
-  task id, each card shows real status from `/api/tasks` (running / waiting / done / error /
-  stopped), with pause (later), stop (exists: `POST /api/chat/stop {task}`) and open-details.
-  *(källa: master brief §"TRUE PARALLEL AUTOPILOT" — definition of done is the three-messages-
-  in-a-row scenario)*
+- **Autopilot UI: done 2026-10-18 except the follow-up surface** — cards live in chat
+  (status/stop/stream pinned by contract test; human click-through still in the round below).
+  Remaining: click a card → "reply to this task" (routing `body.task` exists server-side),
+  pause/resume (registry states exist; the loop does not), and a live `/api/tasks` deck for
+  channel-started tasks. Natural-language routing stays in Medel until the parse is designed.
+  *(källa: master brief §"TRUE PARALLEL AUTOPILOT")*
 - **Browser-use robustness.** Playwright path already exists; it is NOT verified for real work:
   stuck loops, retries, recovery, per-agent isolated browser contexts (locks for browser
   instances the way files are locked now), checkbox/form/upload handling, screenshot evidence
@@ -26,7 +24,7 @@ autopilot/teamwork/dashboard additions).
 - **Windows/browser human round on top of the CI smoke.** CI now installs/runs/uninstalls on
   real Windows every build (job "the installer must install, run, survive a restart"), but a
   human still has to click: provider picker, key box, first real model call, update chip →
-  relaunch, Quit. One run with notes, then this item dissolves.
+  relaunch, Quit — and the new parallel task cards (send a second message mid-run, stop only that one). One run with notes, then this item dissolves.
 
 ## Medel
 
