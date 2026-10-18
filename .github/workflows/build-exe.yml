@@ -12,6 +12,7 @@ name: build-exe
 #     pre-release with the commit sha in the name
 on:
   push:
+    branches: [main]
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -169,6 +170,26 @@ jobs:
       # run dies with "Artifact storage quota has been hit" -- an infrastructure
       # failure that would otherwise look like a build failure. Release assets are
       # not counted against that quota, so the file goes there instead.
+      - name: determine new version release on main
+        id: release_target
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ver = (node -p "require('./package.json').version").Trim()
+          $tag = "v$ver"
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json"; "User-Agent" = "MAJIN" }
+          $publish = 'true'
+          try {
+            Invoke-RestMethod -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" -Headers $headers -TimeoutSec 15 | Out-Null
+            $publish = 'false'
+          } catch {
+            $status = [int]$_.Exception.Response.StatusCode
+            if ($status -ne 404) { throw "Release check failed ($status)" }
+          }
+          Add-Content $env:GITHUB_OUTPUT "publish=$publish"
+          Add-Content $env:GITHUB_OUTPUT "tag=$tag"
       - name: hash the artifacts
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.keep_exe || github.event_name == 'push' }}
         shell: pwsh
@@ -181,12 +202,12 @@ jobs:
             }
           }
       - name: release the exe
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.keep_exe || github.event_name == 'push' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.keep_exe || github.ref_type == 'tag' || github.ref == 'refs/heads/main' && steps.release_target.outputs.publish == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
           # a tag push reuses that tag; a manual run makes its own dev tag
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('exe-v{0}', github.run_number) }}
-          name: ${{ github.ref_type == 'tag' && format('MAJIN {0}', github.ref_name) || format('MAJIN exe (run {0})', github.run_number) }}
+          tag_name: ${{ steps.release_target.outputs.tag || (github.ref_type == 'tag' && github.ref_name) || format('exe-v{0}', github.run_number) }}
+          name: ${{ steps.release_target.outputs.tag && format('MAJIN {0}', steps.release_target.outputs.tag) || (github.ref_type == 'tag' && format('MAJIN {0}', github.ref_name)) || format('MAJIN exe (run {0})', github.run_number) }}
           body: |
             Two files, both unsigned, both no-admin:
 

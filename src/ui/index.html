@@ -179,6 +179,71 @@ body.simple #b-stop{display:none}
 .task-foot .task-send,.task-head .task-pause{background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--dim);font:11px var(--mono);padding:4px 8px;cursor:pointer}
 .task-foot .task-send:hover,.task-head .task-pause:hover{color:var(--ink);border-color:var(--cy)}
 .task-status.st-paused{color:var(--warn);border-color:var(--warn)}
+
+/* ONE CHAT UX — accessible, focused by default, all expert tools preserved. */
+:root{--sans:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;--bg:#100a10;--bg2:#1c111c;--bg3:#150d16;--ink:#fff0f8;--dim:#c9a9bd;--line:#4d3047;--cy:#ff8fbe;--cysoft:rgba(255,111,177,.14)}
+body{font:14px/1.55 var(--sans)}
+body::after{display:none}
+button,select,input,textarea{font-family:var(--sans);font-size:13px}
+button{min-height:32px}
+button:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var(--cy);outline-offset:3px}
+header{min-height:58px;padding:10px 20px;gap:12px}
+header h1{font-size:15px;letter-spacing:.10em;text-shadow:none}
+header .logo{width:30px;height:30px;border-radius:10px}
+#input{font:14.5px/1.6 var(--sans);min-height:54px;padding:14px 16px;border-radius:14px;background:var(--bg2)}
+#send{background:linear-gradient(135deg,#ec539e,#c54eaa);border:0;color:#fff;font-weight:700;font-size:14px;letter-spacing:0;border-radius:12px;min-width:88px;min-height:54px}
+footer{padding:12px 20px 13px;background:var(--bg)}
+#scroller{padding:28px clamp(18px,5vw,72px)}
+.msg{max-width:860px;margin:0 auto 20px}
+.msg .who{letter-spacing:.08em;font-size:11px;font-weight:700}
+.msg .body{line-height:1.65;font-size:14px}
+.msg.majin .body{border-left:2px solid var(--line);padding-left:14px}
+body.simple #app{grid-template-columns:196px minmax(0,1fr)}
+body.simple.rail-off #app{grid-template-columns:0 minmax(0,1fr)}
+body.simple #panel,body.simple #b-panel,
+body.simple #c-route,body.simple #c-moa,body.simple #c-tools,
+body.simple #c-tg,body.simple #c-wa,body.simple #b-mode,
+body.simple #b-test,body.simple #b-voice,body.simple #b-theme,
+body.simple #b-quit,body.simple #v-tag,body.simple #tagline{display:none}
+body.simple #rail{padding:17px 12px;background:var(--bg3)}
+body.simple #rail h3:not(:first-of-type),
+body.simple #rail #plan,body.simple #rail #sched,body.simple #rail #mem{display:none}
+body.simple #rail h3:first-of-type{letter-spacing:.1em;font-size:11px}
+body.simple #rail .sess{font-size:13px;line-height:1.45;padding:10px 12px;border-radius:10px}
+body.simple #b-expert{padding:7px 10px;min-height:34px;background:var(--bg3);border-radius:10px}
+body.simple #c-cost{margin-left:auto}
+#c-update:not([hidden]){background:#742348;border:1px solid var(--cy);color:#fff;box-shadow:0 0 0 2px rgba(255,111,177,.15)}
+#onboard[hidden],#modeldrop[hidden],#c-update[hidden]{display:none!important}
+#onboard{background:rgba(11,7,13,.78);backdrop-filter:blur(9px);padding:20px}
+#ob-card{max-width:430px;width:100%;padding:30px;border-radius:23px;border:1px solid #67445e;background:linear-gradient(155deg,#271626,#170e19);box-shadow:0 24px 90px #000a}
+.ob-mark{display:grid;place-items:center;width:48px;height:48px;margin:4px 0 17px;border-radius:16px;background:linear-gradient(135deg,#ed78a9,#7e3e87);color:white;font-size:28px}
+.ob-title{font:700 27px/1.25 var(--sans);letter-spacing:-.035em;margin:0 0 9px;color:var(--ink)}
+.ob-sub{font-size:14px;color:var(--dim);line-height:1.65;margin:0 0 20px}
+.ob-label{font-size:13px;color:var(--ink);font-weight:650;margin:17px 0 5px}
+.ob-input{min-height:48px;padding:12px 13px;font:14px var(--sans);border:1px solid var(--line);background:#100a12;border-radius:12px}
+.ob-go{display:block;width:100%;margin-top:16px;min-height:48px;padding:12px 16px;font:700 14px var(--sans);background:linear-gradient(135deg,#f06aa9,#c850a5);border-radius:12px;color:#fff}
+.ob-go:hover{filter:brightness(1.1);color:#fff}
+.ob-link{font-size:12.5px;color:#ffb0d0}
+.ob-ready{display:flex;align-items:center;gap:10px;background:#22362e;border:1px solid #487b65;padding:12px 14px;border-radius:12px;margin:8px 0 17px;font-size:13px}
+.ob-ready-dot{color:#7ce0b6}
+.ob-choose{margin-top:12px}
+.ob-details{margin-top:20px;font-size:13px;color:var(--dim)}
+.ob-details summary{cursor:pointer;padding:5px 0}
+.ob-options{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:8px 0}
+.ob-skip{display:block;margin:17px auto 0;text-align:center}
+.ob-msg{min-height:1.3em;line-height:1.45;word-wrap:break-word}
+.home{max-width:740px;margin:clamp(40px,12vh,130px) auto 0;text-align:center}
+.home-mark{width:60px;height:60px;object-fit:contain;border-radius:19px;margin-bottom:17px;box-shadow:0 8px 30px rgba(248,97,173,.18)}
+.home h2{font-size:clamp(27px,4vw,40px);font-weight:750;letter-spacing:-.05em;line-height:1.2;margin:0 0 12px}
+.home h2 strong{color:var(--cy)}
+.home p{font-size:15px;color:var(--dim);max-width:460px;margin:0 auto 25px}
+.home-examples{display:flex;flex-wrap:wrap;justify-content:center;gap:9px}
+.home-examples button{padding:12px 16px;min-height:44px;border-radius:999px;background:var(--bg2);color:var(--ink);border-color:var(--line)}
+.home-examples button:hover{border-color:var(--cy);background:var(--cysoft)}
+@media(max-width:960px){body.simple #app{grid-template-columns:minmax(0,1fr)}body.simple #rail{display:none}header{gap:7px;padding:8px 12px}footer{padding:10px 12px}#scroller{padding:22px 16px}}
+@media(max-width:520px){#c-cost{display:none}#ob-card{padding:23px 19px}.home{margin:50px auto 0}.home-examples button{width:100%}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+
 </style>
 </head>
 <body class="simple">
@@ -191,12 +256,12 @@ body.simple #b-stop{display:none}
   <span class="chip" id="c-moa">MOA <b>–</b></span>
   <span class="chip" id="c-tools">tools <b>–</b></span>
   <span class="chip" id="c-cost">$<b>0</b></span>
-  <span class="chip" id="c-update" hidden title="new version available"></span>
+  <button class="chip" id="c-update" hidden title="New version available" type="button"></button>
   <span class="spacer"></span>
   <span class="chip" id="c-tg"><i class="led" id="led-tg"></i>telegram</span>
   <span class="chip" id="c-wa"><i class="led" id="led-wa"></i>whatsapp</span>
   <button id="b-mode" title="Permission mode — Assist: ask before every write. Approval: ask before risky work. Full auto: never ask.">approval</button>
-  <button id="b-expert" title="expert panel — routing, MOA, providers and the other engine details">expert</button> <button id="b-panel" class="on" title="Side panel">⌗</button> <button id="b-quit" title="Quit MAJIN — stops the agent, closes everything (your keys and memory stay)">⏻</button>
+  <button id="b-expert" title="Advanced settings and tools" aria-label="Advanced settings">⚙</button> <button id="b-panel" class="on" title="Side panel">⌗</button> <button id="b-quit" title="Quit MAJIN — stops the agent, closes everything (your keys and memory stay)">⏻</button>
   <button id="b-rail" title="Sidebar">☰</button>
   <button id="b-theme" title="Light / dark">◐</button>
   <button id="b-voice" title="Read answers aloud">🔊</button>
@@ -229,8 +294,8 @@ body.simple #b-stop{display:none}
 
 <footer>
   <div id="composer">
-    <textarea id="input" placeholder="Ask MAJIN to do something …  type / for commands" rows="1"></textarea>
-    <button id="send">RUN</button>
+    <textarea id="input" placeholder="What would you like MAJIN to do?" rows="1" aria-label="Message MAJIN"></textarea>
+    <button id="send" aria-label="Send message">Send →</button>
   </div>
   <div class="crow">
     <button id="mic" title="Voice input">🎙</button><span id="mic-state"></span>

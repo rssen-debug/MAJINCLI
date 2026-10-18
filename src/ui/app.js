@@ -55,6 +55,8 @@ function scroll() {
   s.scrollTop = s.scrollHeight;
 }
 function addMsg(cls, who, text) {
+  const welcome = $('home');
+  if (welcome) welcome.remove();
   const m = el('div', 'msg ' + cls);
   m.append(el('div', 'who', who));
   const b = el('div', 'body');
@@ -255,7 +257,7 @@ async function send(text) {
   S.busy = true;
   S.t0 = Date.now();
   $('send').classList.add('busy');
-  $('send').textContent = 'STOP';
+  $('send').textContent = 'Stop';
   setStatus('working…');
   const ac = new AbortController();
   S.abort = ac;
@@ -297,7 +299,7 @@ async function send(text) {
     S.busy = false;
     S.abort = null;
     $('send').classList.remove('busy');
-    $('send').textContent = 'RUN';
+    $('send').textContent = 'Send →';
     setStatus('ready');
     refresh(true);
   }
@@ -937,7 +939,38 @@ async function loadHistory() {
   const h = await api('/history?session=' + encodeURIComponent(S.session) + '&n=40').catch(() => ({ messages: [] }));
   $('scroller').innerHTML = '';
   (h.messages || []).forEach((m) => addMsg(m.role === 'user' ? 'user' : 'majin', m.role === 'user' ? 'DU' : 'MAJIN', m.content));
-  if (!(h.messages || []).length) note('new session · ' + S.session);
+  if (!(h.messages || []).length) showWelcome();
+}
+function showWelcome() {
+  const panel = $('scroller');
+  const welcome = document.createElement('section');
+  welcome.id = 'home';
+  welcome.className = 'home';
+  const image = document.createElement('img');
+  image.className = 'home-mark';
+  image.src = '/logo.png';
+  image.alt = '';
+  welcome.append(image);
+  const title = document.createElement('h2');
+  title.append(document.createTextNode('What can I help you '));
+  const strong = document.createElement('strong');
+  strong.textContent = 'achieve?';
+  title.append(strong);
+  welcome.append(title);
+  const sub = document.createElement('p');
+  sub.textContent = 'Describe your goal in your own words. MAJIN handles the tools and the details.';
+  welcome.append(sub);
+  const examples = document.createElement('div');
+  examples.className = 'home-examples';
+  for (const prompt of ['Build me a website', 'Create an iPhone app', 'Make a 3D scene in Blender']) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = prompt + ' ↗';
+    button.onclick = () => { $('input').value = prompt; $('input').focus(); };
+    examples.append(button);
+  }
+  welcome.append(examples);
+  panel.append(welcome);
 }
 
 $('input').addEventListener('keydown', (e) => {
@@ -1039,6 +1072,18 @@ window.addEventListener('load', async () => {
   listen();
   await refresh();
   await loadHistory();
+  // Background update check completes after the first paint; refresh the
+  // badge without making a second model call or interrupting the conversation.
+  setTimeout(() => refresh(true), 6500);
+  // Keep a running window informed of later releases, even if never reopened.
+  setInterval(async () => {
+    try {
+      const st = await api('/state?tools=0');
+      if (st?.config?.updates?.check === false) return;
+      await api('/update', { method: 'POST', body: { action: 'check', force: true } });
+      await refresh(true);
+    } catch { /* an offline GitHub cannot interrupt MAJIN */ }
+  }, 60 * 60 * 1000);
   if (window.paintPanelExtras) window.paintPanelExtras();
   $('input').focus();
 });

@@ -298,7 +298,9 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const action = ['download', 'install'].includes(body.action) ? body.action : 'check';
       if (action === 'install') {
         const r = await rt.update.install({ dir: body.dir || undefined, url: body.url || undefined });
-        if (r.ok) setTimeout(() => rt.shutdown('update'), 1200);
+        // Exit the old runtime before Inno upgrades the executable. The
+        // detached installer watchdog restarts the new process afterwards.
+        if (r.ok) setTimeout(() => rt.shutdown('update').finally(() => process.emit('SIGTERM', 'SIGTERM')), 1200);
         return json(res, r.ok ? 200 : 502, { ok: r.ok, action, ...r, restarting: Boolean(r.ok) });
       }
       if (action === 'download') {
@@ -547,7 +549,8 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
         label: body.label || preset?.label || name,
         kind: body.kind || preset?.kind || 'openai',
         baseUrl: body.baseUrl || preset?.baseUrl || '',
-        apiKey: body.apiKey || '',
+        // No-key local presets still need a usable local auth placeholder.
+        apiKey: body.apiKey || preset?.apiKey || (/^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i.test(body.baseUrl || '') ? 'local' : ''),
         models: Array.isArray(body.models) && body.models.length ? body.models : preset?.models || [],
       };
       if (!entry.baseUrl && entry.kind !== 'mock') return json(res, 422, { ok: false, error: 'baseUrl is required for a custom provider' });

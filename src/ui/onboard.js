@@ -1,18 +1,12 @@
-/* MAJIN Phase B client: first-run onboarding + the universal model picker.
- *
- * Reuse, never rebuild (VNEXT §6):
- *  - onboarding state comes from /api/state (needsSetup, presets, providers)
- *  - key saving + live model catalog + connectivity test come from the
- *    existing provider tool via POST /api/provider (add / models / test)
- *  - model choice is written with PATCH /api/config — the same path the
- *    /model command already uses. One system, one config, one truth.
- * Text is English (i18n gate). Model/provider strings are textContent only.
+/* MAJIN — one-chat onboarding: detect what works, ask only for what is missing.
+ * The existing /api/state, /api/provider and /api/config remain the source of truth.
+ * Never expose or echo keys. Providers beyond the first are an advanced choice.
  */
 (function () {
   'use strict';
-
   const $ = (id) => document.getElementById(id);
   const ROUTE_JOBS = ['chat', 'tasks', 'tools', 'code', 're', 'analysis', 'plan', 'research', 'summarize', 'router', 'final', 'aggregator', 'vision'];
+  const OB = { st: null, provider: null, shown: false, working: false, forceEdit: false };
 
   function el(tag, cls, text) {
     const n = document.createElement(tag);
@@ -21,236 +15,247 @@
     return n;
   }
   function apiLocal(p, o) {
-    // same convention as app.js api(): token in query, JSON everywhere
-    const T = window.__MAJIN_TOKEN__ || 'demo';
-    const url = '/api' + p + (p.includes('?') ? '&' : '?') + 't=' + encodeURIComponent(T);
-    const opt = o || {};
+    const token = window.__MAJIN_TOKEN__ || 'demo';
+    const opt = { ...(o || {}) };
     opt.headers = { 'content-type': 'application/json', ...(opt.headers || {}) };
     if (opt.body && typeof opt.body !== 'string') opt.body = JSON.stringify(opt.body);
-    return fetch(url, opt).then((r) => r.json());
+    return fetch('/api' + p + (p.includes('?') ? '&' : '?') + 't=' + encodeURIComponent(token), opt).then((r) => r.json());
   }
-
-  const OB = { st: null, provider: null, model: null, shown: false };
-
-  /* /api/provider answers errors as plain strings + optional hint — surface
-   * them exactly, a nontechnical user should read the provider's own words. */
   function tellErr(resp, fallback) {
-    if (!resp) return 'no answer from MAJIN — is it still running?';
+    if (!resp) return 'MAJIN did not respond. Is it still running?';
     if (resp.ok) return null;
     const bits = [];
-    if (resp.error) bits.push(resp.error);
+    if (resp.error) bits.push(typeof resp.error === 'string' ? resp.error : (resp.error.message || 'Connection failed'));
     if (resp.hint) bits.push(resp.hint);
-    if (resp.errors) bits.push(resp.errors.map((e) => (e.path ? e.path + ': ' : '') + e.msg).join('; '));
-    return bits.join(' — ') || fallback || 'that did not work — no idea why';
+    if (Array.isArray(resp.errors)) bits.push(resp.errors.map((e) => (e.path ? e.path + ': ' : '') + e.msg).join('; '));
+    return bits.join(' — ') || fallback || 'Something went wrong. Try again.';
   }
-
-  /* ---------------------------- onboarding ---------------------------- */
-
+  function status(name) {
+    return (OB.st && OB.st.providers || []).find((p) => p.name === name);
+  }
+  function connected() {
+    const all = (OB.st && OB.st.providers || []).filter((p) => p.ready && p.kind !== 'mock');
+    const active = (OB.st && OB.st.routes || []).find((r) => r.job === 'chat');
+    return all.find((p) => p.name === active?.provider) || all[0] || null;
+  }
   function open(st) {
     OB.st = st;
+    OB.provider = null;
+    OB.forceEdit = false;
     OB.shown = true;
-    render();
     $('onboard').hidden = false;
-  }
-  function skipForNow() {
-    try { sessionStorage.setItem('majin.onboard.skip', '1'); } catch { /* private mode */ }
-    close();
+    render();
   }
   function close() {
     $('onboard').hidden = true;
     OB.shown = false;
-    if (typeof window.refresh === 'function') window.refresh();
+    OB.working = false;
+    if (typeof window.refresh === 'function') window.refresh(true);
   }
-
+  function skipForNow() {
+    try { sessionStorage.setItem('majin.onboard.skip', '1'); } catch { /* private browsing */ }
+    close();
+  }
   function render() {
     const box = $('ob-body');
     box.textContent = '';
-    if (!OB.provider) return renderProviders(box);
-    if (!OB.model) return renderKeyOrModel(box);
+    if (OB.provider) renderConnect(box);
+    else renderWelcome(box);
   }
+  function renderWelcome(box) {
+    box.append(el('div', 'ob-mark', '✦'));
+    box.append(el('h2', 'ob-title', 'Meet MAJIN'));
+    box.append(el('p', 'ob-sub', 'Your AI, ready to help. Just connect one model to get started.'));
 
-  function renderProviders(box) {
-    box.append(el('h2', 'ob-title', 'Welcome to MAJIN'));
-    box.append(el('p', 'ob-sub', 'Three steps and you are running: pick a provider, paste its key, choose a model.'));
-    const grid = el('div', 'ob-grid');
-    const readyNames = new Set((OB.st.providers || []).filter((x) => x && x.ready && x.name !== 'demo').map((x) => x.name));
-    (OB.st.presets || []).forEach((p) => {
-      const card = el('button', 'ob-card');
-      card.type = 'button';
-      card.append(el('b', '', p.label));
-      card.append(el('span', 'ob-card-desc', readyNames.has(p.name) ? 'configured ✓ — click to change the key' : p.needsKey ? 'needs an API key' : 'no key needed'));
-      card.onclick = () => { OB.provider = p; render(); };
-      if (readyNames.has(p.name)) {
-        const rm = el('button', 'ob-rm', 'remove');
-        rm.type = 'button';
-        rm.onclick = async (e2) => {
-          e2.stopPropagation();
-          rm.disabled = true;
-          rm.textContent = 'removing…';
-          const r2 = await apiLocal('/provider', { method: 'POST', body: { action: 'remove', name: p.name } }).catch(() => null);
-          if (r2 && r2.ok) {
-            if (typeof window.refresh === 'function') await window.refresh();
-            OB.st = (window.S && window.S.st) || OB.st;
-            render();
-          } else {
-            rm.textContent = (r2 && r2.error) || 'failed';
-          }
-        };
-        card.append(rm);
-      }
-      grid.append(card);
-    });
-    /* VNEXT: a custom endpoint is a first-class choice — the provider tool
-     * already knows how to add one, so this is just a form over it. */
-    const custom = el('button', 'ob-card ob-custom');
+    const existing = connected();
+    if (existing) {
+      const ready = el('div', 'ob-ready');
+      ready.append(el('span', 'ob-ready-dot', '●'));
+      ready.append(el('span', '', existing.label + ' is already connected'));
+      box.append(ready);
+      const go = el('button', 'ob-go', 'Start chatting →');
+      go.type = 'button';
+      go.onclick = () => {
+        // Respect existing model routes and credentials. No paid probe on startup.
+        close();
+        const input = $('input');
+        if (input) input.focus();
+      };
+      box.append(go);
+    }
+
+    const label = el('label', 'ob-label', existing ? 'Want to use a different AI?' : 'Choose your AI');
+    label.htmlFor = 'ob-choice';
+    const select = el('select', 'ob-input');
+    select.id = 'ob-choice';
+    const presets = (OB.st && OB.st.presets || []).filter((p) => p.name !== 'mock');
+    const order = ['deepseek', 'openrouter', 'openai', 'gemini', 'anthropic', 'groq', 'kilocode', 'nous', 'ollama', 'lmstudio'];
+    const sorted = [...presets].sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+    for (const p of sorted) {
+      const option = el('option', '', p.label + (status(p.name)?.ready ? ' · connected' : ''));
+      option.value = p.name;
+      select.append(option);
+    }
+    select.value = existing ? existing.name : 'deepseek';
+    if (!select.value && sorted.length) select.value = sorted[0].name;
+    label.append(select);
+    box.append(label);
+
+    const next = el('button', 'ob-go ob-choose', existing ? 'Change AI →' : 'Continue →');
+    next.type = 'button';
+    next.onclick = () => {
+      OB.provider = presets.find((p) => p.name === select.value) || null;
+      render();
+    };
+    box.append(next);
+
+    const details = el('details', 'ob-details');
+    const summary = el('summary', '', 'More options');
+    details.append(summary);
+    const others = el('div', 'ob-options');
+    const custom = el('button', 'ob-link', 'Use a custom API endpoint');
     custom.type = 'button';
-    custom.append(el('b', '', 'Custom endpoint'));
-    custom.append(el('span', 'ob-card-desc', 'any OpenAI-compatible URL + your key'));
-    custom.onclick = () => { OB.provider = { name: 'custom', label: 'Custom endpoint', custom: true }; render(); };
-    grid.append(custom);
-    const skip = el('button', 'ob-link', 'Skip for now');
+    custom.onclick = () => { OB.provider = { name: 'custom', label: 'Custom endpoint', custom: true, needsKey: false }; render(); };
+    const demo = el('button', 'ob-link', 'Try demo mode (no real AI)');
+    demo.type = 'button';
+    demo.onclick = skipForNow;
+    others.append(custom, demo);
+    if (existing) {
+      const p = existing;
+      const changeKey = el('button', 'ob-link', 'Replace the saved key for ' + p.label);
+      changeKey.type = 'button';
+      changeKey.onclick = () => {
+        OB.forceEdit = true;
+        OB.provider = (OB.st.presets || []).find((choice) => choice.name === p.name) || null;
+        render();
+      };
+      const forget = el('button', 'ob-link', 'Forget ' + p.label + ' connection');
+      forget.type = 'button';
+      forget.onclick = async () => {
+        if (!confirm('Remove this AI connection from MAJIN?')) return;
+        forget.disabled = true;
+        const result = await apiLocal('/provider', { method: 'POST', body: { action: 'remove', name: p.name } }).catch(() => null);
+        if (!result || !result.ok) {
+          forget.textContent = tellErr(result, 'Could not remove this connection.');
+          forget.disabled = false;
+          return;
+        }
+        const fresh = await apiLocal('/state?tools=0').catch(() => null);
+        if (fresh) OB.st = fresh;
+        OB.forceEdit = false;
+        OB.provider = null;
+        render();
+      };
+      others.append(changeKey, forget);
+    }
+    details.append(others);
+    box.append(details);
+    const skip = el('button', 'ob-link ob-skip', 'Skip for now');
     skip.id = 'ob-skip';
     skip.type = 'button';
     skip.onclick = skipForNow;
     box.append(skip);
-    box.append(grid);
   }
 
-  function renderKeyOrModel(box) {
+  function renderConnect(box) {
     const p = OB.provider;
-    box.append(el('h2', 'ob-title', p.label));
-    const back = el('button', 'ob-link', '← other provider');
+    const back = el('button', 'ob-link', '← Back');
     back.type = 'button';
     back.onclick = () => { OB.provider = null; render(); };
-    box.append(back);
+    box.append(back, el('div', 'ob-mark', '✦'), el('h2', 'ob-title', 'Connect ' + p.label));
+    const existing = OB.forceEdit ? null : status(p.name);
+    box.append(el('p', 'ob-sub', existing && existing.ready
+      ? 'Your AI is already connected. No need to enter your key again.'
+      : (p.needsKey ? 'Paste your key once. MAJIN keeps it on this computer.' : 'No API key needed. Make sure the local AI server is running.')));
 
-    if (p.custom) {
-      const l1 = el('label', 'ob-label', 'Endpoint URL (OpenAI-compatible)');
-      const urlIn = el('input', 'ob-input');
-      urlIn.placeholder = 'https://your-host/v1';
-      l1.append(urlIn);
-      const l2 = el('label', 'ob-label', 'API key (leave empty if the endpoint needs none)');
-      const keyIn = el('input', 'ob-input');
+    const urlIn = p.custom ? el('input', 'ob-input') : null;
+    if (urlIn) {
+      const label = el('label', 'ob-label', 'Endpoint URL');
+      urlIn.placeholder = 'http://127.0.0.1:1234/v1';
+      urlIn.autocomplete = 'off';
+      label.append(urlIn);
+      box.append(label);
+    }
+    const keyIn = (p.needsKey && !existing?.ready) || p.custom ? el('input', 'ob-input') : null;
+    if (keyIn) {
+      const label = el('label', 'ob-label', 'API key' + (p.custom ? ' (optional for local models)' : ''));
       keyIn.type = 'password';
       keyIn.autocomplete = 'off';
-      l2.append(keyIn);
-      const msg = el('div', 'ob-msg');
-      const btn = el('button', 'ob-go', 'Save & test connection');
-      btn.type = 'button';
-      btn.onclick = async () => {
-        if (!urlIn.value.trim()) { msg.textContent = 'the endpoint URL is missing — something like https://your-host/v1'; return; }
-        btn.disabled = true;
-        msg.textContent = 'saving…';
-        const add = await apiLocal('/provider', { method: 'POST', body: { action: 'add', name: 'custom', kind: 'openai', baseUrl: urlIn.value.trim(), apiKey: keyIn.value.trim() } }).catch(() => null);
-        const err = tellErr(add, 'could not save');
-        if (err) { msg.textContent = err; btn.disabled = false; return; }
-        await testThenModels(box, msg, btn, 'custom');
-      };
-      box.append(l1, l2, btn, msg);
-      return;
-    }
-    if (p.needsKey) {
-      const label = el('label', 'ob-label', 'Paste your API key');
-      const input = el('input', 'ob-input');
-      input.type = 'password';
-      input.placeholder = 'sk-…';
-      input.autocomplete = 'off';
-      label.append(input);
+      keyIn.placeholder = 'Paste your API key';
+      label.append(keyIn);
       box.append(label);
-      if (p.keyUrl) {
-        const a = el('a', 'ob-link', 'Get a key →');
-        a.href = p.keyUrl;
-        a.target = '_blank';
-        a.rel = 'noreferrer';
-        box.append(a);
-      }
-      const msg = el('div', 'ob-msg');
-      const btn = el('button', 'ob-go', 'Save key & test connection');
-      btn.type = 'button';
-      btn.onclick = async () => {
-        btn.disabled = true;
-        msg.textContent = 'saving…';
-        /* the server looks the preset up by `preset`, not `name` */
-        const add = await apiLocal('/provider', { method: 'POST', body: { action: 'add', preset: p.name, name: p.name, apiKey: input.value.trim() } }).catch(() => null);
-        const err = tellErr(add, 'could not save');
-        if (err) { msg.textContent = err; btn.disabled = false; return; }
-        await testThenModels(box, msg, btn, p.name);
-      };
-      box.append(btn, msg);
-    } else {
-      const note = el('div', 'ob-msg', 'No key needed for this one — saving it and loading models…');
-      box.append(note);
-      apiLocal('/provider', { method: 'POST', body: { action: 'add', preset: p.name, name: p.name } }).then((r) => { const e = tellErr(r, 'could not save — try again'); if (e) note.textContent = e; else renderModels(box); }).catch(() => { note.textContent = 'could not save — try again'; });
     }
-  }
-
-  async function testThenModels(box, msg, btn, name) {
-    msg.textContent = 'testing the connection…';
-    const test = await apiLocal('/provider', { method: 'POST', body: { action: 'test', name } }).catch(() => null);
-    const terr = tellErr(test, 'the provider did not answer — check the key');
-    if (terr) {
-      msg.textContent = terr;
-      btn.disabled = false;
-      return;
+    if (p.keyUrl && !existing?.ready) {
+      const link = el('a', 'ob-link', 'Where do I get a key? ↗');
+      link.href = p.keyUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      box.append(link);
     }
-    OB.keyOk = true;
-    renderModels(box);
-  }
 
-  async function renderModels(box) {
-    box.textContent = '';
-    box.append(el('h2', 'ob-title', 'Choose a model'));
-    const msg = el('div', 'ob-msg', 'loading the live list…');
-    const search = el('input', 'ob-input');
-    search.placeholder = 'type to filter…';
-    const list = el('div', 'ob-models');
-    box.append(search, msg, list);
-
-    await apiLocal('/provider', { method: 'POST', body: { action: 'models', name: OB.provider.name } }).catch(() => null);
-    const cfg = await apiLocal('/config').catch(() => null);
-    const ids = (cfg && cfg.config && cfg.config.providers && cfg.config.providers[OB.provider.name] && cfg.config.providers[OB.provider.name].models) || OB.provider.models || [];
-    msg.textContent = ids.length ? ids.length + ' models available — click one to choose' : 'no catalogue available — type the model id above and press Start';
-
-    const paint = () => {
-      list.textContent = '';
-      const q = search.value.trim().toLowerCase();
-      ids.filter((id) => !q || id.toLowerCase().includes(q)).slice(0, 60).forEach((id) => {
-        const row = el('button', 'ob-model', id);
-        row.type = 'button';
-        row.onclick = () => {
-          list.querySelectorAll('.ob-model').forEach((n) => n.classList.remove('on'));
-          row.classList.add('on');
-          OB.model = id;
-          go.disabled = false;
-        };
-        list.append(row);
-      });
-    };
-    search.oninput = paint;
-    paint();
-
-    const typed = () => search.value.trim();
-    const go = el('button', 'ob-go', 'Start MAJIN');
+    const msg = el('p', 'ob-msg');
+    msg.setAttribute('role', 'status');
+    msg.setAttribute('aria-live', 'polite');
+    const go = el('button', 'ob-go', existing?.ready ? 'Start chatting →' : 'Connect and start →');
     go.type = 'button';
-    go.disabled = true;
-    search.addEventListener('input', () => { go.disabled = !(OB.model || typed()); });
     go.onclick = async () => {
-      const model = OB.model || typed();
-      if (!model) return;
+      if (OB.working) return;
+      OB.working = true;
       go.disabled = true;
-      msg.textContent = 'setting everything up…';
-      const routes = Object.fromEntries(ROUTE_JOBS.map((j) => [j, OB.provider.name + '/' + model]));
-      /* single model for EVERY job + MOA off: no hidden second model, ever */
-      const r = await apiLocal('/config', { method: 'PATCH', body: { models: { provider: OB.provider.name, routes }, moa: { policy: 'off' } } }).catch(() => null);
-      if (!r || !r.ok) {
-        msg.textContent = 'could not apply the setup — ' + JSON.stringify((r && r.errors) || 'unknown');
+      try {
+        if (existing?.ready && !p.custom) {
+          // Changing provider is explicit, and needs no additional model tokens.
+          await finishSetup(p.name, msg);
+        } else {
+          if (p.custom && !urlIn.value.trim()) {
+            msg.textContent = 'Enter the URL of your AI server.';
+            return;
+          }
+          if (p.needsKey && !p.custom && !keyIn?.value.trim()) {
+            msg.textContent = 'Paste your API key to connect.';
+            return;
+          }
+          msg.textContent = 'Connecting…';
+          const body = p.custom
+            ? { action: 'add', name: 'custom', kind: 'openai', baseUrl: urlIn.value.trim(), apiKey: keyIn?.value.trim() || '' }
+            : { action: 'add', preset: p.name, name: p.name, ...(keyIn ? { apiKey: keyIn.value.trim() } : {}) };
+          const added = await apiLocal('/provider', { method: 'POST', body }).catch(() => null);
+          const error = tellErr(added, 'Could not connect.');
+          if (error) { msg.textContent = error; return; }
+          msg.textContent = 'Checking connection…';
+          const test = await apiLocal('/provider', { method: 'POST', body: { action: 'test', name: p.name } }).catch(() => null);
+          const testError = tellErr(test, 'Could not reach the provider.');
+          if (testError) { msg.textContent = testError; return; }
+          await finishSetup(p.name, msg);
+        }
+      } finally {
+        OB.working = false;
         go.disabled = false;
-        return;
       }
-      if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.reset();
-      close();
     };
-    box.append(go);
+    box.append(go, msg);
+  }
+
+  async function finishSetup(name, msg) {
+    msg.textContent = 'Finding a model…';
+    const p = OB.provider;
+    // A missing model catalogue is not fatal; validated preset models still work.
+    await apiLocal('/provider', { method: 'POST', body: { action: 'models', name } }).catch(() => null);
+    const info = await apiLocal('/config').catch(() => null);
+    const cfg = info?.config || {};
+    const ids = cfg.providers?.[name]?.models || p?.models || [];
+    const current = cfg.models?.routes?.chat || '';
+    const previous = current.startsWith(name + '/') ? current.slice(name.length + 1) : '';
+    const model = previous || ids[0];
+    if (!model) { msg.textContent = 'No model found. Open the model picker after connecting a model to your provider.'; return; }
+    const routes = Object.fromEntries(ROUTE_JOBS.map((j) => [j, name + '/' + model]));
+    const saved = await apiLocal('/config', { method: 'PATCH', body: { models: { provider: name, routes }, moa: { policy: 'off' } } }).catch(() => null);
+    const error = tellErr(saved, 'Could not select the model.');
+    if (error) { msg.textContent = error; return; }
+    if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.reset();
+    close();
+    const input = $('input');
+    if (input) input.focus();
   }
 
   /* ------------------------- model picker chip ------------------------- */
@@ -338,10 +343,11 @@
 
   window.MAJIN_ONBOARD = {
     reopen() {
-      const st = OB.st || (window.S && window.S.st);
+      const st = (window.S && window.S.st) || OB.st;
       if (st) open(st);
     },
     maybe(st) {
+      OB.st = st;
       if (OB.shown) return;
       /* a dismissed wizard must not trap the user: Skip for now suppresses
          the auto-open for THIS session only — it always comes back on a
