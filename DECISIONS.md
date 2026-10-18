@@ -292,3 +292,21 @@ allowed to contradict a test.
 - **Living Missions data model.** One persistent goal holding many tasks + decision points —
   is it a task with children, or a new object? Deferred until the teamwork phase proves what
   the primitives should be.
+
+## 2026-10-18 — Del 4A: verify in code, repair before you fail, provenance in the summary
+
+- **Contracts are checked against evidence, never against a second model.** A
+  `count` contract is re-counted with `fs.readdir` and compared to the number the
+  worker printed; a `file_contains` contract runs `readFileSync.includes`. A fresh
+  model call would inherit the same hallucination family — code checks cannot.
+- **A dead contract means repair, not instant failure.** The repair prompt names the
+  dead contracts so the retry fixes the right thing; the part still ships only if the
+  repaired output re-verifies. Fail-fast would trade four acceptance points (deliberate-
+  failure REPAIR) for nothing.
+- **Provenance strings are first-class output.** "VERIFIED: 3 files (independently
+  counted)" and "reported, not independently verifiable" are deliberately different
+  sentences in the mission summary — the user must see the difference between checked
+  truth and a claim we took on faith.
+- **`count` contracts only bind when the brief targets the workspace.** A mission like
+  "how many moons has Jupiter" has no verifiable `count`; the engine only fires when the
+  brief names a local directory, avoiding false repair rounds on trivia.

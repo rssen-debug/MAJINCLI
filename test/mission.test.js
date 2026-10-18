@@ -223,3 +223,74 @@ test('mission verify: en worker som VALIDt skriver filen (fs.write) faar VERIFIE
   assert.equal(fs.readFileSync(path.join(ws, 'gamma.txt'), 'utf8'), '42', 'p2:s innehåll landade');
   await rt.shutdown();
 });
+
+test('VERIFICATION CONTRACTS: file_contains — a lying worker is caught on the CONTENT, not just existence', async () => {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-ctrA-'));
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  rt.cfg.patch({
+    models: { provider: 'demo', routes: { tasks: 'demo/demo-fast', tools: 'demo/demo-fast', chat: 'demo/demo-fast' } },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
+    guard: { mode: 'off' }, moa: { policy: 'off' }, workspace: ws,
+  }, { persist: false });
+  const dag = JSON.stringify({ nodes: [{ id: 'p1', input: 'write the file song.txt containing the word "needle"', deps: [], estMs: 1000 }, { id: 'p2', input: 'say done in three words, no more', deps: [], estMs: 1000 }] });
+  setScript('mission:compile', [{ text: dag }]);
+  /* re-run order with cap=1: p1-run (2 modelkalls), p2-run (1), REPAIR-p1 (2)
+     — verify+repair happens efter swarm, så repair-entriesna ligger sist */
+  setScript('sub:tasks', [
+    { toolCalls: [{ name: 'fs.write', args: { path: 'song.txt', content: 'hay hay hay' } }] },
+    { text: 'song.txt skriven med "needle".' },                 /* lie: content is hay-ish */
+    { text: 'done done done.' },
+    { toolCalls: [{ name: 'fs.write', args: { path: 'song.txt', content: 'needle in a haystack' } }] },
+    { text: 'song.txt innehåller nu "needle".' },
+  ]);
+  const m = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'ctrA', input: '1. write the file song.txt containing the word "needle"\n2. tell me it is done', emit: () => {}, capOverride: 1 });
+  assert.equal(m.failCount, 0, JSON.stringify(m.textSummary));
+  assert.equal(m.repairedCount, 1, 'content lie krävde en repair-runda');
+  assert.match(m.textSummary[0], /needle/, m.textSummary[0]);
+  assert.equal(fs.readFileSync(path.join(ws, 'song.txt'), 'utf8'), 'needle in a haystack');
+  await rt.shutdown();
+});
+
+test('VERIFICATION CONTRACTS: count — a worker that invents a number is re-counted by CODE and caught', async () => {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-ctrB-'));
+  fs.mkdirSync(path.join(ws, 'store'));
+  for (const f of ['a.txt', 'b.txt', 'c.txt']) fs.writeFileSync(path.join(ws, 'store', f), f);
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  rt.cfg.patch({
+    models: { provider: 'demo', routes: { tasks: 'demo/demo-fast', tools: 'demo/demo-fast', chat: 'demo/demo-fast' } },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
+    guard: { mode: 'off' }, moa: { policy: 'off' }, workspace: ws,
+  }, { persist: false });
+  const dag = JSON.stringify({ nodes: [{ id: 'p1', input: 'report the number of files in store/', deps: [], estMs: 1000 }, { id: 'p2', input: 'say done in three words, no more', deps: [], estMs: 1000 }] });
+  setScript('mission:compile', [{ text: dag }]);
+  setScript('sub:tasks', [
+    { text: 'There are 7 files in store/.' },              /* p1 — lögnen */
+    { text: 'done done done.' },                            /* p2 */
+    { text: 'There are 3 files in store/.' },              /* REPAIR-p1 — ärligt */
+  ]);
+  const m = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'ctrB', input: '1. report the number of files in store/\n2. tell me it is done', emit: () => {}, capOverride: 1 });
+  assert.equal(m.failCount, 0, JSON.stringify(m.textSummary));
+  assert.equal(m.okCount, 2, 'p1 verifieard efter repair, p2 ok utan kontrakt');
+  assert.equal(m.repairedCount, 1, 'räkne-lögnen KRÄVDE repair innan godkännande');
+  assert.match(m.textSummary[0], /3 files \(independently counted\)/, `proveniens ska matcha oberoende räkning: ${m.textSummary[0]}`);
+  await rt.shutdown();
+});
+
+test('VERIFICATION CONTRACTS: count — correct first answer verified WITHOUT needing repair', async () => {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-ctrC-'));
+  fs.mkdirSync(path.join(ws, 'store'));
+  for (const f of ['a.txt', 'b.txt']) fs.writeFileSync(path.join(ws, 'store', f), f);
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  rt.cfg.patch({
+    models: { provider: 'demo', routes: { tasks: 'demo/demo-fast', tools: 'demo/demo-fast', chat: 'demo/demo-fast' } },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
+    guard: { mode: 'off' }, moa: { policy: 'off' }, workspace: ws,
+  }, { persist: false });
+  const dag = JSON.stringify({ nodes: [{ id: 'p1', input: 'report the number of files in store/', deps: [], estMs: 1000 }, { id: 'p2', input: 'say done in three words, no more', deps: [], estMs: 1000 }] });
+  setScript('mission:compile', [{ text: dag }]);
+  setScript('sub:tasks', [{ text: 'There are 2 files in store/.' }, { text: 'done done done.' }]);
+  const m = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'ctrC', input: '1. report the number of files in store/\n2. tell me it is done', emit: () => {}, capOverride: 1 });
+  assert.equal(m.repairedCount, 0, 'ärlig worker behöver ingen repair');
+  assert.equal(m.verifiedCount, 1);
+  await rt.shutdown();
+});
