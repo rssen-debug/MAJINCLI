@@ -32,6 +32,11 @@ const only = flag('scenario');
    urvalet. toolChars i steg-eventen ar tecknen som faktiskt skickas till
    modellen (namn+beskrivning+JSON-schema per kallel). */
 const withSubset = Boolean(flag('subset', false));
+/* --swarm: malbar HYPERSWARM-matning. Varken pausiserad speedup eller simulerade
+   arbeten presenteras som riktiga: varje nod gor VERKLIG fil-IO (skriva/lasa)
+   plus en inducerad resolve-delay som explicit star for modell-rundturstiden.
+   Texten sager precis vad som ar simulerat. */
+const withSwarm = Boolean(flag('swarm', false));
 
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-bench-'));
 process.env.MAJIN_HOME = home;
@@ -265,6 +270,55 @@ async function main() {
     steps: +(list.reduce((a, b) => a + b.steps, 0) / list.length).toFixed(2),
     events: list[0].events,
   }));
+  /* HYPERSWARM-matning tidigt (kors fore resultatlistan skrivs) */
+  let swarmSummary = null;
+  if (withSwarm) {
+    const { analyzeSwarm, runSwarm } = await import('../src/core/swarm.js');
+    const dir = path.join(home, 'swarm-io');
+    fs.mkdirSync(dir, { recursive: true });
+    const settle = (ms) => new Promise((r) => setTimeout(r, ms));
+    const simulatedLatencyMs = 120;
+    const realIo = async (id) => {
+      const files = [];
+      for (let i = 0; i < 8; i++) {
+        const f = path.join(dir, `${id}-${i}.txt`);
+        fs.writeFileSync(f, `${id}:${i}:${'x'.repeat(4096)}`);
+        files.push(f);
+      }
+      for (const f of files) fs.readFileSync(f, 'utf8');
+      return files.length;
+    };
+    const mk = (id) => async () => {
+      const ioCount = await realIo(id);
+      await settle(simulatedLatencyMs); /* induced latency = placeholder for a real model/HTTP round trip */
+      return { ioCount };
+    };
+    const analysis = analyzeSwarm(
+      [1, 2, 3].map((i) => ({ id: `w${i}`, deps: [], estMs: 30 * 1000 })),
+      { overheadMs: 1500 },
+    );
+    const tSeq = process.hrtime.bigint();
+    for (const i of [1, 2, 3]) await mk(`seq${i}`)();
+    const sequentialWallMs = Number(process.hrtime.bigint() - tSeq) / 1e6;
+    const tSw = process.hrtime.bigint();
+    const r = await runSwarm({ nodes: [1, 2, 3].map((i) => ({ id: `w${i}`, deps: [], run: mk(`w${i}`) })), cap: analysis.workers });
+    const swarmWallMs = Number(process.hrtime.bigint() - tSw) / 1e6;
+    swarmSummary = {
+      decision: analysis.decision,
+      workers: analysis.workers,
+      sequentialWallMs: Math.round(sequentialWallMs),
+      swarmWallMs: Math.round(swarmWallMs),
+      gainedPct: Math.max(0, Math.round(100 * (1 - swarmWallMs / sequentialWallMs))),
+      simulatedLatencyMs,
+      okCount: r.okCount,
+    };
+    console.log(`\n== HYPERSWARM measurement (3 independent research tasks) ==`);
+    console.log(`  analyzer decision : ${swarmSummary.decision} with ${swarmSummary.workers} workers`);
+    console.log(`  sequential wall   : ${swarmSummary.sequentialWallMs} ms`);
+    console.log(`  swarm wall        : ${swarmSummary.swarmWallMs} ms  (gain ${swarmSummary.gainedPct}%)`);
+    console.log(`  honesty note      : each node did REAL file IO (${r.results.get('w1').value.ioCount} files written+read) plus ${simulatedLatencyMs} ms induced latency standing in for model round trips (real calls are typically seconds, so this UNDERSTATES the gain).`);
+  }
+
   /* subset-sammanfattning: paritet + teckenbesparing, alltid bada tva —
      en besparing utan paritet (eller tvartom) ar en halv sanning. */
   let subsetSummary = null;

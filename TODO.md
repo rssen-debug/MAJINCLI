@@ -6,6 +6,17 @@ autopilot/teamwork/dashboard additions).
 
 ## Hög prioritet
 
+- ~~**HYPERSWARM: parallel-worker choice in code, judged by tests**~~
+  **SHIPPED 2026-10-18** (`src/core/swarm.js`): analyzer picks 3 workers for
+  3 independent jobs, 1 for a chain, 1 when overhead eats the win - all
+  deterministic, no model asked. Scheduler runs the DAG with real overlaps,
+  dependency unlocking, typed honest endings (ok/fail/blocked + reason) and
+  `subagentWorker` executes real `sub:` turns. Proof: `test/swarm.test.js`
+  8/8, `bench --swarm` 66% shorter wall with simulated latency clearly
+  labeled. Remaining: wire into a mission compiler so real goals WITH measured
+  estMs feed the analyzer; today the API is proven but nothing calls it from
+  a user-facing path yet.
+  *(kaella: master brief den 2026-10-18 - "valjer MAJIN ratt i bada fallen")*
 - ~~**Autopilot UI follow-up surface**~~ **SHIPPED 2026-10-18** (reply-to-this-agent rows,
   ⏸/▶ per card via `/api/tasks/action`, live "agents at work" deck — see CHANGELOG).
   Remaining: human click-through in the Windows round below; resumed runs now stream

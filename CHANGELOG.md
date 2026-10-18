@@ -5,6 +5,46 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (HYPERSWARM: parallel workers are chosen AND proven — code, not a coordinator-LLM)
+
+### Ändrat
+- **`src/core/swarm.js` (new).** `analyzeSwarm(nodes, opts)` answers "how many
+  workers does this job deserve?" with deterministic arithmetic only: critical
+  path = longest estMs-chain, makespan = list scheduling with critical-path
+  priority, spawn granted only if modeled gain clears `max(2x workerOverhead,
+  10% of sequential)`. Unknown durations -> conservative single, never a guess.
+  No prompt, no model, zero tokens for the decision (GENESIS ZERO principle).
+- **`runSwarm({nodes, cap})` (new).** A real DAG scheduler on the existing
+  runtime: dependencies unlock as workers finish, independent branches keep
+  running when a sibling fails, and every node lands with a typed honest end:
+  `ok:true` + value, `ok:false` + error, or `blocked:true` + which dep failed.
+  Never a silently dropped node.
+- **`subagentWorker()` adapter (new).** Each node inherits the proven subagent
+  engine (its own `sub:` session, `tasks` route, max-steps cap) so swarms run
+  REAL agent turns — validated in the suite against three concurrent mock
+  routes with full text assertions.
+- **A failure never poisons siblings** (scheduler): `a fails` -> `b` and
+  `d(b)` still complete; only `c(a)` is marked blocked with its reason.
+
+### Verifierat
+- `node --test test/swarm.test.js` -> **8/8 green**, failed-first-then-green.
+  Judges: 3 independent 60 s tasks -> 3 workers, reason cites the modeled
+  gain; pure chain -> 1 worker, reason cites the critical path; 6 x 200 ms
+  tasks -> 1 worker, reason cites overhead eating the win; unknown durations
+  -> 1 worker, reason admits the estimate gap.
+- Overlap is MEASURED, not promised: two-node scheduling shows wall 123 ms <
+  half the sequential 360 ms for three 120 ms nodes, and at least two
+  started/ended windows genuinely intersect.
+- `node scripts/bench.mjs --swarm` -> **66% shorter wall** (363 -> 123 ms)
+  on 3 independent tasks doing REAL file IO (8 files written+read each) plus
+  120 ms induced latency per task that honestly stands in for model round
+  trips; real LLM calls are seconds, so the note understates, not
+  overstates, the gain. Printed every run beside the analyzer's decision.
+- Regression-free: `node scripts/bench.mjs` (no flag) -> 7/7 unchanged;
+  full suite **296 pass / 0 fail / 7 skipped**; i18n guard 0/85;
+  Swedish-absence test caught 6 literals in `swarm.js` during the session and
+  they are English now.
+
 ## 2026-10-18 (GENESIS ZERO: the loop sends 97% less tool-schema — measured, then flipped)
 
 ### Ändrat

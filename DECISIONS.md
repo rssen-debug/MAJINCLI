@@ -89,6 +89,15 @@ allowed to contradict a test.
   of MAJIN's own source (self-config edits *config* with backup+diff only); anything requiring
   Windows Defender/firewall/service mutation; background multi-machine sync.
 
+- **Parallelism decisions are arithmetic, not opinions.** `analyzeSwarm`
+  counts the critical path, simulates makespans per worker count, and grants
+  extra workers only when the modeled gain beats `max(2x spawn overhead, 10%
+  of the sequential plan)`. If durations are unknown it says so and runs one
+  worker - honest underdetermination beats a confident wrong number. Cost:
+  until a mission compiler feeds it measured `estMs`, unknown-shape goals stay
+  sequential (the conservative side; mitigated by per-node usage recording
+  feeding future estimates). Proof: `test/swarm.test.js` 8/8 including the
+  fail-first judges; `bench --swarm` measured gain 66% on real file IO.
 ## Avvisat
 
 - **"loadSafe / meaningful-diffs" as the race answer** (2026-10-18): classifying
