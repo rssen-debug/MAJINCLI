@@ -73,7 +73,7 @@
   async function load() {
     const r = await api('/marketing');
     status.textContent = r.connected
-      ? '✓ Meta connected (' + r.accountId + '). Analysis only, no spending permissions used.'
+      ? '✓ Meta credentials saved (' + r.accountId + '). Click Analyze to verify live access; no spending permission used.'
       : 'Connect a Meta Ads account and enter your product costs.';
     acct.value = r.accountId || '';
     curr.value = r.currency || '';
