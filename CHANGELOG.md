@@ -8,9 +8,12 @@ unless stated otherwise; nothing here claims a Windows or browser run.
 Användarrapporterat på riktig Windows: `Setup — Unable to execute file
 C:\Program Files\MAJIN\MAJIN.vbs — CreateProcess failed, code 193`.
 En .vbs är ingen Win32-exe; Inno Setups postinstall körde `CreateProcess`
-direkt på den. Start-menyn, skrivbordet, autostart och postinstall kör nu
-alla `wscript.exe "{app}\MAJIN.vbs"` med M-ikonen kvar. Test låser:
-ingen launchpoint får någonsin peka rakt på vbs:en igen.
+direkt på den. Start-meny, skrivbord och autostart går nu via
+`wscript.exe "{app}\MAJIN.vbs"` med M-ikonen kvar — postinstall kör i
+stället exen direkt med `runhidden` (CI-bevis: en postinstall-wscript
+hängde den tysta installationen i 17 minuter på runnern; Inno döljer
+konsolen lika bra själv). Test låser: ingen launchpoint får någonsin
+peka rakt på vbs:en, och postinstall är runhidden-exe.
 
 Samma runda: `skipifsilent` på postinstall betydde att den **tysta**
 one-click-uppdateringen (VERYSILENT) stängde appen utan att starta den igen

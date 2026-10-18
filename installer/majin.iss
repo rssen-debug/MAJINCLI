@@ -84,7 +84,10 @@ Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; Value
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "MAJIN"; ValueData: """{sys}\wscript.exe"" ""{app}\MAJIN.vbs"""; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
-Filename: "{sys}\wscript.exe"; Parameters: """{app}\MAJIN.vbs"""; Description: "Start {#MyAppName} now"; WorkingDir: "{app}"; Flags: nowait postinstall
+Filename: "{app}\{#MyAppExeName}"; Parameters: "start --no-window"; Description: "Start {#MyAppName} now"; WorkingDir: "{app}"; Flags: nowait postinstall runhidden
+; runhidden on the exe itself — NO wscript in this chain (CI v0.5.3 evidence:
+; a postinstall wscript left the silent install hanging 17 min on the runner;
+; Inno can hide the console on its own, and .vbs is only for Explorer shortcuts)
 ; (no skipifsilent: a silent in-app update must relaunch MAJIN itself,
 ;  otherwise the one-click update leaves the app dead and looks broken)
 

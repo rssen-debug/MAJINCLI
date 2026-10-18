@@ -118,19 +118,27 @@ test('icon embedding can no longer fail silently', () => {
   assert.match(src, /refusing to ship an exe with the default icon/, 'failed icon = failed build');
 });
 
-test('no console window: the user launches through the hidden VBS', () => {
+test('no console window: hidden launch everywhere, Inno only CreateProcesses real programs', () => {
   assert.ok(fs.existsSync(path.join(ROOT, 'installer', 'MAJIN.vbs')), 'the launcher ships');
   const vbs = read('installer/MAJIN.vbs');
   assert.match(vbs, /Wscript\.Shell/, 'hidden shell launcher');
   assert.match(vbs, /Run .* 0, False/, 'window style 0 = invisible');
   const iss = read('installer/majin.iss');
-  /* CreateProcess code 193 (v0.5.1, user-reported): a .vbs is NOT a Win32
-     program — no launch point may target it directly. The whole fleet goes
-     via wscript.exe with the vbs as an argument */
-  const needle = 'Filename: "{sys}' + String.fromCharCode(92) + 'wscript.exe"';
-  const launches = iss.split(needle).length - 1;
-  assert.ok(launches >= 3, `wscript.exe must be the launcher at every entry point (${launches}/≥3: start menu, desktop, postinstall, autostart)`);
-  assert.ok(!iss.includes('Filename: "{app}' + String.fromCharCode(92) + 'MAJIN.vbs"'), 'nothing may target the vbs directly — that is exactly the 193 dialog');
+  /* Two separate failure modes this test encodes, both CI/user-proven:
+     1. CreateProcess code 193 (user-reported): a .vbs is NOT a Win32
+        program — Explorer shortcuts must therefore point at wscript.exe
+        with the vbs as a parameter (Explorer resolves the host, Inno
+        shortcuts don't get that courtesy).
+     2. CI v0.5.3: a postinstall wscript entry left the SILENT install
+        hanging 17 minutes until the job timeout killed it — so postinstall
+        launches the EXE ITSELF with runhidden (Inno hides the console). */
+  const B = String.fromCharCode(92);
+  const shortcutNeedle = 'Filename: "{sys}' + B + 'wscript.exe"';
+  const shortcuts = iss.split(shortcutNeedle).length - 1;
+  assert.strictEqual(shortcuts, 2, `wscript.exe shortcuts = exactly start menu + desktop (found ${shortcuts})`);
+  assert.match(iss, /ValueData:.*?wscript[.]exe/, 'autostart registry goes via wscript.exe too');
+  assert.ok(!iss.includes('Filename: "{app}' + B + 'MAJIN.vbs"'), 'nothing may CreateProcess the vbs directly — that is exactly the 193 dialog');
+  assert.match(iss, /postinstall runhidden/, "postinstall launches the exe itself hidden — never wscript inside Inno's silent chain (17-min hang, CI-proven)");
   assert.ok(!iss.includes('postinstall skipifsilent'), 'silent updates must relaunch the app — skipifsilent kills the one-click update');
 });
 
