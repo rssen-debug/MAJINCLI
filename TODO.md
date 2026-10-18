@@ -6,6 +6,13 @@ autopilot/teamwork/dashboard additions).
 
 ## Hög prioritet
 
+- **Completion matrix baseline: 39/100** (`docs/COMPLETION_MATRIX.md`, scored strictly
+  against v0.5.8 evidence). Next in point-density order: **Del 1D** (crash-resume
+  semantics, no duplicate side effects), **Del 4A/4C** (verification contract types +
+  hard retry/budget/timeout caps), **Del 3C/D/E** (transient recovery, corruption
+  adversarial, measured parallel benefit), **Del 2C** (clarify + replan), **Del 1E**
+  (live two-provider handoff).
+
 - ~~**opencode-free-PLC test**~~ **VERIFIERAT 2026-10-18 kväll** — båda
   free-modellerna (longcat-2.5-preview-free, beam-free) svarade genom
   MAJIN (direct 7856/551 ms, turns 7.6s/3.0s med korrekt aritmetik 17×3=51
