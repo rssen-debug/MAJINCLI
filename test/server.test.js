@@ -292,6 +292,52 @@ test('CLI config set while MAJIN runs goes through the live server and survives 
   assert.equal(restore.status,200);
 });
 
+test('TikTok + Google Ads request credentials privately in chat, never in model history',async()=>{
+  const request=async(prompt)=>get('/api/chat?t='+TOKEN,{
+    method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({input:prompt,stream:true}),
+  });
+  const tiktok=await request('MAJIN analysera TikTok Ads kampanjer');
+  assert.equal(tiktok.status,200);
+  assert.match(tiktok.body,/event: marketing_channel_setup/);
+  assert.match(tiktok.body,/"platform":"tiktok"/);
+  const google=await request('Analysera Google Ads annonser');
+  assert.equal(google.status,200);
+  assert.match(google.body,/"platform":"google"/);
+  const general=await request('What is TikTok Ads?');
+  assert.doesNotMatch(general.body,/event: marketing_channel_setup/,'general knowledge question should not ask for credentials');
+  const src=(await get('/marketing.js')).body;
+  assert.match(src,/showChannel/);
+  const html=(await get('/index.html')).body;
+  assert.doesNotMatch(html,/<h3>(TIKTOK|GOOGLE ADS)<\/h3>/,'no new permanent panels');
+});
+
+test('TikTok and Google credential endpoints save account details but never echo private tokens',async()=>{
+  const tikTokSecret='test-only-tiktok-token-private';
+  const googleSecret='test-only-google-oauth-private';
+  const developerSecret='test-only-google-developer-private';
+  const save=async body=>get('/api/marketing/channel?t='+TOKEN,{
+    method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),
+  });
+  const tik=await save({action:'save',platform:'tiktok',advertiserId:'7123456789',currency:'SEK',accessToken:tikTokSecret});
+  assert.equal(tik.status,200,tik.body);
+  assert.doesNotMatch(tik.body,/test-only/);
+  const goog=await save({action:'save',platform:'google',customerId:'1234567890',loginCustomerId:'',currency:'USD',accessToken:googleSecret,developerToken:developerSecret});
+  assert.equal(goog.status,200,goog.body);
+  assert.doesNotMatch(goog.body,/test-only/);
+  const status=JSON.parse((await get('/api/marketing/channel?t='+TOKEN)).body);
+  assert.equal(status.channels.tiktok.configured,true);
+  assert.equal(status.channels.google.configured,true);
+  assert.equal(status.channels.google.authorization,'credentials_saved_not_verified');
+  const config=(await get('/api/config?t='+TOKEN)).body;
+  for(const secret of [tikTokSecret,googleSecret,developerSecret])assert.ok(!config.includes(secret),'must redact '+secret);
+  assert.equal((await save({action:'save',platform:'tiktok',advertiserId:'bad',currency:'SEK'})).status,422);
+  assert.equal((await save({action:'disconnect',platform:'google'})).status,200);
+  const end=JSON.parse((await get('/api/marketing/channel?t='+TOKEN)).body);
+  assert.equal(end.channels.google.configured,false);
+  assert.equal(end.channels.tiktok.configured,true);
+});
+
 test('/api/chat: demo answer without stream, 400 on empty input', async () => {
   const sw = await get(`/api/config?t=${TOKEN}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ models: { provider: 'demo', routes: { chat: 'demo/demo-fast' } } }) });
   assert.equal(sw.status, 200, JSON.stringify(sw.body).slice(0, 200));
