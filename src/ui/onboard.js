@@ -6,7 +6,7 @@
   'use strict';
   const $ = (id) => document.getElementById(id);
   const ROUTE_JOBS = ['chat', 'tasks', 'tools', 'code', 're', 'analysis', 'plan', 'research', 'summarize', 'router', 'final', 'aggregator', 'vision'];
-  const OB = { st: null, provider: null, shown: false, working: false };
+  const OB = { st: null, provider: null, shown: false, working: false, forceEdit: false };
 
   function el(tag, cls, text) {
     const n = document.createElement(tag);
@@ -41,6 +41,7 @@
   function open(st) {
     OB.st = st;
     OB.provider = null;
+    OB.forceEdit = false;
     OB.shown = true;
     $('onboard').hidden = false;
     render();
@@ -119,6 +120,34 @@
     demo.type = 'button';
     demo.onclick = skipForNow;
     others.append(custom, demo);
+    if (existing) {
+      const p = existing;
+      const changeKey = el('button', 'ob-link', 'Replace the saved key for ' + p.label);
+      changeKey.type = 'button';
+      changeKey.onclick = () => {
+        OB.forceEdit = true;
+        OB.provider = (OB.st.presets || []).find((choice) => choice.name === p.name) || null;
+        render();
+      };
+      const forget = el('button', 'ob-link', 'Forget ' + p.label + ' connection');
+      forget.type = 'button';
+      forget.onclick = async () => {
+        if (!confirm('Remove this AI connection from MAJIN?')) return;
+        forget.disabled = true;
+        const result = await apiLocal('/provider', { method: 'POST', body: { action: 'remove', name: p.name } }).catch(() => null);
+        if (!result || !result.ok) {
+          forget.textContent = tellErr(result, 'Could not remove this connection.');
+          forget.disabled = false;
+          return;
+        }
+        const fresh = await apiLocal('/state?tools=0').catch(() => null);
+        if (fresh) OB.st = fresh;
+        OB.forceEdit = false;
+        OB.provider = null;
+        render();
+      };
+      others.append(changeKey, forget);
+    }
     details.append(others);
     box.append(details);
     const skip = el('button', 'ob-link ob-skip', 'Skip for now');
@@ -134,7 +163,7 @@
     back.type = 'button';
     back.onclick = () => { OB.provider = null; render(); };
     box.append(back, el('div', 'ob-mark', '✦'), el('h2', 'ob-title', 'Connect ' + p.label));
-    const existing = status(p.name);
+    const existing = OB.forceEdit ? null : status(p.name);
     box.append(el('p', 'ob-sub', existing && existing.ready
       ? 'Your AI is already connected. No need to enter your key again.'
       : (p.needsKey ? 'Paste your key once. MAJIN keeps it on this computer.' : 'No API key needed. Make sure the local AI server is running.')));
