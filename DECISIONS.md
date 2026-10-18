@@ -129,8 +129,10 @@ allowed to contradict a test.
 - **Pause mechanics.** Shipped pause is abrupt (stop mid-turn + status `paused`; resume says
   "Continue from the step ..."). A graceful "finish the current tool call, then hold" pause is
   the open refinement — loop.js has no safe-point concept yet.
-- **Browser live-gate cadence.** `test/browser.live.test.js` runs in CI with `continue-on-error: true` until green across consecutive runs — then flips to a hard gate. Open question: is the local form server deterministic enough for a Windows runner (port races, first-run Edge profile popups)? One green run banked (2026-10-18, run 39119535069 — full chain incl. live browser on
-the Windows runner); flips to hard gate after one more consecutive green.
+- ~~**Browser live-gate cadence**~~ **DECIDED 2026-10-18**: two consecutive green runs
+  (39 119 535 069 + 39 120 606 397) and one real bug caught on run one — the local form
+  server is deterministic enough for the Windows runner. `continue-on-error` removed;
+  the live step is a hard gate now.
 - **Browser-context resource model.** Files lock cleanly by path; a browser context is not a
   path. Candidates: a named-resource lock per provider-site domain; count-based pool keyed by
   `channel:browser`. Decided when browser hardening starts (next phase).

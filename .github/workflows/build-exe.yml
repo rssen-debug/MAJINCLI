@@ -110,11 +110,10 @@ jobs:
           Get-ChildItem dist/installer | Select-Object Name, Length | Format-Table -AutoSize
 
       - name: browser tools must work against a real browser (live e2e, observed)
-        # continue-on-error for now on purpose: the CDP wire is new — first
-        # let this step prove itself across runs, then it becomes a gate.
+        # HARD GATE since 2026-10-18: green twice in a row (39 119 535 069 +
+        # 39 120 606 397 — and it caught a real openFor bug on its first run).
         # The runner has Edge + node 22; the test serves a local form page,
         # submits it, proves the upload from the input element, and closes.
-        continue-on-error: true
         shell: pwsh
         env:
           MAJIN_BROWSER_LIVE: '1'

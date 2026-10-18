@@ -29,6 +29,8 @@ without saying so explicitly. Version tags map 1:1 to git tags.
   shipped UI is English end-to-end.
 
 ### Verifierat
+- Live browser gate flipped to hard: two consecutive green CI runs on the Windows
+  runner (39 119 535 069 + 39 120 606 397) after it caught a real `openFor` bug.
 - `node --test test/tasks.test.js` → 8 pass, 0 fail (failing test written before fix).
 - `npm test` → 197 pass, 0 fail, 5 skipped · `npm run i18n` 0/70 · `npm run check` 98/98.
 - Human/browser round still owed for the visual card tick (no DOM harness here —
