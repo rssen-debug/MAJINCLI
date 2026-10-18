@@ -2,17 +2,18 @@
 
 Built into MAJIN: no Python process, no paid MCP service, no additional LLM calls just to compute campaign economics. The optimizer itself is deterministic.
 
-## Connect in the app
+## Connect directly in chat (no panels)
 
-1. Configure your normal MAJIN AI provider and model first.
-2. Open **Expert → MARKETING**.
-3. In Meta Business Manager, create a Marketing API token with read permission (**ads_read**). Enter your **ad account ID** (e.g. act_123456789) and **actual ad account currency**.
-4. Enter your selling price, product/fulfillment costs, shipping, payment fees, expected refund fraction (UI asks for percent), minimum retained profit per order, and a *planned* daily advertising ceiling. **All money values must match the Meta ad account currency.** Convert product economics first if your Meta account uses USD and your store uses SEK.
-5. Click **Save connection**, then **Analyze last 7 days**.
+1. Select your MAJIN AI provider and model once, using the normal onboarding.
+2. Say **"MAJIN, optimize my Facebook ads"** (or an equivalent explicit marketing task in Swedish).
+3. If Meta is not connected, MAJIN asks for only the required data **in the chat** and shows a temporary secure connection form next to your conversation. Nothing is permanently added to the sidebars, settings or header.
+4. Enter your Meta ad account ID, its actual currency, a Marketing API token with **ads_read** permission, your product sale price, costs and an advisory daily budget. Tap **Connect & analyze**. MAJIN resumes your original request automatically.
 
-A Meta access token is a **different credential from your AI provider key**. The token field is not sent to the LLM or included in agent tool arguments. Like MAJIN's AI provider keys, a pasted Meta token is stored in MAJIN's local configuration, **not encrypted**. Alternatively set environment variable MAJIN_META_ACCESS_TOKEN for the MAJIN process and leave the token field empty; the default configuration uses that reference.
+**Important:** Never paste an API key into the chat composer. The contextual token field sends it to MAJIN's authenticated local configuration API, not to the language model or chat history. As with MAJIN provider keys, saved tokens are local but **not encrypted**. You can also set environment variable MAJIN_META_ACCESS_TOKEN for the MAJIN process instead of pasting a token; the default config refers to it.
 
-Never paste a Meta or AI key in chat.
+Costs, selling price and ad spend must use the **same currency**. Convert before entering them if your shop sells in SEK while your ad account bills in USD. Connection settings are not proof that Meta accepted the token; the first actual analysis verifies API access.
+
+No AI-token usage is needed for the first-use question or for calculating the marketing metrics. The selected AI model is used only for reasoning about the analysis and other normal MAJIN tasks.
 
 ## Chat tools
 
