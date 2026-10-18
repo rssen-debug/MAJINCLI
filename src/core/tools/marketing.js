@@ -1,6 +1,6 @@
 /**
  * Marketing intelligence tools: the language model may INSPECT, NEVER spend.
- * Credentials enter via the local marketing panel or an env reference, not tool args.
+ * Credentials enter through a contextual secure chat form or an env reference, not tool args.
  */
 import { def } from './registry.js';
 import { marketingStatus, analyzeMetaAccount } from '../marketing.js';
@@ -15,7 +15,7 @@ export const marketingTools = [
     async run(_args, ctx) {
       const s = marketingStatus(ctx.cfg);
       return {
-        result: JSON.stringify(s, null, 2) + '\nOpen Expert > MARKETING to connect Meta and set price, costs, currency, refund rate and a daily spend ceiling.',
+        result: JSON.stringify(s, null, 2) + '\nIf Meta is not connected, tell the user to say: Analyze my Facebook ads. MAJIN will ask for the required data safely inside the chat.',
         meta: { connected: s.connected, mode: s.mode },
         summary: s.connected ? 'Meta account configured, read-only insights available' : 'Meta not connected',
       };
