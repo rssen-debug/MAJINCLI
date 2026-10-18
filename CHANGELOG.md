@@ -5,6 +5,29 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-18 (kväll) — Persistent Session & Agent Handoff Engine
+
+### Fixat
+- **Context loss mellan meddelanden (huvudbuggen).** `/api/chat` sparade historik till disk men skickade aldrig tillbaka den till modellen —
+  varje meddelande började om utan sammanhang. Nu laster `agent._turnOnce` alltid
+  `readHistory(session, 240)` från disk när callern inte skickar historik (role user/assistant).
+  Testet bevisar att "Mitt namn är Kalle." når modellens meddelandekedja vid nästa anrop.
+- **Ingen checkpoint vid modell/agentbyte.** `agent.handoff({session, to})` skriver
+  `<session>.handoff.json` (mål = första användarmeddelandet, plan med status per steg,
+  sista framsteg, från→till). Nästa tur konsumerar artefakten EN gång och injicerar
+  den som "HANDOFF CONTEXT — continue, do NOT restart" i det medvetna blocket.
+  Planer persistenz dessutom i `<session>.plan.json` via `setPlan` → `persistPlan`,
+  och `planSnapshot(session)`/`loadPlan` gör att en helt ny runtime hittar checkpointen
+  efter full restart.
+- **Historikbackade svar trodde att modellen sett gamla svar** även när historik-arrayen
+  var tom; isolation garanterad per session (enkäter läcker aldrig över sessionsgränsen).
+
+### Verifierat
+- `node --test test/handoff.test.js` → 4/4 (historik→prompt, sessions-isolation,
+  modellbyte-handoff, checkpoint efter full restart). Fail-first var 3 röda innan fixen.
+- Fullsvit 319/0/7, i18n grön, bench 7/7 oförändrad (p50 49ms).
+- Live-rerun mot qwen3:0.6b: mission 3/3 med heuristik-fallback (oförändrat beteende).
+
 ## 2026-10-18 (GRAND ARCHITECT: the mission compiler ships — chat drives HYPERSWARM in code + measured scheduler fixes)
 
 ### Ändrat

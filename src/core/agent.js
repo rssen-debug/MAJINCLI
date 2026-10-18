@@ -4,6 +4,7 @@
  * 4) MOA-final  5) minne + färdighet + historik. Overskott är bortskuret; allt körs på samma loop.
  */
 import os from 'node:os';
+import fs from 'node:fs';
 import { serial } from './serialize.js';
 import { bus as globalBus } from './log.js';
 import { classify, llmClassify, plan as planTurn } from './router.js';
@@ -11,7 +12,7 @@ import { parseIntent } from './routes.js';
 import { JOBS } from './config.js';
 import { loop } from './loop.js';
 import { run as moaRun } from './moa.js';
-import { estimateTokens, appendHistory } from './context.js';
+import { estimateTokens, appendHistory, readHistory, historyPath } from './context.js';
 import { dirs } from './paths.js';
 import { approvals } from './guard.js';
 
@@ -34,7 +35,87 @@ export class Agent {
   setPlan(session, plan, note) {
     if (!plan?.length) this.plans.delete(session);
     else this.plans.set(session, plan);
+    this.persistPlan(session);
     this.bus.emit('plan', { session, plan: plan || [], note: note || null });
+  }
+
+  /* planer och overlamningar overlever restart (persistent sessions) */
+  planPath(session) {
+    try {
+      const hp = historyPath(session);
+      return hp.replace(/\.jsonl$/, '.plan.json');
+    } catch { return null; }
+  }
+
+  persistPlan(session) {
+    try {
+      const file = this.planPath(session);
+      if (!file) return;
+      fs.writeFileSync(file, JSON.stringify({ session, plan: this.plans.get(session) || [], updated: Date.now() }) + '\n');
+    } catch { /* nice-to-have, aldrig fatal */ }
+  }
+
+  loadPlan(session) {
+    if (this.plans.get(session)?.length) return this.plans.get(session);
+    try {
+      const file = this.planPath(session);
+      if (!file) return null;
+      let data;
+      try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+      if (Array.isArray(data.plan) && data.plan.length) {
+        this.plans.set(session, data.plan);
+        return data.plan;
+      }
+    } catch { /* ingen checkpoint an */ }
+    return null;
+  }
+
+  planSnapshot(session) {
+    const plan = this.loadPlan(session) || this.plans.get(session) || [];
+    return { session, plan, count: plan.length, updated: Date.now() };
+  }
+
+  handoffPath(session) {
+    try {
+      const hp = historyPath(session);
+      return hp.replace(/\.jsonl$/, '.handoff.json');
+    } catch { return null; }
+  }
+
+  /* verifierad checkpoint vid byte av modell/agent: mal+plan+filer+framsteg */
+  async handoff({ session, to = null } = {}) {
+    const history = readHistory(session, 6).filter((m) => m && (m.role === 'user' || m.role === 'assistant'));
+    const goal = history.find((m) => m.role === 'user')?.content || null;
+    const lastProgress = [...history].reverse().find((m) => m.role === 'assistant')?.content || null;
+    const plan = this.loadPlan(session) || [];
+    const from = this.cfg.get('models.routes')?.tasks || this.cfg.get('models.provider') || null;
+    if (!goal && !plan.length) return { skipped: 'nothing to hand off yet', session };
+    const artifact = {
+      store: 'majin.handoff.v1',
+      session,
+      goal: goal && String(goal).slice(0, 1200),
+      plan: plan.map((p) => ({ text: p.text, status: p.status })),
+      lastProgress: lastProgress && String(lastProgress).slice(0, 800),
+      from,
+      to,
+      ts: Date.now(),
+    };
+    try {
+      const file = this.handoffPath(session);
+      if (file) fs.writeFileSync(file, JSON.stringify(artifact) + '\n');
+    } catch { /* handoff-skrivning är nice-to-have */ }
+    return artifact;
+  }
+
+  consumeHandoff(session) {
+    try {
+      const file = this.handoffPath(session);
+      if (!file) return null;
+      let data;
+      try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+      fs.writeFileSync(file, JSON.stringify({ ...data, consumed: true }) + '\n');
+      return data;
+    } catch { return null; }
   }
 
   pause() {
@@ -137,7 +218,7 @@ export class Agent {
     return serial(opts.session || 'desktop', () => this._turnOnce(opts));
   }
 
-  async _turnOnce({ input, session = 'desktop', attachments = [], onEvent = () => {}, history = [], source = null, readOnly = false, model = null, aware = '' }) {
+  async _turnOnce({ input, session = 'desktop', attachments = [], onEvent = () => {}, history = null, source = null, readOnly = false, model = null, aware = '', handoff = null }) {
     const cfg = this.cfg;
     const ctrl = new AbortController();
     this.abort.set(session, ctrl);
@@ -151,6 +232,26 @@ export class Agent {
     };
 
     try {
+      /* Persistent Sessions: historiken laster alltid från disk om callern inte
+         skickade den (servervagen glomde att skicka den, sa vi laser filen i stallet) */
+      if (!Array.isArray(history) || !history.length) {
+        const disk = readHistory(session, 240).filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string');
+        if (disk.length) history = disk.map((m) => ({ role: m.role, content: m.content }));
+      }
+      if (!Array.isArray(history)) history = [];
+      /* handoff/checkpoint injiceras en gång: ny modell får mål+plan+framsteg */
+      const handoffData = handoff && handoff.plan ? { goal: handoff.goal || null, plan: handoff.plan, from: handoff.from || null, to: handoff.to || null } : this.consumeHandoff(session);
+      if (handoffData && handoffData.plan?.length || handoffData?.goal) {
+        let planLines = (handoffData.plan || []).map((p) => `[${p.status === 'done' ? 'x' : p.status === 'doing' ? '~' : ' '}] ${p.text}`).join('\n');
+        const ho = [
+          'HANDOFF CONTEXT (from a previous model/agent — continue, do NOT restart):',
+          handoffData.goal ? `GOAL: ${handoffData.goal}` : null,
+          handoffData.from || handoffData.to ? `ROUTE: ${handoffData.from || '?'} → ${handoffData.to || 'this model'}` : null,
+          planLines ? `PLAN:\n${planLines}` : null,
+        ].filter(Boolean).join('\n');
+        aware = (aware ? aware + '\n\n' : '') + ho;
+      }
+
       /* 0) a bare verdict labels the last captured turn and stops there */
       const rated = this.maybeRate(input, session, emit);
       if (rated) return { ...rated, steps: 0, tools: [], usage: null, fastPath: true };
