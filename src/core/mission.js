@@ -11,6 +11,37 @@ import { routeFor } from './router.js';
 import { analyzeSwarm, runSwarm, subagentWorker, validateGraph } from './swarm.js';
 
 const LIST_RE = /(?:^|\n)\s*(?:\d{1,2}[.):\-]|[-*•])\s*\S+/g;
+/* inline-listor: "(1) x, (2) y, (3) z" i EN rad. Radbrudnent-listre
+   rad reaktionen missade detta (bug 2026-10-18). Krav for att skara mot
+   decimaler och littlösa tal: >= 3 items, samma marker-familj, sekvensen
+   stiger steg ett frn start (1/a). */
+export function splitInlineItems(t) {
+  const src = String(t || '').replace(/\s+/g, ' ').trim();
+  const re = /(?:^|[\s(])(\d{1,2}|[a-z])[.)]\s/gu;
+  const hits = [];
+  for (const m of src.matchAll(re)) {
+    const markerStart = m.index + m[0].indexOf(m[1]);
+    const numeric = /\d/.test(m[1]);
+    hits.push({ start: markerStart, after: m.index + m[0].length, mark: m[1], numeric });
+  }
+  if (hits.length < 3) return null;
+  const kinds = new Set(hits.map((h) => h.numeric));
+  if (kinds.size !== 1) return null;
+  const isNum = hits[0].numeric;
+  const seq = hits.map((h) => (isNum ? parseInt(h.mark, 10) : h.mark.charCodeAt(0) - 96));
+  if (seq[0] !== 1) return null;
+  for (let i = 1; i < seq.length; i++) if (seq[i] !== seq[i - 1] + 1) return null;
+  const items = [];
+  for (let i = 0; i < hits.length; i++) {
+    const from = hits[i].after;
+    const to = i + 1 < hits.length ? hits[i + 1].start : src.length;
+    const piece = src.slice(from, to).replace(/[\s),;.-]+$/, '').trim();
+    if (piece.length < 4) return null;
+    items.push(piece);
+  }
+  return items;
+}
+
 const ACTION_RE = /(skriv|skapa|rensa|sortera|flytta|kopiera|zip|packa|stalla|fixa|bygg|research|lista|sok|leta|install|test|kolla|sammanfatta|sammanfatt|rapport|check|analys|rakna|dela|cut|g[oö]r|starta|stoppa|render|kompil|deploy|merge|commit|push|bekr[aä]fta|granska|write|summar|build|gather|collect|rename|move|copy|delet|create|generate|produc|draw|paint|compar|count|read|open|close|searc|look)/iu;
 
 /* regelren heuristik: minst tva sektioner med verbeslaktat innehall */
@@ -19,6 +50,8 @@ export function shouldMission(input) {
   if (t.length < 24) return { mission: false, reason: 'too short to split' };
   const list = t.match(LIST_RE) || [];
   if (list.length >= 2) return { mission: true, reason: `${list.length} list items` };
+  const inline = splitInlineItems(t);
+  if (inline && inline.length >= 3) return { mission: true, reason: `${inline.length} inline list items` };
   const segments = t
     .split(/[;.]\s+|\s{2,}|,\s+(?:och|and)\s+|\s+(?:och sedan|and then|then|sedan|samtidigt|meanwhile)\b/iu)
     .map((x) => x.trim())
@@ -45,6 +78,11 @@ function heuristicNodes(input, maxNodes) {
   }
   if (items.length >= 2 && items.length <= maxNodes) {
     return items.map((input, i) => ({ id: 'item' + (i + 1), input, deps: [], estMs: 30000 }));
+  }
+  /* radbruden saknas men missionen trig gades av inline-lista — dela upp den ocksa */
+  const inline = splitInlineItems(lines.join(' '));
+  if (inline && inline.length >= 2 && inline.length <= maxNodes) {
+    return inline.map((input, i) => ({ id: 'item' + (i + 1), input, deps: [], estMs: 30000 }));
   }
   return null;
 }
