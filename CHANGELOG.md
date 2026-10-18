@@ -27,6 +27,14 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 - **94 tools** (was 92). CI live step now also runs `test/jobs.live.test.js`.
 
 ### Fixat
+- **Scheme-less links into `<input type=url>` silently cancelled every submission**
+  (native constraint validation: `github.com/x` is not a URL). Found via local
+  replication on a real Chromium against the exact CI form (a 120 MiB playwright
+  shell in the sandbox — experimentation beat seven-minute CI guessing loops).
+  Fix stack: `coerceForType` adds the scheme; preview flags FILLED-BUT-INVALID in
+  plain words; `jobs.send` asks the page `checkValidity()` BEFORE clicking and
+  reports exactly which fields the page would refuse. Server-side proof locally:
+  POST observed, thanks words read, file field carried.
 - **`followNewTarget` rewired sessions to the stale initial `about:blank` tab** —
   the wire evidence (server saw /thanks, browser read about:blank) said the click
   worked and the READS went to the wrong tab. Rule now: only tabs born AFTER

@@ -18,7 +18,7 @@ import { loadCv, saveCv, loadApplications, saveApplications, upsertApplication, 
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { openFor, isOpen } from '../browser.js';
-import { classifyField, planValue, extractContact, buildProof, SCAN_SNIPPET, SUBMIT_SNIPPET, TEXT_SNIPPET } from '../jobs/formfill.js';
+import { classifyField, planValue, extractContact, buildProof, coerceForType, SCAN_SNIPPET, SUBMIT_SNIPPET, TEXT_SNIPPET } from '../jobs/formfill.js';
 
 /* ---- submit-slice helpers (mirror browser.fill/browser.upload's CDP flow,
    deliberately local: the job tools must not reach into another group's
@@ -26,7 +26,7 @@ import { classifyField, planValue, extractContact, buildProof, SCAN_SNIPPET, SUB
 async function fillOne(b, sel, value) {
   const selJson = JSON.stringify(String(sel));
   const valJson = JSON.stringify(String(value ?? ''));
-  return b.eval('(() => {' +
+  return b.eval('(() => { try {' +
     'const el = document.querySelector(' + selJson + ');' +
     'if (!el) { return { found: false }; }' +
     'el.focus();' +
@@ -35,8 +35,9 @@ async function fillOne(b, sel, value) {
     'if (setter) { setter.call(el, ' + valJson + '); } else { el.value = ' + valJson + '; }' +
     "el.dispatchEvent(new Event('input', { bubbles: true }));" +
     "el.dispatchEvent(new Event('change', { bubbles: true }));" +
-    'return { found: true, stuck: el.value === ' + valJson + ', value: String(el.value).slice(0, 60) };' +
-  '})()');
+    'let valid = true; try { valid = el.checkValidity(); } catch (e) { valid = true; }' +
+    'return { found: true, stuck: el.value === ' + valJson + ', valid: valid, value: String(el.value).slice(0, 60) };' +
+  ' } catch (err) { return { found: false, error: String(err && err.message) }; } })()');
 }
 
 async function attachFile(b, sel, abs) {
@@ -273,10 +274,11 @@ export const jobTools = [
           preview.push({ role, label: f.label || f.name || '(file input)', filled: Boolean(up && up.ok), value: up && up.ok ? 'file: ' + up.name : null, note: why });
           continue;
         }
-        const value = planValue(role, { profile, coverLetter });
+        let value = planValue(role, { profile, coverLetter });
         if (value == null) { gaps.push({ role, label: f.label || f.name, why }); continue; }
+        value = coerceForType(value, f.type);
         const r = await fillOne(b, f.sel, value);
-        preview.push({ role, label: f.label || f.name || f.sel, filled: Boolean(r && r.stuck), value: r && r.stuck ? String(value).slice(0, 60) : null, note: r && !r.stuck ? 'the page rejected the value' : why });
+        preview.push({ role, label: f.label || f.name || f.sel, filled: Boolean(r && r.stuck), value: r && r.stuck ? String(value).slice(0, 60) : null, valid: r && r.stuck ? r.valid !== false : undefined, note: r && !r.stuck ? 'the page rejected the value' : r && r.valid === false ? 'FILLED BUT INVALID — this blocks the submit' : why });
       }
       if (app.status !== 'waiting') {
         if (app.status !== 'started') transition(app, 'started', { by: 'agent', evidence: { note: 'preparing the application form' } });
@@ -311,6 +313,12 @@ export const jobTools = [
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'the prepare browser was closed — jobs.prepare again to rebuild the exact form state' } };
       const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
       const before = await b.eval(TEXT_SNIPPET).catch(() => ({ url: '' }));
+      /* the page is the referee: an invalid field CANCELS submission silently
+         ("github.com/x" into type=url learned us that). Ask it first. */
+      const validity = await b.eval("(() => { const f = document.querySelector('form'); if (!f) return { valid: true, note: 'no form on page' }; const bad = [...f.querySelectorAll(':invalid')].map((x) => (x.labels && x.labels[0] ? x.labels[0].innerText.trim().slice(0, 40) : null) || x.name || x.id || x.type); return { valid: f.checkValidity(), invalid: bad }; })()").catch(() => ({ valid: true }));
+      if (validity && validity.valid === false) {
+        return { ok: false, error: { code: 'invalid_form', message: 'the page refuses these values as-is: ' + JSON.stringify(validity.invalid || []) + ' — the submit would be silently cancelled by the browser', hint: 'fix the fields (jobs.prepare with better answers), then jobs.send again' } };
+      }
       let click = await b.eval(SUBMIT_SNIPPET);
       if (!click || !click.clicked) {
         await new Promise((r) => setTimeout(r, 1500));

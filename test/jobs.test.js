@@ -220,3 +220,14 @@ test('formfill: planValue never invents contact data', async () => {
   assert.equal(planValue('cv', {}), '__cv__', 'the file sentinel');
   assert.equal(planValue('other', { profile: { email: 'a@b.se' } }), null);
 });
+
+test('coerceForType: url fields get a scheme, everything else is left alone', async () => {
+  const { coerceForType } = await import('../src/core/jobs/formfill.js');
+  assert.equal(coerceForType('github.com/testkandidat', 'url'), 'https://github.com/testkandidat', 'the CI failure: schemeless into type=url silently cancels the submit');
+  assert.equal(coerceForType('linkedin.com/in/annasv', 'URL'), 'https://linkedin.com/in/annasv');
+  assert.equal(coerceForType('https://x.se/a', 'url'), 'https://x.se/a', 'already-schemed passes through');
+  assert.equal(coerceForType('github.com/testkandidat', 'text'), 'github.com/testkandidat', 'text fields keep whatever the user meant');
+  assert.equal(coerceForType('070-111 22 33', 'tel'), '070-111 22 33');
+  assert.equal(coerceForType('', 'url'), null, 'empty is empty, not https://air');
+  assert.equal(coerceForType(null, 'url'), null);
+});

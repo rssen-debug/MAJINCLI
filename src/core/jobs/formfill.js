@@ -124,6 +124,19 @@ export function planValue(role, { profile = {}, coverLetter = '' } = {}) {
   }
 }
 
+/* --------------------------- type coercion ------------------------------- */
+
+/** A value must survive the page's own constraint validation, or the submit
+    click silently does NOTHING and the user thinks the form said no.
+    Found 2026-10-18: github.com/x into <input type=url> → invalid → no POST. */
+export function coerceForType(value, type) {
+  if (value == null) return null;
+  const v = String(value).trim();
+  if (!v) return null;
+  if (String(type).toLowerCase() === 'url' && !/^https?:\/\//i.test(v)) return 'https://' + v;
+  return v;
+}
+
 /* ------------------------------ the proof -------------------------------- */
 
 const CONFIRM_WORDS = svlex('confirm', ['thank you for your application', 'your application has been submitted', 'application received', 'we have received your application', 'tack för din ansökan', 'tack for din ansokan', 'ansökan har skickats', 'ansokan har skickats', 'din ansökan är skickad', 'din ansokan ar skickad', 'vi återkommer', 'vi aterkommer', 'we will get back to you', 'we will be in touch', 'application has been sent', 'ansökan mottagen', 'ansokan mottagen', 'bekräftelse på din ansökan']); // svlex( marker must share the line — the gate reads line-wise
