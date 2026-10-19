@@ -313,14 +313,14 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     if (p === '/api/config' && req.method === 'GET') return json(res, 200, { ok: true, config: cfg.redacted(), file: cfg.file, diffReady: true });
     if (p === '/api/logs') return json(res, 200, { ok: true, events: bus.tail(Number(url.searchParams.get('n') || 200), Number(url.searchParams.get('after') || 0)) });
     if (p === '/api/usage') return json(res, 200, { ok: true, ...usage.summary(), routes: cfg.routeTable().length });
-    if (p === '/api/memory') {
+    if (p === '/api/memory' && req.method === 'GET') {
       const q = url.searchParams.get('q');
       return json(res, 200, { ok: true, facts: q ? memory.recall(q, 20) : memory.facts(), events: memory.recentEvents(25), stats: memory.stats() });
     }
-    if (p === '/api/skills') return json(res, 200, { ok: true, skills: skills.list() });
+    if (p === '/api/skills' && req.method === 'GET') return json(res, 200, { ok: true, skills: skills.list() });
     if (p === '/api/dataset' && req.method !== 'POST') return json(res, 200, { ok: true, capture: dataset.on, share: 'no upload path exists', ...dataset.stats() });
     if (p === '/api/tools') return json(res, 200, { ok: true, count: registry.list().length, groups: registry.groups(), tools: registry.list().map((t) => ({ name: t.name, group: t.group, risk: t.risk, desc: t.desc, params: Object.keys(t.raw || {}) })) });
-    if (p === '/api/schedule') return json(res, 200, { ok: true, jobs: scheduler ? scheduler.list() : [], enabled: Boolean(scheduler) });
+    if (p === '/api/schedule' && req.method === 'GET') return json(res, 200, { ok: true, jobs: scheduler ? scheduler.list() : [], enabled: Boolean(scheduler) });
     if (p === '/api/channels') return json(res, 200, { ok: true, ...(channels ? channels.status() : { telegram: { online: false, state: 'off' }, whatsapp: { online: false, state: 'off' } }) });
     if (p === '/api/approvals') return json(res, 200, { ok: true, pending: approvals.list(), recent: approvals.recent(12) });
     if (p === '/api/sessions') {
@@ -640,7 +640,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     }
     if (p === '/api/memory' && req.method === 'POST') {
       const body = await readJson(req);
-      if (body.action === 'forget') return json(res, 200, { ok: memory.forget(String(body.query || '')) });
+      if (body.action === 'forget') return json(res, 200, memory.forget(String(body.query || '')));
       return json(res, 200, memory.remember(String(body.text || ''), body.tags || []));
     }
     if (p === '/api/channels/telegram' && req.method === 'POST') {

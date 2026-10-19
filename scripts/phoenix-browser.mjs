@@ -232,7 +232,7 @@ try {
     const routes = Object.fromEntries(Object.keys(c.config.models.routes).map(k => [k, 'demo/demo-fast']));
     await window.MAJIN_ONBOARD.api('/config', { method: 'PATCH', body: { models: { provider: 'demo', routes }, moa: { policy: 'off' } } });
   });
-  await page.evaluate(() => slash('/budget 7'));
+  await page.evaluate(() => command('/budget 7'));
   const budgetConfig = await page.evaluate(async () => (await window.MAJIN_ONBOARD.api('/config')).config.budget);
   assert.equal(budgetConfig.mode, 'cap', 'chat budget command enables the enforced cap');
   assert.equal(budgetConfig.monthlyUsd, 7);

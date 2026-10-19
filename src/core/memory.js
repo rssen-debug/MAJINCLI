@@ -43,8 +43,10 @@ export class Memory {
         .readFileSync(this.factsFile, 'utf8')
         .split('\n')
         .map((l) => l.trim())
-        .filter((l) => l.startsWith('- '))
-        .map((l) => l.slice(2));
+        // Older writes accidentally dropped bullet prefixes on existing notes.
+        // Read those plain lines too, so a later save does not erase them.
+        .filter((l) => l && !l.startsWith('#'))
+        .map((l) => l.replace(/^- /, ''));
     } catch {
       return [...(this.cfg.get('memory.facts') || [])];
     }
@@ -64,7 +66,7 @@ export class Memory {
     if (dup >= 0) existing[dup] = line.replace(/^- /, '- ');
     else existing.unshift(line);
     const capped = existing.slice(0, this.cfg?.get('memory.maxNotes') || 400);
-    fs.writeFileSync(this.factsFile, `# Minnen\n\n${capped.join('\n')}\n`);
+    fs.writeFileSync(this.factsFile, `# Minnen\n\n${capped.map(f => '- ' + f.replace(/^- /, '')).join('\n')}\n`);
     bus.info('memory.remember', { dup: dup >= 0, chars: clean.length });
     return { ok: true, count: capped.length, replaced: dup >= 0 ? clean : null, file: this.factsFile };
   }
@@ -77,7 +79,7 @@ export class Memory {
       const inter = [...q].filter((w) => k.has(w)).length;
       return !(inter >= 1 && inter / Math.max(1, q.size) > 0.5);
     });
-    fs.writeFileSync(this.factsFile, `# Minnen\n\n${keep.join('\n')}\n`);
+    fs.writeFileSync(this.factsFile, `# Minnen\n\n${keep.map(f => '- ' + f.replace(/^- /, '')).join('\n')}\n`);
     return { ok: true, removed: existing.length - keep.length };
   }
 

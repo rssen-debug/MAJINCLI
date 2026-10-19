@@ -58,3 +58,10 @@ OpenCode live-diagnos: officiell modellkatalog https://opencode.ai/inference/v1/
 - OpenCode onboarding visar nu presetens faktiska villkor: Go kräver prenumeration; gratisnamn innebär inte gratis API-åtkomst från MAJIN.
 - Nya HTTP-tester täcker Workspace-datakällor och minnes-spara/sök/glöm i isolerad testprofil. Browser-test kompletterat för /budget och uppföljningars status.
 - Ett tillfälligt Git-fel "No space left on device" inträffade under checkpoint; omförsök med explicita källfiler lyckades. C: hade ca 531 MiB ledigt vid kontroll. Ingen användardata raderades. Kodcheckpoint 6168e61 finns lokalt; ska pushas tillsammans med nästa checkpoint.
+
+### Checkpoint 5 — HTTP-skrivtester hittade verkliga funktionsfel
+- API-02: GET-handlers för /api/memory, /api/skills och /api/schedule saknade metodvillkor. De fångade POST/DELETE och returnerade listor istället för att spara eller radera. Alla tre rättade till GET-only; nya verkliga HTTP-tester verifierar minnes-spara/sök/glöm, skill-fil, framtida schemaläggning/listning/radering och felaktig tid (422). 46 riktade tester är gröna.
+- MEMORY-01: remember/forget skrev gamla minnen utan listprefix, medan facts-läsaren ignorerade sådana rader. Äldre minnen försvann därmed ur läsningen efter ändring. Skrivning bevarar nu prefix; läsning återhämtar äldre prefixlösa rader. Regressionstest med omstart/återläsning tillagt.
+- /api/memory forget svarade dessutom ok som ett nästlat objekt. Returnerar nu normalt booleskt ok med removed.
+- Browser-testet passerar igen, inklusive verklig demo-inferens/stopp, felaktig Stop-ack, /budget cap och Workspace run=2. Ingen betald inferens.
+- CI kompletterad med hela npm test även på Windows, utöver Linux-svit, Edge browser-tool E2E och installationstester.
