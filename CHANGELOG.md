@@ -5,6 +5,42 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 — Del 4C: hard mission limits (retry/budget/timeout) with LIMIT markers
+
+### Changed
+- **One limits policy per mission.** `missionLimits(cfg)` reads
+  `mission.limits.repairRounds` (default 1, clamped 0..3), `.timeoutMs` (0=off,
+  clamped to 1 h) and `.tokenBudget` (0=off) from `config.js` DEFAULTS. The model
+  never limits itself; every cap is enforced by code.
+- **Token budget is charged against real measured usage.** Every worker call
+  (initial + repair) sums provider usage; crossing the cap aborts the swarm
+  (AbortController), prevents not-yet-started workers, and marks the run
+  `[LIMIT:BUDGET]` in the summary. `subagentWorker` now forwards `usage` so the
+  accounting is real, not estimated.
+- **Repair loop is bounded by config, capped at 3.** After the configured rounds a
+  dead part fails HONESTLY with `[LIMIT:RETRY]` — no infinite repair, no silent
+  pass. Mid-loop budget/timeout interrupts stop repairs with their own marker.
+- **Wall-clock timeout reaches the swarm.** `runSwarm` gets both the deadline and
+  the abort signal; parts blocked by the deadline read `↷ n: blocked — deadline
+  [LIMIT:TIMEOUT]`. Return object carries `limits`, `limitsHit`, `usedTokens`.
+- **Parser robustness (found by the limit tests):** `file_contains` needle
+  detection now accepts "the exact phrase/line/..." wordings, not only
+  "the word/text/string".
+
+### Verified
+- `node --test test/mission.test.js` → 15/15. t13: 3 scripted lying rounds with
+  repairRounds=2 consume exactly 4 worker calls and fail with `[LIMIT:RETRY]`;
+  t14: token cap 40 against a ~600-char answer stops worker #2 before it starts,
+  `usedTokens > 40` measured from real usage; t15: 120 ms cap cuts a ~1.7 s mock
+  stream, wall time < 1500 ms, nothing marked ok after the deadline.
+- **Discrimination:** sabotaging the budget gate turns t14 red; unclamping the
+  repair-round bound turns t13 red; removing deadline/signal pass-through turns
+  t15 (and the budget-abort dependent) red; sane baseline 15/15.
+- Full suite 335/0/7, i18n 0 Swedish literals in 90 files, bench 7/7 with
+  byte-identical token spend (24399 tokens, 22 calls) — caps cost nothing when
+  not triggered.
+
+
 ## 2026-10-18 (evening, part 4) — Del 4A: verification contracts + evidence provenance
 
 ### Changed

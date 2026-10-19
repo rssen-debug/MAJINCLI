@@ -6,10 +6,9 @@ autopilot/teamwork/dashboard additions).
 
 ## Hög prioritet
 
-- **Completion matrix: 45/100** (`docs/COMPLETION_MATRIX.md`). Del 1D + **Del 4A** SHIPPED
-  (contracts engine: file_exists/file_contains/count verified in CODE, repair-before-fail,
-  provenance strings; mission 12/12). Next in point-density order: **Del 4C**
-  (hard retry/budget/timeout caps), **Del 3C/D/E** (transient recovery, corruption
+- **Completion matrix: 49/100** (`docs/COMPLETION_MATRIX.md`). Del 1D + **Del 4A + Del 4C** SHIPPED
+  (contracts engine; hard retry/budget/timeout limits with LIMIT markers; mission 15/15).
+  Next in point-density order: **Del 3C/D/E** (transient recovery, corruption
   adversarial, measured parallel benefit), **Del 2C** (clarify + replan), **Del 1E**
   (live two-provider handoff — BLOCKED in sandbox: no second live provider, ollama
   wiped by snapshot).

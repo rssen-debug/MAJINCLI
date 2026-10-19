@@ -12,7 +12,7 @@ process.env.MAJIN_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-mission-')
 
 const { shouldMission, compileMission, runMission } = await import('../src/core/mission.js');
 const { createRuntime } = await import('../src/core/runtime.js');
-const { setScript } = await import('../src/core/provider/mock.js');
+const { setScript, lastCalls, resetCalls } = await import('../src/core/provider/mock.js');
 
 test('shouldMission: numrerad eller tydligt flerdelad uppgift känns igen — deskriptivt, aldrig godtyckligt', () => {
   const listig = shouldMission('1. Skriv filen a2.txt\n2. Rensa temporbobbelsen\n3. Rapportp överresultat till mig');
@@ -292,5 +292,95 @@ test('VERIFICATION CONTRACTS: count — correct first answer verified WITHOUT ne
   const m = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'ctrC', input: '1. report the number of files in store/\n2. tell me it is done', emit: () => {}, capOverride: 1 });
   assert.equal(m.repairedCount, 0, 'ärlig worker behöver ingen repair');
   assert.equal(m.verifiedCount, 1);
+  await rt.shutdown();
+});
+
+/* ---------------- Del 4C: hard limits respected, in code ---------------- */
+
+test('PRODUCTION LIMITS: worker-calls never exceed rounds even with a permanently lying worker [LIMIT:RETRY]', async () => {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-4c-retry-'));
+  fs.writeFileSync(path.join(ws, 'song.txt'), 'Darwin was a naturalist.'); /* needle never contains "survival of the fittest" */
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  rt.cfg.patch({
+    models: { provider: 'demo', routes: { tasks: 'demo/demo-fast', tools: 'demo/demo-fast', chat: 'demo/demo-fast' } },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
+    guard: { mode: 'off' }, moa: { policy: 'off' }, workspace: ws,
+    mission: { limits: { repairRounds: 2, timeoutMs: 0, tokenBudget: 99999999 } },
+  }, { persist: false });
+  const dag = JSON.stringify({ nodes: [
+    { id: 'p1', input: 'write song.txt that contains the exact phrase "survival of the fittest"', deps: [], estMs: 1000 },
+    { id: 'p2', input: 'say done in three words, no more', deps: [], estMs: 1000 },
+  ] });
+  setScript('mission:compile', [{ text: dag }]);
+  /* initial + 2 lying repairs — the needle is never written, nothing can save p1 */
+  setScript('sub:tasks', [
+    { text: 'I wrote the phrase survival of the fittest into song.txt.' },
+    { text: 'done done done.' },
+    { text: 'Repair 1 done: song.txt now says survival of the fittest.' },
+    { text: 'Repair 2 done: song.txt now says survival of the fittest.' },
+    { text: 'SHOULD NEVER BE CONSUMED — more repairs would violate the cap.' },
+  ]);
+  resetCalls();
+  const m = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'limR', input: '1. write song.txt that contains the exact phrase "survival of the fittest"\n2. tell me it is done', emit: () => {}, capOverride: 1 });
+  const taskCalls = lastCalls().filter((c) => c.key === 'sub:tasks').length;
+  assert.equal(taskCalls, 4, `expected 1 initial + 1 trivial + 2 repairs = 4 worker calls, got ${taskCalls} — cap not enforced`);
+  assert.match(m.textSummary.join('\n'), /\[LIMIT:RETRY\]/, 'summary must carry the LIMIT:RETRY marker');
+  assert.ok(m.limitsHit.includes('retry'), JSON.stringify(m.limitsHit));
+  assert.equal(m.failCount, 1, 'p1 must fail honestly after the cap, never loop forever');
+  await rt.shutdown();
+});
+
+test('PRODUCTION LIMITS: token budget aborts the mission mid-flight with [LIMIT:BUDGET] and no overspend beyond the abort point', async () => {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-4c-budget-'));
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  rt.cfg.patch({
+    models: { provider: 'demo', routes: { tasks: 'demo/demo-fast', tools: 'demo/demo-fast', chat: 'demo/demo-fast' } },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
+    guard: { mode: 'off' }, moa: { policy: 'off' }, workspace: ws,
+    mission: { limits: { repairRounds: 1, timeoutMs: 0, tokenBudget: 40 } }, /* instantly exceeded by the first fat answer */
+  }, { persist: false });
+  const dag = JSON.stringify({ nodes: [
+    { id: 'p1', input: 'say done in three words, no more', deps: [], estMs: 1000 },
+    { id: 'p2', input: 'say done in three words, no more', deps: [], estMs: 1000 },
+  ] });
+  setScript('mission:compile', [{ text: dag }]);
+  const fat = 'token '.repeat(120); /* ~600 chars => mock usage well over the 40-token budget */
+  setScript('sub:tasks', [
+    { text: fat },
+    { text: 'SECOND NODE MUST NEVER RUN — the budget abort must stop the swarm.' },
+  ]);
+  resetCalls();
+  const m = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'limB', input: '1. summarize the project journal\n2. summarize the token ledger', emit: () => {}, capOverride: 1 });
+  const taskCalls = lastCalls().filter((c) => c.key === 'sub:tasks').length;
+  assert.equal(taskCalls, 1, `budget abort must stop the second worker from ever starting; got ${taskCalls} calls`);
+  assert.ok(m.limitsHit.includes('budget'), JSON.stringify(m.limitsHit));
+  assert.match(m.textSummary.join('\n'), /\[LIMIT:BUDGET\]/, 'summary must carry the LIMIT:BUDGET marker');
+  assert.ok(m.usedTokens > 40, `usedTokens should reflect the real measured spend, got ${m.usedTokens}`);
+  await rt.shutdown();
+});
+
+test('PRODUCTION LIMITS: a mission that overruns its wall-clock budget is stopped by [LIMIT:TIMEOUT], not by waiting for the worker', async () => {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-4c-time-'));
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  rt.cfg.patch({
+    models: { provider: 'demo', routes: { tasks: 'demo/demo-fast', tools: 'demo/demo-fast', chat: 'demo/demo-fast' } },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
+    guard: { mode: 'off' }, moa: { policy: 'off' }, workspace: ws,
+    mission: { limits: { repairRounds: 1, timeoutMs: 120, tokenBudget: 0 } }, /* mock sleeps ~4 ms per word; the scripted answer is 400+ words */
+  }, { persist: false });
+  const dag = JSON.stringify({ nodes: [
+    { id: 'p1', input: 'say done in three words, no more', deps: [], estMs: 1000 },
+    { id: 'p2', input: 'say done in three words, no more', deps: [], estMs: 1000 },
+  ] });
+  setScript('mission:compile', [{ text: dag }]);
+  const slow = 'word '.repeat(420); /* ≈1.7 s of mock streaming => far past the 120 ms cap */
+  setScript('sub:tasks', [{ text: slow }, { text: 'MUST NEVER RUN — deadline already fired.' }]);
+  const t0 = Date.now();
+  const m = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'limT', input: '1. summarize the project journal\n2. summarize the token ledger', emit: () => {}, capOverride: 1 });
+  const wall = Date.now() - t0;
+  assert.ok(m.limitsHit.includes('timeout'), JSON.stringify(m.limitsHit));
+  assert.match(m.textSummary.join('\n'), /\[LIMIT:(TIMEOUT|BUDGET)\]/, 'summary must name the limit that fired');
+  assert.ok(wall < 1500, `mission returned in ${wall} ms — the run must be cut by the deadline, not by the slow worker (~1.7 s)`);
+  assert.equal(m.okCount, 0, 'nothing may be marked ok after the deadline fired mid-flight');
   await rt.shutdown();
 });

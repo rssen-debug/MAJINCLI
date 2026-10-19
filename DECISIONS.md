@@ -310,3 +310,18 @@ allowed to contradict a test.
 - **`count` contracts only bind when the brief targets the workspace.** A mission like
   "how many moons has Jupiter" has no verifiable `count`; the engine only fires when the
   brief names a local directory, avoiding false repair rounds on trivia.
+
+## 2026-10-19 — Del 4C: one limits policy, charged on measured usage, markers are contract-level honesty
+
+- **The model never limits itself.** retry/timeout/budget live in one object
+  (`missionLimits`) with hard clamps in code. A safety gate that is a prompt is a
+  suggestion; a gate in the scheduler is a guarantee.
+- **Budget counts provider usage, not chars-in-my-head.** subagentWorker forwards
+  `usage`; repairs are charged to the same pool. Mock usage (`reported:false`) is
+  accepted in tests exactly because the wiring is what is under test.
+- **Exceeded caps must be visible to the user.** `[LIMIT:RETRY]` explains WHY a
+  part failed differently than `verification failed` — the difference between
+  "the worker was wrong" and "we chose safety" is product-trust material.
+- **Abort marks, it does not fabricate.** Parts killed by budget/timeout end
+  `blocked` with a LIMIT tag, never `ok`. A limit firing mid-flight must never
+  retro-certify half-finished work.
