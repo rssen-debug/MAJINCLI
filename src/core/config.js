@@ -199,7 +199,7 @@ export const DEFAULTS = {
     density: 'comfortable',
     autoOpen: true,
   },
-  budget: { mode: 'track', monthlyUsd: 0, warnAt: 0.8 },
+  budget: { mode: 'track', monthlyUsd: 0, warnAt: 0.8, perTaskUsd: 0 },
   /* Del 4C: hard caps that code enforces on every mission run. 0 = off for the
      time/token caps; repairRounds is the verify->repair ceiling (never infinite). */
   mission: { limits: { repairRounds: 1, timeoutMs: 0, tokenBudget: 0, transientRetries: 1, replanRounds: 1 } },

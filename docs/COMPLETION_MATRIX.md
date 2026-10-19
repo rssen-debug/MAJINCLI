@@ -5,7 +5,7 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 56 / 100** (verified against main (squash), v0.6.3-rc, 2026-10-19).
+**Score so far: 59 / 100** (verified against the Del 6A PR head, 2026-10-19).
 
 | Phase | Max | Earned |
 |---|---:|---:|
@@ -14,14 +14,14 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 3. HYPERSWARM | 10 | 8 |
 | 4. Reality Engine | 16 | 12 |
 | 5. Browser & Computer Use | 10 | 2 |
-| 6. GENESIS ZERO & Cost | 9 | 3 |
+| 6. GENESIS ZERO & Cost | 9 | 6 |
 | 7. Skill Compiler | 8 | 2 |
 | 8. UI & Imagination | 8 | 0 |
 | 9. Real-World Workflows | 5 | 4 |
 | 10. Security & Privacy | 5 | 3 |
 | 11. Windows & Updates | 4 | 2 |
 | 12. Final Acceptance | 3 | 0 |
-| **TOTAL** | **100** | **56** |
+| **TOTAL** | **100** | **59** |
 
 ---
 
@@ -73,11 +73,11 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 5D | 2 | Real Windows computer-use scenarios | — | needs Windows runner | — | UNVERIFIED | 2026-10-18 |
 | 5E | 2 | Multi-step real website workflow without unverified completion claims | `jobs.test.js` has form-fill state machine; live probe gated | — | — | UNVERIFIED | 2026-10-18 |
 
-## DEL 6 — GENESIS ZERO & Cost (3/9)
+## DEL 6 — GENESIS ZERO & Cost (6/9)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
-| 6A | 3 | Real per-task usage + strict budget enforcement | Usage is recorded (`usage.js`), but there is no enforced per-task/monthly cap; "unknown price must not read as zero" untested | — | — | UNVERIFIED | 2026-10-18 |
+| 6A | 3 | Real per-task usage + strict budget enforcement | One guard `budgetGate` in `src/core/loop.js` at BOTH spots the loop can spend: monthly ledger pre-check (over-cap PAID dies before the call; free routes keep working; unknown price under cap → "unknown never spends") and per-task check AFTER each measured step (`budget.perTaskUsd`, default 0=off, fires only on REAL measured cost — 10M free tokens trip nothing). Turn usage carries `priceKnown` via `priceKnownForRoute` (priced/local/mock/0-priced = KNOWN; priceless cloud = UNKNOWN); ledger keeps `unpricedCount` so unknown never reads as known-$0. `test/budget.test.js` 5/5: gate-level synthetic routes; live loop with a deliberately expensive mock route ($1e9/Mtok) stopped after exactly 1 counted call with `stopReason: task-budget` and the measured $ number in the stop message; same workload without cap runs both steps (control). Discrimination: per-task gate off → t2+t3 red; monthly gate off → t1 red; price-always-known → t5 red; gate-on-tokens-not-cost → free-tally assertion red. | mock | PR #45 | PASS | 2026-10-19 |
 | 6B | 3 | Model profiling, routing + single-model guarantee | `test/singlemodel.test.js` 3/3 (one chosen model covers all routes, MOA off); `test/subset.test.js` tool-subset selection | mock | main line | PASS | 2026-10-18 |
 | 6C | 3 | Comparable verified quality at lower measured cost | Free opencode models verified tasks at $0, but no same-task matrix vs other models | opencode free | — | UNVERIFIED | 2026-10-18 |
 

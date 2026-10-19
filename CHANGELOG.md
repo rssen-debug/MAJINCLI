@@ -5,6 +5,37 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 (late evening) — Del 6A: one budget guard, measured per-task caps, honest unknown prices
+
+### Changed
+- **`budgetGate` (exported from `src/core/loop.js`) is the single guard called
+  at the only two places the loop can spend**: before a provider call (monthly
+  ledger — behaviour unchanged for users) and after every measured step
+  (the new per-task cap `budget.perTaskUsd`, default 0 = off). Only REAL
+  MEASURED cost trips a task cap: ten million free tokens trip nothing.
+- **Unknown price never reads as $0.** `priceKnownForRoute` (pricing.js) marks
+  a route priced/local/mock/$0-priced as KNOWN, priceless cloud models as
+  UNKNOWN; the loop exposes it as `usage.priceKnown` per turn, and the
+  existing ledger's `unpricedCount` keeps a count so a $0 number is never
+  presented as a known price.
+- **Hard-stop honesty.** A stopped task ends `fatal: true`,
+  `errorKind: 'budget'`, `stopReason: 'task-budget'`, and its stop message
+  names the cap AND the measured number
+  (`This task's budget of $0.5 is spent ($2.3100 measured so far)`).
+
+### Verified
+- `node --test test/budget.test.js` → 5/5: synthetic gate matrix (monthly
+  over/under, unknown under cap, free routes, track-mode), live loop with a
+  deliberately expensive mock route stopped after EXACTLY one counted call,
+  same-workload control without cap (both steps complete), unknown-price
+  honesty pins.
+- **Discrimination:** per-task gate off → t2+t3 red; monthly gate off → t1
+  red; price-always-known → t5 red; gate-on-tokens-not-cost → free-tally
+  assertion red; sane baseline 5/5.
+- Full suite 350/0/7, i18n clean, bench 7/7 with IDENTICAL token spend
+  (24400/22 — the guard costs nothing while off).
+
+
 ## 2026-10-19 (evening, part 2) — Del 2C: clarify-before-touch, failure-driven replan, carried objectives
 
 ### Changed

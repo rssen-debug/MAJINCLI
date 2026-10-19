@@ -8,7 +8,7 @@ import { complete, explainError } from './provider/chat.js';
 import { routeFor } from './router.js';
 import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
-import { isFreeRoute } from './pricing.js';
+import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 
 /*
  * Väljer vilka scheman modellen får se detta steg. Standard: hela den synliga
@@ -22,6 +22,26 @@ function pickSchemas(registry, ctx) {
   if (!Array.isArray(names) || !names.length) return all;
   const wanted = new Set(names.filter((n) => registry.has(n)));
   return all.filter((t) => wanted.has(t.name));
+}
+
+/** Del 6A: ONE guard, two call sites. Monthly ledger check before a call costs
+   anything; per-task check after each measured step. Returns null to proceed,
+   or a result object hard-stopping the loop HONESTLY (errorKind 'budget'). */
+export function budgetGate({ cfg, usageCtx = null, route, tally = null }) {
+  if (usageCtx?.overBudget?.() && cfg.get('budget.mode') === 'cap' && !isFreeRoute(route)) {
+    const capUsd = Number(cfg.get('budget.monthlyUsd')) || 0;
+    const human = route.pricing && (route.pricing.in || route.pricing.out)
+      ? `The monthly budget of $${capUsd} is reached — paid models stop here. Free models and your own server still answer, or say "budget <new> USD" to raise it.`
+      : `The monthly budget of $${capUsd} is reached, and "${route.model || 'this model'}" has no known price — under a cap, unknown never spends. Free models and your own server still answer, or say "budget <new> USD" to raise it.`;
+    return { kind: 'monthly', text: human, error: 'budget cap reached', errorKind: 'budget', fatal: true, stopReason: 'budget' };
+  }
+  /* per-task: ONLY real measured cost can trip this — free routes spend $0 and never do. */
+  const perTask = Number(cfg.get('budget.perTaskUsd')) || 0;
+  if (tally && perTask > 0 && cfg.get('budget.mode') === 'cap' && (tally.costUsd || 0) > perTask) {
+    const human = `This task's budget of $${perTask} is spent ($${(tally.costUsd || 0).toFixed(4)} measured so far) — the task stops here instead of compounding silently. Raise it with "budget.task <new> USD" or run a cheaper model.`;
+    return { kind: 'task', text: human, error: 'task budget cap reached', errorKind: 'budget', fatal: true, stopReason: 'task-budget' };
+  }
+  return null;
 }
 
 export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = () => {}, signal, maxSteps, usage, ctx, allowTools = true, label = 'agent', providerErrorCap = 4, providerRetries = null }) {
@@ -47,15 +67,13 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     if (!route) throw new Error('no provider with an API key yet — open the Providers card, pick one and paste the key');
     /* A cap is a promise: over the monthly line, PAID calls stop right here,
        before they cost anything. Free routes keep working. */
-    if (usage?.overBudget?.() && cfg.get('budget.mode') === 'cap' && !isFreeRoute(route)) {
-      const capUsd = Number(cfg.get('budget.monthlyUsd')) || 0;
-      const human = route.pricing && (route.pricing.in || route.pricing.out)
-        ? `The monthly budget of $${capUsd} is reached — paid models stop here. Free models and your own server still answer, or say "budget <new> USD" to raise it.`
-        : `The monthly budget of $${capUsd} is reached, and "${route.model || 'this model'}" has no known price — under a cap, unknown never spends. Free models and your own server still answer, or say "budget <new> USD" to raise it.`;
-      bus.warn('loop.budget', { label, cap: capUsd });
-      onEvent({ type: 'error', label, where: 'budget', message: human, kind: 'budget' });
-      return { text: human, steps, toolLog, usage: tally, error: 'budget cap reached', errorKind: 'budget', fatal: true, stopReason: 'budget' };
+    const monthlyBlock = budgetGate({ cfg, usageCtx: usage, route });
+    if (monthlyBlock) {
+      bus.warn('loop.budget', { label, kind: monthlyBlock.kind });
+      onEvent({ type: 'error', label, where: 'budget', message: monthlyBlock.text, kind: 'budget' });
+      return { text: monthlyBlock.text, steps, toolLog, usage: tally, error: monthlyBlock.error, errorKind: 'budget', fatal: true, stopReason: monthlyBlock.stopReason };
     }
+
     const sentTools = allowTools ? pickSchemas(registry, ctx) : [];
     onEvent({ type: 'step', label, step: steps, of: limit, job: stepJob, model: route.ref, escalated, toolsSent: sentTools.length, toolChars: sentTools.reduce((a, t) => a + t.description.length + JSON.stringify(t.parameters).length, 0) });
 
@@ -101,6 +119,13 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     tally.input += res.usage?.input || 0;
     tally.output += res.usage?.output || 0;
     tally.costUsd += res.usage?.costUsd || 0;
+    tally.priceKnown = priceKnownForRoute(route);
+    const taskBlock = budgetGate({ cfg, usageCtx: null, route, tally });
+    if (taskBlock) {
+      bus.warn('loop.budget.task', { label, costUsd: tally.costUsd, steps });
+      onEvent({ type: 'error', label, where: 'budget', message: taskBlock.text, kind: 'budget' });
+      return { text: taskBlock.text, steps, toolLog, usage: tally, error: taskBlock.error, errorKind: 'budget', fatal: true, stopReason: taskBlock.stopReason };
+    }
     usage?.record({ job: `${label}:${stepJob}`, ref: res.route || route.ref, usage: res.usage, ms: res.elapsedMs, escalated, unpriced: !route.pricing && !isFreeRoute(route) });
     answer = res.text || answer;
     onEvent({ type: 'usage', label, step: steps, model: route.ref, tokensIn: res.usage?.input || 0, tokensOut: res.usage?.output || 0, costUsd: res.usage?.costUsd || 0, ms: res.elapsedMs });
