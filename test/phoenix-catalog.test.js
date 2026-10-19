@@ -29,3 +29,13 @@ test('catalog USD per million conversion and unknown sorting', () => {
   assert.equal(models[1].input, 2); assert.equal(models[1].output, 8);
   assert.equal(filterCatalog(models, { sort: 'price' })[0].id, 'paid');
 });
+
+
+test('capability filters intersect at the 128k boundary; unknown capabilities stay excluded', () => {
+  const models = normalizeCatalog({ data: [null, { id: 'all', context_length: 128000, supported_parameters: ['tools'], architecture: { input_modalities: ['image'] } },
+    { id: 'short', context_length: 127999, supported_parameters: ['tools'], architecture: { input_modalities: ['image'] } },
+    { id: 'text', context_length: 200000, supported_parameters: ['tools'] },
+    { id: 'malformed', supported_parameters: {}, pricing: { prompt: false, completion: false } }] });
+  assert.deepEqual(filterCatalog(models, { tools: true, vision: true, longContext: true }).map(m => m.id), ['all']);
+  assert.equal(models.find(m => m.id === 'malformed').free, false);
+});

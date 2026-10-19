@@ -5,6 +5,21 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 — Aurora Studio UI/UX — v0.9.0
+
+### Changed
+- Refined graphite/pink visual system, static luminous home emblem, compact organic loading states and one aligned conversation/composer column.
+- Contextual Workspace: Activity, Files, Preview and Settings. The existing advanced tools remain accessible without turning the chat into a dashboard.
+- Interactive task visualization from actual API snapshots, per-task Stop, real file inventory, sandboxed read-only preview, original-file download and resizable preview width.
+- Model capability filters (Tools, Vision, 128k+), model detail view, session search, keyboard navigation and narrow-window controls.
+
+### Fixed
+- Immediate Escape/open race in the asynchronous model picker; stale loads cannot repaint a dismissed dialog.
+- Theme-switch contrast flash; late events changing failed/stopped runs into active/success states; sidebar/composer alignment when contextual panels open.
+
+### Validation
+- Windows Edge UI acceptance, 37 focused tests, reduced-motion checks, actual file download/preview and live catalog access. See docs/MAJIN_AURORA_HANDOVER.md for test fixtures, evidence and scope limits.
+
 ## 2026-10-19 — Phoenix UI/UX — v0.8.0
 
 ### Changed

@@ -79,10 +79,13 @@ async function paintRail(st) {
   for (const it of list) {
     if (seen.has(it.id)) continue;
     seen.add(it.id);
-    const n = el('button', 'sess' + (it.id === S.session ? ' act' : ''), esc(it.id.length > 22 ? it.id.slice(0, 21) + '…' : it.id) + ' <span class="kv">' + (it.messages || 0) + '</span>');
+    const label = it.id === 'desktop' ? 'General' : it.lastText || 'New conversation';
+    const n = el('button', 'sess' + (it.id === S.session ? ' act' : ''), '<span class="session-label">' + esc(String(label).slice(0, 80)) + '</span>');
+    n.dataset.search = (label + ' ' + it.id).toLowerCase();
     n.title = (it.lastText || '') + '\n' + (it.mtime || '');
     n.onclick = () => {
       if (S.busy) { toast('Stop the current task before switching chats.'); return; }
+      if (typeof closeMobileRail === 'function') closeMobileRail();
       S.session = it.id;
       box.querySelectorAll('.sess').forEach((x) => x.classList.remove('act'));
       n.classList.add('act');
@@ -90,6 +93,7 @@ async function paintRail(st) {
     };
     box.append(n);
   }
+  if (window.MAJIN_STUDIO) window.MAJIN_STUDIO.filterChats();
   if (st.schedule && st.schedule.length) {
     $('sched').innerHTML = st.schedule
       .map((j) => `<div><b>${esc(j.name || j.id)}</b> · ${esc(j.when || '')}<br><span class="kv">next ${esc(j.nextRunHuman || '')}${j.paused ? ' · paused' : ''}${j.lastStatus ? ' · ' + esc(j.lastStatus) : ''}</span></div>`)

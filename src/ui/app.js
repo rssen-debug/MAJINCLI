@@ -166,6 +166,7 @@ function moaGauge(ev) {
 
 /* ------------------------------ event pump ------------------------------ */
 function onEvent(ev) {
+  if (window.MAJIN_STUDIO) window.MAJIN_STUDIO.onEvent(ev);
   if (ev.type === 'error') { err(ev.message + (ev.hint ? '\n→ ' + ev.hint : '')); return; }
   if (S.failed && ['delta', 'thinking', 'answer'].includes(ev.type)) return;
   if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.onEvent(ev); // Live Agent Vision — real events only
@@ -191,7 +192,7 @@ function onEvent(ev) {
       appendDelta(ev.text);
       break;
     case 'thinking':
-      setThinking(ev.text);
+      if (!window.MAJIN_STUDIO) setThinking(ev.text);
       break;
     case 'tool':
       S.activeTool = toolRow(ev.name);
@@ -207,17 +208,20 @@ function onEvent(ev) {
       break;
     }
     case 'escalate':
-      note('escalating → ' + ev.to + ' (' + (ev.why || 'errors') + ')');
+      if (window.MAJIN_STUDIO) setStatus('Switching model');
+      else note('escalating → ' + ev.to + ' (' + (ev.why || 'errors') + ')');
       break;
     case 'compact':
-      note('compacting context (' + ev.tokens + ' tok)');
+      if (window.MAJIN_STUDIO) setStatus('Updating context');
+      else note('compacting context (' + ev.tokens + ' tok)');
       break;
     case 'plan':
       renderPlan(ev.plan);
       break;
     case 'config':
       S.st = null;
-      note('config: ' + (ev.notes || []).join(' · '));
+      if (window.MAJIN_STUDIO) toast('Settings updated');
+      else note('config: ' + (ev.notes || []).join(' · '));
       refresh();
       break;
     case 'config_error':
@@ -270,7 +274,6 @@ function closeAnswer(ev) {
 
 /* --------------------------------- send --------------------------------- */
 async function send(text) {
-  if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.reset(); // a new run gets a fresh canvas
 
   const input = String(text || '').trim();
   if (!input) return false;
@@ -283,6 +286,8 @@ async function send(text) {
      must NEVER wait for the first one. The /stop command above still reaches
      the running task. */
   if (S.busy) return parallelTask(input);
+  if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.reset(); // a new run gets a fresh canvas
+  if (window.MAJIN_STUDIO) window.MAJIN_STUDIO.setState('connecting');
   S.failed = false; S.lastInput = input; S.completed = false; S.readingHistory = false;
   addMsg('user', 'You', input);
   $('input').value = '';
@@ -680,6 +685,10 @@ async function deckTick() {
   try {
     d = await (await fetch('/api/tasks?t=' + encodeURIComponent(TOKEN), { headers: { authorization: 'Bearer ' + TOKEN } })).json();
   } catch { d = null; }
+  if (window.MAJIN_STUDIO) {
+    if (d && Array.isArray(d.tasks)) window.MAJIN_STUDIO.updateTasks(d.tasks);
+    else window.MAJIN_STUDIO.tasksUnavailable();
+  }
   const active = d && Array.isArray(d.tasks) ? d.tasks.filter((t) => ['running', 'waiting', 'paused'].includes(t.status)) : [];
   if (!active.length) { elx.hidden = true; return; }
   elx.hidden = false;
@@ -975,6 +984,7 @@ async function refresh(quiet) {
     if (window.MAJIN_ONBOARD) window.MAJIN_ONBOARD.maybe(S.st); // first-run wizard + model chip
     if (window.paintPanel) window.paintPanel(st);
     paintRail(st);
+    if (window.MAJIN_STUDIO) window.MAJIN_STUDIO.setUsage(st.usage || {});
     if (!quiet) {
       /* tyst */
     }
@@ -996,26 +1006,23 @@ function showWelcome() {
   const welcome = document.createElement('section');
   welcome.id = 'home';
   welcome.className = 'home';
-  const image = document.createElement('img');
-  image.className = 'home-mark';
-  image.src = '/logo.png';
-  image.alt = '';
-  welcome.append(image);
+  const emblem = el('div', 'home-emblem', '<span class="living-orb" aria-hidden="true"><i></i><i></i><i></i></span>');
+  welcome.append(emblem, el('span', 'eyebrow', 'A SPACE FOR POSSIBILITY'));
   const title = document.createElement('h2');
-  title.append(document.createTextNode('What can I help you '));
+  title.append(document.createTextNode('What will you '));
   const strong = document.createElement('strong');
-  strong.textContent = 'achieve?';
+  strong.textContent = 'bring to life?';
   title.append(strong);
   welcome.append(title);
   const sub = document.createElement('p');
-  sub.textContent = 'A little curiosity. A big idea. Where shall we start?';
+  sub.textContent = 'Think freely. Build boldly. Make it yours.';
   welcome.append(sub);
   const examples = document.createElement('div');
   examples.className = 'home-examples';
   for (const prompt of ['Explore an idea', 'Build something', 'Help me research']) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.textContent = prompt + ' ↗';
+    button.append(el('span', 'prompt-spark', prompt === 'Explore an idea' ? '✧' : prompt === 'Build something' ? '⌘' : '↗'), document.createTextNode(prompt));
     button.onclick = () => { $('input').value = prompt; $('input').focus(); };
     examples.append(button);
   }
@@ -1023,14 +1030,22 @@ function showWelcome() {
   panel.append(welcome);
 }
 
+function closeMobileRail() {
+  if (matchMedia('(max-width:1000px)').matches) {
+    document.body.classList.remove('mobile-rail');
+    document.body.classList.add('rail-off');
+    $('b-rail').setAttribute('aria-expanded', 'false');
+  }
+}
 $('new-chat').onclick = async () => {
   if (S.busy) { toast('Stop the current task before starting a new chat.'); return; }
+  closeMobileRail();
   S.session = 'chat-' + Date.now().toString(36);
   $('input').value = ''; autoGrow();
   await loadHistory(); $('input').focus();
 };
-$('browse-models').onclick = () => window.MAJIN_ONBOARD.togglePicker();
-$('manage-providers').onclick = () => window.MAJIN_ONBOARD.reopen();
+$('browse-models').onclick = () => { closeMobileRail(); window.MAJIN_ONBOARD.togglePicker(); };
+$('manage-providers').onclick = () => { closeMobileRail(); window.MAJIN_ONBOARD.reopen(); };
 $('input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -1040,20 +1055,27 @@ $('input').addEventListener('keydown', (e) => {
 });
 $('send').onclick = () => (S.busy ? stop() : send($('input').value));
 $('input').addEventListener('input', autoGrow);
-$('b-rail').onclick = () => document.body.classList.toggle('rail-off');
+$('b-rail').onclick = () => {
+  if (matchMedia('(max-width:1000px)').matches) {
+    const open = document.body.classList.toggle('mobile-rail');
+    document.body.classList.toggle('rail-off', !open);
+    $('b-rail').setAttribute('aria-expanded', String(open));
+  } else { const off = document.body.classList.toggle('rail-off'); $('b-rail').setAttribute('aria-expanded', String(!off)); }
+};
 $('c-model').onclick = () => window.MAJIN_ONBOARD && window.MAJIN_ONBOARD.togglePicker();
 $('b-quit').onclick = async () => {
-  if ($('b-quit').dataset.arm !== '1') { $('b-quit').dataset.arm = '1'; $('b-quit').textContent = 'quit?'; setTimeout(() => { $('b-quit').dataset.arm = ''; $('b-quit').textContent = '⏻'; }, 3000); return; }
+  if ($('b-quit').dataset.arm !== '1') { $('b-quit').dataset.arm = '1'; $('b-quit').textContent = 'quit?'; setTimeout(() => { $('b-quit').dataset.arm = ''; $('b-quit').textContent = window.MAJIN_STUDIO ? 'Quit MAJIN' : '⏻'; }, 3000); return; }
   $('b-quit').textContent = 'closing…';
   try { await fetch('/api/shutdown?t=' + encodeURIComponent(TOKEN), { method: 'POST' }); } catch { /* it goes away either way */ }
   try { window.close(); } catch { /* browsers may refuse */ }
 };
 $('b-expert').onclick = () => {
+  if (window.MAJIN_STUDIO) { window.MAJIN_STUDIO.open('settings'); return; }
   const simple = document.body.classList.toggle('simple');
   $('b-expert').classList.toggle('on', !simple);
   try { localStorage.setItem('majin.expert', simple ? '0' : '1'); } catch { /* private mode */ }
 };
-try { if (localStorage.getItem('majin.expert') === '1') { document.body.classList.remove('simple'); $('b-expert').classList.add('on'); } } catch { /* private mode */ }
+try { if (!window.MAJIN_STUDIO && localStorage.getItem('majin.expert') === '1') { document.body.classList.remove('simple'); $('b-expert').classList.add('on'); } } catch { /* private mode */ }
 $('b-panel').onclick = () => {
   document.body.classList.toggle('pan-off');
   $('b-panel').classList.toggle('on');
@@ -1075,6 +1097,8 @@ $('b-test').onclick = async () => {
 };
 $('mic').onclick = micToggle;
 $('b-theme').onclick = () => {
+  document.body.classList.add('theme-changing');
+  requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('theme-changing')));
   const light = document.body.classList.toggle('light');
   try { localStorage.setItem('majin.theme', light ? 'light' : 'dark'); } catch { /* private mode */ }
 };
