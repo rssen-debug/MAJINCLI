@@ -25,8 +25,8 @@
   "implementationScore": 81,
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
-  "nextAction": "P1: durable journal / context / resume \u2014 plan-load in normal turn (agent.js:187 uses plans.get, not loadPlan), setPlan->persistPlan wiring with honest failure, handoff producer/consumer call sites + consume-once guard (engine only); then P2 adapter capacity/vision (Anthropic image blocks), P3 Windows control (FlaUI/UFO PoC first). UI/Aurora stays with the UI agent branch.",
-  "version": "0.9.4",
-  "milestone": "P0 honest persistence + per-chat routing merged (PR #63), rebased onto UI-agent main v0.9.3",
-  "branch": "main-post-merge"
+  "nextAction": "P2: adapter capacity + honest vision (Anthropic image blocks drop + screen.capture FromLTRB + truthful capture receipt).",
+  "version": "0.9.5",
+  "milestone": "P1 durable journal/resume: plan hydration from disk, exact-once handoff, producer wiring on route switch, served-route journal",
+  "branch": "feature/p1-journal-resume (in PR)"
 }

@@ -183,10 +183,13 @@ function fallback(cfg, job) {
 }
 
 /** Which provider/model actually serves this turn, plus escalation state. */
-export function plan(cfg, decision) {
+export function plan(cfg, decision, opts = {}) {
   const job = decision.job;
-  const route = routeFor(cfg, job);
-  const finalRoute = routeFor(cfg, 'final');
+  /* P1: the TURN-level plan must see the same per-chat binding the loop
+     does — otherwise the route event, MOA routing and served-route tracking
+     all describe a different model than the one actually serving the chat. */
+  const route = routeFor(cfg, job, opts);
+  const finalRoute = routeFor(cfg, 'final', opts);
   const moa = cfg.moaConfig();
   const useMoa = moa.enabled && (moa.policy === 'always' || moa.hardJobs.includes(job));
   const width = useMoa ? moaWidth(moa, job) : 1;

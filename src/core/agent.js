@@ -27,6 +27,7 @@ export class Agent {
     this.scheduler = scheduler;
     this.bus = bus;
     this.plans = new Map();
+    this.servedRoutes = new Map();
     this.abort = new Map();
     this.paused = false;
     this.shared = shared;
@@ -47,12 +48,23 @@ export class Agent {
     } catch { return null; }
   }
 
+  /* P1: atomic journal write, honestly reported (P0 rule: never a false
+     'saved'). A failed plan persist must NOT kill the turn — the plan lives
+     in memory — but the loss surfaces in lastPlanPersistError + the bus. */
   persistPlan(session) {
     try {
       const file = this.planPath(session);
-      if (!file) return;
-      fs.writeFileSync(file, JSON.stringify({ session, plan: this.plans.get(session) || [], updated: Date.now() }) + '\n');
-    } catch { /* nice-to-have, aldrig fatal */ }
+      if (!file) return false;
+      const tmp = `${file}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify({ session, plan: this.plans.get(session) || [], updated: Date.now() }) + '\n');
+      fs.renameSync(tmp, file);
+      this.lastPlanPersistError = null;
+      return true;
+    } catch (err) {
+      this.lastPlanPersistError = { message: String(err?.message || err), code: err?.code || 'write_failed', when: new Date().toISOString() };
+      this.bus.emit('plan.persist_failed', { session, message: this.lastPlanPersistError.message });
+      return false;
+    }
   }
 
   loadPlan(session) {
@@ -68,6 +80,40 @@ export class Agent {
       }
     } catch { /* ingen checkpoint an */ }
     return null;
+  }
+
+  /* P1: which route ACTUALLY served each session last — recorded durably so a
+     model/provider switch is detectable even across a process restart, and a
+     handoff checkpoint can be written before the new model starts working. */
+  servedRoutePath(session) {
+    try {
+      const hp = historyPath(session);
+      return hp.replace(/\.jsonl$/, '.route.json');
+    } catch { return null; }
+  }
+
+  lastServedRoute(session) {
+    if (this.servedRoutes.has(session)) return this.servedRoutes.get(session);
+    try {
+      const file = this.servedRoutePath(session);
+      if (!file) return null;
+      const d = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const ref = d && typeof d.ref === 'string' ? d.ref : null;
+      if (ref) this.servedRoutes.set(session, ref);
+      return ref;
+    } catch { return null; }
+  }
+
+  noteServedRoute(session, ref) {
+    if (!ref) return;
+    this.servedRoutes.set(session, ref);
+    try {
+      const file = this.servedRoutePath(session);
+      if (!file) return;
+      const tmp = `${file}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify({ session, ref, at: Date.now() }) + '\n');
+      fs.renameSync(tmp, file);
+    } catch { /* tracking is best-effort; the turn itself is what matters */ }
   }
 
   planSnapshot(session) {
@@ -102,18 +148,48 @@ export class Agent {
     };
     try {
       const file = this.handoffPath(session);
-      if (file) fs.writeFileSync(file, JSON.stringify(artifact) + '\n');
-    } catch { /* handoff-skrivning är nice-to-have */ }
+      if (file) {
+        const tmp = `${file}.tmp`;
+        fs.writeFileSync(tmp, JSON.stringify(artifact) + '\n');
+        fs.renameSync(tmp, file);
+      }
+      artifact.persisted = Boolean(file);
+      this.lastHandoffError = null;
+    } catch (err) {
+      artifact.persisted = false;
+      this.lastHandoffError = { message: String(err?.message || err), code: err?.code || 'write_failed', when: new Date().toISOString() };
+      this.bus.emit('handoff.persist_failed', { session, message: this.lastHandoffError.message });
+    }
     return artifact;
   }
 
+  /* P1: one formatting, two injection paths (restart-artifact + per-turn route switch) */
+  handoffBlock(d) {
+    if (!d) return null;
+    const planLines = (d.plan || []).map((p) => `[${p.status === 'done' ? 'x' : p.status === 'doing' ? '~' : ' '}] ${p.text}`).join('\n');
+    if (!d.goal && !planLines) return null;
+    return [
+      'HANDOFF CONTEXT (from a previous model/agent — continue, do NOT restart):',
+      d.goal ? `GOAL: ${d.goal}` : null,
+      d.from || d.to ? `ROUTE: ${d.from || '?'} → ${d.to || 'this model'}` : null,
+      planLines ? `PLAN:\n${planLines}` : null,
+    ].filter(Boolean).join('\n');
+  }
+
+  /* P1: an artifact is consumed EXACTLY once — a re-run, retry or crash-loop
+     must never re-inject the same checkpoint as if it were new. */
   consumeHandoff(session) {
     try {
       const file = this.handoffPath(session);
       if (!file) return null;
       let data;
       try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
-      fs.writeFileSync(file, JSON.stringify({ ...data, consumed: true }) + '\n');
+      if (data.consumed) return null;
+      try {
+        const tmp = `${file}.tmp`;
+        fs.writeFileSync(tmp, JSON.stringify({ ...data, consumed: true }) + '\n');
+        fs.renameSync(tmp, file);
+      } catch { /* the read above is still the truth; the mark is best-effort */ }
       return data;
     } catch { return null; }
   }
@@ -184,7 +260,7 @@ export class Agent {
       this.skills.prompt(),
       this.memory?.digest?.() || '',
       attachments?.length ? `ATTACHMENTS (already saved to disk):\n${attachments.map((a) => `- ${a.name} · ${a.kind} · ${a.size} byte${a.path ? ` · ${a.path}` : ''}${a.note ? ` · ${a.note}` : ''}`).join('\n')}` : '',
-      this.plans.get(session)?.length ? `ACTIVE PLAN:\n${this.plans.get(session).map((p) => `[${p.status === 'done' ? 'x' : p.status === 'doing' ? '~' : p.status === 'blocked' ? '!' : ' '}] ${p.text}`).join('\n')}` : '',
+      this.loadPlan(session)?.length ? `ACTIVE PLAN:\n${this.loadPlan(session).map((p) => `[${p.status === 'done' ? 'x' : p.status === 'doing' ? '~' : p.status === 'blocked' ? '!' : ' '}] ${p.text}`).join('\n')}` : '',
       '',
       'Reply in English unless the user clearly writes another language. Short before long. No metadata about yourself.',
       'Browser work: if a click/fill fails, recover in order — browser.read the page, try a narrower selector (or search text from browser.read), browser.shot once to look, then try again or ask. Usually the bottleneck: never click the same failing element more than twice; the loop guard stops at three.',
@@ -241,16 +317,11 @@ export class Agent {
       if (!Array.isArray(history)) history = [];
       /* handoff/checkpoint injiceras en gång: ny modell får mål+plan+framsteg */
       const handoffData = handoff && handoff.plan ? { goal: handoff.goal || null, plan: handoff.plan, from: handoff.from || null, to: handoff.to || null } : this.consumeHandoff(session);
-      if (handoffData && handoffData.plan?.length || handoffData?.goal) {
-        let planLines = (handoffData.plan || []).map((p) => `[${p.status === 'done' ? 'x' : p.status === 'doing' ? '~' : ' '}] ${p.text}`).join('\n');
-        const ho = [
-          'HANDOFF CONTEXT (from a previous model/agent — continue, do NOT restart):',
-          handoffData.goal ? `GOAL: ${handoffData.goal}` : null,
-          handoffData.from || handoffData.to ? `ROUTE: ${handoffData.from || '?'} → ${handoffData.to || 'this model'}` : null,
-          planLines ? `PLAN:\n${planLines}` : null,
-        ].filter(Boolean).join('\n');
-        aware = (aware ? aware + '\n\n' : '') + ho;
-      }
+      const topBlock = this.handoffBlock(handoffData);
+      if (topBlock) aware = (aware ? aware + '\n\n' : '') + topBlock;
+      /* P1: the resumed plan hydrates from DISK too — after a restart the
+         memory map is empty even though the journal is intact (plan-load gap). */
+      const activePlan = this.loadPlan(session) || [];
 
       /* 0) a bare verdict labels the last captured turn and stops there */
       const rated = this.maybeRate(input, session, emit);
@@ -291,7 +362,7 @@ export class Agent {
         const llm = await llmClassify(input, { cfg });
         if (llm && llm !== decision.job) decision = { ...decision, job: llm, llmTiebreak: true };
       }
-      let turnPlan = planTurn(cfg, decision);
+      let turnPlan = planTurn(cfg, decision, { session });
       /* ett modelsvar från t.ex. ett schemalagt jobb måste faktiskt gälla — annars är fältet dekorering */
       if (model && /\S+\/\S+/.test(String(model))) {
         turnPlan = { ...turnPlan, route: cfg.resolveModel(String(model), decision.job), modelOverride: String(model) };
@@ -303,6 +374,22 @@ export class Agent {
         turnPlan = { ...turnPlan, moa: { ...turnPlan.moa, enabled: false, skipped: 'setup' } };
       }
       emit({ type: 'route', job: decision.job, confidence: decision.confidence, model: turnPlan.route?.ref, moa: turnPlan.moa, reasons: decision.reasons, alt: decision.alt, tiebreak: Boolean(decision.llmTiebreak) });
+
+      /* P1 producer: a route switch for THIS session (per-chat binding, global
+         picker, or override) writes a durable handoff checkpoint BEFORE the new
+         model starts, then injects it immediately — and it survives restart. */
+      const currentRef = turnPlan.route?.ref || null;
+      const prevRef = this.lastServedRoute(session);
+      if (currentRef && prevRef && currentRef !== prevRef) {
+        const art = await this.handoff({ session, to: currentRef });
+        const d = art?.persisted ? this.consumeHandoff(session) : (art && !art.skipped ? art : null);
+        const switchBlock = this.handoffBlock(d && d.plan?.length || d?.goal ? d : null);
+        if (switchBlock) {
+          aware = (aware ? aware + '\n\n' : '') + switchBlock;
+          emit({ type: 'handoff', from: d.from, to: currentRef, goal: d.goal || null, persisted: Boolean(art?.persisted) });
+        }
+      }
+      if (currentRef) this.noteServedRoute(session, currentRef);
 
       /* 2b) GRAND ARCHITECT mission gate: ett tydligt flerdelsmaal kompileras till DAG
          → HYPERSWARM. Beslutet om HUR manga workers: analyzer i kod. Alla fel
@@ -365,7 +452,7 @@ export class Agent {
         scheduler: this.scheduler,
         paused: () => this.paused,
         statusProviders: () => cfg.providerStatus(),
-        plan: this.plans.get(session) || [],
+        plan: activePlan,
         setPlan: (plan, note) => this.setPlan(session, plan, note),
         stop: () => this.stop(session),
       };
