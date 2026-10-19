@@ -147,7 +147,8 @@ test('autopilot UI: a new message never waits for a running task, and every para
   assert.ok(!app.includes('if (!input || S.busy) return false;'), 'the global S.busy wall must stay down — a second message spawns a task instead of being swallowed');
   assert.match(app, /if \(S\.busy\) return parallelTask\(input\);/, 'the busy-branch routes into a new independent task');
   assert.match(app, /autopilot: true/, 'parallel messages ask the server for a fresh task (own session + history)');
-  assert.match(app, /body: \{ task: rec\.id \}/, 'a task is stopped BY ID — the first task must never die with the second');
+  assert.match(app, /stopObservedTask\(rec\.id\)/, 'parallel Stop delegates the selected task ID');
+  assert.match(app, /body: id \? \{ task: id \} : \{ session \}/, 'the acknowledged stop request preserves task isolation');
   assert.match(app, /event: task|name === 'task'/, 'the UI binds the resumed stream to the task the server named');
   const html = read('src/ui/index.html');
   for (const st of ['working', 'waiting', 'done', 'error']) {

@@ -115,7 +115,11 @@
         const stop = node('button', 'studio-stop', 'Stop this task');
         stop.onclick = async () => {
           stop.disabled = true;
-          try { await request('/chat/stop', { task: t.id }); await refreshTasks(); }
+          try {
+            if (window.MAJIN_CHAT) await window.MAJIN_CHAT.stopTask(t.id);
+            else await request('/chat/stop', { task: t.id });
+            await refreshTasks();
+          }
           catch (e) { stop.disabled = false; stop.textContent = e.message + ' — retry'; }
         };
         detail.append(stop);

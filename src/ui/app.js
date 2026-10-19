@@ -166,6 +166,11 @@ function moaGauge(ev) {
 
 /* ------------------------------ event pump ------------------------------ */
 function onEvent(ev) {
+  if (ev.type === 'task') S.taskId = ev.task;
+  if (S.stopRequested && ['error', 'answer'].includes(ev.type)) {
+    if (!S.deferredStopEvent || (ev.type === 'error' && S.deferredStopEvent.type !== 'error')) S.deferredStopEvent = ev;
+    return;
+  }
   if (window.MAJIN_STUDIO) window.MAJIN_STUDIO.onEvent(ev);
   if (ev.type === 'error') { err(ev.message + (ev.hint ? '\n→ ' + ev.hint : '')); return; }
   if (S.failed && ['delta', 'thinking', 'answer'].includes(ev.type)) return;
@@ -277,6 +282,7 @@ async function send(text) {
 
   const input = String(text || '').trim();
   if (!input) return false;
+  if (S.stopRequested) { toast('Waiting for stop confirmation.'); return false; }
   if (input[0] === '/') {
     const ok = await command(input);
     if (ok) return true;
@@ -288,6 +294,7 @@ async function send(text) {
   if (S.busy) return parallelTask(input);
   if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.reset(); // a new run gets a fresh canvas
   if (window.MAJIN_STUDIO) window.MAJIN_STUDIO.setState('connecting');
+  S.taskId = null; S.deferredStopEvent = null;
   S.failed = false; S.lastInput = input; S.completed = false; S.readingHistory = false;
   addMsg('user', 'You', input);
   $('input').value = '';
@@ -335,8 +342,8 @@ async function send(text) {
         onEvent(ev);
       }
     }
-    if (!S.completed && !S.failed) err('The response stream ended before completion.');
-    if (S.cur && !S.failed) closeAnswer({ text: S.curBody, meta: {} });
+    if (!S.completed && !S.failed && !S.stopRequested) err('The response stream ended before completion.');
+    if (S.cur && !S.failed && !S.stopRequested) closeAnswer({ text: S.curBody, meta: {} });
   } catch (e) {
     if (e.name !== 'AbortError') err('connection lost: ' + e.message);
     else {
@@ -350,20 +357,60 @@ async function send(text) {
     $('send').classList.remove('busy');
     $('send').textContent = 'Send →';
     if (S.failed && !$('input').value) { $('input').value = input; autoGrow(); }
-    setStatus(S.failed ? 'Request failed · message preserved' : S.cancelled ? 'Stopped' : 'Ready');
-    S.cur = null; S.cancelled = false;
+    setStatus(S.stopRequested ? 'Stopping task…' : S.failed ? 'Request failed · message preserved' : S.cancelled ? 'Stopped' : 'Ready');
+    if (S.stopRequested && S.cur) { S.cur.b.classList.remove('caret'); if (S.cur.thinking) S.cur.thinking.remove(); }
+    if (!S.stopRequested) S.cur = null;
+    S.cancelled = false;
     refresh(true);
   }
   return true;
 }
 
 async function stop() {
-  if (!S.busy) return;
-  S.abort?.abort();
+  if (!S.busy || S.stopRequested) return;
+  try { await stopObservedTask(S.taskId, S.session); }
+  catch (e) { toast('Could not stop: ' + e.message); }
+}
+
+// One acknowledged backend action keeps Workspace and chat cancellation in sync.
+async function stopObservedTask(id, session) {
+  const main = S.busy && (id ? S.taskId === id : session === S.session);
+  const rec = id ? PLIVE.find(t => t.id === id && !t.finished) : null;
+  if (main) { S.stopRequested = true; S.deferredStopEvent = null; setStatus('Stopping task…'); }
+  if (rec) { rec.stopRequested = true; rec.card.stopb.disabled = true; }
   try {
-    await api('/chat/stop', { method: 'POST', body: { session: S.session } });
-  } catch {
-    /* */
+    const result = await api('/chat/stop', { method: 'POST', body: id ? { task: id } : { session } });
+    if (result.ok !== true) throw new Error(result.error || 'Stop was not confirmed by the server');
+  } catch (e) {
+    if (main) {
+      S.stopRequested = false;
+      if (S.deferredStopEvent) {
+        const busy = S.busy; S.busy = true; onEvent(S.deferredStopEvent); S.busy = busy;
+        if (!busy) { setStatus(S.failed ? 'Request failed · message preserved' : 'Ready'); S.cur = null; }
+      }
+      else setStatus('Stop failed · task may still be running');
+      S.deferredStopEvent = null;
+    }
+    if (rec) {
+      rec.stopRequested = false; rec.card.stopb.disabled = false;
+      if (rec.deferredStopError) taskEvent(rec, 'error', rec.deferredStopError);
+      if (rec.deferredStopDone) finishTask(rec, rec.deferredStopDone);
+    }
+    throw e;
+  }
+  if (main) {
+    S.stopRequested = false; S.failed = false; S.cancelled = true; S.deferredStopEvent = null;
+    S.abort?.abort();
+    if (!S.busy) {
+      if (S.cur) closeAnswer({ text: S.curBody, meta: {} });
+      S.cancelled = false; setStatus('Stopped');
+      if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.onEvent({ type: 'cancelled' });
+    }
+  }
+  if (rec) {
+    rec.stopRequested = false; rec.status = 'stopped'; rec.finished = true; rec.endAt = Date.now();
+    telLeave(rec); paintTel(rec); paintTaskState(rec, 'stopped on request');
+    rec.card.m.classList.add('task-bad'); rec.abort.abort();
   }
 }
 
@@ -572,6 +619,7 @@ function telLeave(rec) {
 function telTickAll() { for (const rec of PLIVE) paintTel(rec); }
 
 function taskEvent(rec, name, ev) {
+  if (rec.stopRequested && name === 'error') { rec.deferredStopError = ev; return; }
   if (name === 'task') {
     rec.id = ev.task;
     rec.session = ev.session;
@@ -626,6 +674,7 @@ function taskEvent(rec, name, ev) {
 }
 
 function finishTask(rec, doneEv) {
+  if (rec.stopRequested) { rec.deferredStopDone = doneEv; return; }
   if (rec.finished) return;
   rec.finished = true;
   rec.endAt = Date.now();
@@ -641,19 +690,9 @@ function finishTask(rec, doneEv) {
 }
 
 async function stopTask(rec) {
-  if (!rec || !rec.id) return;
-  rec.card.stopb.disabled = true;
-  try {
-    await api('/chat/stop', { method: 'POST', body: { task: rec.id } });
-  } catch { /* keep */ }
-  rec.status = 'stopped';
-  rec.finished = true;
-  rec.endAt = Date.now();
-  telLeave(rec);
-  paintTel(rec);
-  paintTaskState(rec, 'stopped on request');
-  rec.card.m.classList.add('task-bad');
-  rec.abort.abort();
+  if (!rec || !rec.id || rec.stopRequested) return;
+  try { await stopObservedTask(rec.id); }
+  catch (e) { toast('Could not stop: ' + e.message); }
 }
 
 /* ------------------------------ live deck --------------------------------
@@ -1038,7 +1077,7 @@ function closeMobileRail() {
   }
 }
 $('new-chat').onclick = async () => {
-  if (S.busy) { toast('Stop the current task before starting a new chat.'); return; }
+  if (S.busy || S.stopRequested) { toast('Stop the current task before starting a new chat.'); return; }
   closeMobileRail();
   S.session = 'chat-' + Date.now().toString(36);
   $('input').value = ''; autoGrow();
@@ -1169,4 +1208,5 @@ window.addEventListener('load', async () => {
   if (window.paintPanelExtras) window.paintPanelExtras();
   $('input').focus();
 });
+window.MAJIN_CHAT = { stopTask: stopObservedTask };
 window.refresh = refresh; // onboarding + model picker repaint through the same funnel

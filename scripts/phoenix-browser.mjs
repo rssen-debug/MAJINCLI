@@ -233,6 +233,21 @@ try {
   await page.waitForFunction(() => document.querySelector('#status').textContent === 'Stopped');
   assert.equal(await page.locator('#imagine .core-label').textContent(), 'stopped');
   await page.locator('#input').fill('hi'); await page.locator('#send').click();
+  await page.waitForFunction(() => S.busy && S.taskId);
+  await page.evaluate(() => window.MAJIN_CHAT.stopTask(S.taskId));
+  await page.waitForFunction(() => document.querySelector('#status').textContent === 'Stopped');
+  assert.equal(await page.locator('.msg.err').count(), 0, 'Workspace cancellation is acknowledged without an error card');
+  const beforeFailedStop = await page.locator('.msg.majin .body').count();
+  await page.route('**/api/chat/stop?**', async r => { await new Promise(resolve => setTimeout(resolve, 700)); await r.fulfill({ status: 503, json: { error: 'Stop unavailable' } }); });
+  await page.locator('#input').fill('hi'); await page.locator('#send').click();
+  await page.waitForFunction(() => S.busy && S.taskId);
+  const stopFailure = await page.evaluate(async () => { try { await window.MAJIN_CHAT.stopTask(S.taskId); return false; } catch { return true; } });
+  assert.equal(stopFailure, true);
+  await page.unroute('**/api/chat/stop?**');
+  await page.waitForFunction(() => document.querySelector('#status').textContent === 'Ready');
+  assert.equal(await page.locator('.msg.majin .body').count(), beforeFailedStop + 1, 'failed stop preserves the real answer without duplication or false stopped status');
+
+  await page.locator('#input').fill('hi'); await page.locator('#send').click();
   await page.waitForFunction(() => document.querySelector('#status').textContent === 'Ready');
   assert.ok(await page.getByText('I am in demo mode', { exact: false }).count(), 'real backend mock streams through actual HTTP endpoint');
   if (process.env.MAJIN_UI_LIVE_CATALOG === '1') {

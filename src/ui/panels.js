@@ -84,7 +84,7 @@ async function paintRail(st) {
     n.dataset.search = (label + ' ' + it.id).toLowerCase();
     n.title = (it.lastText || '') + '\n' + (it.mtime || '');
     n.onclick = () => {
-      if (S.busy) { toast('Stop the current task before switching chats.'); return; }
+      if (S.busy || S.stopRequested) { toast('Stop the current task before switching chats.'); return; }
       if (typeof closeMobileRail === 'function') closeMobileRail();
       S.session = it.id;
       box.querySelectorAll('.sess').forEach((x) => x.classList.remove('act'));
