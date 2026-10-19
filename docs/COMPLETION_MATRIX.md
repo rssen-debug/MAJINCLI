@@ -132,7 +132,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
-| 12A | 1 | Independent real-model end-to-end acceptance suite | This matrix + a versioned additive acceptance runner are new; suite not yet runnable | — | — | UNVERIFIED | 2026-10-18 |
+| 12A | 1 | Independent real-model end-to-end acceptance suite | `test/acceptance-live.test.js` 3/3 with MAJIN_LIVE=1: A1 live create json VERIFIED (43 379 tokens), A2 live append via fs.patch preserved-original (281 891 tokens), A3 engine-only lie-detector (missing-file + exit 7 named honestly) — verdicts by code, never by a model | opencode live | this branch | PASS | 2026-10-19 |
 | 12B | 1 | Real Windows user-journey + recovery suite | — | needs Windows | — | UNVERIFIED | 2026-10-18 |
 | 12C | 1 | Release candidate passes all mandatory integration gates | — | — | — | UNVERIFIED | 2026-10-18 |
 

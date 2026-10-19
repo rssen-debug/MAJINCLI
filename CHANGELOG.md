@@ -5,6 +5,16 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 — Del 12A (independent real-model acceptance suite) — 81/100
+
+### Changed
+- New `test/acceptance-live.test.js`: three real-model acceptance runs (create, append-via-patch preserving original, engine lie-detector) — the verdict machine is code only. Version 0.7.1.
+
+### Verified
+- Suite total: 396 tests / 380 pass / 0 fail / 16 skipped (live-gated files all skip cleanly).
+- Live: A1 43 379 tokens, A2 281 891 tokens measured; A3 engine-only exit-7 honesty. **81/100.**
+
+
 ## 2026-10-19 — Del 5A + 5B + 5E (real browser domains) — 80/100
 
 ### Changed

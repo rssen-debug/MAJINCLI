@@ -149,3 +149,15 @@ Flake-class fixed this wave (engine, not test): Edge launch gets one bounded
 retry with a fresh port — proven by runs 39265517682 (1 attempt → 2/3 red)
 → c066a34 (retry → 3/3 green). The retry IS the sabotage cycle: removing it
 reopens the red state.
+
+## Del 12A — independent real-model acceptance suite (2026-10-19, opencode live)
+
+`test/acceptance-live.test.js` 3/3 (MAJIN_LIVE=1, gate-skipped in CI):
+
+| test | verdict-by-code | usage (measured) |
+|---|---|---|
+| 12A.1 create json | file on disk, keys suite=12A status=green, VERIFIED marker | 43 379 tokens |
+| 12A.2 append via fs.patch | original line preserved AND new line appended on disk | 281 891 tokens |
+| 12A.3 lie-detector | missing file named "missing or empty"; exit 7 never a success | 0 (engine only) |
+
+The suite never lets a model judge its own work.
