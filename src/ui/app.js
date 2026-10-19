@@ -762,7 +762,8 @@ function approvalCard(ev) {
 }
 async function respond(id, approved, box) {
   try {
-    await api('/approve', { method: 'POST', body: { id, approved } });
+    const result = await api('/approve', { method: 'POST', body: { id, approved } });
+    if (result.ok !== true) throw new Error('This approval is no longer pending.');
     if (box) box.querySelectorAll('button').forEach((b) => {
       b.disabled = true;
     });

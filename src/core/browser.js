@@ -288,12 +288,20 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
      tab around forever, and it is NOT ours to follow later (CI, twice). */
   const { targetInfos: bornTabs = [] } = await cdp('Target.getTargets');
   const close = () => {
-    try { ws.close(); } catch { /* gone */ }
-    try { if (!proc.killed) proc.kill(); } catch { /* gone */ }
+    if (b.closed) return b.closed;
     thePool.release(session);
     sess.delete(session);
+    // Edge may relaunch itself on Windows, leaving the spawned PID already
+    // exited. Close the browser over its own CDP connection before killing
+    // the original process; otherwise a headless profile keeps running.
+    b.closed = (async () => {
+      try { await cdp('Browser.close', {}, { timeoutMs: 3000 }); } catch { /* already gone */ }
+      try { ws.close(); } catch { /* gone */ }
+      try { if (!proc.killed) proc.kill(); } catch { /* gone */ }
+    })();
+    return b.closed;
   };
-  const b = { session, sessionId, targetId, send: null, goto: null, eval: null, close, proc, slot, knownTabs: new Set(bornTabs.map((t) => t.targetId)) };
+  const b = { session, sessionId, targetId, debuggerUrl: version.webSocketDebuggerUrl, send: null, goto: null, eval: null, close, proc, slot, knownTabs: new Set(bornTabs.map((t) => t.targetId)) };
   /* send reads b.sessionId EVERY call — smarttab can re-wire it later */
   const send = (method, params = {}, opts = null) => sendRaw({ sessionId: b.sessionId, method, params }, opts);
   b.send = send;
@@ -364,11 +372,12 @@ export function isOpen(session) {
 }
 
 /** Close this task's browser (if any) and hand its slot back to the fleet. */
-export function closeFor(session) {
+export function closeFor(session, { wait = false } = {}) {
   const b = sess.get(String(session || 'default'));
-  if (!b) return false;
-  try { b.close?.(); } catch { /* gone */ }
-  return true;
+  if (!b) return wait ? Promise.resolve(false) : false;
+  let closing;
+  try { closing = b.close?.(); } catch { /* gone */ }
+  return wait ? Promise.resolve(closing).then(() => true) : true;
 }
 
 /** tests + diagnostics only */

@@ -30,7 +30,10 @@ class Bus {
   }
 
   emit(type, data = {}, level = 'info') {
-    const ev = { ...data, id: ++this.seq, ts: new Date().toISOString(), type, level };
+    const seq = ++this.seq;
+    // Domain IDs (for example approval IDs) are used by action buttons.
+    // Keep them separate from the monotonic event-stream cursor.
+    const ev = { id: seq, ...data, seq, ts: new Date().toISOString(), type, level };
     this.events.push(ev);
     if (this.events.length > CAP) this.events.splice(0, this.events.length - CAP);
     if (this.file) {
@@ -64,7 +67,7 @@ class Bus {
   }
 
   tail(n = 200, afterSeq = 0) {
-    return this.events.filter((e) => e.id > afterSeq).slice(-n);
+    return this.events.filter((e) => e.seq > afterSeq).slice(-n);
   }
 
   log(level, msg, extra = {}) {
@@ -97,7 +100,7 @@ class Bus {
     });
     try {
       for (const ev of this.tail(CAP, cursor)) {
-        cursor = ev.id;
+        cursor = ev.seq;
         yield ev;
       }
       while (!signal?.aborted) {
@@ -115,7 +118,7 @@ class Bus {
         }
         while (queue.length) {
           const ev = queue.shift();
-          cursor = ev.id;
+          cursor = ev.seq;
           yield ev;
         }
       }

@@ -25,6 +25,14 @@ try {
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(`http://127.0.0.1:${port}/?t=${token}`);
   await page.waitForFunction(() => window.MAJIN_ONBOARD && document.querySelector('#home'));
+  const rejectedApproval = await page.evaluate(async () => {
+    const box = approvalCard({ id: 'audit-expired-approval', tool: 'audit.no-execution', reason: 'test rejected acknowledgment' });
+    await respond('audit-expired-approval', true, box);
+    const enabled = [...box.querySelectorAll('button')].every(button => !button.disabled);
+    box.remove();
+    return enabled;
+  });
+  assert.equal(rejectedApproval, true, 'rejected approval acknowledgment never turns into a false allowed state');
   if (await page.locator('#ob-skip').isVisible()) await page.locator('#ob-skip').click();
   assert.equal(await page.evaluate(() => window.__MAJIN_TOKEN__), token, 'server does not rewrite variable names');
   await page.screenshot({ path: path.join(output, 'phoenix-home.png') });

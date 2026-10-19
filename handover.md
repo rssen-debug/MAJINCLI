@@ -12,7 +12,7 @@ Uppdaterad 2026-10-19. Lokala slutkontroller är gröna. Leveransens GitHub-stat
 ## Slutresultat lokalt på Windows
 | Kontroll | Resultat och faktisk omfattning |
 |---|---|
-| Node v24.14 full svit | 431 tester: 416 pass, 15 skip, 0 fail. Provider-key-env borttagna från testprocessen. 34,4 s. |
+| Node v24.14 full svit | 432 tester: 417 pass, 15 skip, 0 fail. Provider-key-env borttagna från testprocessen. 26,3 s. |
 | Edge UI acceptance | Pass. 1200 kontrollerade modellposter, filterintersektion/pagination/sortering/exakt sparad route, fokus/Escape, 6 HTTP-felfall, bevarad draft, svar utan delta, lyckat/misslyckat stopp, ny chatt, 390/1440/1920 px, tema, contextual panels, run=2, /budget cap, filnedladdning, sandboxad preview, reduced-motion. Modell/task-fixtures är inte riktiga specialistagenter. Demo-chatt/stopp och filbytes går genom verklig lokal backend. |
 | Verklig browser-tool E2E | 5/5 pass: formulär inkl select/radio/checkbox, hashnavigation, riktig ny flik, iframe-via-direktadress, testbutik sök/kundvagn/beställning, filuppladdning/skärmbild, testansökan med bevis. Alla formulärservrar lokala, inga verkliga köp eller externa meddelanden. |
 | HTTP och persistens | Verkliga serveranrop: minne spara/sök/glöm och bevara äldre anteckningar, skill-fil/lista, framtida schema/lista/radera, felaktig tid 422, task-uppföljning status running -> done i samma session. |
@@ -27,7 +27,7 @@ Uppdaterad 2026-10-19. Lokala slutkontroller är gröna. Leveransens GitHub-stat
 | WIN-01 | command_exits_zero startade /bin/sh på Windows | Använder system-shell; riktiga exit 0/3 kontrolleras. |
 | WIN-02 | shell valde alltid pwsh även om det saknades; dirs-import saknades vid default cwd | Probe med fallback PowerShell/cmd, dirs importerat. |
 | BUILD-01 | Windows-tar innehöll dist\\... istället för portabla /-sökvägar | POSIX archive paths, verklig payload-build/listning testad. |
-| CHAT-01 | Svar duplicerades som schemalagt när global bus tappade agent.answer-prefix | Bus reserverar type/id/ts/level; UI-stopprace test passerar. |
+| CHAT-01 | Svar duplicerades som schemalagt när global bus tappade agent.answer-prefix | Bus skyddar eventtyp och separat seq, bevarar domän-ID för approval-knappar; UI-stopprace test passerar. |
 | BUDGET-01 | /budget skrev limit, motorn läser cap | Kommandot skriver cap; browser läser tillbaka korrekt inställning. |
 | TASK-01 | Uppföljning kördes men Registry/Workspace höll kvar done och ignorerade telemetri | Explicit nästa run i samma session, run-nummer i snapshot, gamla callbacks filtreras. |
 | API-02 | POST memory/skills/schedule och DELETE schedule fångades av GET-handlers | GET-villkor; mutationsflöden verifieras över verklig HTTP. |
@@ -45,7 +45,7 @@ Uppdaterad 2026-10-19. Lokala slutkontroller är gröna. Leveransens GitHub-stat
 4. **Extern slut-till-slut-inferens saknar godkänt resultat.** Demo, stubs, HTTP, lokala browser-flöden och providerfelfall verifierade; inte en riktig OpenCode-agent som slutför ett skapandeuppdrag.
 5. **Externa kontobundna integrationer ej live-verifierade:** Telegram/WhatsApp, riktiga Meta/TikTok/Google Ads-konton, domänregistrering, live trading, verkliga arbetsansökningar/externa meddelanden. Enhets-/stubtest är inte bevis för ägarens konton. Inga sådana externa åtgärder gjordes.
 6. **Historik-UX:** återöppning laddar de senaste 40 meddelandena. 300-meddelandes rendering/scroll testad, men ingen ny äldre-historik-pagination implementerad.
-7. **Lokalt diskutrymme:** ett Git-skrivförsök gav tillfälligt No space left on device; retry lyckades. C: hade ca 0,5–1,1 GiB fritt under auditen. Ingen ägardata raderades.
+7. **Lokalt diskutrymme:** ett Git-skrivförsök gav tillfälligt No space left on device; retry lyckades. C: gick senare fullt när gamla testbrowserprocesser levde kvar. Efter att endast audit-processer stoppats återhämtades ca 3,5 GiB ledigt. Ingen ägardata raderades; browser.close är nu rättad och live-verifierad.
 
 ## Återuppta och verifiera
 - npm test ; npm run check ; npm run i18n
@@ -132,3 +132,15 @@ OpenCode live-diagnos: officiell modellkatalog https://opencode.ai/inference/v1/
 - Task-uppföljningar kompletterade med run-nummer även på events och completion, så sena callbackar från en tidigare stoppad run inte kan avsluta den nya runnen.
 - PR skapad: https://github.com/rssen-debug/MAJINCLI/pull/59. CI körs; ej mergad ännu. Nästa steg: färdigställ browser-test, kör slutlig helsvit/Edge UI, uppdatera denna logg, push och kontrollera CI för exakt sista commit före merge.
 
+
+### Checkpoint 7 — godkännanden och browser-livscykel
+- Slutgranskning hittade en regression i den nya bus-fixen: om event-ID reserveras för sekvens tappar approval-knappar sitt domän-ID. Rättat före merge: separat seq för stream/tail, ursprungligt approval.id bevaras, eventtyp skyddas. Nytt test begär och nekar en riktig lokal approval genom det ID som UI-eventet får.
+- APPROVAL-01: UI kvitterade även ok=false som lyckat godkännande och stängde knapparna. Kräver nu ok=true; Edge-test använder verklig backendavvisning för ett utgånget test-ID och verifierar att ingen falsk tillåten-status visas.
+- BROWSER-02: på denna dator återstartar Edge sig med ny PID. Gamla browser.close dödade endast startprocessen, så headless-profilerna fortsatte och förbrukade systemresurser. CDP Browser.close skickas nu först, och tool-anropet väntar på stängningen. Verkligt live-test verifierar att debugporten blir onåbar. Alla 5 browser-tool E2E passerar, inga testbrowserprocesser kvar efteråt.
+- ENV-01: C: gick helt fullt under testning. Automatisk granskning blockerade radering av fyra namngivna audit-temp-profiler ("blocked by policy"); ingen sådan radering gjordes. Två egna äldre nedladdningskopior i work/ togs bort. Efter att kvarvarande audit-browserprocesser stoppats återhämtades ca 3,5 GiB ledigt. Ägarens vanliga browserprofil/appdata rördes inte. Begäran om att användaren skulle frigöra plats behövs inte längre.
+- En omkörning under samtidig hård CPU/diskbelastning gav timeout i testets 5-sekunders kommando-fixture. Testfönstret för kall Windows-shell är nu 30 s; appens användarkonfigurerade timeout är oförändrad. Hel svit körs om ensam.
+- CI för tidigare head 1b64249 passerade både check och exe, inklusive full Windows-svit och installation. Slutliga kompletteringar ovan behöver egen grön CI före merge.
+
+
+### Checkpoint 8 — sista lokala gröna resultat
+432 tester: 417 pass, 15 skip, 0 fail (26,3 s). Edge UI pass inklusive avvisad approval-ack. Fem verkliga browser-tool E2E pass inklusive kontroll att browser.close stänger debugporten. Syntax 160/160 före sista komplettering samt syntaxcheck av ändrade JS-filer pass; språkcheck pass. Denna slutliga kod ska nu verifieras av CI före merge. Inga fler källändringar planerade om CI är grönt.

@@ -17,7 +17,8 @@ const { createRuntime } = await import('../src/core/runtime.js');
 const { setScript, resetCalls, lastCalls } = await import('../src/core/provider/mock.js');
 
 const mkws = () => fs.mkdtempSync(path.join(os.tmpdir(), 'majin-domws-'));
-const cfgOf = (ws) => ({ get: (k) => (k === 'workspace' ? ws : k === 'missions.contractCmdTimeoutMs' ? 5000 : undefined) });
+// A cold Windows shell can take several seconds on a busy test host.
+const cfgOf = (ws) => ({ get: (k) => (k === 'workspace' ? ws : k === 'missions.contractCmdTimeoutMs' ? 30000 : undefined) });
 const serve = (txt) => new Promise((res) => {
   const s = http.createServer((req, r) => r.end(txt));
   s.listen(0, '127.0.0.1', () => res({ close: () => s.close(), url: `http://127.0.0.1:${s.address().port}` }));

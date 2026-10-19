@@ -12,14 +12,28 @@ const { selectShell, shellTools } = await import('../src/core/tools/shell.js');
 const { explainError, ProviderError } = await import('../src/core/provider/chat.js');
 const { bus } = await import('../src/core/log.js');
 
-test('global events retain their namespace and sequence when payload carries its own type/id', () => {
+test('global events retain their namespace and sequence separately from domain IDs', () => {
   let received;
   const off = bus.on('agent.answer', ev => { received = ev; });
   try {
     const next = bus.seq + 1;
     bus.emit('agent.answer', { type: 'answer', id: -1, text: 'one answer' });
     assert.equal(received?.type, 'agent.answer');
-    assert.equal(received.id, next);
+    assert.equal(received.seq, next);
+    assert.equal(received.id, -1);
+    assert.equal(bus.tail(1, next - 1)[0], received);
+  } finally { off(); }
+});
+
+test('approval event buttons receive the actual approval ID and can resolve it', async () => {
+  const { approvals } = await import('../src/core/guard.js');
+  let event;
+  const off = bus.on('approval:request', value => { event = value; });
+  try {
+    const request = approvals.request({ tool: 'audit.no-execution', reason: 'test only' });
+    assert.equal(event.id, request.id);
+    assert.equal(approvals.respond(event.id, false, 'audit deny'), true);
+    assert.equal((await request.promise).approved, false);
   } finally { off(); }
 });
 
