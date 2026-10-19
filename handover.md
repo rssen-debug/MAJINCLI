@@ -183,3 +183,6 @@ Edge: även custom Anthropic-anslutning med eget namn sparades via riktig API-ro
 
 ### Korrigerat OpenCode-liveutfall — 19:34 UTC, senaste bevis
 OpenCode Go fungerar nu med användarens nyckel och longcat-2.5-preview-free via MAJIN complete(): vanligt svar OK (52 tokens) och streaming OK med deltas OK (38 tokens), maxTokens 128. Zen gav tidigare 403 FreeTierError. MaxTokens 16 på Go gav tom text, så en för liten testbudget kan ge missvisande tomt svar. Ingen betald modell/fallback körd. Tidigare kategoriska formuleringar om gratisåtkomst korrigerade i preset, feltext och dev-dokument. Evidens utan nyckel: outputs/opencode-live-check.json. Behåll Go/Zen åtskilda och lova inte stabil framtida åtkomst utifrån ett lyckat prov.
+
+### Full appväg verifierad — 19:35:08 UTC
+Isolerad riktig MAJIN-server: POST /api/chat med Go/longcat-2.5-preview-free gav HTTP 200, ok=true, text OK, 1 steg, inga verktyg, 1706 input/25 output-tokens. MOA av, alla rutter/fallbacks bundna till samma fria modell. Befintlig användarinstallation ändrades inte. priceKnown=false i API-svaret; costUsd=0 är inte fristående faktureringsbevis. Evidens: outputs/opencode-app-check.json. Detta uppdaterar tidigare OpenCode-403-checkpoints: Go FUNGERAR i senaste testet; Zen nekade tidigare.
