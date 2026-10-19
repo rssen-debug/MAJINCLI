@@ -12,6 +12,7 @@ import { bus } from './log.js';
 import { checkForUpdate, downloadSetup, installSetup, notice, scheduleUpdateCheck } from './update.js';
 import { dirs, ensureDirs } from './paths.js';
 import { Memory, Skills } from './memory.js';
+import { Adapters } from './adapters.js';
 import { Usage } from './usage.js';
 import { buildRegistry, ALL_TOOLS } from './tools/index.js';
 import { Agent } from './agent.js';
@@ -28,11 +29,12 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
   const cfg = load();
   const memory = new Memory(cfg);
   const skills = new Skills(cfg);
+  const adapters = new Adapters(cfg);
   const usage = new Usage(cfg);
   const dataset = new Dataset(cfg, bus);
   dataset.trim();
 
-  const ctx = { cfg, bus, memory, skills, usage, dataset, approvals, agent: null, channels: null, scheduler: null, emit: (ev) => bus.emit(`tool.${ev.type}`, ev) };
+  const ctx = { cfg, bus, memory, skills, adapters, usage, dataset, approvals, agent: null, channels: null, scheduler: null, emit: (ev) => bus.emit(`tool.${ev.type}`, ev) };
   const registry = buildRegistry(ctx);
 
   const agent = new Agent({ cfg, registry, memory, skills, usage, bus, shared: ctx });

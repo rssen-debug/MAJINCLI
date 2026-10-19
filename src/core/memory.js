@@ -163,12 +163,82 @@ export class Skills {
               if (i > 0) meta[line.slice(0, i).trim()] = line.slice(i + 1).trim();
             }
           }
-          return { file: f, name: meta.name || f.replace(/\.md$/, ''), when: meta.when || '', tools: meta.tools || '', steps: raw.replace(FRONT, '').trim(), meta };
+          return { file: f, name: meta.name || f.replace(/\.md$/, ''), when: meta.when || '', tools: meta.tools || '', disabled: Boolean(meta.disabled && !/^false/.test(meta.disabled)), fails: Number(meta.fails) || 0, steps: raw.replace(FRONT, '').trim(), meta };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
     } catch {
       return [];
     }
+  }
+
+  /* Del 7C: outcomes are counted on DISK state, never on memory — two agents
+     see the same truth, and a crash mid-run cannot fake a success streak. */
+  _file(slug) { return path.join(this.dir, `${slug}.md`); }
+
+  _readRaw(slug) {
+    const raw = fs.readFileSync(this._file(slug), 'utf8');
+    const m = FRONT.exec(raw);
+    const meta = {};
+    if (m) {
+      for (const line of m[1].split('\n')) {
+        const i = line.indexOf(':');
+        if (i > 0) meta[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+      }
+    }
+    return { meta, steps: raw.replace(FRONT, '').trim() };
+  }
+
+  _writeRaw(slug, meta, steps) {
+    const lines = Object.entries(meta).map(([k, v]) => `${k}: ${v}`);
+    const body = `---\n${lines.join('\n')}\n---\n${(steps || '').trim()}\n`;
+    const tmp = `${this._file(slug)}.tmp-${process.pid}`;
+    fs.writeFileSync(tmp, body);
+    fs.renameSync(tmp, this._file(slug)); /* atomic: no torn frontmatter */
+  }
+
+  /** Record one outcome for a skill. ok=false bumps fails (resets streak);
+     ok=true resets fails. At maxFails in a row the skill is disabled HONESTLY
+     (never deleted — a human can re-enable when the world changed). */
+  recordOutcome(slug, { ok, why = '' } = {}) {
+    const maxFails = Math.max(1, Math.min(10, Number(this.cfg?.get('skills.maxFails')) || 3));
+    let raw;
+    try { raw = this._readRaw(slug); } catch {
+      return { ok: false, why: `no skill '${slug}'` };
+    }
+    const meta = raw.meta;
+    const fails = Number(meta.fails) || 0;
+    const streak = Number(meta.streak) || 0;
+    if (ok) {
+      meta.fails = '0';
+      meta.streak = String(streak + 1);
+      meta.lastOk = new Date().toISOString();
+    } else {
+      const nextFail = fails + 1;
+      meta.fails = String(nextFail);
+      meta.streak = '0';
+      meta.lastFail = new Date().toISOString();
+      meta.lastFailWhy = String(why || '').slice(0, 200);
+      if (nextFail >= maxFails) {
+        meta.disabled = `true (${nextFail} failures in a row — last: ${String(why || '').slice(0, 120)})`;
+      }
+    }
+    this._writeRaw(slug, meta, raw.steps);
+    bus.info('skill.outcome', { name: slug, ok: Boolean(ok), fails: Number(meta.fails) || 0, disabled: Boolean(meta.disabled && meta.disabled !== 'false') });
+    return { ok: true, fails: Number(meta.fails) || 0, streak: Number(meta.streak) || 0, disabled: Boolean(meta.disabled && meta.disabled !== 'false') };
+  }
+
+  /** Explicit user re-enable: clears fails and disabled. */
+  enable(slug) {
+    let raw;
+    try { raw = this._readRaw(slug); } catch {
+      return { ok: false, why: `no skill '${slug}'` };
+    }
+    raw.meta.fails = '0';
+    raw.meta.disabled = 'false';
+    delete raw.meta.lastFailWhy;
+    this._writeRaw(slug, raw.meta, raw.steps);
+    bus.info('skill.enable', { name: slug });
+    return { ok: true };
   }
 
   save({ name, when, steps, tools = '' }) {
@@ -189,6 +259,7 @@ export class Skills {
     const q = tokenize(text);
     if (!q.size) return [];
     return this.list()
+      .filter((s) => !s.disabled) /* Del 7C: a repeat-fail skill is never selected */
       .map((s) => {
         const t = tokenize(`${s.name} ${s.when}`);
         let score = 0;
@@ -202,7 +273,7 @@ export class Skills {
 
   prompt() {
     const max = this.cfg?.get('skills.maxInPrompt') || 12;
-    const list = this.list().slice(0, max);
+    const list = this.list().filter((s) => !s.disabled).slice(0, max);
     if (!list.length) return '';
     return `Learned skills (follow them when they fit):\n${list.map((s) => `- ${s.name} — ${s.when}\n${s.steps.split('\n').slice(0, 12).map((l) => `    ${l}`).join('\n')}`).join('\n')}`;
   }
