@@ -28,8 +28,8 @@
   "implementationScore": 81,
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
-  "nextAction": "P5: skills versioning/rollback review vs V5 \u00a73 (skills dir exists \u2014 verify versioning claim honestly); else Windows-control PoC gate via GitHub windows runner (FlaUI/UFO \u2014 PoC-before-bind per handover).",
-  "version": "0.9.7",
-  "milestone": "P4 entry: ratelimit load-proof S9-S12 (measured, not certified); RELEASE_MASTER_DIRECTIVE.md reconstructed; Linux/Windows test counts reconciled",
-  "branch": "main-post-merge"
+  "nextAction": "Windows-control PoC via GitHub windows runner (FlaUI/UFO candidates; PoC-before-bind per handover) \u2014 OR acceptance audit of remaining matrix blockers (1E/6C/5D/11A/11C/12B/12C from V4).",
+  "version": "0.9.8",
+  "milestone": "P5: skills atomic save + versioned archive + rollback + accountability carry-over (V5 \u00a73 skills with versioning and rollback)",
+  "branch": "feature/p5-skills-integrity (in PR)"
 }
