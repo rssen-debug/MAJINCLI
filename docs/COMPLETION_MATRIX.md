@@ -5,7 +5,7 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 63 / 100** (verified against main `c10d84b` (squash), v0.6.5, 2026-10-19).
+**Score so far: 65 / 100** (verified against main (squash), v0.6.6-rc, 2026-10-19).
 
 | Phase | Max | Earned |
 |---|---:|---:|
@@ -15,7 +15,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 4. Reality Engine | 16 | 12 |
 | 5. Browser & Computer Use | 10 | 2 |
 | 6. GENESIS ZERO & Cost | 9 | 6 |
-| 7. Skill Compiler | 8 | 6 |
+| 7. Skill Compiler | 8 | 8 |
 | 8. UI & Imagination | 8 | 0 |
 | 9. Real-World Workflows | 5 | 4 |
 | 10. Security & Privacy | 5 | 3 |
@@ -81,14 +81,14 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 6B | 3 | Model profiling, routing + single-model guarantee | `test/singlemodel.test.js` 3/3 (one chosen model covers all routes, MOA off); `test/subset.test.js` tool-subset selection | mock | main line | PASS | 2026-10-18 |
 | 6C | 3 | Comparable verified quality at lower measured cost | Free opencode models verified tasks at $0, but no same-task matrix vs other models | opencode free | — | UNVERIFIED | 2026-10-18 |
 
-## DEL 7 — Skill Compiler (6/8)
+## DEL 7 — Skill Compiler (8/8)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
 | 7A | 2 | Capability discovery + missing-capability detection | `test/capability.test.js` 7/7; `test/github-research.test.js` 4/4 | mock/github API gated | main line | PASS | 2026-10-18 |
 | 7B | 2 | Safe adapter creation + validation (schemas, permission classes) | Adapters are DECLARATIVE `http-json` descriptors (`src/core/adapters.js`): hard `validateAdapter()` BEFORE any write (https-only-or-localhost, no `javascript:`/`data:` schemes, no raw secrets in headers — `{env:NAME}` placeholders only, code-shaped mapping paths rejected, kind allowlist, permission ∈ `read | external-write | external-post`, sane timeout/rate clamps); invalid spec → REFUSED, nothing reaches disk; atomic tmp+rename write; surfaced via `majin.adapter` validate/create/list/remove | `node --test test/adapters.test.js` (4 tests: happy path; 8-way unsafe-spec rejection incl. disk-empty proof; permission-class contract; localhost-dev vs remote-non-TLS) | 5-way discrimination incl. S4 (create skips validation → 7B.2 red), S5 (remote http accepted → 7B.2+7B.4 red), both restored green | **PASS** | 2026-10-19 |
 | 7C | 2 | Verified reusable skills w/ failure tracking and disable-on-repeat-fail | `Skills` (memory.js): `recordOutcome({ok,why})` counted on DISK state (multi-instance honesty — no in-memory streaks), frontmatter `fails/streak/disabled/lastFailWhy`, success resets streak, N=`skills.maxFails` (default 3) consecutive failures → DISABLED honestly (never deleted); disabled skills filtered from `match()` and `prompt()` (never reach the model); explicit `enable()` resurrects; atomic writes; surfaced via `majin.skill` report/enable | `node --test test/skills-failures.test.js` (5 tests: 3-fail disable + disk persistence; success reset; enable resurrection; prompt exclusion; two-instance shared truth) | 3-way discrimination: S1 (disabled still selectable → 7C.1+7C.3 red), S2 (never disable → 4 red), S3 (success keeps counter → 7C.2 red), all restored green | **PASS** | 2026-10-19 |
-| 7D | 2 | End-to-end new capability through the existing engine | Jobs/Teamtailor adapters were hand-built, not skill-compiled | — | — | UNVERIFIED | 2026-10-18 |
+| 7D | 2 | End-to-end new capability through the existing engine | `Adapters.call()` (adapters.js): a validated descriptor (7B, re-read + re-validated per call — hand-edited hostile specs are refused at execution) runs end-to-end: permission class decides method (read→GET, external-write/post→POST), external classes require BOTH the `approved` tool-arg AND a live decision from the engine's `approvals.request` singleton (the same gate that guards jobs.send — denied decision never hits the wire), rolling-hour rate limit from a disk sidecar (`.state-{name}.json`), AbortController timeout counted as failure, 4MB cap, json-only, dotted-path mapping with array enumeration (`mapRows`), N=`adapters.maxFails` (3) consecutive failures self-disable the adapter (no more network attempts) until explicit `enable`. Tool: `majin.adapter` call | enable | `node --test test/adapters-exec.test.js` (5 tests: GET→rows end-to-end via local server; per-call re-validation vs hand-edited spec; approval gate both ways + body integrity + self-disable + enable; rate limit + timeout-as-failure; mapRows semantics) | 4-way discrimination D1 (approval skipped → 7D.3 red), D2 (rate off → 7D.4 red), D3 (never-disable → 7D.3 red), D4 (re-validation off → 7D.2 red), all restored green | **PASS** | 2026-10-19 |
 
 ## DEL 8 — One-Chat UI & Imagination (0/8)
 

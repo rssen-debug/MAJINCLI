@@ -847,11 +847,13 @@ export const majinTools = [
     risk: 'write',
     desc: 'Safe external adapters (Del 7B): validate | create | list | remove. An adapter is a DECLARATIVE http-json descriptor (no code, https only, permission class read | external-write | external-post); an invalid adapter is never written to disk.',
     params: {
-      action: 'string: validate | create | list | remove [validate|create|list|remove]',
+      action: 'string: validate | create | list | remove | call | enable',
       spec: 'object: {name, kind:"http-json", baseUrl, permission, headers, mapping, timeoutMs, rate:{maxPerHour}}',
-      name: 'string: adapter name (for remove)',
+      name: 'string: adapter name (for remove | call | enable)',
+      params: 'object: request payload for call (params for GET, json body for POST) [call only]',
+      approved: 'boolean: only ever true after the HUMAN said yes — required for external-write/external-post [call only]',
     },
-    async run({ action = 'list', spec = null, name = '' }, ctx) {
+    async run({ action = 'list', spec = null, name = '', params = {}, approved = false }, ctx) {
       const a = ctx.adapters;
       if (!a) return { ok: false, error: { code: 'no_adapters', message: 'adapter store missing' } };
       if (action === 'validate') {
@@ -866,6 +868,15 @@ export const majinTools = [
       if (action === 'remove') {
         const r = a.remove(name);
         return r.ok ? { result: `removed ${name}`, summary: 'adapter removed' } : { ok: false, error: { code: 'not_found', message: r.why } };
+      }
+      if (action === 'enable') {
+        const r = a.enable(name);
+        return r.ok ? { result: `adapter "${name}" re-enabled (failure counters cleared)`, summary: 'adapter enabled' } : { ok: false, error: { code: 'not_found', message: r.why } };
+      }
+      if (action === 'call') {
+        const r = await a.call(name, { params: params && typeof params === 'object' ? params : {}, approved: Boolean(approved), approvals: ctx.approvals, session: ctx.session });
+        if (!r.ok) return r;
+        return { result: JSON.stringify(r.rows, null, 1).slice(0, 10000), meta: { adapter: r.adapter, status: r.status, rows: r.rows.length, method: r.method }, summary: `${r.rows.length} rows from ${name}` };
       }
       const list = a.list();
       return { result: `${list.length} adapters in ${a.dir}:\n${list.map((x) => `- ${x.name} [${x.permission}] ${x.baseUrl}`).join('\n') || '(none)'}`, meta: { count: list.length }, summary: `${list.length} adapters` };

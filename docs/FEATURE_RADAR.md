@@ -1,17 +1,18 @@
-# MAJIN FEATURE RADAR — top 5 discoveries (2026-10-19 night, after Del 7B+7C)
+# MAJIN FEATURE RADAR — top 5 discoveries (2026-10-19 night, after Del 7D — Skill Compiler COMPLETE)
 
 Standing rule from the master brief: every run records its five highest-value
 discoveries in docs. Each item names where it was found and why it ranks.
 Nothing here is scored — only listed by observed point-density and leverage.
 
-1. **Del 7D harness is now one module away (2p, last Skill Compiler gap).**
-   Found while shipping 7B: adapters are validated descriptors on disk with a
-   permission class. The only missing piece for "new capability through the
-   whole engine" is a tiny executor that (a) fetches `baseUrl` (GET for `read`),
-   (b) applies the dotted-path mapping, (c) enforces `rate.maxPerHour` on disk,
-   (d) routes `external-write`/`external-post` through the approvals gate — and
-   (e) records a `skill outcome` (7C) per call so bad adapters disable
-   themselves. All four ingredients shipped tonight; 7D is assembly + tests.
+1. **SHIPPED — Del 7D (2p): adapter execution through the engine.** The
+   executor listed here this morning now exists (`Adapters.call`): per-call
+   re-validation, dual approval for external classes, disk rate-limit,
+   timeout-as-failure, self-disable + enable, `mapRows` array enumeration.
+   Tested against a local http server; 4 sabotage cycles red→green. DEL 7 is
+   the first fully complete phase (8/8). The next-generation discovery: the
+   SAME executor pattern (validate→gate→rate→fail-count) is one import away
+   for scheduled jobs (Del 9D) and browser actions (Del 5B) — reuse before
+   invention.
 
 2. **Registry-count pins are intentional tripwires — but they cost a sweep.**
    Found while shipping 7B: `103` was hardcoded in 5 test files (agent, jobs,
