@@ -5,6 +5,24 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 — Phoenix UI/UX — v0.8.0
+
+### Changed
+- Neutral dark surfaces, readable conversation, centered composer, new-chat and model/provider navigation; expert features preserved.
+- Live model explorer with provider selection, search, free-price filtering, context/input-price sorting and incremental rendering of the full catalog.
+- One recoverable failure card per request, preserved input, accurate failed status, keyboard dismissal/focus and quiet expandable activity.
+
+### Fixed
+- Token/version interpolation corrupted JavaScript variable names in the served HTML.
+- Undefined MODE_LABEL interrupted header rendering; named SSE events without a JSON type were ignored.
+- Error-followed-by-answer events could display false success; routing notices flooded the conversation.
+- Unstreamed answers were invisible; automatic activity scrolling interrupted reading.
+
+### Validation
+- Windows Edge behavioral UI acceptance; pure catalog tests; syntax/i18n and CLI bundle checks.
+- Live OpenRouter catalog: 470 entries, 20 with zero reported catalog charges on 2026-10-19.
+- OpenCode inference attempt timed out; no successful live inference claimed. See docs/PHOENIX_HANDOVER.md for limits and release verification.
+
 ## 2026-10-19 — GODLIKE V4: intelligent rate-limit orchestrator (§7) — v0.7.2
 
 ### Changed

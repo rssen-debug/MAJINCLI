@@ -245,6 +245,7 @@ body.simple #c-cost{margin-left:auto}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 
 </style>
+<link rel="stylesheet" href="/phoenix.css" />
 </head>
 <body class="simple">
 <header>
@@ -262,7 +263,7 @@ body.simple #c-cost{margin-left:auto}
   <span class="chip" id="c-wa"><i class="led" id="led-wa"></i>whatsapp</span>
   <button id="b-mode" title="Permission mode — Assist: ask before every write. Approval: ask before risky work. Full auto: never ask.">approval</button>
   <button id="b-expert" title="Advanced settings and tools" aria-label="Advanced settings">⚙</button> <button id="b-panel" class="on" title="Side panel">⌗</button> <button id="b-quit" title="Quit MAJIN — stops the agent, closes everything (your keys and memory stay)">⏻</button>
-  <button id="b-rail" title="Sidebar">☰</button>
+  <button id="b-rail" title="Sidebar" aria-label="Toggle sidebar">☰</button>
   <button id="b-theme" title="Light / dark">◐</button>
   <button id="b-voice" title="Read answers aloud">🔊</button>
   <button id="b-test" title="Run self-test">◎</button>
@@ -272,7 +273,7 @@ body.simple #c-cost{margin-left:auto}
 
 <div id="app">
   <div id="rail">
-    <h3>SESSIONS</h3><div id="sessions"></div>
+    <button id="new-chat" class="nav-new">＋ New chat</button><button id="browse-models" class="nav-link">◈ Explore models</button><button id="manage-providers" class="nav-link">⚙ Providers</button><h3>YOUR CHATS</h3><div id="sessions"></div>
     <h3>PLAN</h3><div class="plan" id="plan"><div>–</div></div>
     <h3>SCHEDULE</h3><div id="sched" class="kv">no jobs</div>
     <h3>MEMORY</h3><div id="mem" class="kv">–</div>
@@ -299,7 +300,7 @@ body.simple #c-cost{margin-left:auto}
   </div>
   <div class="crow">
     <button id="mic" title="Voice input">🎙</button><span id="mic-state"></span>
-    <span class="grow" id="status">ready</span>
+    <span class="grow" id="status" role="status" aria-live="polite">Ready</span>
     <span id="drop" class="drop">drop a file → RE analysis</span>
   </div>
 </footer>

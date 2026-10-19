@@ -71,7 +71,7 @@
     if (existing) {
       const ready = el('div', 'ob-ready');
       ready.append(el('span', 'ob-ready-dot', '●'));
-      ready.append(el('span', '', existing.label + ' is already connected'));
+      ready.append(el('span', '', existing.label + ' is configured'));
       box.append(ready);
       const go = el('button', 'ob-go', 'Start chatting →');
       go.type = 'button';
@@ -165,7 +165,7 @@
     box.append(back, el('div', 'ob-mark', '✦'), el('h2', 'ob-title', 'Connect ' + p.label));
     const existing = OB.forceEdit ? null : status(p.name);
     box.append(el('p', 'ob-sub', existing && existing.ready
-      ? 'Your AI is already connected. No need to enter your key again.'
+      ? 'A key is saved for this provider. Choose a current model to continue.'
       : (p.needsKey ? 'Paste your key once. MAJIN keeps it on this computer.' : 'No API key needed. Make sure the local AI server is running.')));
 
     const urlIn = p.custom ? el('input', 'ob-input') : null;
@@ -196,7 +196,7 @@
     const msg = el('p', 'ob-msg');
     msg.setAttribute('role', 'status');
     msg.setAttribute('aria-live', 'polite');
-    const go = el('button', 'ob-go', existing?.ready ? 'Start chatting →' : 'Connect and start →');
+    const go = el('button', 'ob-go', existing?.ready ? 'Choose a model →' : 'Save and choose model →');
     go.type = 'button';
     go.onclick = async () => {
       if (OB.working) return;
@@ -222,10 +222,6 @@
           const added = await apiLocal('/provider', { method: 'POST', body }).catch(() => null);
           const error = tellErr(added, 'Could not connect.');
           if (error) { msg.textContent = error; return; }
-          msg.textContent = 'Checking connection…';
-          const test = await apiLocal('/provider', { method: 'POST', body: { action: 'test', name: p.name } }).catch(() => null);
-          const testError = tellErr(test, 'Could not reach the provider.');
-          if (testError) { msg.textContent = testError; return; }
           await finishSetup(p.name, msg);
         }
       } finally {
@@ -238,24 +234,10 @@
 
   async function finishSetup(name, msg) {
     msg.textContent = 'Finding a model…';
-    const p = OB.provider;
-    // A missing model catalogue is not fatal; validated preset models still work.
-    await apiLocal('/provider', { method: 'POST', body: { action: 'models', name } }).catch(() => null);
-    const info = await apiLocal('/config').catch(() => null);
-    const cfg = info?.config || {};
-    const ids = cfg.providers?.[name]?.models || p?.models || [];
-    const current = cfg.models?.routes?.chat || '';
-    const previous = current.startsWith(name + '/') ? current.slice(name.length + 1) : '';
-    const model = previous || ids[0];
-    if (!model) { msg.textContent = 'No model found. Open the model picker after connecting a model to your provider.'; return; }
-    const routes = Object.fromEntries(ROUTE_JOBS.map((j) => [j, name + '/' + model]));
-    const saved = await apiLocal('/config', { method: 'PATCH', body: { models: { provider: name, routes }, moa: { policy: 'off' } } }).catch(() => null);
-    const error = tellErr(saved, 'Could not select the model.');
-    if (error) { msg.textContent = error; return; }
-    if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.reset();
+    // Connecting credentials must not silently choose a priced or stale preset.
     close();
-    const input = $('input');
-    if (input) input.focus();
+    PICKER.preferred = name;
+    await togglePicker();
   }
 
   /* ------------------------- model picker chip ------------------------- */
@@ -273,9 +255,11 @@
     if (!st || !st.routes) return;
     const chat = (st.routes || []).find((r) => r.job === 'chat');
     PICKER.current = chat ? chat.ref : '';
-    chip.textContent = 'model ' + shortModel(PICKER.current) + ' ▾';
+    chip.textContent = (PICKER.current ? shortModel(PICKER.current) : 'Choose a model') + ' ▾';
     chip.title = PICKER.current || 'no model set';
-    chip.hidden = !PICKER.current;
+    chip.hidden = false;
+    chip.setAttribute('aria-haspopup', 'dialog');
+    chip.setAttribute('aria-expanded', String(PICKER.openFlag));
   }
 
   async function togglePicker() {
@@ -283,63 +267,128 @@
     if (!pane) return;
     PICKER.openFlag = !PICKER.openFlag;
     pane.hidden = !PICKER.openFlag;
+    $('c-model').setAttribute('aria-expanded', String(PICKER.openFlag));
     if (!PICKER.openFlag) return;
     fillPicker(pane);
   }
 
+  function closePicker() {
+    PICKER.openFlag = false;
+    $('modeldrop').hidden = true;
+    $('c-model').setAttribute('aria-expanded', 'false');
+    $('c-model').focus();
+  }
+
   async function fillPicker(pane) {
+    const { normalizeCatalog, filterCatalog } = await import('/catalog.js');
     pane.textContent = '';
-    const manage = el('button', 'ob-link', '⚙ providers: add, change key or remove →');
-    manage.type = 'button';
-    manage.onclick = () => { pane.hidden = true; PICKER.openFlag = false; window.MAJIN_ONBOARD.reopen(); };
-    const st = OB.st || (window.S && window.S.st);
-    const provName = (st && st.routes && st.routes.find((r) => r.job === 'chat') || {}).provider || (st && st.config && st.config.models && st.config.models.provider) || '';
-    const search = el('input', 'ob-input');
-    search.placeholder = 'filter models…';
-    const list = el('div', 'ob-models md-list');
-    pane.append(manage, search, el('div', 'ob-msg', provName ? 'loading ' + provName + ' models…' : 'no provider set'), list);
-    search.focus();
-
-    let ids = PICKER.cache[provName];
-    if (!ids && provName) {
-      await apiLocal('/provider', { method: 'POST', body: { action: 'models', name: provName } }).catch(() => null);
-      const cfg = await apiLocal('/config').catch(() => null);
-      ids = (cfg && cfg.config && cfg.config.providers && cfg.config.providers[provName] && cfg.config.providers[provName].models) || [];
-      PICKER.cache[provName] = ids;
+    pane.setAttribute('role', 'dialog');
+    pane.setAttribute('aria-label', 'Choose a model');
+    const head = el('div', 'explorer-head');
+    const title = el('div', '', 'Choose your model');
+    const close = el('button', 'explorer-close', '✕');
+    close.setAttribute('aria-label', 'Close model picker');
+    close.onclick = closePicker;
+    head.append(title, close);
+    const st = OB.st || window.S?.st;
+    const providers = (st?.providers || []).filter((p) => p.kind !== 'mock');
+    const active = st?.routes?.find((r) => r.job === 'chat')?.provider;
+    const provider = el('select', 'ob-input');
+    provider.setAttribute('aria-label', 'Provider');
+    for (const p of providers) {
+      const option = el('option', '', p.label + (p.ready ? '' : ' · key needed'));
+      option.value = p.name;
+      provider.append(option);
     }
-    const msg = pane.querySelector('.ob-msg');
-    if (msg) msg.textContent = ids && ids.length ? ids.length + ' models' : 'no catalogue — type the id and press Enter';
-
+    provider.value = PICKER.preferred || active || providers[0]?.name || '';
+    PICKER.preferred = null;
+    const search = el('input', 'ob-input');
+    search.placeholder = 'Search models or creators…';
+    search.setAttribute('aria-label', 'Search models');
+    const filters = el('div', 'explorer-filters');
+    const free = el('button', 'filter-chip', 'Free only');
+    free.setAttribute('aria-pressed', 'false');
+    const sort = el('select', 'explorer-sort');
+    sort.setAttribute('aria-label', 'Sort models');
+    for (const [value, label] of [['name', 'Name A–Z'], ['price', 'Lowest input price'], ['context', 'Largest context']]) {
+      const option = el('option', '', label); option.value = value; sort.append(option);
+    }
+    filters.append(free, sort);
+    const msg = el('div', 'ob-msg explorer-count');
+    msg.setAttribute('role', 'status');
+    const list = el('div', 'ob-models md-list');
+    const more = el('button', 'explorer-more', 'Show more models');
+    const manage = el('button', 'ob-link explorer-manage', 'Manage providers →');
+    manage.onclick = () => { closePicker(); window.MAJIN_ONBOARD.reopen(); };
+    const manual = el('details', 'manual-model');
+    manual.append(el('summary', '', 'Use an exact model ID'));
+    const manualInput = el('input', 'ob-input');
+    manualInput.placeholder = 'Exact provider model ID';
+    manualInput.setAttribute('aria-label', 'Exact model ID');
+    const manualGo = el('button', '', 'Use this ID');
+    manual.append(el('p', 'ob-msg', 'For custom or unlisted models. Availability and price are unverified.'), manualInput, manualGo);
+    pane.append(head, provider, search, filters, msg, list, more, manual, manage);
+    let models = [], freeOnly = false, limit = 60, generation = 0, unverified = false;
     const accept = async (id) => {
-      if (!id) return;
-      const routes = Object.fromEntries(ROUTE_JOBS.map((j) => [j, provName + '/' + id]));
-      const r = await apiLocal('/config', { method: 'PATCH', body: { models: { provider: provName, routes } } }).catch(() => null);
-      if (r && r.ok) {
-        PICKER.openFlag = false;
-        pane.hidden = true;
-        if (typeof window.refresh === 'function') window.refresh();
+      msg.textContent = 'Selecting model…';
+      const name = provider.value;
+      const routes = Object.fromEntries(ROUTE_JOBS.map((j) => [j, name + '/' + id]));
+      const r = await apiLocal('/config', { method: 'PATCH', body: { models: { provider: name, routes }, moa: { policy: 'off' } } }).catch(() => null);
+      if (r?.ok) { closePicker(); if (typeof window.refresh === 'function') window.refresh(); }
+      else msg.textContent = tellErr(r, 'Could not save this model. Try again.');
+    };
+    manualGo.onclick = () => { const id = manualInput.value.trim(); if (id) accept(id); };
+    function paint() {
+      list.textContent = '';
+      const hits = filterCatalog(models, { query: search.value, free: freeOnly, sort: sort.value });
+      msg.textContent = hits.length + ' of ' + models.length + ' models' + (freeOnly ? ' · zero catalog charges' : unverified ? ' · unverified suggestions' : '');
+      if (!hits.length) list.append(el('p', 'explorer-empty', freeOnly ? 'No verified free models here. Try another provider or turn off Free only.' : 'No models match. Try another search or provider.'));
+      for (const m of hits.slice(0, limit)) {
+        const row = el('button', 'ob-model' + (provider.value + '/' + m.id === PICKER.current ? ' on' : ''));
+        row.type = 'button';
+        row.setAttribute('aria-pressed', String(provider.value + '/' + m.id === PICKER.current));
+        row.append(el('span', 'model-name', m.name), el('span', 'model-id', m.id));
+        const bits = [m.free ? 'Free' : m.input == null || m.output == null ? 'Price unknown' : '$' + m.input.toFixed(2) + ' in / $' + m.output.toFixed(2) + ' out · 1M tokens', m.context ? Math.round(m.context / 1000) + 'k context' : '', m.tools ? 'Tools' : '', m.vision ? 'Vision' : ''].filter(Boolean);
+        row.append(el('span', 'model-meta' + (m.free ? ' model-free' : ''), bits.join(' · ')));
+        row.onclick = () => accept(m.id);
+        list.append(row);
+      }
+      more.hidden = hits.length <= limit;
+    }
+    async function load() {
+      const turn = ++generation, name = provider.value;
+      models = []; list.textContent = ''; more.hidden = true;
+      msg.textContent = 'Loading live catalog…';
+      const result = await apiLocal('/models?provider=' + encodeURIComponent(name)).catch(() => null);
+      if (turn !== generation) return;
+      if (!result?.ok) {
+        msg.textContent = tellErr(result, 'Could not load catalog. Check the provider connection.');
+        const retry = el('button', '', 'Retry catalog'); retry.onclick = load; list.append(retry);
+        return;
+      }
+      unverified = Boolean(result.note);
+      models = result.catalog || normalizeCatalog({ models: result.models });
+      limit = 60; paint();
+    }
+    provider.onchange = load;
+    search.oninput = () => { limit = 60; paint(); };
+    sort.onchange = () => { limit = 60; paint(); };
+    free.onclick = () => { freeOnly = !freeOnly; free.setAttribute('aria-pressed', String(freeOnly)); limit = 60; paint(); };
+    more.onclick = () => { limit += 60; paint(); };
+    pane.onkeydown = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); closePicker(); }
+      if (e.key === 'Tab') {
+        const nodes = [...pane.querySelectorAll('button, input, select')].filter((n) => !n.hidden && !n.disabled);
+        const first = nodes[0], last = nodes.at(-1);
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
       }
     };
-    search.addEventListener('keydown', (e) => { if (e.key === 'Enter') accept(search.value.trim()); });
-    search.oninput = () => paintSearch();
-    const paintSearch = () => {
-      list.textContent = '';
-      const q = search.value.trim().toLowerCase();
-      const pricing = (window.S && window.S.st && window.S.st.config && window.S.st.config.pricing) || {};
-      (ids || []).filter((id) => !q || id.toLowerCase().includes(q)).slice(0, 40).forEach((id) => {
-        const row = el('button', 'ob-model' + (provName + '/' + id === PICKER.current ? ' on' : ''), id);
-        row.type = 'button';
-        const pr = pricing[provName + '/' + id];
-        if (pr && (pr.input || pr.output)) {
-          const tag = el('span', 'ob-price', ` $${pr.input || '?'}/$${pr.output || '?'} per Mtok`);
-          row.append(tag);
-        }
-        row.onclick = () => accept(id);
-        list.append(row);
-      });
-    };
-    paintSearch();
+    search.focus(); load();
   }
+  document.addEventListener('pointerdown', (e) => {
+    if (PICKER.openFlag && !$('modeldrop').contains(e.target) && !$('c-model').contains(e.target)) closePicker();
+  });
 
   window.MAJIN_ONBOARD = {
     reopen() {

@@ -1,7 +1,7 @@
 {
   "name": "majin",
-  "version": "0.7.2",
-  "description": "MAJIN — a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
+  "version": "0.8.0",
+  "description": "MAJIN â€” a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -42,7 +42,8 @@
     "setup:payload": "node ./scripts/build-setup.mjs --payload-only",
     "installer": "node ./scripts/build-installer.mjs",
     "win:build": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-on-windows.ps1",
-    "win:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-on-windows.ps1 -SkipBuild"
+    "win:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-on-windows.ps1 -SkipBuild",
+    "test:ui": "node scripts/phoenix-browser.mjs"
   },
   "optionalDependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
@@ -73,6 +74,7 @@
     "@yao-pkg/pkg": "^6.23.0",
     "esbuild": "^0.24.0",
     "js-yaml": "^5.5.0",
+    "playwright": "^1.64.1",
     "resedit": "^3.1.0"
   }
 }
