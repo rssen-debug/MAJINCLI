@@ -5,7 +5,7 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 65 / 100** (verified against main `55bbab1` (squash), v0.6.6, 2026-10-19).
+**Score so far: 67 / 100** (verified against main (squash), v0.6.7-rc, 2026-10-19).
 
 | Phase | Max | Earned |
 |---|---:|---:|
@@ -17,8 +17,8 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 6. GENESIS ZERO & Cost | 9 | 6 |
 | 7. Skill Compiler | 8 | 8 |
 | 8. UI & Imagination | 8 | 0 |
-| 9. Real-World Workflows | 5 | 4 |
-| 10. Security & Privacy | 5 | 3 |
+| 9. Real-World Workflows | 5 | 5 |
+| 10. Security & Privacy | 5 | 4 |
 | 11. Windows & Updates | 4 | 2 |
 | 12. Final Acceptance | 3 | 0 |
 | **TOTAL** | **100** | **59** |
@@ -99,23 +99,23 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 8C | 2 | Living Canvas + safe previews with real artifacts | `test/imagination.test.js` 4/4; `test/imagination-preview.test.js` — declarative rendering rules; living-canvas pass not formally run | — | — | UNVERIFIED | 2026-10-18 |
 | 8D | 2 | Accessibility/performance/interaction tests | No a11y suite | — | — | UNVERIFIED | 2026-10-18 |
 
-## DEL 9 — Real-World Workflows (4/5)
+## DEL 9 — Real-World Workflows (5/5)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
 | 9A | 1 | Job workflow real test evidence + explicit approval before submit | `test/jobs.test.js` 13/13 (state machine, dedupe, CV-match, Platsbanken parser, approval-boundary) + gated live probe | offline + gated live | main line | PASS | 2026-10-18 |
 | 9B | 1 | Marketing workflow evidence + no publish without permission | `test/marketing.test.js` 10/10 (+ `marketing-plan.test.js`, `marketing-channels.test.js`) | mock | main line | PASS | 2026-10-18 |
 | 9C | 1 | Coding/research workflow evidence | `test/re.test.js` 8/8 ("RE-spec between understanding and rebuild, with proof per claim"); github tools against real API gated | mock | main line | PASS | 2026-10-18 |
-| 9D | 1 | Creative/productivity workflow evidence | File tools proven incidentally; no dedicated creative workflow test | — | — | UNVERIFIED | 2026-10-18 |
+| 9D | 1 | Creative/productivity workflow evidence | Dedicated E2E acceptance: 3-chapter story composed step-by-step by the agent (4 scripted fs.write calls through the live registry) — every artifact byte-verified ON DISK (not from transcript), index.json cross-references all chapters, final answer names the work; second pipeline: notes.md → structured brief.json with decision extraction and untouched source | `node --test test/creative.test.js` (2 tests: 9D.1 creative story+index, 9D.2 productivity pipeline) | 2-way discrimination: C1 (fs.write no-op stores nothing → both red), C2 (registry wipes tool args → both red), both restored green | **PASS** | 2026-10-19 |
 | 9E | 1 | Financial research / paper trading with costs + no profit promises | `test/trading.test.js` 7/7 | mock | main line | PASS | 2026-10-18 |
 
-## DEL 10 — Security & Privacy (3/5)
+## DEL 10 — Security & Privacy (4/5)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
 | 10A | 1 | Permissions and approval enforcement | bench scenario `guard-approval` green; approvals gate in `src/core/guard.js` | bench (mock) | main line | PASS | 2026-10-18 |
 | 10B | 1 | Secret protection and privacy | `test/provider-flow.test.js` — saved key never echoed; `cfg.redacted()` masks | — | `cc604d2` | PASS | 2026-10-18 |
-| 10C | 1 | Prompt-injection resistance (web/repo/doc) | No adversarial injection suite | — | — | UNVERIFIED | 2026-10-18 |
+| 10C | 1 | Prompt-injection resistance (web/repo/doc) | `src/core/injection.js`: 11-pattern override corpus; `scanInjection` catches every corpus line with zero false positives on clean text; `guardToolContent` wired into THE loop's tool-result message path — infected results are annotated in the very message the model reads (`INJECTION-PATTERN WARNING` + UNTRUSTED-DATA marker) and emitted as `injection_warning` events; clean results pass byte-identical (zero token tax). Live-loop proof: poisoned file from ws is annotated already in the next model call (mock lastCalls inspection), clean sibling passes untouched; final answer honestly reports the attempt | `node --test test/adversarial.test.js` (3: corpus breadth/false-positives; annotate-vs-clean; live loop E2E incl. event + message-level assertions) | 3-way discrimination: A1 (scan off → all red), A2 (corpus emptied → all red), A3 (detect-but-never-annotate → 10C.2/10C.3 red), restored green | **PASS** | 2026-10-19 |
 | 10D | 1 | Process/file isolation + cancellations actually stop work | `test/readonly.test.js` 6/6 (read-only turns cannot touch); workspace escape refusal in `resolveIn` | mock | main line | PASS | 2026-10-18 |
 | 10E | 1 | Real adversarial regression tests | `test/stability.test.js` 15/15 exists; not classified adversarial | — | — | UNVERIFIED | 2026-10-18 |
 

@@ -6,7 +6,7 @@ autopilot/teamwork/dashboard additions).
 
 ## Hög prioritet
 
-- **Completion matrix: 65/100** (`docs/COMPLETION_MATRIX.md`). Del 1D + 2C + 3C + 3D + 4A + 4C
+- **Completion matrix: 67/100** (`docs/COMPLETION_MATRIX.md`). Del 1D + 2C + 3C + 3D + 4A + 4C
   + 6A SHIPPED — **Del 2 complete (12/12)**. Next in point-density order: **Del 3E** and **6C**
   (live model benchmarks — BLOCKED: no live provider key), **Del 7B/7C** (skill compiler
   adapter validation + failure tracking, sandbox-ready), **Del 10C/10E** (prompt-injection +
