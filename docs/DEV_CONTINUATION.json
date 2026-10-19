@@ -28,8 +28,8 @@
   "implementationScore": 81,
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
-  "nextAction": "Windows-control PoC via GitHub windows runner (FlaUI/UFO candidates; PoC-before-bind per handover) \u2014 OR acceptance audit of remaining matrix blockers (1E/6C/5D/11A/11C/12B/12C from V4).",
-  "version": "0.9.8",
-  "milestone": "P5: skills atomic save + versioned archive + rollback + accountability carry-over (V5 \u00a73 skills with versioning and rollback)",
-  "branch": "main-post-merge"
+  "nextAction": "Dispatch win-control-poc on main post-merge; collect probe-result.json; record ADOPT/DEFER for the Windows-control adapter with evidence (raw-UIA-first vs FlaUI vs UFO) in docs/DEV_CONTINUATION.json decisions.",
+  "version": "0.9.9",
+  "milestone": "Windows-control PoC scaffold (raw UIA probe, dispatch-gated; evidence pending)",
+  "branch": "feature/win-control-poc (in PR)"
 }

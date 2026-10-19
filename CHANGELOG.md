@@ -5,6 +5,21 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 — Windows-control PoC scaffold (handover #4, PoC-before-bind; evidence pending) — v0.9.9
+
+### Added
+- **`scripts/win-uia-probe.ps1`** — raw UI Automation probe with ZERO installed dependencies: UIA assembly load + top-level window enumeration (P1), a deliberately impossible window name as negative control (P2), and a controlled Notepad round-trip: launch → locate window → locate Edit/Document control → `ValuePattern.SetValue(marker)` → read back → must round-trip → cleared (P3). Every capability is a measured boolean; gaps are recorded as data (`gapReason`), never smoothed over.
+- **`.github/workflows/win-control-poc.yml`** — `workflow_dispatch`-only on `windows-latest` (read-only permissions, 15-min cap, artifact upload of the verdict JSON). Workflow-dispatch requires the file on the default branch — this is why the scaffold lands before evidence; the probe itself gates the BINDING decision, and no dependency is being added.
+
+### Status — explicitly EVIDENCE-PENDING
+The probe has NOT yet run on a Windows runner at merge time. The FlaUI-vs-Microsoft-UFO binding decision follows only after the runner JSON exists (recorded as a separate evidence commit into `docs/DEV_CONTINUATION.json` decisions). Zero installs anywhere; no UI files touched.
+
+### Verified
+- Local: file scaffolding + workflow yaml shape validated by build-exe CI on this branch (ubuntu suite unchanged).
+- Full suite: unchanged by this wave (453 pass / 0 fail / 17 skipped on v0.9.8).
+- Release gate: `build-exe` workflow on tag `v0.9.9` (GitHub Actions, Windows NSIS).
+
+
 ## 2026-10-19 — P5: skills with versioning, rollback and surviving accountability (V5 §3) — v0.9.8
 
 ### Fixed
