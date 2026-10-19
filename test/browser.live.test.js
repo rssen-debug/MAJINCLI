@@ -63,12 +63,14 @@ test('live: open → read → fill → click-submit (server saw it) → read res
   const session = 'live-e2e';
   const ctx = { session, cfg };
 
+  let debuggerUrl;
   try {
     /* 1 — open through the same tool the agent sees */
     const open = await T['browser.open'].run({ url: `http://127.0.0.1:${port}/`, headless: true }, ctx);
     assert.ok(open.ok, `open failed: ${JSON.stringify(open)}`);
     assert.match(open.meta.title, /majin live form/, 'the page is named from its own words');
     assert.ok(isOpen(session), 'the session owns a browser now');
+    debuggerUrl = (await openFor({ session })).debuggerUrl;
 
     /* 2 — read: the page's own text, not our assumption */
     const read = await T['browser.read'].run({ selector: 'h1' }, ctx);
@@ -117,6 +119,13 @@ test('live: open → read → fill → click-submit (server saw it) → read res
     if (isOpen(session)) {
       const c = await T['browser.close'].run({}, ctx);
       assert.ok(c.ok && c.meta.closed === true, 'the browser was actually open and now is not');
+      let closed = false;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        try { await fetch(`http://${new URL(debuggerUrl).host}/json/version`, { signal: AbortSignal.timeout(250) }); }
+        catch { closed = true; break; }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      assert.equal(closed, true, 'browser.close shuts down the real debug endpoint, including a relaunched Edge process');
     }
     _resetBrowser();
     srv.close();

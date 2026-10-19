@@ -313,14 +313,14 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     if (p === '/api/config' && req.method === 'GET') return json(res, 200, { ok: true, config: cfg.redacted(), file: cfg.file, diffReady: true });
     if (p === '/api/logs') return json(res, 200, { ok: true, events: bus.tail(Number(url.searchParams.get('n') || 200), Number(url.searchParams.get('after') || 0)) });
     if (p === '/api/usage') return json(res, 200, { ok: true, ...usage.summary(), routes: cfg.routeTable().length });
-    if (p === '/api/memory') {
+    if (p === '/api/memory' && req.method === 'GET') {
       const q = url.searchParams.get('q');
       return json(res, 200, { ok: true, facts: q ? memory.recall(q, 20) : memory.facts(), events: memory.recentEvents(25), stats: memory.stats() });
     }
-    if (p === '/api/skills') return json(res, 200, { ok: true, skills: skills.list() });
+    if (p === '/api/skills' && req.method === 'GET') return json(res, 200, { ok: true, skills: skills.list() });
     if (p === '/api/dataset' && req.method !== 'POST') return json(res, 200, { ok: true, capture: dataset.on, share: 'no upload path exists', ...dataset.stats() });
     if (p === '/api/tools') return json(res, 200, { ok: true, count: registry.list().length, groups: registry.groups(), tools: registry.list().map((t) => ({ name: t.name, group: t.group, risk: t.risk, desc: t.desc, params: Object.keys(t.raw || {}) })) });
-    if (p === '/api/schedule') return json(res, 200, { ok: true, jobs: scheduler ? scheduler.list() : [], enabled: Boolean(scheduler) });
+    if (p === '/api/schedule' && req.method === 'GET') return json(res, 200, { ok: true, jobs: scheduler ? scheduler.list() : [], enabled: Boolean(scheduler) });
     if (p === '/api/channels') return json(res, 200, { ok: true, ...(channels ? channels.status() : { telegram: { online: false, state: 'off' }, whatsapp: { online: false, state: 'off' } }) });
     if (p === '/api/approvals') return json(res, 200, { ok: true, pending: approvals.list(), recent: approvals.recent(12) });
     if (p === '/api/sessions') {
@@ -460,23 +460,25 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       if (follow) {
         task = tasks.get(body.task);
         session = follow;
-        tasks.setStatus(task.id, 'running');
+        tasks.beginFollowup(task.id);
       } else {
         task = tasks.create({ input, source: body.source || 'ui' });
         if (body.autopilot === true) session = task.session;
         else task.session = session; // observe-only: one name, one behaviour
       }
+      const taskRun = task.run;
       const track = (ev) => {
+        if (task.run !== taskRun) return;
         tasks.event(task.id, ev.type, (ev.type === 'tool' || ev.type === 'tool_begin') ? { tool: ev.name || ev.tool || null }
           : ev.type === 'tool_result' ? { tool: ev.tool || null, ms: ev.ms ?? null }
-          : null);
+          : null, taskRun);
         if (ev.type === 'tool_result' && ev.tool && Number.isFinite(ev.ms)) eta.record(ev.tool, ev.ms);
       };
       const noStream = body.stream === false || body.stream === 'false'
         || ['false', '0'].includes(String(url.searchParams.get('stream') || '').toLowerCase());
       if (noStream) {
         const r = await agent.turn({ input, session, attachments, source: 'api', onEvent: track, aware: tasks.awareText({ excludeId: task.id }) });
-        tasks.setStatus(task.id, r.error ? 'error' : 'done');
+        tasks.setStatus(task.id, r.error ? 'error' : 'done', taskRun);
         return json(res, 200, { ok: !r.error, task: task.id, ...r });
       }
       sseHead(res);
@@ -495,10 +497,10 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
             res.write(`event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`);
           },
         });
-        tasks.setStatus(task.id, r.error ? 'error' : 'done');
+        tasks.setStatus(task.id, r.error ? 'error' : 'done', taskRun);
         res.write(`event: done\ndata: ${JSON.stringify({ ok: !r.error, task: task.id, steps: r.steps, tools: r.tools?.length || 0, usage: r.usage, moa: r.moa, job: r.job })}\n\n`);
       } catch (err) {
-        tasks.setStatus(task.id, 'error');
+        tasks.setStatus(task.id, 'error', taskRun);
         res.write(`event: error\ndata: ${JSON.stringify({ message: err.message, hint: err.hint || null })}\n\n`);
       }
       return res.end();
@@ -640,7 +642,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     }
     if (p === '/api/memory' && req.method === 'POST') {
       const body = await readJson(req);
-      if (body.action === 'forget') return json(res, 200, { ok: memory.forget(String(body.query || '')) });
+      if (body.action === 'forget') return json(res, 200, memory.forget(String(body.query || '')));
       return json(res, 200, memory.remember(String(body.text || ''), body.tags || []));
     }
     if (p === '/api/channels/telegram' && req.method === 'POST') {

@@ -3,19 +3,18 @@
  * Auto-detekterar skallet (pwsh > powershell > cmd på Windows, bash/zsh annars) och
  * kör med tyst timeout + output-cap. Alltid på. Farliga mönster går via guarden.
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { def } from './registry.js';
 import { bus } from '../log.js';
+import { dirs } from '../paths.js';
 
 const WIN = process.platform === 'win32';
 let chosen = null;
 
-export function shell() {
-  if (chosen) return chosen;
-  const pref = process.env.MAJIN_SHELL || 'auto';
-  const candidates = WIN
+export function selectShell({ windows = WIN, pref = process.env.MAJIN_SHELL || 'auto', probe = (cmd, args) => spawnSync(cmd, [...args, 'exit 0'], { windowsHide: true, stdio: 'ignore', timeout: 5000 }).status === 0 } = {}) {
+  const candidates = windows
     ? pref === 'cmd'
       ? [['cmd.exe', '/d', '/c']]
       : [
@@ -26,8 +25,13 @@ export function shell() {
     : pref === 'sh'
       ? [['/bin/sh', '-c']]
       : [['bash', '-lc'], ['zsh', '-lc'], ['/bin/sh', '-c']];
-  chosen = { cmd: candidates[0][0], args: candidates[0].slice(1), name: path.basename(candidates[0][0]) };
-  return chosen;
+  const candidate = candidates.find(([cmd, ...args]) => probe(cmd, args));
+  if (!candidate) throw new Error('No supported system shell found');
+  return { cmd: candidate[0], args: candidate.slice(1), name: path.basename(candidate[0]) };
+}
+
+export function shell() {
+  return chosen ||= selectShell();
 }
 
 function quotePowerShell(cmd) {

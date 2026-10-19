@@ -35,7 +35,9 @@ test('setup: the payload is a MAJIN that runs, file by file', { skip: canBundle 
   const r = build(['--payload-only']);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.ok(fs.existsSync(path.join(SETUP, 'payload.tar.gz')), 'the build must leave a payload');
-  const list = spawnSync('tar', ['-tzf', path.join(SETUP, 'payload.tar.gz')], { encoding: 'utf8' }).stdout.split('\n');
+  const listing = spawnSync('tar', ['-tzf', path.join(SETUP, 'payload.tar.gz')], { encoding: 'utf8' });
+  assert.equal(listing.status, 0, listing.stderr);
+  const list = listing.stdout.split(/\r?\n/);
   for (const want of [
     'dist/majin.cjs',
     'dist/ui/index.html',

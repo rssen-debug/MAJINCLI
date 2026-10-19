@@ -25,7 +25,7 @@ test('one version literal, and package.json agrees with it', () => {
   const hardcoded = [];
   for (const dir of ['src', 'scripts']) {
     for (const ent of fs.readdirSync(path.join(root, dir), { recursive: true, encoding: 'utf8' })) {
-      if (!/\.(js|mjs)$/.test(ent) || ent.includes('node_modules') || ent === 'core/version.js') continue;
+      if (!/\.(js|mjs)$/.test(ent) || ent.includes('node_modules') || ent.replace(/\\/g, '/') === 'core/version.js') continue;
       const body = read(dir, ent);
       if (/VERSION\s*=\s*['"]\d+\.\d+\.\d+['"]/.test(body) || /version:\s*['"]\d+\.\d+\.\d+['"]/.test(body)) hardcoded.push(ent);
     }

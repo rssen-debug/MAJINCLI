@@ -388,7 +388,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     desc: 'Close this task’s browser window and give the slot back to the fleet.',
     params: {},
     async run(_, ctx) {
-      const closed = closeFor(ctx.session || 'default');
+      const closed = await closeFor(ctx.session || 'default', { wait: true });
       return { ok: true, result: closed ? 'browser closed, slot released' : 'no browser was open for this task', meta: { closed }, summary: closed ? 'closed' : 'nothing open' };
     },
   }),

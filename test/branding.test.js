@@ -79,7 +79,12 @@ test('ui: the palette is pink edge to edge, not blue with a pink accent', () => 
 });
 
 /* ---------------- loggan i terminalen ---------------- */
-test('banner: the pixel M reads as an M and degrades politely without colour or Unicode', () => {
+test('banner: the pixel M reads as an M and degrades politely without colour or Unicode', (t) => {
+  for (const name of ['NO_COLOR', 'MAJIN_NO_COLOR']) {
+    const original = process.env[name];
+    delete process.env[name];
+    t.after(() => { if (original === undefined) delete process.env[name]; else process.env[name] = original; });
+  }
   assert.ok(LOGO_ROWS.length >= 8, 'a M needs some height');
   for (const row of LOGO_ROWS) assert.ok(row.length <= 60, `row too wide for an 80-col terminal: ${row.length}`);
   assert.ok(LOGO_ROWS.some((r) => r.includes('█')), 'solid blocks must be used, not only dots');

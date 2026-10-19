@@ -59,7 +59,9 @@ test('majin.doctor svarar hälsostatus även utan nätverk och utan providers', 
   const path = await import('node:path');
   const { Config, DEFAULTS, clone } = await import('../src/core/config.js');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-doctor-'));
-  const cfg = new Config(clone(DEFAULTS), path.join(dir, 'c.json'));
+  const data = clone(DEFAULTS);
+  for (const provider of Object.values(data.providers)) if (provider.kind !== 'mock') { provider.apiKey = ''; provider.keyEnv = null; }
+  const cfg = new Config(data, path.join(dir, 'c.json'));
   const tool = ALL_TOOLS.find((t) => t.name === 'majin.doctor');
   assert.ok(tool, 'majin.doctor måste vara registrerad');
   const out = await tool.run({}, { cfg });

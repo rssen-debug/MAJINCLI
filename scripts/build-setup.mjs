@@ -134,7 +134,7 @@ const walk = (rel) => {
   const st = fs.statSync(abs);
   if (st.isDirectory()) {
     entries.push([...ustar(rel.replace(/\/+$/, '') + '/', null, { dir: true })].flat());
-    for (const child of fs.readdirSync(abs).sort()) walk(path.join(rel, child));
+    for (const child of fs.readdirSync(abs).sort()) walk(path.posix.join(rel, child));
     return;
   }
   entries.push(ustar(rel, fs.readFileSync(abs)));

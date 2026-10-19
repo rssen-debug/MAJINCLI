@@ -31,6 +31,30 @@ test('registry: create → track → terminal states are one-way', () => {
   assert.throws(() => r.setStatus(t.id, 'levitating'), /unknown status/);
 });
 
+test('explicit follow-up starts another observable run in the same session', () => {
+  const r = new TaskRegistry();
+  const t = r.create({ input: 'first question' });
+  const session = t.session;
+  r.event(t.id, 'tool_result', { tool: 'fs.read', ms: 5 });
+  r.setStatus(t.id, 'done');
+  r.event(t.id, 'delta');
+  assert.equal(t.status, 'done', 'late event cannot reopen a completed run');
+  r.beginFollowup(t.id);
+  assert.equal(t.status, 'running');
+  assert.equal(t.session, session);
+  assert.equal(t.run, 2);
+  assert.equal(t.toolsRun, 0);
+  r.setStatus(t.id, 'done', 1);
+  r.event(t.id, 'tool_result', { tool: 'old-tool', ms: 999 }, 1);
+  assert.equal(t.status, 'running', 'late completion from an earlier stopped run cannot finish its follow-up');
+  assert.equal(t.toolsRun, 0);
+  r.event(t.id, 'tool_result', { tool: 'fs.read', ms: 8 });
+  assert.equal(r.snapshot()[0].toolsRun, 1);
+  assert.equal(r.snapshot()[0].run, 2);
+  r.setStatus(t.id, 'done');
+  assert.equal(r.active().length, 0);
+});
+
 test('locks: same file queues FIFO — different files run truly parallel', async () => {
   const L = new FileLocks();
   const order = [];

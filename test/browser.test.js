@@ -119,7 +119,22 @@ test('openFor reuse never navigates the page away (the eval-vs-goto coin flip)',
   const reuse = src.slice(src.indexOf('const existing = sess.get(session)'), src.indexOf('const thePool'));
   assert.match(reuse, /if \(url && url !== 'about:blank'\)\s+await existing\.goto\(url\)/, 'reuse navigates ONLY on explicit url');
   assert.doesNotMatch(reuse, /url = 'about:blank'/, 'no silent default navigation target');
-  assert.match(src, /Page\.navigate[\s\S]{0,400}document\.readyState/, 'goto waits for the document before asking questions');
+  assert.match(src, /return waitForNavigation\(navigation/, 'goto waits for the new document before asking questions');
+});
+
+test('navigation rejects a ready old document and waits for the committed loader', async () => {
+  const { waitForNavigation } = await import('../src/core/browser.js');
+  const documents = [
+    { loaderId: 'old', readyState: 'complete', url: 'about:blank' },
+    { loaderId: 'new', readyState: 'loading' },
+    { loaderId: 'new', readyState: 'complete', url: 'http://fixture/form' },
+  ];
+  const result = await waitForNavigation({ loaderId: 'new' }, async () => documents.shift(), { wait: async () => {} });
+  assert.equal(result.url, 'http://fixture/form');
+  assert.equal(documents.length, 0);
+  await assert.rejects(waitForNavigation({ loaderId: 'new' }, async () => ({ loaderId: 'old', readyState: 'complete' }), { attempts: 2, wait: async () => {} }), /timeout/);
+  await assert.rejects(waitForNavigation({ errorText: 'net::ERR_CONNECTION_REFUSED' }, async () => ({})), /CONNECTION_REFUSED/);
+  assert.equal((await waitForNavigation({}, async () => ({ readyState: 'interactive' }))).readyState, 'interactive', 'same-document navigation has no new loader ID');
 });
 
 test('followNewTarget never follows the stale initial tab (the about:blank wire)', async () => {
@@ -128,5 +143,12 @@ test('followNewTarget never follows the stale initial tab (the about:blank wire)
      the server had already seen the real submit. Rule: tabs born after spawn. */
   const src = (await import('node:fs')).readFileSync(new URL('../src/core/browser.js', import.meta.url), 'utf8');
   assert.match(src, /knownTabs\s*:\s*new Set\(bornTabs/, 'birth tabs are remembered');
-  assert.match(src, /spawnTarget = targetInfos\.find\(\(t\) => t\.type === 'page' && t\.targetId !== targetId && !t\.attached && !b\.knownTabs\.has\(t\.targetId\)\)/, 'only post-birth tabs are followable');
+  const { isChildTarget } = await import('../src/core/browser.js');
+  const browser = { targetId: 'our-page', knownTabs: new Set(['initial-blank', 'our-page']) };
+  assert.equal(isChildTarget({ type: 'page', targetId: 'initial-blank' }, browser), false);
+  assert.equal(isChildTarget({ type: 'page', targetId: 'edge-sync-dialog' }, browser), false, 'an unrelated browser-owned page must never receive the agent actions');
+  assert.equal(isChildTarget({ type: 'page', targetId: 'other-popup', openerId: 'other-page' }, browser), false);
+  assert.equal(isChildTarget({ type: 'page', targetId: 'our-popup', openerId: 'our-page' }, browser), true);
+  browser.targetId = 'our-popup'; browser.knownTabs.add('our-popup');
+  assert.equal(isChildTarget({ type: 'page', targetId: 'nested-popup', openerId: 'our-popup' }, browser), true, 'following a tab updates the opener for subsequent clicks');
 });

@@ -17,7 +17,8 @@ const { createRuntime } = await import('../src/core/runtime.js');
 const { setScript, resetCalls, lastCalls } = await import('../src/core/provider/mock.js');
 
 const mkws = () => fs.mkdtempSync(path.join(os.tmpdir(), 'majin-domws-'));
-const cfgOf = (ws) => ({ get: (k) => (k === 'workspace' ? ws : k === 'missions.contractCmdTimeoutMs' ? 5000 : undefined) });
+// A cold Windows shell can take several seconds on a busy test host.
+const cfgOf = (ws) => ({ get: (k) => (k === 'workspace' ? ws : k === 'missions.contractCmdTimeoutMs' ? 30000 : undefined) });
 const serve = (txt) => new Promise((res) => {
   const s = http.createServer((req, r) => r.end(txt));
   s.listen(0, '127.0.0.1', () => res({ close: () => s.close(), url: `http://127.0.0.1:${s.address().port}` }));
@@ -25,12 +26,12 @@ const serve = (txt) => new Promise((res) => {
 
 test('4D.1 command domain: exit code is the evidence — pass, fail, denied', async () => {
   const ws = mkws();
-  fs.writeFileSync(path.join(ws, 'ok.sh'), '#!/bin/sh\necho hello-from-script\nexit 0\n');
-  fs.writeFileSync(path.join(ws, 'bad.sh'), '#!/bin/sh\necho oops\nexit 3\n');
-  const ok = await verifyContract({ type: 'command_exits_zero', cmd: 'sh ok.sh' }, { cfg: cfgOf(ws) });
+  fs.writeFileSync(path.join(ws, 'ok.cjs'), 'console.log("hello-from-script"); process.exit(0);');
+  fs.writeFileSync(path.join(ws, 'bad.cjs'), 'console.log("oops"); process.exit(3);');
+  const ok = await verifyContract({ type: 'command_exits_zero', cmd: 'node ok.cjs' }, { cfg: cfgOf(ws) });
   assert.equal(ok.ok, true, ok.evidence);
   assert.match(ok.evidence, /exited 0/); assert.match(ok.evidence, /hello-from-script/);
-  const bad = await verifyContract({ type: 'command_exits_zero', cmd: 'sh bad.sh' }, { cfg: cfgOf(ws) });
+  const bad = await verifyContract({ type: 'command_exits_zero', cmd: 'node bad.cjs' }, { cfg: cfgOf(ws) });
   assert.equal(bad.ok, false); assert.match(bad.evidence, /exit 3|failed/);
   const denied = await verifyContract({ type: 'command_exits_zero', cmd: 'rm -rf /' }, { cfg: cfgOf(ws) });
   assert.equal(denied.ok, false); assert.match(denied.evidence, /guardrail/);

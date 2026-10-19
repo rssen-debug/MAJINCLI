@@ -9,22 +9,29 @@
    store USD per 1M tokens to match the DeepSeek table shape ({in,out}). */
 
 const PER_MILLION = 1e6;
+import { keylessUrl } from './presets.js';
+const priceNumber = value => ['number', 'string'].includes(typeof value) && String(value).trim() !== '' && Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
 
 /** payload → { 'provider/model': {in, out} }; models without a price are absent. */
 export function extractPricing(providerName, payload) {
   const rows = payload?.data || payload?.models || [];
   const out = {};
-  for (const m of rows) {
+  for (const m of Array.isArray(rows) ? rows : []) {
     const id = String(m?.id || m?.name || '');
     if (!id) continue;
     const p = m?.pricing;
     if (!p || p.prompt == null || p.completion == null) continue; // unknown stays unknown — never $0
+    if (priceNumber(p.prompt) === null || priceNumber(p.completion) === null) continue;
     const pin = Number(p.prompt) * PER_MILLION;
     const pout = Number(p.completion) * PER_MILLION;
     if (!Number.isFinite(pin) || !Number.isFinite(pout)) continue;
     const ref = `${providerName}/${id}`;
     // free tiers ("...:free") land as real zeros — that is data, not a guess
     out[ref] = { in: roundPrice(pin), out: roundPrice(pout) };
+    const extra = Object.entries(p).filter(([key]) => !['prompt', 'completion'].includes(key) && priceNumber(p[key]) !== 0);
+    // Preserve fee units: request/image charges are not token prices. Their
+    // presence blocks a free classification; token-only estimates remain a floor.
+    if (extra.length) out[ref].extra = Object.fromEntries(extra);
   }
   return out;
 }
@@ -76,8 +83,9 @@ export function priceKnownForRoute(route = {}) {
 }
 
 export function isFreeRoute(route = {}) {
-  if (!route || route.kind === 'mock') return true;
+  if (!route) return false;
+  if (route.kind === 'mock') return true;
   const p = route.pricing;
-  if (p && Number(p.in) === 0 && Number(p.out) === 0) return true;
-  return /:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(String(route.baseUrl || ''));
+  if (p && priceNumber(p.in) === 0 && priceNumber(p.out) === 0 && Object.values(p).every(value => priceNumber(value) === 0)) return true;
+  return keylessUrl(route.baseUrl);
 }

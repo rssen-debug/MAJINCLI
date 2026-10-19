@@ -65,6 +65,26 @@ test('isFreeRoute: explicit 0/0, mock, loopback — yes; priced or unknown-remot
   assert.equal(isFreeRoute({ baseUrl: 'https://openrouter.ai/api/v1' }), false, 'okänt pris på en riktig server räknas som betald');
 });
 
+test('free classification rejects malformed prices, additional fees and fake local hosts', () => {
+  for (const baseUrl of ['https://localhost.example.com/v1', 'https://127.0.0.1.example.com/v1', 'https://10.example.com/v1', 'https://example.com/://localhost']) {
+    assert.equal(isFreeRoute({ baseUrl }), false, baseUrl);
+  }
+  for (const pricing of [{ in: null, out: null }, { in: '', out: '' }, { in: false, out: false }, { in: ' ', out: ' ' }, { in: 0, out: 0, request: 0.1 }]) {
+    assert.equal(isFreeRoute({ pricing }), false, JSON.stringify(pricing));
+  }
+  const imported = extractPricing('test', { data: [
+    { id: 'fee', pricing: { prompt: '0', completion: '0', request: '0.01' } },
+    { id: 'unknown-fee', pricing: { prompt: '0', completion: '0', request: null } },
+    { id: 'invalid', pricing: { prompt: false, completion: '' } },
+    { id: 'space', pricing: { prompt: ' ', completion: '0' } },
+  ] });
+  assert.equal(imported['test/invalid'], undefined);
+  assert.equal(imported['test/space'], undefined);
+  assert.equal(isFreeRoute({ pricing: imported['test/fee'] }), false);
+  assert.equal(isFreeRoute({ pricing: imported['test/unknown-fee'] }), false);
+  assert.deepEqual(extractPricing('test', { data: {} }), {});
+});
+
 test('budget cap stops paid calls before they cost, free ones pass', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-budget-'));
   process.env.MAJIN_HOME = home;

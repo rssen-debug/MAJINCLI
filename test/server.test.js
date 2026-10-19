@@ -105,6 +105,67 @@ test('/healthz and /api/hello stay open', async () => {
   assert.equal(JSON.parse(hello.body).name, 'MAJIN');
 });
 
+test('completed task follow-up is running in the same session, then completes its next run', async () => {
+  const config = JSON.parse((await get(`/api/config?t=${TOKEN}`)).body).config;
+  const routes = Object.fromEntries(Object.keys(config.models.routes).map(job => [job, 'demo/demo-fast']));
+  await get(`/api/config?t=${TOKEN}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ models: { provider: 'demo', routes }, moa: { policy: 'off' } }) });
+  const first = await get(`/api/chat?t=${TOKEN}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ input: 'hi', autopilot: true, stream: false }) });
+  const task = JSON.parse(first.body).task;
+  assert.ok(task);
+  const response = await fetch(base(`/api/chat?t=${TOKEN}`), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ input: 'hi again', task }) });
+  assert.equal(response.status, 200);
+  const running = JSON.parse((await get(`/api/tasks?t=${TOKEN}`)).body).tasks.find(t => t.id === task);
+  assert.equal(running.status, 'running');
+  assert.equal(running.run, 2);
+  await response.text();
+  const done = JSON.parse((await get(`/api/tasks?t=${TOKEN}`)).body).tasks.find(t => t.id === task);
+  assert.equal(done.status, 'done');
+  assert.equal(done.run, 2);
+});
+
+test('workspace data APIs and isolated memory writes work over real HTTP', async (t) => {
+  for (const endpoint of ['state?tools=0', 'tasks', 'usage', 'memory', 'skills', 'dataset', 'tools', 'schedule', 'channels', 'approvals', 'sessions', 'history?session=audit-missing', 'logs?n=3']) {
+    await t.test(endpoint, async () => {
+      const r = await get(`/api/${endpoint}${endpoint.includes('?') ? '&' : '?'}t=${TOKEN}`);
+      assert.equal(r.status, 200, r.body.slice(0, 120));
+      const payload = JSON.parse(r.body);
+      if (endpoint.startsWith('state?')) assert.ok(payload.version && payload.config);
+      else assert.equal(payload.ok, true);
+    });
+  }
+  const marker = 'audit-memory-roundtrip-11927';
+  const older = 'audit-memory-older-11928';
+  const post = body => get(`/api/memory?t=${TOKEN}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  await post({ text: older });
+  assert.equal((await post({ text: marker })).status, 200);
+  const saved = JSON.parse((await get(`/api/memory?q=${marker}&t=${TOKEN}`)).body);
+  assert.ok(saved.facts.some(f => f.text === marker));
+  assert.ok(JSON.parse((await get(`/api/memory?q=${older}&t=${TOKEN}`)).body).facts.some(f => f.text === older), 'saving another fact preserves earlier notes');
+  await post({ action: 'forget', query: marker });
+  const forgotten = JSON.parse((await get(`/api/memory?q=${marker}&t=${TOKEN}`)).body);
+  assert.equal(forgotten.facts.some(f => f.text === marker), false);
+  assert.ok(JSON.parse((await get(`/api/memory?q=${older}&t=${TOKEN}`)).body).facts.some(f => f.text === older), 'forgetting one fact preserves other notes');
+});
+
+test('skills and scheduler mutations reach their handlers instead of the GET response', async () => {
+  const post = (endpoint, body) => get(`/api/${endpoint}?t=${TOKEN}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const skill = JSON.parse((await post('skills', { name: 'audit skill 1291', when: 'audit check', steps: 'Read the local fixture.' })).body);
+  assert.equal(skill.ok, true);
+  assert.ok(skill.file, 'POST creates the skill file, rather than returning a list');
+  const list = JSON.parse((await get(`/api/skills?t=${TOKEN}`)).body).skills;
+  assert.ok(list.some(s => s.name === 'audit skill 1291'));
+  const scheduled = await post('schedule', { when: '2099-01-01 12:00', task: 'hi', deliver: 'silent', name: 'audit-only' });
+  assert.equal(scheduled.status, 200, scheduled.body);
+  const job = JSON.parse(scheduled.body).job;
+  assert.ok(job?.id, 'POST creates a future job without executing it');
+  const jobs = JSON.parse((await get(`/api/schedule?t=${TOKEN}`)).body).jobs;
+  assert.ok(jobs.some(j => j.id === job.id));
+  const removed = JSON.parse((await get(`/api/schedule?id=${job.id}&t=${TOKEN}`, { method: 'DELETE' })).body);
+  assert.equal(removed.ok, true);
+  assert.equal(JSON.parse((await get(`/api/schedule?t=${TOKEN}`)).body).jobs.some(j => j.id === job.id), false);
+  assert.equal((await post('schedule', { when: 'not a time', task: 'hi' })).status, 422);
+});
+
 test('SPA: index, /panel deep links and logo.png are served', async () => {
   const html = await get('/');
   assert.equal(html.status, 200);

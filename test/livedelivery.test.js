@@ -59,7 +59,7 @@ test('på samma version syns aldrig en uppdaterings-notis (K-fallet)', async () 
   assert.equal(compareVersions('0.5.4', 'v0.5.4'), 0);
 });
 
-test('installer-vägen säger ärligt windows_only MED releasesidan som vägledning (linux/mac)', async () => {
+test('installer-vägen säger ärligt windows_only MED releasesidan som vägledning (linux/mac)', { skip: process.platform === 'win32' && 'non-Windows contract; real installer verified by Windows CI' }, async () => {
   const cfg = await freshCfg();
   const r = await installSetup({ cfg });
   /* i Linux-sandboxen ALLTID windows_only — och svarsfältet måste hjälpa, inte spam-a Downloads */

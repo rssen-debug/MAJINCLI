@@ -25,6 +25,14 @@ try {
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(`http://127.0.0.1:${port}/?t=${token}`);
   await page.waitForFunction(() => window.MAJIN_ONBOARD && document.querySelector('#home'));
+  const rejectedApproval = await page.evaluate(async () => {
+    const box = approvalCard({ id: 'audit-expired-approval', tool: 'audit.no-execution', reason: 'test rejected acknowledgment' });
+    await respond('audit-expired-approval', true, box);
+    const enabled = [...box.querySelectorAll('button')].every(button => !button.disabled);
+    box.remove();
+    return enabled;
+  });
+  assert.equal(rejectedApproval, true, 'rejected approval acknowledgment never turns into a false allowed state');
   if (await page.locator('#ob-skip').isVisible()) await page.locator('#ob-skip').click();
   assert.equal(await page.evaluate(() => window.__MAJIN_TOKEN__), token, 'server does not rewrite variable names');
   await page.screenshot({ path: path.join(output, 'phoenix-home.png') });
@@ -114,6 +122,11 @@ try {
   await page.waitForFunction(() => document.querySelector('[data-task="fixture-research"]').dataset.state === 'stopped');
   assert.equal(stoppedTask, 'fixture-research');
   await page.unroute('**/api/chat/stop?**');
+  await page.evaluate(() => {
+    const task = { id: 'fixture-research', input: 'Continue research', status: 'running', run: 2, source: 'ui', created: 1, updated: Date.now() + 1 };
+    window.MAJIN_STUDIO.updateTasks([task]);
+  });
+  assert.equal(await page.locator('[data-task="fixture-research"]').getAttribute('data-state'), 'running', 'explicit next run reopens a completed Workspace task');
   const previewPath = path.join(home, 'workspace', 'aurora-preview.html');
   fs.mkdirSync(path.dirname(previewPath), { recursive: true });
   fs.writeFileSync(previewPath, '<!doctype html><style>body{margin:0;background:#f5f1e9;color:#253830;font:16px/1.6 Georgia;padding:36px}small{letter-spacing:3px;font:10px Arial}h1{font-size:46px;line-height:1.1;margin-top:65px}p{color:#617268}article{border-top:1px solid #c5cbbd;margin-top:55px;padding-top:24px}</style><small>FIELDNOTES / STUDIO</small><h1>Ideas deserve<br>room to grow.</h1><p>A real local HTML file, displayed through MAJIN’s workspace API.</p><article>Browser acceptance fixture</article><script>document.body.dataset.unsafe="executed"</script>');
@@ -227,6 +240,10 @@ try {
     const routes = Object.fromEntries(Object.keys(c.config.models.routes).map(k => [k, 'demo/demo-fast']));
     await window.MAJIN_ONBOARD.api('/config', { method: 'PATCH', body: { models: { provider: 'demo', routes }, moa: { policy: 'off' } } });
   });
+  await page.evaluate(() => command('/budget 7'));
+  const budgetConfig = await page.evaluate(async () => (await window.MAJIN_ONBOARD.api('/config')).config.budget);
+  assert.equal(budgetConfig.mode, 'cap', 'chat budget command enables the enforced cap');
+  assert.equal(budgetConfig.monthlyUsd, 7);
   await page.locator('#input').fill('hi'); await page.locator('#send').click();
   await page.waitForFunction(() => document.querySelector('#send').textContent === 'Stop');
   await page.locator('#send').click();
