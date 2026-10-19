@@ -404,3 +404,14 @@ allowed to contradict a test.
 *(Correction note: the 7B/7C and 7D entries above were re-committed after a
 silent no-op docs edit was discovered — the earlier runs' code, tests and
 matrix rows were unaffected; only these prose entries went missing briefly.)*
+## 2026-10-19 (kväll) — Del 3E
+1. **Concurrency is proven with timestamps, not claims.** Overlap-pairs from
+   measured startedAt/endedAt intervals are the contract — if they collude,
+   the benchmark lies; hence sabotage D2 zeroed them and the test went red.
+2. **Interleaved replicates kill drift.** S,P,S,P interleave keeps go-slow
+   gateway windows equally visible to both groups; a median of 3 is honest
+   enough on a free gateway.
+3. **Live evidence is recorded, live tests stay optional.** The numbers live
+   permanently in docs/BENCHMARKS.md; the live test gate (MAJIN_LIVE=1) keeps
+   CI deterministic while the reproduction command stays one line long.
+

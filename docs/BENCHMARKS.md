@@ -96,3 +96,26 @@ passes, and `--json` prints the same tree for a CI gate:
 ```bash
 node scripts/bench.mjs --json | tee bench.json && python3 -c "import json;exit(0 if json.load(open('bench.json'))['ok'] else 1)"
 ```
+
+## Del 3E — REAL parallel-vs-sequential (LIVE, 2026-10-19 12:1x UTC)
+
+**Setup:** `scripts/live-bench.mjs` — N=4 independent briefs (no dependencies),
+R=3 replicates interleaved S,P,S,P through `runSwarm`, provider
+`opencode/longcat-2.5-preview-free` (free model, measured usage via zen gateway,
+`x-opencode-session: majin`), same process, same machine, same minute.
+
+| Mode | run1 | run2 | run3 | median | overlap-pairs (max 6) |
+|---|---:|---:|---:|---:|---:|
+| sequential (cap=1) | 74 325 ms | 47 499 ms | 36 998 ms | **47 499 ms** | 0 / 0 / 0 |
+| parallel (cap=4) | 13 217 ms | 10 454 ms | 11 065 ms | **11 065 ms** | 6 / 6 / 6 |
+
+**Speedup: 4.29× on the median.** Every call ok (24/24). Measured usage:
+6 290 tokens total across all replicates (never estimated).
+
+Test-level live corroboration (same key, `MAJIN_LIVE=1 node --test test/live-bench.test.js`):
+N=3 — seq 24 522 ms (overlap 0) vs par 6 991 ms (overlap 3), tokens 660 = 660.
+
+Reproduction command (requires opencode key in ~/.majin/config.json):
+`node scripts/live-bench.mjs` and/or `MAJIN_LIVE=1 node --test test/live-bench.test.js`.
+Without the key both degrade honestly: script exits at the first provider call,
+and the live test skips with a typed reason (CI stays 370/0/7+1 mock always-on).

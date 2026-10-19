@@ -5,13 +5,13 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 67 / 100** (verified against main `24f0aec` (squash), v0.6.7, 2026-10-19).
+**Score so far: 69 / 100** (verified against main (squash), v0.6.8-rc, 2026-10-19).
 
 | Phase | Max | Earned |
 |---|---:|---:|
 | 1. Persistent Sessions & Handoff | 10 | 8 |
 | 2. Grand Architect | 12 | 12 |
-| 3. HYPERSWARM | 10 | 8 |
+| 3. HYPERSWARM | 10 | 10 |
 | 4. Reality Engine | 16 | 12 |
 | 5. Browser & Computer Use | 10 | 2 |
 | 6. GENESIS ZERO & Cost | 9 | 6 |
@@ -44,7 +44,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 2C | 3 | Ambiguity, change and failure-driven replanning work | Three mechanisms in `src/core/mission.js`, all bounded by config and all carrying markers: (1) **Clarify path** — compile prompt may answer `{"clarify":"..."}` → `kind: clarify` with ZERO workers and ZERO side effects (workspace asserted empty); (2) **failure-driven replan** — when repairRounds exhaust with dead contracts, one bounded strategy-change attempt (`mission.limits.replanRounds`, default 1 clamp 0..2) runs with a different-method prompt, charged to the same budget, re-verified against the SAME contracts → success marked `after replan`, failure marked `[LIMIT:REPLAN]`; (3) **objective change mid-flight** — `carry` grafts previously VERIFIED parts by node id: zero re-runs, zero repeated side effects, summary says `carried from previous objective`. task calls counted through every path. `test/mission.test.js` 20/20 (t17–t20). Discrimination: clarify ignored → t17 red; replan dead → t13+t18 red; carry bypassed → t20 red; knob ignored → t13+t19 red. Honest cost note: the clarify compile-rule adds ≈1 estimated token per compile call (bench 24399→24400 measured). | mock | PR #44 | PASS | 2026-10-19 |
 | 2D | 3 | Real end-to-end complex goals through the normal chat path | `node /home/user/live-verify-oc.mjs <key>` — mission compiled, 2 workers, files written and `[VERIFIED: …]` in summary | opencode Go free (longcat) | `a0a08b0` | PASS | 2026-10-18 |
 
-## DEL 3 — HYPERSWARM (8/10)
+## DEL 3 — HYPERSWARM (10/10)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
@@ -52,7 +52,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 3B | 2 | Independent work overlaps; dependencies never violated | swarm.test.js + mission.test 4; live mission events `worker_start×N` before completions | mock + opencode live | `a0a08b0` | PASS | 2026-10-18 |
 | 3C | 2 | Failure, cancellation and recovery correct (bounded transient recovery, safe replacement) | Scheduler-level bounded replacement in `runSwarm` (`maxAttempts`, per-node attempt counter): `isTransientFailure` admits ONLY network/rate-limit/5xx shapes — permanent errors run EXACTLY ONCE. Replacement = fresh subagent session (`:a2` suffix, no state bleed), every attempt emits `worker_retry(id, attempt, why)`. Hidden retry layers removed for missions: `providerRetries:0` + `providerErrorCap:0` in swarm workers (chat path keeps its defaults), so mission recovery has exactly ONE accountable owner and ZERO sleep hiding. `test/swarm.test.js` t11–t13 + `test/mission.test.js` t16: ECONNRESET flake → replacement → mission still verifies (worker_start→error→worker_retry→worker_start event chain); permanent refusal → calls==1 + dep blocked; AbortSignal mid-flight → zero new starts, all `blocked: cancelled`, wall ≪ serial. Discrimination: everything-transient→t12 red, retry branch off→t11+t16 red, hidden retries restored→t16 red. | mock | PR #43 | PASS | 2026-10-19 |
 | 3D | 2 | Parallel work cannot corrupt shared resources (locks, worktrees, ownership) | Adversarial harness in `test/swarm.test.js` t14–t15: ownership timing proven deterministically (workerB queues ≥60 ms behind holder, FIFO order, owner re-entry without deadlock, heldBy empty after release); 2 hostile workers × 5 rounds of interleaved `fs.patch` read-modify-writes on ONE file → every update of BOTH workers present, every line regex-intact (no torn bytes). The lock is the explanation, not luck: bypassing `locked()` turns t15 red (lost update). | mock | PR #43 | PASS | 2026-10-19 |
-| 3E | 2 | Real model runs show measurable benefit where parallelism applies | BLOCKED in sandbox: no live provider key exists on this machine (all provider apiKeys empty, no OPENCODE/DEEPSEEK env, ollama wiped by snapshot). In-process wall-clock overlap proof exists (swarm.test "tre oberoende noder verkligen överlappar") but is not a REAL MODEL benchmark — by §16 honesty rules this row stays UNVERIFIED until a live parallel-vs-sequential measurement runs. | — | — | UNVERIFIED (blocked: needs live key) | 2026-10-19 |
+| 3E | 2 | REAL parallel-vs-sequential benchmark (live model) | LIVE MEASURED: scripts/live-bench.mjs through runSwarm, opencode longcat-2.5-preview-free, N=4 briefs, R=3 interleaved — seq median 47 499 ms (overlap 0/0/0) vs par median 11 065 ms (overlap 6/6/6) = **4.29× speedup**; 24/24 ok; 6 290 tokens MEASURED. Test-level live corroboration N=3: 24 522 vs 6 991 ms, tokens 660=660. Table committed in docs/BENCHMARKS.md. | `node scripts/live-bench.mjs` (key required) · `MAJIN_LIVE=1 node --test test/live-bench.test.js` · offline CI path same harness w/o key (370/0/7+1) | mock + live | 2-way discrimination: D1 (cap forced 1 → RED in mock AND live: par behaved seq-equal 30 553 ms/overlap 0), D2 (result timestamps zeroed → overlap evidence breaks, RED), both restored green | **PASS** | 2026-10-19 |
 
 ## DEL 4 — Reality Engine (12/16)
 

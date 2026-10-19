@@ -1,18 +1,15 @@
-# MAJIN FEATURE RADAR — top 5 discoveries (2026-10-19 night, wave 3: 9D+10C — Del 9 COMPLETE 5/5)
+# MAJIN FEATURE RADAR — top 5 discoveries (2026-10-19 evening, wave 4: 3E LIVE — Del 3 COMPLETE 10/10)
 
 Standing rule from the master brief: every run records its five highest-value
 discoveries in docs. Each item names where it was found and why it ranks.
 Nothing here is scored — only listed by observed point-density and leverage.
 
-1. **SHIPPED — Del 7D (2p): adapter execution through the engine.** The
-   executor listed here this morning now exists (`Adapters.call`): per-call
-   re-validation, dual approval for external classes, disk rate-limit,
-   timeout-as-failure, self-disable + enable, `mapRows` array enumeration.
-   Tested against a local http server; 4 sabotage cycles red→green. DEL 7 is
-   the first fully complete phase (8/8). The next-generation discovery: the
-   SAME executor pattern (validate→gate→rate→fail-count) is one import away
-   for scheduled jobs (Del 9D) and browser actions (Del 5B) — reuse before
-   invention.
+1. **SHIPPED — Del 3E REAL benchmark (2p): HYPERSWARM COMPLETE 10/10.** The
+   opencode key (free models only, longcat-2.5-preview-free) landed and the
+   harness ran same-night: 4.29× median speedup, overlap 0 vs 6/6, 24/24 ok,
+   6 290 tokens measured. Live path is now ORDINARY infra: any remaining
+   "needs live key" row (1E, 6C) lost its last decoy excuse — they are
+   next-wave candidates, not blockers.
 
 2. **NEW — Silent no-op doc edits are the most expensive cheap bug.** Found shipping 7D+9D/10C: two DECISIONS entries never landed because a `replace()` anchor ('# DECISIONS') did not match the real heading ('# Decisions') — the failure was silent and invisible to the suite until re-verified manually. Rule now: every docs edit asserts `count==1` AND is grep-verified post-write; a docs trio isn't done until the target lines are re-read from disk. Rank: #2 because it guards the whole evidence chain.
    Found while shipping 7B: `103` was hardcoded in 5 test files (agent, jobs,
