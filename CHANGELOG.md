@@ -5,6 +5,37 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 (del 2) — Del 3C/3D: bounded transient replacement + adversarial lock proof
+
+### Changed
+- **Scheduler owns mission recovery, exactly one accountable layer.** Swarm
+  workers now run with `providerRetries:0`/`providerErrorCap:0`: a provider
+  flake inside a mission surfaces immediately instead of hiding behind
+  chat.complete's silent backoff retries (invisible cost, invisible latency,
+  ~1.5 s→0.6 s in tests). The chat/conversation path keeps its defaults.
+- **Bounded transient replacement.** `runSwarm(maxAttempts)` (missions: 1 +
+  `mission.limits.transientRetries`, clamped): a node that dies transiently is
+  re-queued as a NEW attempt with a FRESH subagent session (`:a2`) and a
+  `worker_retry(id, attempt, why)` event — safe replacement, no state bleed,
+  never a loop. `isTransientFailure` admits only network/rate-limit/5xx shapes;
+  permanent failures (safety refusal, bad args, parse errors…) run EXACTLY
+  ONCE and block dependents honestly.
+- **Mid-run cancel stays honest.** Aborting mid-flight starts nothing new and
+  every pending/in-flight node ends `blocked: cancelled` — never ok, never
+  timed-out.
+- **Adversarial lock proof.** Racing `fs.patch` read-modify-writes by two
+  hostile workers (5 rounds, disjoint edits, one file) lose nothing and tear
+  no line; ownership timing is asserted deterministically (queue ≥60 ms,
+  FIFO, re-entry safe).
+
+### Verified
+- swarm 15/15 + mission 16/16 = 31/31; full suite 341/0/7; i18n clean; bench
+  7/7 with byte-identical token spend (24399/22 calls).
+- **Discrimination:** everything-classified-transient → permanent-failure test
+  red; retry branch off → transient tests red; `locked()` bypassed → lost-update
+  test red; hidden retries restored → mission observability test red; sane 31/31.
+
+
 ## 2026-10-19 — Del 4C: hard mission limits (retry/budget/timeout) with LIMIT markers
 
 ### Changed

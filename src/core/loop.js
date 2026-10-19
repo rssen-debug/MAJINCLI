@@ -24,7 +24,7 @@ function pickSchemas(registry, ctx) {
   return all.filter((t) => wanted.has(t.name));
 }
 
-export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = () => {}, signal, maxSteps, usage, ctx, allowTools = true, label = 'agent' }) {
+export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = () => {}, signal, maxSteps, usage, ctx, allowTools = true, label = 'agent', providerErrorCap = 4, providerRetries = null }) {
   const agent = cfg.get('agent') || {};
   const limit = Number(maxSteps) || agent.maxSteps || 40;
   const toolLog = [];
@@ -70,7 +70,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         stream: true,
         maxTokens: agent.maxTokens || 6000,
         temperature: agent.temperature ?? 0.2,
-        retries: agent.retries ?? 2,
+        retries: providerRetries ?? agent.retries ?? 2,
         signal,
         onEvent: (ev) => {
           if (ev.type === 'delta') onEvent({ type: 'delta', label, text: ev.text });
@@ -93,7 +93,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         };
       }
       if (errors >= 2) escalated = true;
-      if (errors >= 4) return { text: answer || `${whoIs(route)} did not answer after ${errors} tries: ${info.human || err.message}`, steps, toolLog, usage: tally, error: err.message, errorKind: info.kind, errorHint: err.hint || null, escalated };
+      if (errors >= providerErrorCap) return { text: answer || `${whoIs(route)} did not answer after ${errors} tries: ${info.human || err.message}`, steps, toolLog, usage: tally, error: err.message, errorKind: info.kind, errorHint: err.hint || null, escalated };
       messages.push({ role: 'user', content: `The previous call failed (${err.code || 'error'}: ${String(err.message).slice(0, 200)}). Try again, simpler.` });
       continue;
     }

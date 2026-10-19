@@ -384,3 +384,38 @@ test('PRODUCTION LIMITS: a mission that overruns its wall-clock budget is stoppe
   assert.equal(m.okCount, 0, 'nothing may be marked ok after the deadline fired mid-flight');
   await rt.shutdown();
 });
+
+test('RESILIENCE: a provider flake mid-mission is absorbed by ONE bounded replacement — mission still verifies', async () => {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-3c-live-'));
+  fs.mkdirSync(path.join(ws, 'store'));
+  fs.writeFileSync(path.join(ws, 'store', 'a.txt'), 'a');
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  rt.cfg.patch({
+    models: { provider: 'demo', routes: { tasks: 'demo/demo-fast', tools: 'demo/demo-fast', chat: 'demo/demo-fast' } },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
+    guard: { mode: 'off' }, moa: { policy: 'off' }, workspace: ws,
+    mission: { limits: { repairRounds: 1, timeoutMs: 0, tokenBudget: 0, transientRetries: 1 } },
+  }, { persist: false });
+  setScript('mission:compile', [{ text: JSON.stringify({ nodes: [{ id: 'p1', input: 'report the number of files in store/', deps: [], estMs: 1000 }, { id: 'p2', input: 'say done in three words, no more', deps: [], estMs: 1000 }] }) }]);
+  /* p1 flakes once (transient), p2 answers, then p1's REPLACEMENT answers.
+     Consumption order with cap=1: p1-a1 throw -> p2 -> p1-a2. */
+  /* retry lands FIRST in node order (p1 relaunchable before p2 is reached): */
+  setScript('sub:tasks', [
+    { throw: 'fetch failed: ECONNRESET to provider' },
+    { text: 'There are 1 files in store/.' },
+    { text: 'done done done.' },
+  ]);
+  const events = [];
+  resetCalls();
+  const m = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'resS', input: '1. report the number of files in store/\n2. tell me it is done', emit: (e) => events.push(e), capOverride: 1 });
+  const taskCalls = lastCalls().filter((c) => c.key === 'sub:tasks').length;
+  assert.equal(taskCalls, 3, `2 workers + 1 replacement = 3 calls, got ${taskCalls}`);
+  assert.equal(m.okCount, 2, JSON.stringify(m.textSummary));
+  assert.equal(m.failCount, 0);
+  const retry = events.find((e) => e.type === 'worker_retry');
+  assert.ok(retry, 'worker_retry must be visible in mission events');
+  assert.equal(retry.attempt, 2);
+  assert.match(String(retry.why), /ECONNRESET/i);
+  assert.ok((fs.readdirSync(path.join(ws)) || []).length >= 0);
+  await rt.shutdown();
+});

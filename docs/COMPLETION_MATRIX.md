@@ -5,13 +5,13 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 49 / 100** (verified against main `e2b3f2e`, v0.6.1-rc, 2026-10-19).
+**Score so far: 53 / 100** (verified against the Del 3C/3D PR head, 2026-10-19).
 
 | Phase | Max | Earned |
 |---|---:|---:|
 | 1. Persistent Sessions & Handoff | 10 | 8 |
 | 2. Grand Architect | 12 | 9 |
-| 3. HYPERSWARM | 10 | 4 |
+| 3. HYPERSWARM | 10 | 8 |
 | 4. Reality Engine | 16 | 12 |
 | 5. Browser & Computer Use | 10 | 2 |
 | 6. GENESIS ZERO & Cost | 9 | 3 |
@@ -21,7 +21,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 10. Security & Privacy | 5 | 3 |
 | 11. Windows & Updates | 4 | 2 |
 | 12. Final Acceptance | 3 | 0 |
-| **TOTAL** | **100** | **49** |
+| **TOTAL** | **100** | **53** |
 
 ---
 
@@ -44,15 +44,15 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 2C | 3 | Ambiguity, change and failure-driven replanning work | No replanning loop; no clarifying-question path when goal is ambiguous | — | — | FAIL | 2026-10-18 |
 | 2D | 3 | Real end-to-end complex goals through the normal chat path | `node /home/user/live-verify-oc.mjs <key>` — mission compiled, 2 workers, files written and `[VERIFIED: …]` in summary | opencode Go free (longcat) | `a0a08b0` | PASS | 2026-10-18 |
 
-## DEL 3 — HYPERSWARM (4/10)
+## DEL 3 — HYPERSWARM (8/10)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
 | 3A | 2 | Deterministic worker selection (1..N by deps/overhead/costs) | `test/swarm.test.js` — analyzer picks 3 for 3 independent jobs, 1 for a chain, 1 when overhead eats the win | mock | `933a982` | PASS | 2026-10-18 |
 | 3B | 2 | Independent work overlaps; dependencies never violated | swarm.test.js + mission.test 4; live mission events `worker_start×N` before completions | mock + opencode live | `a0a08b0` | PASS | 2026-10-18 |
-| 3C | 2 | Failure, cancellation and recovery correct (bounded transient recovery, safe replacement) | Typed endings + blocked propagation proven; bounded transient *retry* and mid-run cancel/replace not formally tested | — | — | UNVERIFIED | 2026-10-18 |
-| 3D | 2 | Parallel work cannot corrupt shared resources (locks, worktrees, ownership) | `fs.write` serializes per path via `locked()`; no adversarial corruption test | — | — | UNVERIFIED | 2026-10-18 |
-| 3E | 2 | Real model runs show measurable benefit where parallelism applies | Workers ran live but no against-sequential benchmark of wall time/tokens | — | — | UNVERIFIED | 2026-10-18 |
+| 3C | 2 | Failure, cancellation and recovery correct (bounded transient recovery, safe replacement) | Scheduler-level bounded replacement in `runSwarm` (`maxAttempts`, per-node attempt counter): `isTransientFailure` admits ONLY network/rate-limit/5xx shapes — permanent errors run EXACTLY ONCE. Replacement = fresh subagent session (`:a2` suffix, no state bleed), every attempt emits `worker_retry(id, attempt, why)`. Hidden retry layers removed for missions: `providerRetries:0` + `providerErrorCap:0` in swarm workers (chat path keeps its defaults), so mission recovery has exactly ONE accountable owner and ZERO sleep hiding. `test/swarm.test.js` t11–t13 + `test/mission.test.js` t16: ECONNRESET flake → replacement → mission still verifies (worker_start→error→worker_retry→worker_start event chain); permanent refusal → calls==1 + dep blocked; AbortSignal mid-flight → zero new starts, all `blocked: cancelled`, wall ≪ serial. Discrimination: everything-transient→t12 red, retry branch off→t11+t16 red, hidden retries restored→t16 red. | mock | PR #43 | PASS | 2026-10-19 |
+| 3D | 2 | Parallel work cannot corrupt shared resources (locks, worktrees, ownership) | Adversarial harness in `test/swarm.test.js` t14–t15: ownership timing proven deterministically (workerB queues ≥60 ms behind holder, FIFO order, owner re-entry without deadlock, heldBy empty after release); 2 hostile workers × 5 rounds of interleaved `fs.patch` read-modify-writes on ONE file → every update of BOTH workers present, every line regex-intact (no torn bytes). The lock is the explanation, not luck: bypassing `locked()` turns t15 red (lost update). | mock | PR #43 | PASS | 2026-10-19 |
+| 3E | 2 | Real model runs show measurable benefit where parallelism applies | BLOCKED in sandbox: no live provider key exists on this machine (all provider apiKeys empty, no OPENCODE/DEEPSEEK env, ollama wiped by snapshot). In-process wall-clock overlap proof exists (swarm.test "tre oberoende noder verkligen överlappar") but is not a REAL MODEL benchmark — by §16 honesty rules this row stays UNVERIFIED until a live parallel-vs-sequential measurement runs. | — | — | UNVERIFIED (blocked: needs live key) | 2026-10-19 |
 
 ## DEL 4 — Reality Engine (12/16)
 

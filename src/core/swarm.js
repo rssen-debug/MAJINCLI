@@ -184,8 +184,17 @@ export function analyzeSwarm(nodes, opts = {}) {
  * aven barn-till-barn blocked, med arlig orsak), sa inget vantar for evigt.
  * Stoder AbortSignal: avbruten paus = resterande markeras cancelled.
  */
-export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, onEvent = () => {} }) {
+/** Del 3C: what counts as RETRYABLE. Only network/rate-limit/transient shapes —
+   an unknown error is never retried blindly (that is how duplicate side effects
+   are born). */
+export function isTransientFailure(msg) {
+  return /fetch failed|econnreset|econnrefused|enotfound|etimedout|socket hang up|rate.?limit|\b429\b|\b5[0-9][0-9]\b|temporarily|broken pipe|reset by peer/i.test(String(msg || ''));
+}
+
+export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, onEvent = () => {}, maxAttempts = 1 }) {
   validateGraph(nodes);
+  const attempts = new Map(nodes.map((n) => [n.id, 0]));
+  const maxAttemptsN = Math.max(1, Math.min(4, Number(maxAttempts) || 1));
   const capN = Math.max(1, Math.min(16, Number(cap) || 4));
   const results = new Map(nodes.map((n) => [n.id, null]));
   const done = new Set(), failed = new Set();
@@ -218,11 +227,13 @@ export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, o
 
   const launchOne = (n) => {
     started.add(n.id);
+    const attempt = (attempts.get(n.id) || 0) + 1;
+    attempts.set(n.id, attempt);
     const job = (async () => {
       const startedAt = performance.now();
-      onEvent({ type: 'worker_start', id: n.id });
+      onEvent({ type: 'worker_start', id: n.id, attempt });
       try {
-        const value = await n.run(n, { signal });
+        const value = await n.run({ ...n, attempt }, { signal });
         const endedAt = performance.now();
         if (aborted()) {
           results.set(n.id, { ok: undefined, blocked: true, reason: 'cancelled', ms: Math.round(endedAt - startedAt) });
@@ -234,7 +245,17 @@ export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, o
         onEvent({ type: 'worker_done', id: n.id, ok: true });
       } catch (err) {
         const endedAt = performance.now();
-        results.set(n.id, { ok: false, error: String(err && err.message || err).slice(0, 300), ms: Math.round(endedAt - startedAt), startedAt: Math.round(startedAt), endedAt: Math.round(endedAt) });
+        const msg = String(err && err.message || err);
+        /* Del 3C: bounded transient retry = safe REPLACEMENT. A fresh attempt runs
+           a fresh subagent session (node.attempt) — no half-state bleeds over, and
+           the error must LOOK transient before we ever re-run: permanent failures
+           stay permanent, exactly once. */
+        if (!aborted() && isTransientFailure(msg) && attempt < maxAttemptsN) {
+          results.set(n.id, null);
+          onEvent({ type: 'worker_retry', id: n.id, attempt: attempt + 1, why: msg.slice(0, 160) });
+          return;
+        }
+        results.set(n.id, { ok: false, error: msg.slice(0, 300), ms: Math.round(endedAt - startedAt), startedAt: Math.round(startedAt), endedAt: Math.round(endedAt) });
         failed.add(n.id);
         onEvent({ type: 'worker_done', id: n.id, ok: false, error: err && err.message });
       }
@@ -307,9 +328,14 @@ export function subagentWorker({ cfg, registry, sessionPrefix = 'swarm', emit = 
       job,
       maxSteps,
       registry,
-      session: `${sessionPrefix}:${node.id}`,
+      session: `${sessionPrefix}:${node.id}${(node.attempt || 1) > 1 ? ':a' + node.attempt : ''}`,
       emit: (e) => emit?.({ ...e, worker: node.id, sub: true }),
       memory,
+      /* Del 3C: the scheduler owns replacement. A worker must not hide a provider
+         flake behind up to 4 silent inner retries — first error surfaces, the
+         scheduler classifies transient vs permanent and decides bounded retry. */
+      providerErrorCap: 0,
+      providerRetries: 0,
     });
     if (res.error) throw new Error(String(res.error).slice(0, 300));
     return { text: res.text, steps: res.steps, tools: res.tools || [], usage: res.usage || null };

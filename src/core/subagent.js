@@ -6,7 +6,7 @@
 import { loop } from './loop.js';
 import { routeFor } from './router.js';
 
-export async function run({ cfg, task, job = 'tasks', maxSteps = 10, registry, session, emit, memory }) {
+export async function run({ cfg, task, job = 'tasks', maxSteps = 10, registry, session, emit, memory, providerErrorCap = 4, providerRetries = null }) {
   const route = routeFor(cfg, job);
   const messages = [
     {
@@ -32,6 +32,8 @@ export async function run({ cfg, task, job = 'tasks', maxSteps = 10, registry, s
     ctx: { session: `${session}:sub`, emit: (e) => emit?.({ ...e, sub: true }) },
     onEvent: (e) => emit?.({ ...e, sub: true }),
     label: 'sub',
+    providerErrorCap,
+    providerRetries,
   });
   return { text: res.text, steps: res.steps, tools: res.toolLog.map((t) => t.tool), usage: res.usage, error: res.error };
 }

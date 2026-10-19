@@ -11,7 +11,7 @@ import fs from 'node:fs';
 
 process.env.MAJIN_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-swarm-'));
 
-const { analyzeSwarm, runSwarm, subagentWorker } = await import('../src/core/swarm.js');
+const { analyzeSwarm, runSwarm, subagentWorker, isTransientFailure } = await import('../src/core/swarm.js');
 const { createRuntime } = await import('../src/core/runtime.js');
 const { setScript } = await import('../src/core/provider/mock.js');
 
@@ -195,4 +195,156 @@ test('REGRESSION: ledig kapacitet tilldelas omedelbart nagot körbart — aldrig
   assert.ok(times['c-start'] != null, 'c kordes');
   assert.ok(gap < 250, `c startade ${gap.toFixed(0)}ms efter fast — work-conserving maste ligga nara noll (batchv:e skulle ge ~840+)`);
   assert.ok(times['slow-end'] > times['fast-end'] + 400, 'slow sprang oavbruet parallellt');
+});
+
+/* ---------------- Del 3C: failure, cancellation and recovery ---------------- */
+
+test('recover: a TRANSIENT flake is retried as a safe replacement and still succeeds (bounded)', async () => {
+  let calls = 0;
+  const events = [];
+  const flaky = async (node) => {
+    calls += 1;
+    if (calls === 1) throw new Error('fetch failed: ECONNRESET');
+    return { recovered: true, attempt: node.attempt };
+  };
+  const r = await runSwarm({
+    nodes: [
+      { id: 'a', deps: [], run: flaky },
+      { id: 'b', deps: ['a'], run: async () => ({ done: 'b' }) },
+    ],
+    cap: 2,
+    maxAttempts: 2,
+    onEvent: (e) => events.push(e),
+  });
+  assert.equal(calls, 2, 'exactly one replacement attempt — never a loop');
+  assert.equal(r.okCount, 2, 'a flaky start must not poison the dep chain');
+  assert.equal(r.failCount, 0);
+  const aRes = r.results.get('a');
+  assert.equal(aRes.ok, true);
+  assert.equal(aRes.value.attempt, 2, 'the replacement attempt produced the result');
+  const retry = events.find((e) => e.type === 'worker_retry');
+  assert.ok(retry, 'worker_retry event required for observability');
+  assert.equal(retry.attempt, 2);
+  assert.match(String(retry.why), /ECONNRESET/i);
+});
+
+test('recover: a PERMANENT failure is never retried — it stays failed exactly once', async () => {
+  let calls = 0;
+  const events = [];
+  const refused = async () => {
+    calls += 1;
+    throw new Error('model refused: safety policy');
+  };
+  const r = await runSwarm({
+    nodes: [
+      { id: 'a', deps: [], run: refused },
+      { id: 'b', deps: ['a'], run: async () => ({ done: 'b' }) },
+    ],
+    cap: 2,
+    maxAttempts: 3, /* generous cap — a permanent error must not consume it */
+    onEvent: (e) => events.push(e),
+  });
+  assert.equal(calls, 1, `permanent failure ran ${calls} times — a blind retry would duplicate side effects`);
+  assert.equal(r.failCount, 1);
+  assert.equal(events.some((e) => e.type === 'worker_retry'), false, 'no worker_retry for non-transient errors');
+  const b = r.results.get('b');
+  assert.equal(b.blocked, true, 'dependent is honestly blocked, never executed');
+  assert.match(String(b.reason), /dependency a failed/i);
+  /* classifier unit-pins: network/rate shapes transient, semantic failures permanent */
+  for (const m of ['fetch failed: ECONNRESET', 'HTTP 429 rate_limit', 'HTTP 503 upstream', 'socket hang up', 'request ETIMEDOUT']) {
+    assert.ok(isTransientFailure(m), `should be transient: ${m}`);
+  }
+  for (const m of ['model refused: safety policy', 'JSON.parse error', 'verification failed', 'invalid args', 'exited with status 1']) {
+    assert.ok(!isTransientFailure(m), `must stay permanent: ${m}`);
+  }
+});
+
+test('recover: mid-run CANCEL stops pending work honestly — nothing new starts after the signal', async () => {
+  const controller = new AbortController();
+  const started = [];
+  const slow = (id) => async () => {
+    started.push(id);
+    await settle(300);
+    return { done: id };
+  };
+  const t0 = performance.now();
+  const promise = runSwarm({
+    nodes: [
+      { id: 'a', deps: [], run: slow('a') },
+      { id: 'b', deps: [], run: slow('b') },
+      { id: 'c', deps: ['b'], run: slow('c') },
+    ],
+    cap: 1,
+    signal: controller.signal,
+  });
+  await settle(60);
+  controller.abort();
+  const r = await promise;
+  const wall = performance.now() - t0;
+  assert.deepEqual(started, ['a'], `no worker may start after a cancel, started=${started.join(',')},`);
+  assert.ok(wall < 900, `cancel must not wait for the full queue (~900ms): ${wall.toFixed(0)}ms`);
+  for (const id of ['a', 'b', 'c']) {
+    const res = r.results.get(id);
+    assert.equal(res.blocked, true, `${id} must end blocked, never ok`);
+    assert.match(String(res.reason), /cancelled/i, `${id} must say cancelled, not timed-out or failed`);
+  }
+  assert.equal(r.okCount + r.failCount, 0, 'a cancelled queue produces zero ok and zero fail — honest blocked');
+});
+
+/* ---------------- Del 3D: parallel work cannot corrupt shared resources ---------------- */
+
+test('ownership: the per-path file lock serializes owners deterministically (FIFO, no re-entrant deadlock)', async () => {
+  const { fileLocks } = await import('../src/core/tasks.js');
+  const p = '/tmp/majin-3d-lock-' + Math.random().toString(36).slice(2, 8);
+  const order = [];
+  const tA0 = Date.now();
+  const releaseA = await fileLocks.acquire(p, 'workerA');
+  let aEnd = 0;
+  const holding = (async () => { await settle(80); order.push('A-out'); aEnd = Date.now(); releaseA(); })();
+  const b0 = Date.now();
+  const releaseB = await fileLocks.acquire(p, 'workerB');
+  const bQueuedMs = Date.now() - b0;
+  assert.ok(bQueuedMs >= 60, `workerB entered while workerA held the lock (+${bQueuedMs}ms queue)`);
+  assert.ok(Date.now() >= aEnd, 'B entered only after A released');
+  releaseB();
+  order.push('B-out');
+  await holding;
+  assert.deepEqual(order, ['A-out', 'B-out'], 'FIFO order: A releases, then B proceeds');
+  /* owner re-entry: the SAME session may re-acquire its own file without parking forever */
+  const r1 = await fileLocks.acquire(p, 'ownerSelf');
+  const r2 = await fileLocks.acquire(p, 'ownerSelf');
+  r1(); r2();
+  assert.ok(fileLocks.heldBy('ownerSelf').length === 0, 'heldBy must be empty after full release');
+});
+
+test('adversarial: racing fs.patch edits on one file never lose an update and never tear a line', async (t) => {
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-3d-ws-'));
+  rt.cfg.patch({
+    models: { provider: 'demo', routes: { tasks: 'demo/demo-fast', tools: 'demo/demo-fast', chat: 'demo/demo-fast' } },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
+    guard: { mode: 'off' }, workspace: ws,
+  }, { persist: false });
+  assert.ok(rt.registry.list().some((x) => x.name === 'fs.patch'), 'fs.patch must be registered');
+  fs.writeFileSync(path.join(ws, 'shared.txt'), 'BASE-one\nBASE-two\n');
+  /* two hostile workers: interleaved rounds, distinct edits each, disjoint targets.
+     Without the lock their read-modify-write interleaves and one update is lost. */
+  const worker = async (who, session) => {
+    for (let i = 0; i < 5; i++) {
+      const marker = `${who}:line${i}`;
+      const anchor = i % 2 ? 'BASE-two' : 'BASE-one';
+      const out = await rt.registry.exec('fs.patch', { path: 'shared.txt', edits: [{ find: anchor, replace: `${anchor}\n${marker}` }] }, { session });
+      if (out.error) throw new Error('fs.patch failed: ' + JSON.stringify(out.error).slice(0, 160));
+    }
+  };
+  await Promise.all([worker('wA', 'workerA'), worker('wB', 'workerB')]);
+  const final = fs.readFileSync(path.join(ws, 'shared.txt'), 'utf8');
+  for (let i = 0; i < 5; i++) {
+    assert.ok(final.includes(`wA:line${i}`), `wA update ${i} lost — lock violation`);
+    assert.ok(final.includes(`wB:line${i}`), `wB update ${i} lost — lock violation`);
+  }
+  for (const line of final.split('\n').filter(Boolean)) {
+    assert.match(line, /^(BASE-(one|two)|w[AB]:line\d)$/, `torn line = interleaved bytes: ${JSON.stringify(line)}`);
+  }
+  await rt.shutdown();
 });
