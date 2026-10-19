@@ -5,6 +5,78 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 (night) — v0.6.8 · Del 3E — HYPERSWARM COMPLETE (67 → 69/100)
+
+### Changed
+- **3E — REAL parallel-vs-sequential benchmark, live model:** `scripts/live-bench.mjs`,
+  N=4 dependency-free briefs through `runSwarm`, interleaved R=3 (S,P,S,P)
+  against `opencode/longcat-2.5-preview-free`. Sequential median **47 499 ms**
+  vs parallel median **11 065 ms** = **4.29× speedup**; overlap-pairs 0/0/0 vs
+  6/6/6 (of max 6). 24/24 calls ok; 6 290 tokens measured by the gateway.
+- `test/live-bench.test.js`: deterministic mock path (always on in CI — cap
+  mechanics + timestamp-overlap evidence with a 120–160 ms latency ladder) +
+  live path gated `MAJIN_LIVE=1` (24 522 ms vs 6 991 ms, tokens 660=660).
+  Offline the live test skips honestly (suite 370/0/8, the +1 skip IS the gate).
+
+### Verified
+- `node scripts/live-bench.mjs` (opencode key) → table committed in
+  `docs/BENCHMARKS.md`; `MAJIN_LIVE=1 node --test test/live-bench.test.js` → 2/2.
+- Discrimination: D1 cap forced 1 → RED in BOTH modes (live parallel degraded to
+  30 553 ms/overlap 0 — fake concurrency caught); D2 timestamps zeroed → RED.
+  Restored green. Version pinned 0.6.8 in all four sites before the final gate.
+
+## 2026-10-19 (night) — v0.6.7 · Del 9D + 10C (Del 9 COMPLETE 5/5)
+
+### Changed
+- **9D — creative/productivity workflow evidence:** E2E story brief through the
+  live registry (3 chapters + referencing index.json, byte-verified on disk);
+  notes.md → brief.json pipeline with preserved source. `test/creative.test.js`.
+- **10C — prompt-injection resistance (web/repo/doc):** `src/core/injection.js`
+  (11-pattern corpus, zero false positives), wired into the loop's tool-result
+  message path: infected results annotated in the message the model reads
+  + `injection_warning` events; clean results byte-identical. `test/adversarial.test.js`.
+
+### Verified
+- Suite 369/0/7, i18n clean. Bench note: totals read 24399 (`main` worktree
+  control identical — environmental drift, branch==main parity exact).
+- Discrimination 5 cycles: C1 fs.write no-op, C2 registry args wiped, A1 scan
+  off, A2 corpus emptied, A3 detect-without-annotate — all RED → restored GREEN.
+
+## 2026-10-19 (night) — v0.6.6 · Del 7D (Del 7 COMPLETE 8/8)
+
+### Changed
+- **7D — adapter execution through the existing engine:** `Adapters.call()`
+  re-reads + RE-validates the descriptor per call; read→GET /
+  external-write,post→POST; external classes need approved:true AND a live
+  `approvals.request` decision (same gate as jobs.send); disk sidecar state
+  (rolling-hour rate limit, fail counters, disabled flag); self-disable after
+  3 consecutive failures; explicit enable; `mapRows` array enumeration.
+  Tool: `majin.adapter` call | enable. `test/adapters-exec.test.js` 5/5.
+
+### Verified
+- Suite 364/0/7, i18n clean, bench 7/7 byte-identical 24400 tokens.
+- Discrimination 4 cycles: D1 approval skipped, D2 rate off, D3 never-disable,
+  D4 re-validation off — all RED → restored GREEN.
+
+## 2026-10-19 (night) — v0.6.5 · Del 7B + 7C (59 → 63/100)
+
+### Changed
+- **7B — safe adapters (`src/core/adapters.js`):** declarative http-json
+  descriptors only; HARD validation before any disk write (https-or-localhost,
+  no javascript:/data: schemes, no raw secrets — {env:NAME} placeholders only,
+  kind allowlist, permission classes read | external-write | external-post,
+  code-shaped mappings refused, clamped timeout/rate, atomic writes).
+  Tool: `majin.adapter` validate | create | list | remove. Registry 103 → 104.
+- **7C — skill failure tracking (memory.js):** `recordOutcome()` counted on
+  disk state (multi-instance honesty), success resets streak, N=3 consecutive
+  failures → DISABLED honestly (never deleted), disabled filtered from
+  match()+prompt(), explicit enable. Tool: `majin.skill` report | enable.
+
+### Verified
+- Suite 359/0/7, i18n clean, bench byte-identical 24400 tokens.
+- Discrimination 5 cycles: S1 disabled-selectable, S2 never-disable, S3
+  no-success-reset, S4 skip-validation, S5 allow-remote-http — RED → GREEN.
+
 ## 2026-10-19 (late evening) — Del 6A: one budget guard, measured per-task caps, honest unknown prices
 
 ### Changed
