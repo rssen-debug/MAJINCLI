@@ -5,6 +5,25 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 — P1: durable journal, resume and route-switch handoffs (UI-agent handover #2, engine side) — v0.9.5
+
+### Fixed
+- **Resume gap closed**: the turn brief now hydrates plans from DISK (`loadPlan`), not only the in-memory map — after a restart the ACTIVE PLAN block returns. The loop's plan context uses the same hydration.
+- **`consumeHandoff` consumes exactly once**: an artifact is marked `consumed` (atomic) and never re-injected on later turns — a re-run, retry or restart no longer duplicates context.
+- **Turn-level plan honored the session binding**: `plan(cfg, decision, { session })` now routes through the same per-chat table as the loop — the `route` event, MOA routing and served-route tracking describe the model that actually serves the chat (previously the turn plan silently ignored per-chat pins).
+- `persistPlan` / `handoff` writes are atomic (tmp→rename) and honestly reported (`lastPlanPersistError`, `lastHandoffError`, bus events `plan.persist_failed` / `handoff.persist_failed`) — a journal hiccup never kills a turn, but it is never silently lost either.
+
+### Added
+- **Handoff producer wiring (was dead code)**: a route switch for a session (per-chat binding or global picker) writes a durable handoff checkpoint — goal from the durable history, live plan, from→to — BEFORE the new model starts, injects it into the same turn, and emits a `handoff` event including `persisted` status. The artifact survives restart (restart-resume), and a fresh process consumes it exactly once.
+- **Served-route journal**: `.route.json` per session atomically records which route actually served it — switch detection works across process restarts.
+- `test/p1-journal-resume.test.js` — R1–R6 (restart plan hydration, same-turn switch handoff, consume-once, pre-crash artifact pickup, honest persist failure, well-formed artifact).
+
+### Verified
+- `node --test test/p1-journal-resume.test.js` → 6/6 pass.
+- `node --test test/*.test.js` → **437 pass / 0 fail / 17 skipped** (454 total; v0.9.4: 428 pass of 448; +6 new, zero regressions).
+- Release gate: `build-exe` workflow on tag `v0.9.5` (GitHub Actions, Windows NSIS).
+
+
 ## 2026-10-19 — P0: honest persistence + per-chat routing (UI-agent handover #1, engine side) — v0.9.4
 
 ### Fixed
