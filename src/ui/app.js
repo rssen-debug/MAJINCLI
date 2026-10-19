@@ -74,6 +74,7 @@ function err(t) {
   if (!S.busy) return addMsg('err', 'MAJIN', t);
   if (S.failed) return;
   S.failed = true;
+  if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.onEvent({ type: 'error', message: t });
   const a = ensureAgent();
   a.b.classList.remove('caret');
   if (a.thinking) a.thinking.remove();
@@ -165,6 +166,7 @@ function moaGauge(ev) {
 
 /* ------------------------------ event pump ------------------------------ */
 function onEvent(ev) {
+  if (ev.type === 'error') { err(ev.message + (ev.hint ? '\n→ ' + ev.hint : '')); return; }
   if (S.failed && ['delta', 'thinking', 'answer'].includes(ev.type)) return;
   if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.onEvent(ev); // Live Agent Vision — real events only
   switch (ev.type) {
@@ -332,7 +334,11 @@ async function send(text) {
     if (S.cur && !S.failed) closeAnswer({ text: S.curBody, meta: {} });
   } catch (e) {
     if (e.name !== 'AbortError') err('connection lost: ' + e.message);
-    else { S.cancelled = true; if (S.cur) closeAnswer({ text: S.curBody, meta: {} }); }
+    else {
+      S.cancelled = true;
+      if (S.cur) closeAnswer({ text: S.curBody, meta: {} });
+      if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.onEvent({ type: 'cancelled' });
+    }
   } finally {
     S.busy = false;
     S.abort = null;

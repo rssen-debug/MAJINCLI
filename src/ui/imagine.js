@@ -48,6 +48,7 @@
     waiting: 'waiting for you',
     done: 'done ✓',
     error: 'something went wrong',
+    stopped: 'stopped',
   };
 
   function el(tag, cls, text) {
@@ -275,6 +276,9 @@
         setCore('done');
         break;
       }
+      case 'cancelled':
+        setCore('stopped');
+        break;
       case 'schedule.done':
         addStep(stepRow('🗓️', 'scheduled job finished', ev.name || ''));
         break;

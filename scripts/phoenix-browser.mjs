@@ -53,6 +53,7 @@ try {
   for (const status of [400, 401, 402, 404, 429, 500]) {
     await page.route('**/api/chat?**', r => r.fulfill({ contentType: 'text/event-stream', body: stream([
       ['error', { message: `${status}: deepseek/deepseek-flash is not a valid model ID` }],
+      ['delta', { text: 'Late content must not replace the error' }],
       ['answer', { type: 'answer', text: 'False success' }], ['done', { ok: false }],
     ]) }));
     await page.locator('#input').fill('hi'); await page.locator('#send').click();
@@ -60,6 +61,7 @@ try {
     await page.waitForFunction(() => document.querySelector('#send').textContent.includes('Send'));
     assert.equal(await page.locator('#input').inputValue(), 'hi');
     assert.equal(await page.getByText('False success', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('Late content must not replace the error', { exact: true }).count(), 0);
     assert.equal(await page.locator('#imagine .core-label').textContent(), 'something went wrong');
     await page.unroute('**/api/chat?**');
   }
@@ -74,6 +76,18 @@ try {
   assert.equal(await page.getByText('Hello. Ready to create.', { exact: true }).count(), 1);
   assert.equal(await page.locator('.msg.sys').count(), 0, 'routing does not spam transcript');
   await page.screenshot({ path: path.join(output, 'phoenix-chat.png') });
+  await page.unroute('**/api/chat?**');
+  await page.route('**/api/chat?**', r => r.fulfill({ contentType: 'text/event-stream', body: stream([
+    ['answer', { text: 'An answer without deltas.' }], ['done', { ok: true }],
+  ]) }));
+  await page.locator('#input').fill('answer only'); await page.locator('#send').click();
+  await page.waitForFunction(() => document.querySelector('#status').textContent === 'Ready');
+  assert.equal(await page.getByText('An answer without deltas.', { exact: true }).count(), 1);
+  await page.unroute('**/api/chat?**');
+  await page.route('**/api/chat?**', r => r.fulfill({ status: 401, json: { error: 'Unauthorized' } }));
+  await page.locator('#input').fill('auth check'); await page.locator('#send').click();
+  await page.waitForFunction(() => document.querySelector('#status').textContent.includes('Request failed'));
+  assert.equal(await page.locator('#imagine .core-label').textContent(), 'something went wrong');
   await page.unroute('**/api/chat?**');
   await page.locator('#new-chat').click();
   await page.waitForSelector('#home');
@@ -96,6 +110,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#send').textContent === 'Stop');
   await page.locator('#send').click();
   await page.waitForFunction(() => document.querySelector('#status').textContent === 'Stopped');
+  assert.equal(await page.locator('#imagine .core-label').textContent(), 'stopped');
   await page.locator('#input').fill('hi'); await page.locator('#send').click();
   await page.waitForFunction(() => document.querySelector('#status').textContent === 'Ready');
   assert.ok(await page.getByText('I am in demo mode', { exact: false }).count(), 'real backend mock streams through actual HTTP endpoint');
