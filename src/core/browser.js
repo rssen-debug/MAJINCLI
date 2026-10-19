@@ -228,28 +228,42 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
   }
   const profile = profileFor(`${session}-s${slot}`);
   fs.mkdirSync(profile, { recursive: true });
-  const port = randomPort();
-  const args = [
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${profile}`,
-    '--no-first-run', '--no-default-browser-check', '--disable-popup-blocking',
-  ];
-  if (headless !== false) args.push('--headless=new');
-  args.push('about:blank');
-  const proc = spawn(bin, args, { detached: false, stdio: 'ignore' });
-  const base = `http://127.0.0.1:${port}`;
+  let proc = null;
   let version = null;
-  const deadline = Date.now() + 10000;
-  while (Date.now() < deadline) {
-    try {
-      version = await httpJson(`${base}/json/version`, { timeoutMs: 1200 });
-      break;
-    } catch {
-      await new Promise((r) => setTimeout(r, 250));
+  let lastErr = null;
+  /* Del 5ABE flake-hardening (CI evidence: runs 39261715303 + 39265517682):
+     the Windows runner's policy gate sometimes swallows the FIRST spawned
+     Edge for ~10 s — one shot of luck was the difference between green and a
+     red suite. Bounded retry: attempt 1 as before, attempt 2 with a fresh
+     random port + longer deadline. Honest: the final error text is unchanged. */
+  for (let attempt = 1; attempt <= 2 && !version; attempt++) {
+    if (proc && !proc.killed) { try { proc.kill(); } catch { /* gone */ } }
+    const port = randomPort();
+    const args = [
+      `--remote-debugging-port=${port}`,
+      `--user-data-dir=${profile}`,
+      '--no-first-run', '--no-default-browser-check', '--disable-popup-blocking',
+    ];
+    if (headless !== false) args.push('--headless=new');
+    args.push('about:blank');
+    proc = spawn(bin, args, { detached: false, stdio: 'ignore' });
+    const base = `http://127.0.0.1:${port}`;
+    const deadline = Date.now() + (attempt === 1 ? 10000 : 15000);
+    while (Date.now() < deadline) {
+      try {
+        version = await httpJson(`${base}/json/version`, { timeoutMs: 1200 });
+        break;
+      } catch (e2) {
+        lastErr = e2;
+        await new Promise((r) => setTimeout(r, 250));
+      }
     }
+    if (version?.webSocketDebuggerUrl) break;
+    version = null;
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 1500));
   }
   if (!version || !version.webSocketDebuggerUrl) {
-    try { if (!proc.killed) proc.kill(); } catch { /* gone */ }
+    try { if (proc && !proc.killed) proc.kill(); } catch { /* gone */ }
     thePool.release(session);
     throw new Error('the browser debug port never came up — the browser may be blocked by a policy on this machine');
   }
