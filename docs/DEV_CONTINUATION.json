@@ -1,5 +1,5 @@
 {
-  "lastVerifiedMain": "00b09f5",
+  "lastVerifiedMain": "e1f16b5",
   "lastCompletedMilestone": "GODLIKE V4 \u00a77 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
   "currentWorkstream": "GODLIKE V4 WAVE 2 \u2014 \u00a75 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
@@ -29,5 +29,5 @@
   "nextAction": "P3 candidates beyond handover: (a) Windows-control PoC gate (FlaUI/UFO \u2014 needs Windows runner experiment, not blind install); (b) acceptance gap: Linux test count 460 \u2260 their Windows 441 \u2014 reconcile; (c) handover P4/P5: m\u00e4tstyrd parallellisering + f\u00e4rdigheter.",
   "version": "0.9.6",
   "milestone": "P2: Anthropic image blocks delivered, screen.capture math + byte-validated receipts",
-  "branch": "feature/p2-vision-honesty (in PR)"
+  "branch": "main-post-merge"
 }
