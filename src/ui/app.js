@@ -983,6 +983,8 @@ async function refresh(quiet) {
   }
 }
 async function loadHistory() {
+  S.readingHistory = false; S.failed = false; S.cur = null; S.curBody = '';
+  setStatus('Ready');
   if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.reset();
   const h = await api('/history?session=' + encodeURIComponent(S.session) + '&n=40').catch(() => ({ messages: [] }));
   $('scroller').innerHTML = '';
@@ -1024,6 +1026,7 @@ function showWelcome() {
 $('new-chat').onclick = async () => {
   if (S.busy) { toast('Stop the current task before starting a new chat.'); return; }
   S.session = 'chat-' + Date.now().toString(36);
+  $('input').value = ''; autoGrow();
   await loadHistory(); $('input').focus();
 };
 $('browse-models').onclick = () => window.MAJIN_ONBOARD.togglePicker();

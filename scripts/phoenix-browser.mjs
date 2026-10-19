@@ -91,6 +91,8 @@ try {
   await page.unroute('**/api/chat?**');
   await page.locator('#new-chat').click();
   await page.waitForSelector('#home');
+  assert.equal(await page.locator('#input').inputValue(), '', 'new chat clears prior failed draft');
+  assert.equal(await page.locator('#status').textContent(), 'Ready', 'new chat clears stale failure status');
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'mobile has no horizontal overflow');
   await page.screenshot({ path: path.join(output, 'phoenix-small.png') });
