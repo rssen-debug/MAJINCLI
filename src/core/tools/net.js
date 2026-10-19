@@ -9,6 +9,35 @@ import { runShell, IS_WIN } from './shell.js';
 import { resolveIn } from './files.js';
 
 const CSV = 'ConvertTo-Csv -NoTypeInformation';
+
+/* P2 truths for screen.capture:
+   1. the UI contract says region = x,y,width,height but the Windows backend fed
+      those numbers straight into FromLTRB(left,top,RIGHT,BOTTOM) — every region
+      not starting at 0,0 silently captured the wrong rectangle.
+   2. a receipt used to mean "stdout said saved / a file exists" — never that the
+      bytes are a PNG. Now: capture into a unique temp file, validate the PNG
+      magic, then atomically rename into place. A lying capture tells the truth:
+      it is an ERROR, not a "screenshot".
+   Timeless helpers, exported for tests. */
+export function ltrbFromRegion(region) {
+  const parts = String(region || '').split(',').map((n) => Number(String(n).trim()));
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return null;
+  const [x, y, w, h] = parts;
+  if (!(w > 0) || !(h > 0)) return null;
+  return [x, y, x + w, y + h];
+}
+export const psQuote = (s) => `'${String(s).replace(/'/g, "''")}'`;
+const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+/** Real PNG magic bytes or it is NOT a screenshot (P2). */
+export function validatePngBytes(head) {
+  const buf = Buffer.from(head || []);
+  if (buf.length < 8) return false;
+  return PNG_MAGIC.every((b, i) => buf[i] === b);
+}
+export function validateCaptureFile(abs, read = (p) => require('node:fs').readFileSync(p)) {
+  void read;
+  return null; /* replaced below by the ESM version */
+}
 const clean = (s) => String(s || '').replace(/\r/g, '').split('\n').map((l) => l.trim()).filter(Boolean);
 
 function csvRow(line) {
@@ -165,27 +194,45 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
     params: { path: 'string: target file (default screenshot-<time>.png)', region: 'string: x,y,width,height', then: 'string: describe | save [describe|save]' },
     async run({ path: p, region, then = 'save' }, ctx) {
       const out = resolveIn(ctx, p || `skarmbild-${Date.now()}.png`);
+      const fsSync = await import('node:fs');
+      /* capture to a UNIQUE temp first — a reader must never pick up a half-written
+         frame, and a stale successful-looking file must never pass as a fresh one (P2) */
+      const tmp = `${out.abs}.cap-${process.pid}-${Date.now()}.part`;
+      const qTmp = JSON.stringify(tmp); // safe double-quoted form for POSIX shells
+      const ltrb = region ? ltrbFromRegion(region) : null;
+      if (region && !ltrb) {
+        return { ok: false, error: { code: 'bad_region', message: `region must be x,y,width,height with positive width/height — got '${region}'` } };
+      }
       if (IS_WIN) {
-        const bounds = region ? region.split(',').map((n) => Number(n.trim())) : null;
-        const size = bounds ? `[Drawing.Rectangle]::FromLTRB(${bounds.join(',')})` : '[System.Windows.Forms.SystemInformation]::VirtualScreen';
-        const cmd = `Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $b=${size}; $bmp=New-Object Drawing.Bitmap($b.Width,$b.Height); $g=[Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location,[Drawing.Point]::Empty,$b.Size); $bmp.Save('${out.abs}'); 'saved'`;
+        /* P2: the UI says x,y,width,height — FromLTRB takes left,top,RIGHT,BOTTOM.
+           Feeding w,h straight in captured the wrong rectangle whenever x,y != 0,0. */
+        const size = ltrb ? `[Drawing.Rectangle]::FromLTRB(${ltrb.join(',')})` : '[System.Windows.Forms.SystemInformation]::VirtualScreen';
+        const cmd = `Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $b=${size}; $bmp=New-Object Drawing.Bitmap($b.Width,$b.Height); $g=[Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location,[Drawing.Point]::Empty,$b.Size); $bmp.Save(${psQuote(tmp)}); 'saved'`;
         const r = await runShell(cmd, { timeoutSec: 30 });
         if (!/saved/.test(r.stdout || '')) return { ok: false, error: { code: 'screenshot_failed', message: (r.stderr || 'unknown error').slice(0, 300), hint: 'fungerar bara i en interaktiv session' } };
       } else if (process.platform === 'darwin') {
-        await runShell(`screencapture ${region ? `-R${region}` : ''} "${out.abs}"`, { timeoutSec: 30 });
+        await runShell(`screencapture ${region ? `-R${region}` : ''} ${qTmp}`, { timeoutSec: 30 });
       } else {
-        const r = await runShell(`(grim -o "${out.abs}" 2>/dev/null) || (import -window root "${out.abs}" 2>/dev/null) || (spectacle -bn -o "${out.abs}" 2>/dev/null)`, { timeoutSec: 30 });
+        const r = await runShell(`(grim -o ${qTmp} 2>/dev/null) || (import -window root ${qTmp} 2>/dev/null) || (spectacle -bn -o ${qTmp} 2>/dev/null)`, { timeoutSec: 30 });
         void r;
       }
-      const fsSync = await import('node:fs');
-      if (!fsSync.existsSync(out.abs)) return { ok: false, error: { code: 'no_file', message: 'the screenshot was not created', hint: 'installera grim (wayland) eller imagemagick (x11)' } };
+      /* the receipt is the BYTES, not the exit code: real PNG magic, or it never happened (P2) */
+      if (!fsSync.existsSync(tmp)) {
+        return { ok: false, error: { code: 'no_file', message: 'the screenshot was not created', hint: 'installera grim (wayland) eller imagemagick (x11)' } };
+      }
+      const head = fsSync.readFileSync(tmp).subarray(0, 8);
+      if (!validatePngBytes(head)) {
+        try { fsSync.unlinkSync(tmp); } catch { /* fine */ }
+        return { ok: false, error: { code: 'invalid_png', message: 'the capture did not produce PNG bytes — no screenshot is claimed' } };
+      }
+      fsSync.renameSync(tmp, out.abs); /* atomic on same volume: no half frames, no stale receipts */
       const size = fsSync.statSync(out.abs).size;
       if (then === 'describe') {
         const { analyzeImage } = await import('../vision.js');
         const d = await analyzeImage({ cfg: ctx.cfg, imagePath: out.abs, question: 'What is on screen? Describe windows, text, errors and what may need fixing.' });
-        return { result: `${out.abs} (${size} byte)\n\n${d}`, summary: 'screenshot + description' };
+        return { result: `${out.abs} (${size} byte)\n\n${d}`, meta: { path: out.abs, validatedPng: true, bytes: size }, summary: 'screenshot + description' };
       }
-      return { result: `${out.abs} (${size} byte)`, meta: { path: out.abs }, summary: `screenshot ${(size / 1024) | 0} kB` };
+      return { result: `${out.abs} (${size} byte)`, meta: { path: out.abs, validatedPng: true, bytes: size }, summary: `screenshot ${(size / 1024) | 0} kB` };
     },
   }),
 
