@@ -955,7 +955,7 @@ async function command(line) {
   if (c === 'budget') {
     const n = Number(arg.replace(/[^\d.]/g, ''));
     if (!n) return (note('/budget <usd per month>'), true);
-    await api('/config', { method: 'PATCH', body: { budget: { monthlyUsd: n, mode: 'limit' } } });
+    await api('/config', { method: 'PATCH', body: { budget: { monthlyUsd: n, mode: 'cap' } } });
     note('budget ' + n + ' USD/month');
     refresh();
     return true;

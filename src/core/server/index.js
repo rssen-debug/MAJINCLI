@@ -460,7 +460,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       if (follow) {
         task = tasks.get(body.task);
         session = follow;
-        tasks.setStatus(task.id, 'running');
+        tasks.beginFollowup(task.id);
       } else {
         task = tasks.create({ input, source: body.source || 'ui' });
         if (body.autopilot === true) session = task.session;

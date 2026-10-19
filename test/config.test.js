@@ -127,7 +127,9 @@ test('resolveModel/routeTable: ref → provider+kind, fallback när nyckel sakna
 
 test('needsSetup: demo/mock räknas inte som riktig nyckel', (t) => {
   const dir = tmpHome(t);
-  const cfg = new Config(clone(DEFAULTS), path.join(dir, 'c.json'));
+  const data = clone(DEFAULTS);
+  for (const provider of Object.values(data.providers)) if (provider.kind !== 'mock') { provider.apiKey = ''; provider.keyEnv = null; }
+  const cfg = new Config(data, path.join(dir, 'c.json'));
   assert.equal(cfg.needsSetup(), true, 'bara demo-nyckel = måste fortfarande ställa in sig');
   cfg.patch({ providers: { groq: { apiKey: 'gsk_x' } } });
   assert.equal(cfg.needsSetup(), false);

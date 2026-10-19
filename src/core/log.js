@@ -30,7 +30,7 @@ class Bus {
   }
 
   emit(type, data = {}, level = 'info') {
-    const ev = { id: ++this.seq, ts: new Date().toISOString(), type, level, ...data };
+    const ev = { ...data, id: ++this.seq, ts: new Date().toISOString(), type, level };
     this.events.push(ev);
     if (this.events.length > CAP) this.events.splice(0, this.events.length - CAP);
     if (this.file) {

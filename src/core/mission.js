@@ -183,9 +183,10 @@ export async function verifyContract(c, { cfg, partText = '' } = {}) {
     const DENY = /(?:\brm\s+-[rf]+\s+[~/&]|\bsudo\b|:\(\)\{|<\(|\bcurl\b[^|]*\|\s*(?:sh|bash)|\bwget\b[^|]*\|\s*(?:sh|bash)|\bmkfs\b|\bdd\s+if=)/i;
     if (DENY.test(c.cmd)) return { ...c, ok: false, evidence: `refused by contract guardrail: "${c.cmd}"` };
     try {
-      const { execFileSync } = await import('node:child_process');
-      const out = execFileSync('/bin/sh', ['-c', c.cmd], { cwd: ws, timeout: Number(cfg?.get?.('missions.contractCmdTimeoutMs')) || 15000, encoding: 'utf8', maxBuffer: 256 * 1024 });
-      return { ...c, ok: true, evidence: `"${c.cmd}" exited 0 (${String(out).trim().slice(0, 120) || 'no output'})` };
+      const { runShell } = await import('./tools/shell.js');
+      const result = await runShell(c.cmd, { cwd: ws, timeoutSec: (Number(cfg?.get?.('missions.contractCmdTimeoutMs')) || 15000) / 1000, maxChars: 256 * 1024 });
+      if (!result.ok) return { ...c, ok: false, evidence: `"${c.cmd}" failed: exit ${result.exitCode ?? 'signal/timeout'}${result.killed ? ' (timeout)' : ''} — ${String(result.error || result.stderr || '').slice(0, 120)}` };
+      return { ...c, ok: true, evidence: `"${c.cmd}" exited 0 (${String(result.stdout || '').trim().slice(0, 120) || 'no output'})` };
     } catch (err) {
       return { ...c, ok: false, evidence: `"${c.cmd}" failed: exit ${err.status ?? 'signal/timeout'} — ${String(err.stderr || err.message).slice(0, 120)}` };
     }

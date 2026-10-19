@@ -25,12 +25,12 @@ const serve = (txt) => new Promise((res) => {
 
 test('4D.1 command domain: exit code is the evidence — pass, fail, denied', async () => {
   const ws = mkws();
-  fs.writeFileSync(path.join(ws, 'ok.sh'), '#!/bin/sh\necho hello-from-script\nexit 0\n');
-  fs.writeFileSync(path.join(ws, 'bad.sh'), '#!/bin/sh\necho oops\nexit 3\n');
-  const ok = await verifyContract({ type: 'command_exits_zero', cmd: 'sh ok.sh' }, { cfg: cfgOf(ws) });
+  fs.writeFileSync(path.join(ws, 'ok.cjs'), 'console.log("hello-from-script"); process.exit(0);');
+  fs.writeFileSync(path.join(ws, 'bad.cjs'), 'console.log("oops"); process.exit(3);');
+  const ok = await verifyContract({ type: 'command_exits_zero', cmd: 'node ok.cjs' }, { cfg: cfgOf(ws) });
   assert.equal(ok.ok, true, ok.evidence);
   assert.match(ok.evidence, /exited 0/); assert.match(ok.evidence, /hello-from-script/);
-  const bad = await verifyContract({ type: 'command_exits_zero', cmd: 'sh bad.sh' }, { cfg: cfgOf(ws) });
+  const bad = await verifyContract({ type: 'command_exits_zero', cmd: 'node bad.cjs' }, { cfg: cfgOf(ws) });
   assert.equal(bad.ok, false); assert.match(bad.evidence, /exit 3|failed/);
   const denied = await verifyContract({ type: 'command_exits_zero', cmd: 'rm -rf /' }, { cfg: cfgOf(ws) });
   assert.equal(denied.ok, false); assert.match(denied.evidence, /guardrail/);

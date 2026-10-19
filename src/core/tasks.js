@@ -44,6 +44,7 @@ export class TaskRegistry {
       input: String(input).slice(0, 160),
       source,
       status: 'running',
+      run: 1,
       created: now,
       updated: now,
       events: [],
@@ -86,6 +87,20 @@ export class TaskRegistry {
     if (TERMINAL.has(t.status)) return t; // terminal tasks never move again
     t.status = status;
     t.updated = Date.now();
+    return t;
+  }
+
+  /** Only an explicit follow-up starts a new run; late events cannot reopen a terminal run. */
+  beginFollowup(id) {
+    const t = this.get(id);
+    if (!t) throw new Error(`unknown task: ${id}`);
+    if (TERMINAL.has(t.status)) {
+      t.run += 1;
+      t.events = [];
+      t.toolsRun = 0; t.toolMs = 0; t.curTool = null; t.lastTool = null;
+    }
+    t.status = 'running';
+    t.updated = Math.max(Date.now(), t.updated + 1);
     return t;
   }
 
@@ -134,6 +149,7 @@ export class TaskRegistry {
     return this.list().map((t) => ({
       id: t.id,
       status: t.status,
+      run: t.run,
       input: t.input,
       source: t.source,
       created: t.created,

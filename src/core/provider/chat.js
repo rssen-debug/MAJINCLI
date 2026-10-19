@@ -49,9 +49,13 @@ export function explainError(err, route = {}) {
   if (code === 'no_key' || /no api key/i.test(msg)) {
     return out('no_key', `You have not pasted a key for ${who} yet. ${KEYCARD}`, { needsKey: true });
   }
-  if (status === 401 || status === 403 || /invalid or missing api key|invalid api key|unauthorized|incorrect api key|key (was )?(revoked|deleted|expired|invalid)|wrong api key/i.test(msg)) {
+  if (/FreeTierError|free tier can only be used from within OpenCode/i.test(msg)) {
+    return out('access', 'OpenCode restricts its free tier to the OpenCode app. This model cannot be used directly from MAJIN. Choose another provider with verified free models.');
+  }
+  if (status === 401 || /invalid or missing api key|invalid api key|unauthorized|incorrect api key|key (was )?(revoked|deleted|expired|invalid)|wrong api key/i.test(msg)) {
     return out('auth', `${who} rejected the API key - it is wrong, deleted, or from another account. ${KEYCARD}`, { needsKey: true });
   }
+  if (status === 403) return out('access', `${who} denied access to this model or API. Check the provider's access rules, or choose another available model.`);
   if (status === 402 || /insufficient balance|no credit|out of credit|not enough credit|payment required|billing/i.test(msg)) {
     return out('billing', `${who} says the account is out of credit. Top it up there, or pick another provider in the Providers card - everything else keeps working.`);
   }

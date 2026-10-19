@@ -40,3 +40,13 @@ Aktuell full testsvit, bred API/UI-inventering, säker OpenCode-diagnostik, fixe
 - TEST-07: version-testet undantar core/version.js med Unix-separator; Windows returnerar core\version.js.
 
 OpenCode live-diagnos: officiell modellkatalog https://opencode.ai/inference/v1/models gav 85 ID:n. Officiella dokumentationen https://opencode.ai/v2/docs/console/models/ anger longcat-2.5-preview-free som gratis. Ett anrop med exakt denna modell, max_tokens=16, ingen fallback, till dokumenterad https://opencode.ai/inference/openai/v1/chat/completions gav HTTP 403 med error.type=FreeTierError: "OpenCode's free tier can only be used from within OpenCode." Det är en leverantörsbegränsning, inte bevis för ogiltig nyckel. Ingen lyckad extern inferens. Betalda modeller har inte testats. Äldre Go-preset och nuvarande API-adresser behöver särskiljas; gratis tillgång från MAJIN kan inte utlovas eller kringgås.
+
+### Checkpoint 3 — korrigeringar och omtest
+- Windows helsvit nu 412 tester: 397 godkända, 15 överhoppade, 0 fel. En ny skip är uttryckligen Linux/macOS-installationskontraktet; Windows verkliga installation testas separat i CI.
+- Edge UI acceptance godkänd efter åtgärd av dubbla svar. Före fix gav den 5 svarsrader där 4 väntades; orsaken var att loggbussens payload skrev över agent.answer med answer. Händelsetyp och sekvens skyddas nu.
+- WIN-01 åtgärdat: kommandoverifiering använder appens system-shell. Ny test kör riktiga Node-kommandon med exit 0 och 3 på Windows.
+- WIN-02 åtgärdat: shell-valet kontrollerar faktiskt pwsh/PowerShell/cmd istället för att alltid välja pwsh. Import av dirs saknades dessutom i shell.run när config-workspace/cwd saknas; åtgärdat och testat.
+- BUILD-01: installationsarkivets verkliga sökvägar innehöll backslash på Windows. Byggaren använder nu POSIX-sökvägar i tar, verifierat genom faktisk payload-build och tar-listning.
+- BUDGET-01: chattkommandot /budget sparade mode=limit men budgetspärren kräver cap. Rättat till cap; browser-regressionstest ska läggas till.
+- API-01: även installerad officiell OpenCode CLI 1.18.32, --pure och explicit longcat-2.5-preview-free, returnerade samma FreeTierError/403. Ingen fallback eller betald modell användes. Kvarstående leverantörsåtkomstproblem. MAJIN förklarar nu detta som accesspolicy, inte automatiskt fel nyckel; generisk HTTP403 behandlas också som åtkomstfel.
+- TASK-01 upptäckt vid kodgranskning: uppföljning på avslutad task kördes med oförändrad terminal status, ignorerade telemetry och Workspace höll kvar "done". Åtgärd pågår med uttryckliga run-nummer som skiljer verklig uppföljning från sena events; återstår test.

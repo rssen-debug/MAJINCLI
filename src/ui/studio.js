@@ -129,7 +129,11 @@
   function updateTasks(next) {
     $('task-connection').hidden = true;
     if (JSON.stringify(tasks) === JSON.stringify(next)) return;
-    tasks = next.map(t => { const previous = tasks.find(p => p.id === t.id); return previous && (previous.updated > t.updated || (['done', 'error', 'stopped'].includes(previous.status) && ACTIVE.has(t.status))) ? previous : t; });
+    tasks = next.map(t => {
+      const previous = tasks.find(p => p.id === t.id);
+      const newerRun = (t.run || 1) > (previous?.run || 1);
+      return previous && !newerRun && ((previous.run || 1) > (t.run || 1) || previous.updated > t.updated || (['done', 'error', 'stopped'].includes(previous.status) && ACTIVE.has(t.status))) ? previous : t;
+    });
     renderTasks();
   }
   function tasksUnavailable() {
