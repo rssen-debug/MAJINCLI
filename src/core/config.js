@@ -46,7 +46,7 @@ export const DEFAULTS = {
     ...Object.fromEntries(
       Object.entries(PRESETS)
         .filter(([name]) => name !== 'deepseek' && name !== 'mock')
-        .map(([name, p]) => [name, { label: p.label, kind: p.kind, baseUrl: p.baseUrl, apiKey: null, models: [...(p.models || [])], keyEnv: p.keyEnv || null, keyUrl: p.keyUrl || null }]),
+        .map(([name, p]) => [name, { label: p.label, kind: p.kind, baseUrl: p.baseUrl, apiKey: null, models: [...(p.models || [])], keyEnv: p.keyEnv || null, keyUrl: p.keyUrl || null, ...(p.headers ? { headers: { ...p.headers } } : {}) }]),
     ),
     deepseek: {
       label: 'DeepSeek',
@@ -456,7 +456,7 @@ export class Config {
       // etiketten med (DeepSeek, inte deepseek) sa att felmeddelanden namner
       // leverantoren pa samma sat som mannen kan lasa den i panelen
       label: provider.label || name,
-      model: parsed.model,
+      model: provider.kind === 'gemini' ? parsed.model.replace(/^models\//, '') : parsed.model,
       kind: provider.kind || PRESETS[provider.preset]?.kind || 'openai',
       baseUrl: provider.baseUrl,
       endpoint: provider.endpoint || chatUrl({ kind: provider.kind || PRESETS[provider.preset]?.kind || 'openai', baseUrl: provider.baseUrl }),

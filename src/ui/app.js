@@ -804,7 +804,7 @@ function listen() {
     if (name === 'schedule.done') toast('schedule: ' + (ev.status || 'ok'));
   };
   ['approval:request', 'approval:resolved', 'answer', 'telegram.up', 'telegram.paired', 'telegram.unpaired', 'whatsapp.qr', 'whatsapp.connected', 'whatsapp.close', 'schedule.done', 'schedule.failed', 'tool.denied', 'majin.ui'].forEach((n) => es.addEventListener(n, handle(n)));
-  es.onopen = () => { if (!S.busy) setStatus('Connected'); };
+  es.onopen = () => { if (!S.busy) setStatus('Connected'); refresh(true); };
   es.onerror = () => {
     setStatus('reconnecting…');
   };
@@ -1025,6 +1025,11 @@ async function analyzePath(p) {
 async function refresh(quiet) {
   try {
     const st = await api('/state?tools=0');
+    if (S.st?.version && st.version && S.st.version !== st.version && !S.busy) {
+      try { sessionStorage.setItem('majin.update.resume', JSON.stringify({ session: S.session, draft: $('input').value })); } catch { /* storage unavailable */ }
+      location.reload();
+      return;
+    }
     S.st = st;
     paintHeader(st);
     if (window.MAJIN_ONBOARD) window.MAJIN_ONBOARD.maybe(S.st); // first-run wizard + model chip
@@ -1180,6 +1185,13 @@ async function uploadAndAnalyze(f) {
 }
 
 window.addEventListener('load', async () => {
+  try {
+    const resume = JSON.parse(sessionStorage.getItem('majin.update.resume') || 'null');
+    sessionStorage.removeItem('majin.update.resume');
+    if (resume && typeof resume.session === 'string' && typeof resume.draft === 'string') {
+      S.session = resume.session; $('input').value = resume.draft; autoGrow();
+    }
+  } catch { /* storage unavailable */ }
   listen();
   await refresh();
   await loadHistory();

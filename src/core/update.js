@@ -243,9 +243,14 @@ export async function installSetup(o = {}) {
   }
   const dl = await downloadSetup(o);
   if (!dl.ok) return dl;
-  const { spawn } = await import('node:child_process');
-  const child = spawn(dl.file, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'], { detached: true, stdio: 'ignore' });
-  child.on('error', () => {});
+  const spawn = o.spawnImpl || (await import('node:child_process')).spawn;
+  let child;
+  try {
+    child = spawn(dl.file, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'], { detached: true, stdio: 'ignore', windowsHide: true });
+    await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
+  } catch {
+    return { ok: false, error: 'Windows could not start the installer. MAJIN stays open; try the release download.' };
+  }
   child.unref();
   /* v0.5.3 lesson, CI-proven twice (jobs 117623334287 + run 39111598323): an
      Inno [Run] postinstall entry that actually starts the app during a SILENT

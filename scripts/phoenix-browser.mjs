@@ -72,6 +72,21 @@ try {
   assert.ok(providerActions.every(action => action === 'add'), 'onboarding never probes a preset model or makes paid inference calls');
   await page.unroute('**/api/provider?**');
   await page.keyboard.press('Escape');
+  await page.locator('#manage-providers').click();
+  await page.getByText('More options', { exact: true }).click();
+  await page.getByRole('button', { name: 'Use a custom API endpoint', exact: true }).click();
+  await page.getByLabel('API protocol', { exact: true }).selectOption('anthropic');
+  await page.getByLabel('Connection name', { exact: true }).fill('audit-anthropic');
+  await page.getByLabel('Endpoint URL', { exact: true }).fill(`http://127.0.0.1:${port}/fixture/v1`);
+  await page.locator('#ob-body input[type=password]').fill('ui-fixture-not-real');
+  await page.screenshot({ path: path.join(output, 'custom-provider-protocol.png') });
+  await page.locator('#ob-body .ob-go').click();
+  await page.waitForFunction(() => document.querySelector('select[aria-label="Provider"]')?.value === 'audit-anthropic');
+  const customConfig = await page.evaluate(async () => (await window.MAJIN_ONBOARD.api('/config')).config.providers['audit-anthropic']);
+  assert.equal(customConfig.kind, 'anthropic');
+  assert.equal(customConfig.baseUrl, `http://127.0.0.1:${port}/fixture/v1`);
+
+  await page.keyboard.press('Escape');
   await page.locator('#c-model').click();
   await page.waitForFunction(() => document.querySelector('.explorer-count')?.textContent.includes('1200'));
   assert.equal(await page.locator('.ob-model').count(), 60);
@@ -296,6 +311,36 @@ try {
     await page.screenshot({ path: path.join(output, 'aurora-live-catalog.png') });
     await page.keyboard.press('Escape');
   }
+  // Update controls use a fixture acknowledgment; never install over this machine.
+  const updateFixture = { latest: '99.0.0', available: true, status: 'available', notice: 'New release' };
+  await page.evaluate(upd => paintHeader({ ...S.st, update: upd }), updateFixture);
+  assert.equal(await page.locator('#c-update').isVisible(), true);
+  await page.locator('#c-update').click();
+  await page.evaluate(upd => paintHeader({ ...S.st, update: upd }), updateFixture);
+  assert.match(await page.locator('#c-update').textContent(), /install.*99.0.0/);
+  let installRequests = 0;
+  await page.route('**/api/update?**', async r => { installRequests++; await new Promise(resolve => setTimeout(resolve, 250)); await r.fulfill({ json: { ok: false, error: 'fixture installer declined' } }); });
+  await page.locator('#c-update').click();
+  await page.evaluate(upd => paintHeader({ ...S.st, update: upd }), updateFixture);
+  assert.equal(await page.locator('#c-update').isDisabled(), true, 'refresh cannot allow a duplicate install');
+  await page.waitForFunction(() => !document.querySelector('#c-update').disabled);
+  assert.equal(installRequests, 1);
+  await page.unroute('**/api/update?**');
+  await page.evaluate(() => paintHeader({ ...S.st, update: { latest: S.st.version, status: 'up_to_date', available: false, notice: '' } }));
+  assert.equal(await page.locator('#c-update').isVisible(), false, 'latest version has no update badge');
+  await page.locator('#input').fill('Keep this unsent draft');
+  await page.evaluate(() => { S.session = 'audit-update-resume'; });
+  let stateRequests = 0;
+  await page.route('**/api/state?**', async r => {
+    if (++stateRequests !== 1) return r.continue();
+    const result = await r.fetch(); const state = await result.json(); state.version = '99.0.0';
+    await r.fulfill({ json: state });
+  });
+  await Promise.all([page.waitForEvent('domcontentloaded'), page.evaluate(() => refresh(true)).catch(() => {})]);
+  await page.waitForFunction(() => S.session === 'audit-update-resume' && document.querySelector('#input').value === 'Keep this unsent draft');
+  assert.equal(await page.locator('#send').isEnabled(), true);
+  await page.unroute('**/api/state?**');
+  await page.locator('#input').fill('');
   const longChat = await page.evaluate(() => {
     const t = performance.now();
     for (let i = 0; i < 300; i++) addMsg(i % 2 ? 'majin' : 'user', i % 2 ? 'MAJIN' : 'You', 'History message ' + i);

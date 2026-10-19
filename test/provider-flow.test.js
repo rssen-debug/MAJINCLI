@@ -67,3 +67,28 @@ test('add → list models → verify key: the whole flow on a stub provider', as
     stub.close();
   }
 });
+
+test('Gemini compatible chat and Anthropic messages reach the correct endpoints with the right keys', async () => {
+  const { complete } = await import('../src/core/provider/chat.js');
+  const requests = [];
+  const server = http.createServer(async (req, res) => {
+    let body = ''; for await (const chunk of req) body += chunk;
+    requests.push({ url: req.url, headers: req.headers, body: JSON.parse(body) });
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify(req.url.endsWith('/messages') ? { id: 'm', content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } } : { choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-protocol-'));
+  try {
+    const cfg = new Config(clone(DEFAULTS), path.join(dir, 'config.json'));
+    for (const kind of ['openai', 'gemini', 'anthropic']) {
+      cfg.patch({ providers: { protocol: { kind, baseUrl: `http://127.0.0.1:${server.address().port}/v1`, apiKey: 'protocol-fixture' } } });
+      const result = await complete({ route: cfg.resolveModel('protocol/model-id', 'chat'), messages: [{ role: 'user', content: 'OK' }], retries: 0, maxTokens: 4 });
+      assert.equal(result.text, 'OK');
+    }
+    assert.deepEqual(requests.map(r => r.url), ['/v1/chat/completions', '/v1/openai/chat/completions', '/v1/messages']);
+    assert.equal(requests[1].headers.authorization, 'Bearer protocol-fixture');
+    assert.equal(requests[2].headers['x-api-key'], 'protocol-fixture');
+    assert.ok(requests.every(r => r.body.model === 'model-id'));
+  } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});

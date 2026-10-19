@@ -90,7 +90,7 @@
     select.id = 'ob-choice';
     const presets = (OB.st && OB.st.presets || []).filter((p) => p.name !== 'mock');
     const order = ['deepseek', 'openrouter', 'openai', 'gemini', 'anthropic', 'groq', 'kilocode', 'nous', 'ollama', 'lmstudio'];
-    const sorted = [...presets].sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+    const sorted = [...presets].sort((a, b) => (order.indexOf(a.name) < 0 ? 100 : order.indexOf(a.name)) - (order.indexOf(b.name) < 0 ? 100 : order.indexOf(b.name)));
     for (const p of sorted) {
       const option = el('option', '', p.label + (status(p.name)?.ready ? ' · connected' : ''));
       option.value = p.name;
@@ -164,18 +164,35 @@
     back.onclick = () => { OB.provider = null; render(); };
     box.append(back, el('div', 'ob-mark', '✦'), el('h2', 'ob-title', 'Connect ' + p.label));
     const existing = OB.forceEdit ? null : status(p.name);
-    if (p.notes && p.name === 'opencode') box.append(el('p', 'ob-sub', p.notes));
+    if (p.notes && ['opencode', 'opencodezen', 'qwen'].includes(p.name)) box.append(el('p', 'ob-sub', p.notes));
     box.append(el('p', 'ob-sub', existing && existing.ready
       ? 'A key is saved for this provider. Choose a current model to continue.'
-      : (p.needsKey ? 'Paste your key once. MAJIN keeps it on this computer.' : 'No API key needed. Make sure the local AI server is running.')));
+      : (p.custom ? 'Connect a cloud API or a local model. Use the endpoint and key from your provider.' : p.needsKey ? 'Paste your key once. MAJIN keeps it on this computer.' : 'No API key needed. Make sure the local AI server is running.')));
 
-    const urlIn = p.custom ? el('input', 'ob-input') : null;
+    const urlIn = p.custom || !existing?.ready ? el('input', 'ob-input') : null;
+    const kindIn = p.custom ? el('select', 'ob-input') : null;
+    const nameIn = p.custom ? el('input', 'ob-input') : null;
+    if (kindIn) {
+      kindIn.setAttribute('aria-label', 'API protocol');
+      nameIn.setAttribute('aria-label', 'Connection name');
+      const label = el('label', 'ob-label', 'API protocol');
+      for (const [value, text] of [['openai', 'OpenAI compatible'], ['anthropic', 'Anthropic'], ['gemini', 'Google Gemini']]) { const option = el('option', '', text); option.value = value; kindIn.append(option); }
+      label.append(kindIn); box.append(label);
+      const nameLabel = el('label', 'ob-label', 'Connection name'); nameIn.value = 'custom'; nameLabel.append(nameIn); box.append(nameLabel);
+    }
     if (urlIn) {
       const label = el('label', 'ob-label', 'Endpoint URL');
       urlIn.placeholder = 'http://127.0.0.1:1234/v1';
       urlIn.autocomplete = 'off';
+      urlIn.setAttribute('aria-label', 'Endpoint URL');
+      urlIn.value = p.baseUrl || '';
       label.append(urlIn);
-      box.append(label);
+      if (p.custom) box.append(label);
+      else {
+        const advanced = el('details', 'ob-details');
+        advanced.append(el('summary', '', 'Connection options'), label);
+        box.append(advanced);
+      }
     }
     const keyIn = (p.needsKey && !existing?.ready) || p.custom ? el('input', 'ob-input') : null;
     if (keyIn) {
@@ -218,12 +235,12 @@
           }
           msg.textContent = 'Connecting…';
           const body = p.custom
-            ? { action: 'add', name: 'custom', kind: 'openai', baseUrl: urlIn.value.trim(), apiKey: keyIn?.value.trim() || '' }
-            : { action: 'add', preset: p.name, name: p.name, ...(keyIn ? { apiKey: keyIn.value.trim() } : {}) };
+            ? { action: 'add', name: nameIn.value.trim(), kind: kindIn.value, baseUrl: urlIn.value.trim(), apiKey: keyIn?.value.trim() || '' }
+            : { action: 'add', preset: p.name, name: p.name, ...(urlIn ? { baseUrl: urlIn.value.trim() } : {}), ...(keyIn ? { apiKey: keyIn.value.trim() } : {}) };
           const added = await apiLocal('/provider', { method: 'POST', body }).catch(() => null);
           const error = tellErr(added, 'Could not connect.');
           if (error) { msg.textContent = error; return; }
-          await finishSetup(p.name, msg);
+          await finishSetup(added.provider || body.name, msg);
         }
       } finally {
         OB.working = false;
@@ -235,6 +252,9 @@
 
   async function finishSetup(name, msg) {
     msg.textContent = 'Finding a model…';
+    const fresh = await apiLocal('/state?tools=0').catch(() => null);
+    if (!fresh?.providers) { msg.textContent = 'Connection saved. Reopen providers to choose a model when MAJIN responds.'; return; }
+    OB.st = fresh;
     // Connecting credentials must not silently choose a priced or stale preset.
     close();
     PICKER.preferred = name;

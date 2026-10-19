@@ -163,3 +163,26 @@ Användarens korrigering: byt den generiska välkomsttexten/chipsen och den rosa
 - Full lokal testsvit: 433 tester, 418 godkända, 15 avsiktligt hoppade, 0 fel. Parse: 160/160. i18n: exit 0. Inga betalda modellkörningar.
 - Evidens finns i arbetschattens outputs/quiet-ui/. Nycklar har inte skrivits i kod eller handover. OpenCode FreeTierError från tidigare audit kvarstår enligt tidigare anteckningar; denna UI-ändring kräver ingen inferens.
 - Nästa steg: push/PR, Linux- och Windows-CI, därefter merge och verifiering av v0.9.2-release.
+
+## v0.9.3 provider/update audit — pågår
+Krav från användaren: BEHÅLL Aurora UI/UX från v0.9.2, inklusive välkomstyta och rund Send/Stop. Fixa providerfunktion och dokumentera kvarvarande hinder för dev. Nya verifierade kodluckor: Gemini chatUrl pekade på native-bas men skickade OpenAI-body; Anthropic /models saknades; verktyg/API hade olika kataloghämtning, kapning vid 400 modeller och ingen pagination. Uppdateringsknapp/installationsflöde granskas också. Ingen betald inferens tillåten.
+
+### Checkpoint: provider- och uppdateringsfixar implementerade
+- Gemensam katalogkod för UI/API och agentverktyget, utan inferens. Anthropic native auth + cursor-pagination; Gemini native lista + pageToken, rätt OpenAI-kompatibel chat-URL; Alibaba/Qwen workspace/region-endpoint + native modellista och sidnummer. Alla hämtade modell-ID sparas, ingen 400-kapning. Prefix i vendor/model bevaras.
+- Katalogfel får inte se ut som framgång eller spara en partiell/uppdiktad lista. Nycklar från miljövariabler och custom headers fungerar även vid kataloghämtning. Pagination får aldrig skicka nyckeln till annan origin.
+- Qwen och separat OpenCode Zen tillagda; befintlig Go-konfiguration bevarad. Custom endpoint kan välja OpenAI-kompatibel, Anthropic eller Gemini samt eget anslutningsnamn. Endpoint kan justeras för region/workspace i dolda anslutningsalternativ. UI/UX-designen från v0.9.2 BEHÅLLS.
+- Update: bekräftelseläge överlever statusrefresh, dubbla installationer blockeras, knappen döljs vid up_to_date. Installerstart måste bekräftas av Windows innan appen stängs. Efter backend-versionbyte laddar UI om och återställer aktuell session/osänt utkast (från v0.9.3-klient och framåt).
+- Live OpenCode 2026-10-19: Zen /models HTTP 200 med 47 modeller, Go /models HTTP 200 med 37. LongCat 2.5 Preview Free via Zen chat/completions: HTTP 403 FreeTierError. Nyckeln felklassas inte som ogiltig. Ingen betald fallback körd. Bildens äldre 200-anrop ändrar inte det nya testresultatet.
+- Kvar att verifiera: nya integrationstester, Windows/Edge, full svit, CI, merge och release. Alla andra leverantörers riktiga konton kräver respektive nyckel/kvot; lokala protokolltester är inte bevis för kunders faktiska åtkomst. Ostandardiserade protokoll (t.ex. AWS SigV4/Responses-only) kräver separat adapter, inget löfte om varje API i världen.
+
+### Testcheckpoint före PR
+Full lokal Windows-svit: 441 tester, 426 pass, 15 skip, 0 fail. Den första omkörningen hittade saknad felhint och ändrad katalogordning; båda rättade och omtestade. 162/162 JS-filer parse; i18n exit 0. Edge update-/resume-tester passerar; custom-provider-save granskas också. Devs konkreta återstående arbete och uttryckligt BEHÅLL UI/UX-krav finns i docs/PROVIDER-UPDATE-HANDOVER.md (användarkopia outputs/DEV-HANDOVER.md). Full uppgradering äldre->nyare via appknapp på separat VM ska fortfarande verifieras; befintlig installation lämnad orörd. Senaste direkta OpenCode-gratisanrop ger 403 FreeTierError.
+
+### Lokal verifiering klar
+Edge: även custom Anthropic-anslutning med eget namn sparades via riktig API-route och valdes i modellväljaren; huvuddesignen visuellt bevarad. Tester för updater/draft/session och övrig browseracceptans PASS. Full svit 426 pass, 15 skip, 0 fail. Ingen egen datainstallation ändrad. Nästa steg är PR och CI före merge.
+
+### Korrigerat OpenCode-liveutfall — 19:34 UTC, senaste bevis
+OpenCode Go fungerar nu med användarens nyckel och longcat-2.5-preview-free via MAJIN complete(): vanligt svar OK (52 tokens) och streaming OK med deltas OK (38 tokens), maxTokens 128. Zen gav tidigare 403 FreeTierError. MaxTokens 16 på Go gav tom text, så en för liten testbudget kan ge missvisande tomt svar. Ingen betald modell/fallback körd. Tidigare kategoriska formuleringar om gratisåtkomst korrigerade i preset, feltext och dev-dokument. Evidens utan nyckel: outputs/opencode-live-check.json. Behåll Go/Zen åtskilda och lova inte stabil framtida åtkomst utifrån ett lyckat prov.
+
+### Full appväg verifierad — 19:35:08 UTC
+Isolerad riktig MAJIN-server: POST /api/chat med Go/longcat-2.5-preview-free gav HTTP 200, ok=true, text OK, 1 steg, inga verktyg, 1706 input/25 output-tokens. MOA av, alla rutter/fallbacks bundna till samma fria modell. Befintlig användarinstallation ändrades inte. priceKnown=false i API-svaret; costUsd=0 är inte fristående faktureringsbevis. Evidens: outputs/opencode-app-check.json. Detta uppdaterar tidigare OpenCode-403-checkpoints: Go FUNGERAR i senaste testet; Zen nekade tidigare.

@@ -593,24 +593,17 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       }
     }
     if (p === '/api/models' && req.method === 'GET') {
-      const { listModelsUrl } = await import('../presets.js');
       const name = String(url.searchParams.get('provider') || cfg.get('models.provider'));
       const prov = (cfg.get('providers') || {})[name];
-      if (!prov) return json(res, 404, { ok: false, error: `unknown provider "${name}"` });
-      const listUrl = listModelsUrl(prov);
-      if (!listUrl) return json(res, 200, { ok: true, provider: name, models: prov.models || [], note: 'the provider has no model list — type the model name yourself' });
-      try {
-        const r = await fetch(listUrl, { headers: { ...(prov.headers || {}), ...(prov.apiKey ? (prov.kind === 'gemini' ? { 'x-goog-api-key': prov.apiKey } : { authorization: `Bearer ${prov.apiKey}` }) : {}) }, signal: AbortSignal.timeout(12000) });
-        const j = await r.json().catch(() => ({}));
-        const { normalizeCatalog } = await import('../../ui/catalog.js');
-        const catalog = normalizeCatalog(j);
-        const models = catalog.map((m) => m.id).sort();
+      if (!prov) return json(res, 404, { ok: false, error: 'unknown provider' });
+      const { discoverModels } = await import('../provider/catalog.js');
+      const { payload, ...result } = await discoverModels(prov);
+      if (result.ok) {
+        cfg.patch({ providers: { [name]: { models: result.models } } }, { source: 'catalog' });
         const { importPricing } = await import('../pricing.js');
-        const imp = await importPricing(cfg, name, j, { source: `${name}:/models` }).catch(() => ({ imported: 0, skipped: 0 }));
-        return json(res, 200, { ok: r.ok, ...(!r.ok ? { error: `Catalog request failed (HTTP ${r.status})` } : {}), provider: name, models, catalog, count: models.length, status: r.status, pricingImported: imp.imported, pricingKnown: imp.imported + imp.skipped });
-      } catch (err) {
-        return json(res, 200, { ok: false, error: err.message, hint: 'network error or a wrong baseUrl' });
+        await importPricing(cfg, name, payload, { source: name + ':/models' }).catch(() => {});
       }
+      return json(res, 200, { ...result, provider: name });
     }
     if (p === '/api/approve' && req.method === 'POST') {
       const body = await readJson(req);

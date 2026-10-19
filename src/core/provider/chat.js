@@ -50,7 +50,7 @@ export function explainError(err, route = {}) {
     return out('no_key', `You have not pasted a key for ${who} yet. ${KEYCARD}`, { needsKey: true });
   }
   if (/FreeTierError|free tier can only be used from within OpenCode/i.test(msg)) {
-    return out('access', 'OpenCode restricts its free tier to the OpenCode app. This model cannot be used directly from MAJIN. Choose another provider with verified free models.');
+    return out('access', 'OpenCode rejected this free-tier request with an OpenCode app-only restriction. The key may still be valid. Check whether your account uses Go or Zen, then choose an allowed model or provider.');
   }
   if (status === 401 || /invalid or missing api key|invalid api key|unauthorized|incorrect api key|key (was )?(revoked|deleted|expired|invalid)|wrong api key/i.test(msg)) {
     return out('auth', `${who} rejected the API key - it is wrong, deleted, or from another account. ${KEYCARD}`, { needsKey: true });

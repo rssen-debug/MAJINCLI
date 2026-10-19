@@ -285,3 +285,30 @@ test('the silent-update relaunch is a real watchdog script, byte-verified', () =
   assert.match(script, /'start','--no-window'/, 'it starts the new build the same way the launcher does');
   assert.match(script, /update-relaunch\.log/, 'every step is logged — a failed relaunch must be debuggable');
 });
+
+test('Windows updater acknowledges only a successfully spawned installer', { skip: process.platform !== 'win32' }, async (t) => {
+  const { EventEmitter } = await import('node:events');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-update-spawn-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const bytes = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(1_100_000)]);
+  const options = { dir, url: 'https://example.invalid/installer.exe', cfg: { get: () => ({}) }, fetchImpl: async url => String(url).endsWith('.sha256') ? new Response('', { status: 404 }) : new Response(bytes) };
+  let calls = 0;
+  const failed = await U.installSetup({ ...options, spawnImpl: () => {
+    calls++;
+    const child = new EventEmitter();
+    process.nextTick(() => child.emit('error', new Error('fixture EACCES')));
+    return child;
+  } });
+  assert.equal(failed.ok, false);
+  assert.equal(calls, 1, 'failed installer must not launch a restart watchdog');
+  calls = 0;
+  const started = await U.installSetup({ ...options, spawnImpl: (_file, _args, spawnOptions) => {
+    calls++;
+    assert.equal(spawnOptions.windowsHide, true);
+    const child = new EventEmitter(); child.pid = 1234; child.unref = () => {};
+    process.nextTick(() => child.emit('spawn'));
+    return child;
+  } });
+  assert.equal(started.ok, true);
+  assert.equal(calls, 2, 'successful installer receives a detached restart watchdog');
+});
