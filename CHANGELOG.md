@@ -5,6 +5,21 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 — P5: skills with versioning, rollback and surviving accountability (V5 §3) — v0.9.8
+
+### Fixed
+- **`Skills.save()` was not atomic and had no history**: every save now (a) archives the previous full file to `.versions/<slug>.v<N>.md`, (b) bumps `version` honestly, (c) writes atomically (tmp+rename — the same standard as config/plan; a crash can no longer tear skill frontmatter), and (d) **carries the fail/streak/disabled accountability** — editing a skill can no longer launder a failing track record (previously the whole frontmatter was rewritten from scratch, silently resetting `fails`).
+- **New honest APIs**: `skills.versions(slug)` (archived versions, oldest first) and `skills.rollback(slug, version?)` — restores the archived state atomically and **archives the live state first**, so rollback itself destroys no information; missing archive/version answers `ok:false` never a synthetic restore. Archives capped at the newest 10 per skill.
+
+### Added
+- `test/p5-skills-integrity.test.js` K1–K6: version bump + full-content archive; accountability carry-over incl. disabled-through-edit and silent-match exclusion; symmetric rollback + explicit-version restore; honest refusal without an archive; atomic save (no temp litter, exact re-read); 10-version archive cap.
+
+### Verified
+- `node --test test/p5-skills-integrity.test.js` → 6/6 pass.
+- `node --test test/*.test.js` → **453 pass / 0 fail / 17 skipped** (470 total; v0.9.7: 447/464 → +6, zero regressions).
+- Release gate: `build-exe` workflow on tag `v0.9.8` (GitHub Actions, Windows NSIS).
+
+
 ## 2026-10-19 — P4 entry: load-proof measurements + durable spec + count reconciliation — v0.9.7
 
 ### Added

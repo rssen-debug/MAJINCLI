@@ -243,6 +243,83 @@ export class Skills {
     return { ok: true };
   }
 
+  /* P5 (V5 §3: "reusable, tested skills with versioning and rollback").
+     Every content change: (a) archives the previous full file under
+     .versions/<slug>.v<N>.md, (b) bumps version honestly, (c) CARRIES the
+     fail/streak/disabled accountability — an edit never launders a track
+     record, (d) writes atomically (P0 standard: tmp + rename, never torn). */
+  _versionsDir() { return path.join(this.dir, '.versions'); }
+
+  _archiveCurrent(slug) {
+    try {
+      const file = this._file(slug);
+      if (!fs.existsSync(file)) return { archived: null, prevVersion: 0 };
+      let meta = {};
+      try { meta = this._readRaw(slug).meta; } catch { meta = {}; }
+      const prevVersion = Math.max(0, Number(meta.version) || 0);
+      fs.mkdirSync(this._versionsDir(), { recursive: true });
+      const archive = path.join(this._versionsDir(), `${slug}.v${prevVersion || 'pre'}.md`);
+      fs.copyFileSync(file, archive);
+      // cap: newest 10 archives per slug
+      const keep = 10;
+      const all = fs.readdirSync(this._versionsDir()).filter((f) => f.startsWith(`${slug}.v`) && f.endsWith('.md'));
+      if (all.length > keep) {
+        const sorted = all.map((f) => ({ f, t: fs.statSync(path.join(this._versionsDir(), f)).mtimeMs })).sort((a, b) => a.t - b.t);
+        for (const old of sorted.slice(0, sorted.length - keep)) fs.unlinkSync(path.join(this._versionsDir(), old.f));
+      }
+      return { archived: archive, prevVersion };
+    } catch (err) {
+      bus.warn('skill.archive_failed', { name: slug, message: String(err?.message || err) });
+      return { archived: null, archiveError: String(err?.message || err), prevVersion: 0 };
+    }
+  }
+
+  /** Archived versions of a skill, oldest first. */
+  versions(slug) {
+    try {
+      const dir = this._versionsDir();
+      const files = fs
+        .readdirSync(dir)
+        .filter((f) => f.startsWith(`${slug}.v`) && f.endsWith('.md'))
+        .map((f) => {
+          const raw = fs.readFileSync(path.join(dir, f), 'utf8');
+          const m = FRONT.exec(raw);
+          const meta = {};
+          if (m) for (const line of m[1].split('\n')) { const i = line.indexOf(':'); if (i > 0) meta[line.slice(0, i).trim()] = line.slice(i + 1).trim(); }
+          return { file: path.join(dir, f), version: Number(meta.version) || 0, updated: meta.updated || null };
+        })
+        .sort((a, b) => a.version - b.version);
+      return files;
+    } catch {
+      return [];
+    }
+  }
+
+  /** Roll back to an archived version (default: newest archive). The CURRENT
+     state is archived first — rollback never destroys information either way. */
+  rollback(slug, version = null) {
+    const target = (() => {
+      const all = this.versions(slug);
+      if (!all.length) return null;
+      if (version == null) return all[all.length - 1];
+      return all.find((v) => v.version === Number(version)) || null;
+    })();
+    if (!target) return { ok: false, why: `no archived version of '${slug}'${version != null ? ` (v${version})` : ''}` };
+    try {
+      const live = this._readRaw(slug);
+      const liveVersion = Math.max(0, Number(live.meta.version) || 0);
+      this._archiveCurrent(slug); // symmetric safety: current becomes the newest archive
+      const rawTarget = fs.readFileSync(target.file, 'utf8');
+      const tmp = `${this._file(slug)}.tmp-${process.pid}`;
+      fs.writeFileSync(tmp, rawTarget);
+      fs.renameSync(tmp, this._file(slug)); /* atomic restore */
+      bus.info('skill.rollback', { name: slug, from: liveVersion, to: target.version });
+      return { ok: true, from: liveVersion, to: target.version, restored: this._file(slug) };
+    } catch (err) {
+      return { ok: false, why: `rollback failed: ${String(err?.message || err)}` };
+    }
+  }
+
   save({ name, when, steps, tools = '' }) {
     const slug = String(name || 'skill')
       .toLowerCase()
@@ -250,11 +327,32 @@ export class Skills {
       .replace(/^-|-$/g, '')
       .slice(0, 48);
     if (!slug) return { ok: false, why: 'the name could not be written as a filename' };
+    /* version + accountability: previous content is archived, previous FAIL
+       and STREAK counters travel with the skill (an edit is not an acquittal) */
+    const archiveInfo = this._archiveCurrent(slug);
+    let prevMeta = {};
+    try { prevMeta = this._readRaw(slug).meta; } catch { prevMeta = {}; }
+    const version = (Math.max(0, Number(prevMeta.version) || 0)) + 1;
     const file = path.join(this.dir, `${slug}.md`);
-    const body = `---\nname: ${name}\nwhen: ${when || ''}\ntools: ${Array.isArray(tools) ? tools.join(', ') : tools || ''}\nupdated: ${new Date().toISOString()}\n---\n${(steps || '').trim()}\n`;
-    fs.writeFileSync(file, body);
-    bus.info('skill.save', { name: slug, file });
-    return { ok: true, file, name: slug };
+    const metaLines = [
+      `name: ${name}`,
+      `when: ${when || ''}`,
+      `tools: ${Array.isArray(tools) ? tools.join(', ') : tools || ''}`,
+      `version: ${version}`,
+      `updated: ${new Date().toISOString()}`,
+    ];
+    for (const k of ['fails', 'streak', 'lastOk', 'lastFail', 'lastFailWhy', 'disabled']) {
+      if (prevMeta[k] !== undefined) metaLines.push(`${k}: ${prevMeta[k]}`);
+      else if (k === 'fails' && version > 1) metaLines.push('fails: 0');
+    }
+    const body = `---\n${metaLines.join('\n')}\n---\n${(steps || '').trim()}\n`;
+    const tmp = `${file}.tmp-${process.pid}`;
+    fs.writeFileSync(tmp, body);
+    fs.renameSync(tmp, file); /* atomic: same standard as config.plan — never torn */
+    bus.info('skill.save', { name: slug, file, version, archived: archiveInfo.archived });
+    const out = { ok: true, file, name: slug, version, archived: archiveInfo.archived };
+    if (archiveInfo.archiveError) out.archiveError = archiveInfo.archiveError; // honestly surfaced, never hidden
+    return out;
   }
 
   match(text, k = 4) {
