@@ -110,12 +110,19 @@ export function historyPath(sessionId, dir = dirs.sessions) {
   return path.join(dir, `${sessionId.replace(/[^\w-]/g, '_')}.jsonl`);
 }
 
+/* History stays best-effort, but silently swallowing disk errors hid the very
+   outages the UI-agent handover (2026-10-19) flagged: callers now get the truth
+   (true/false) plus the last error, and may decide to surface it. */
+export const historyErrors = [];
 export function appendHistory(sessionId, msg, dir = dirs.sessions) {
   try {
     fs.mkdirSync(dir, { recursive: true });
     fs.appendFileSync(historyPath(sessionId, dir), JSON.stringify({ ...msg, ts: new Date().toISOString() }) + '\n');
-  } catch {
-    /* history is a nice-to-have, never fatal */
+    return true;
+  } catch (err) {
+    historyErrors.push({ sessionId, message: String(err?.message || err), code: err?.code || 'write_failed', when: new Date().toISOString() });
+    if (historyErrors.length > 50) historyErrors.splice(0, historyErrors.length - 50);
+    return false;
   }
 }
 

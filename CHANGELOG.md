@@ -5,6 +5,24 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 — P0: honest persistence + per-chat routing (UI-agent handover #1, engine side) — v0.9.4
+
+### Fixed
+- `Config.save()` is now atomic (`tmp` write → fsync → rename, rotation into `.bak`) and honestly reported: a failed disk write surfaces as `patch()` → `{ ok:false, persisted:false, errors:[{ code:'save_failed' }] }` — the old silent `ok:true` on a failed save is gone. The previous file on disk stays intact when a write fails.
+- `load()` now distinguishes **absent** from **corrupt**: a corrupt main file heals from `.bak` (`cfg.recoveredFrom='bak'`), never gets silently overwritten by defaults, and every anomaly stays visible via `cfg.loadIssues`. (Previously a parse error flipped `fresh=true`, which could auto-save defaults over the user's last working config.)
+- `appendHistory()` reports success/failure (`true/false`) and records failures in a bounded `historyErrors` ring instead of swallowing disk errors.
+
+### Added
+- **Per-chat model binding (backend)**: `models.sessionRoutes = { <sessionId>: { <job>: "provider/model" } }`; `routeFor(cfg, job, { session })` honors an explicit binding without rewriting the global table, and a missing key on an explicitly bound route surfaces as a real error in that chat (no silent fallback).
+- **Turn-pinned routing**: an in-flight turn now keeps the route chosen at its start (`loop` pins per `stepJob`); a provider switch in another chat mid-turn no longer reroutes the running work. Deliberate escalation keeps its own swap.
+- `test/p0-save-sessionroute.test.js` — S1–S6 (7 subtests): honest save, atomic+`.bak`, corrupt→heal, no-overwrite-without-backup, session binding global-table isolation, mid-turn re-route prevention, honest history.
+
+### Verified
+- `node --test test/p0-save-sessionroute.test.js` → 7/7 pass.
+- `node --test test/*.test.js` → 395 pass / 0 fail / 16 skipped (was 388 pass on v0.7.2; +7 new, zero regressions).
+- Release gate: `build-exe` workflow on tag `v0.9.4` (GitHub Actions, Windows NSIS).
+
+
 ## 2026-10-19 — Aurora Studio UI/UX — v0.9.0
 
 ### Changed

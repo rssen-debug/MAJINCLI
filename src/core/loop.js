@@ -56,6 +56,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
   let answer = '';
   let brief = messages.find((m) => m.role === 'system' && String(m.content).startsWith('ARBETSMINNESBRIEF'))?.content || '';
   const tally = { input: 0, output: 0, costUsd: 0 };
+  const turnRoutes = new Map(); // stepJob -> route pinned for this turn
 
   while (steps < limit) {
     if (signal?.aborted) {
@@ -64,7 +65,15 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     }
     steps += 1;
     const stepJob = escalated ? cfg.get('routing.escalateJob') || 'analysis' : steps === 1 ? job : agent.stepJob || 'tasks';
-    const route = routeFor(cfg, stepJob);
+    /* P0: a TURN keeps the route chosen at its start. Resolving fresh on every
+       step meant a provider switch mid-turn silently changed which model
+       finished the running work (handover: picker wrote globally; every step
+       re-read). Escalation keeps its own deliberate swap via its own key. */
+    let route = turnRoutes.get(stepJob) || null;
+    if (!route) {
+      route = routeFor(cfg, stepJob, { session: ctx?.session });
+      if (route) turnRoutes.set(stepJob, route);
+    }
     if (!route) throw new Error('no provider with an API key yet — open the Providers card, pick one and paste the key');
     /* A cap is a promise: over the monthly line, PAID calls stop right here,
        before they cost anything. Free routes keep working. */
