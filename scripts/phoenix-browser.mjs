@@ -30,6 +30,20 @@ try {
   await page.screenshot({ path: path.join(output, 'phoenix-home.png') });
   const catalog = Array.from({ length: 1200 }, (_, i) => ({ id: `vendor/model-${i}:free`, name: `Model ${String(i).padStart(4, '0')}`, free: i % 2 === 0, input: i % 2, output: i % 2, context: (i + 1) * 1000, tools: true }));
   await page.route('**/api/models?**', r => r.fulfill({ json: { ok: true, catalog, models: catalog.map(m => m.id) } }));
+  const providerActions = [];
+  await page.route('**/api/provider?**', r => {
+    providerActions.push(r.request().postDataJSON().action);
+    return r.fulfill({ json: { ok: true } });
+  });
+  await page.locator('#manage-providers').click();
+  await page.locator('#ob-choice').selectOption('deepseek');
+  await page.locator('.ob-choose').click();
+  if (await page.locator('#ob-body input[type=password]').count()) await page.locator('#ob-body input[type=password]').fill('ui-fixture-not-a-real-key');
+  await page.locator('#ob-body .ob-go').click();
+  await page.waitForFunction(() => !document.querySelector('#modeldrop').hidden);
+  assert.ok(providerActions.every(action => action === 'add'), 'onboarding never probes a preset model or makes paid inference calls');
+  await page.unroute('**/api/provider?**');
+  await page.keyboard.press('Escape');
   await page.locator('#c-model').click();
   await page.waitForFunction(() => document.querySelector('.explorer-count')?.textContent.includes('1200'));
   assert.equal(await page.locator('.ob-model').count(), 60);

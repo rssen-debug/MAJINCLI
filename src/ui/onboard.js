@@ -71,7 +71,7 @@
     if (existing) {
       const ready = el('div', 'ob-ready');
       ready.append(el('span', 'ob-ready-dot', '●'));
-      ready.append(el('span', '', existing.label + ' is already connected'));
+      ready.append(el('span', '', existing.label + ' is configured'));
       box.append(ready);
       const go = el('button', 'ob-go', 'Start chatting →');
       go.type = 'button';
@@ -165,7 +165,7 @@
     box.append(back, el('div', 'ob-mark', '✦'), el('h2', 'ob-title', 'Connect ' + p.label));
     const existing = OB.forceEdit ? null : status(p.name);
     box.append(el('p', 'ob-sub', existing && existing.ready
-      ? 'Your AI is already connected. No need to enter your key again.'
+      ? 'A key is saved for this provider. Choose a current model to continue.'
       : (p.needsKey ? 'Paste your key once. MAJIN keeps it on this computer.' : 'No API key needed. Make sure the local AI server is running.')));
 
     const urlIn = p.custom ? el('input', 'ob-input') : null;
@@ -196,7 +196,7 @@
     const msg = el('p', 'ob-msg');
     msg.setAttribute('role', 'status');
     msg.setAttribute('aria-live', 'polite');
-    const go = el('button', 'ob-go', existing?.ready ? 'Start chatting →' : 'Connect and start →');
+    const go = el('button', 'ob-go', existing?.ready ? 'Choose a model →' : 'Save and choose model →');
     go.type = 'button';
     go.onclick = async () => {
       if (OB.working) return;
@@ -222,10 +222,6 @@
           const added = await apiLocal('/provider', { method: 'POST', body }).catch(() => null);
           const error = tellErr(added, 'Could not connect.');
           if (error) { msg.textContent = error; return; }
-          msg.textContent = 'Checking connection…';
-          const test = await apiLocal('/provider', { method: 'POST', body: { action: 'test', name: p.name } }).catch(() => null);
-          const testError = tellErr(test, 'Could not reach the provider.');
-          if (testError) { msg.textContent = testError; return; }
           await finishSetup(p.name, msg);
         }
       } finally {
