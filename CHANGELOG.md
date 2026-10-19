@@ -5,6 +5,20 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 — GODLIKE V4: intelligent rate-limit orchestrator (§7) — v0.7.2
+
+### Changed
+- New `src/core/ratelimit.js`: provider-quota buckets (rpm/tpm/concurrent), token reservations (requests count against quota at reservation time), Retry-After floor, bounded backoff+jitter, prioritized admission queue (interactive > tasks > background, same-tick coalescing), AIMD adaptive concurrency, 6-class error classification, pass-through when no quota is configured.
+- `chat.complete` now admits through the orchestrator + reconciles actual usage against reservations + honors Retry-After before retrying.
+- `Config.resolveModel` carries the owner-configured `limits[provider]` on the route (no invented limits).
+- New reporting dimension docs: `docs/SWARM_PERFORMANCE.md`, `docs/REAL_WORLD_READINESS.md`, `docs/DEV_CONTINUATION.json`; FEATURE_RADAR updated.
+
+### Verified
+- Deterministic simulator `test/ratelimit-sim.test.js` 8/8: S1 naive-burst violation vs S2 zero-violation throughput; S3 Retry-After floor; S4 queued-abort (zero unhandledRejection, floating-reject class eliminated in engine); S5 priority; S6 AIMD; S7 classification; S8 pass-through.
+- Sabotage discrimination: SA3 (both prio sorts removed) → S5 red; SB (reservations not counted) → S4/S2-class red; SC (Retry-After floor removed) → S3 red. Restored → green.
+- Full suite: 404 tests / 388 pass / 0 fail / 16 skipped. Bench unchanged 7/7 (24 399 tokens, $0).
+- Version 0.7.2. Implementation completion unchanged 81/100 (this wave strengthens the OMEGA layer; matrix rows untouched by design).
+
 ## 2026-10-19 — Del 12A (independent real-model acceptance suite) — 81/100
 
 ### Changed

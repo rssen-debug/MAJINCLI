@@ -37,3 +37,24 @@ Nothing here is scored — only listed by observed point-density and leverage.
    bus event when truncation happens would make prompt composition honest —
    cheap, and directly useful when skills becomes the agent's main long-term
    memory (Del 7 makes that likely).
+---
+
+## V4 wave additions (2026-10-19 evening, wave: HYPERSWARM OMEGA §7 done)
+
+### IMPLEMENTED — Rate-limit orchestrator (LiteLLM-router + Netflix concurrency-limits inspired)
+- Source: LiteLLM routing/quotas + Netflix adaptive concurrency + provider Retry-After docs.
+- Decision: ADOPT (already shipped): src/core/ratelimit.js + wire in chat.complete
+- Evidence: sim 8/8 + sabotage discrimination (SA3 sorts / SB reservations / SC floor).
+- Security: pass-through default, zero invented limits, no paid-model upgrades, honors owner quotas only.
+
+### Candidate — Adaptive topology dispatch (§5) — next wave
+- Source: Google Research scaling-agents blog + AgentDropout (ACL 2025).
+- Hypothesis: SOLO vs TEAM vs PARALLEL chosen on dependency+duration estimates beats fixed heuristic.
+- Experiment design: matched missions A/B against current scheduler; pass = meaningful median advantage.
+
+### Candidate — Delta memory protocol (§9)
+- Hypothesis: provenance-tagged shared state cuts cross-agent tokens without factual drift.
+- Pass = ≥30% reduction in inter-agent context bytes on same mission set.
+
+### Rejected-at-proposal — Speculative side-effect execution (§6 subset)
+- Any speculative path touching writes/POSTs: violates the directive's own constraint — read-only speculation only, future wave, disabled by default.

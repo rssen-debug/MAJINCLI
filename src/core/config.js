@@ -464,6 +464,10 @@ export class Config {
       apiKey: provider.apiKey || (provider.keyEnv && process.env[provider.keyEnv]) || '',
       extraHeaders: provider.headers || {},
       pricing,
+      /* GODLIKE V4 §7: per-provider quota (owner-configured) rides the route so
+         the admission layer never needs a second config lookup. Absent →
+         pass-through, no invented limits. */
+      quota: this.data.limits?.[name] ? { ...this.data.limits[name] } : null,
       job,
     };
   }
