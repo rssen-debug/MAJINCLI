@@ -28,3 +28,15 @@ Gå igenom appen på Windows, åtgärda fel, testa OpenCode endast med verifiera
 
 ## Otestat / kvar
 Aktuell full testsvit, bred API/UI-inventering, säker OpenCode-diagnostik, fixes med regressionstester, visuell kontroll vid UI-ändring, PR/CI/merge. Funktioner som kräver externa konton eller verkliga systemintegrationer måste redovisas separat om de inte kan verifieras.
+
+### Checkpoint 2 — första aktuella Windows-körningen
+408 tester: 385 godkända, 9 fel, 14 överhoppade (27,7 s). Felidentifierare:
+- WIN-01: mission.verifyContract använder hårdkodad /bin/sh; command_exits_zero fungerar därför inte på Windows utan Unix-shell. Bekräftat appfel.
+- TEST-02: branding-testet förutsätter att NO_COLOR saknas.
+- TEST-03: config.needsSetup och doctor-testerna ärver verkliga provider-nycklar från miljön; deras förutsättning "utan nyckel" är falsk.
+- TEST-04: installer-testernas två kontroller förutsätter LF, misslyckas på CRLF-checkout.
+- TEST-05: livedelivery-testet förutsätter Linux även på Windows.
+- TEST-06: setup-testets tar-lista innehåller CRLF, jämförs utan trimning.
+- TEST-07: version-testet undantar core/version.js med Unix-separator; Windows returnerar core\version.js.
+
+OpenCode live-diagnos: officiell modellkatalog https://opencode.ai/inference/v1/models gav 85 ID:n. Officiella dokumentationen https://opencode.ai/v2/docs/console/models/ anger longcat-2.5-preview-free som gratis. Ett anrop med exakt denna modell, max_tokens=16, ingen fallback, till dokumenterad https://opencode.ai/inference/openai/v1/chat/completions gav HTTP 403 med error.type=FreeTierError: "OpenCode's free tier can only be used from within OpenCode." Det är en leverantörsbegränsning, inte bevis för ogiltig nyckel. Ingen lyckad extern inferens. Betalda modeller har inte testats. Äldre Go-preset och nuvarande API-adresser behöver särskiljas; gratis tillgång från MAJIN kan inte utlovas eller kringgås.
