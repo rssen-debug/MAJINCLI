@@ -5,7 +5,7 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 80 / 100** (verified against branch `feature/reality-5abe` (pre-release), 2026-10-19).
+**Score so far: 80 / 100** (verified against main `c6b4ce3` (squash), v0.7.0, 2026-10-19).
 
 | Phase | Max | Earned |
 |---|---:|---:|
@@ -67,11 +67,11 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
-| 5A | 2 | Forms and interactive controls | `test/browser-domains.live.test.js` 5A green in exe-CI (Windows Edge): text/select/radio/consent posted + observed AT THE SERVER: {"name":"Siri Testsson","mail":"siri@test.dev","stack":"node","level":"senior","consent":"on"}; thanks-words proven | live browser (CI) | this branch | PASS | 2026-10-19 |
-| 5B | 2 | Dynamic navigation, tabs, iframes | `test/browser-domains.live.test.js` 5B green in exe-CI (Windows Edge): hash-rendered content proven, target=_blank followed via engine meta openedNewTab:true, iframe host + straight-path verification | live browser (CI) | this branch | PASS | 2026-10-19 |
+| 5A | 2 | Forms and interactive controls | `test/browser-domains.live.test.js` 5A green in exe-CI (Windows Edge): text/select/radio/consent posted + observed AT THE SERVER: {"name":"Siri Testsson","mail":"siri@test.dev","stack":"node","level":"senior","consent":"on"}; thanks-words proven | live browser (CI) | main `c6b4ce3` | PASS | 2026-10-19 |
+| 5B | 2 | Dynamic navigation, tabs, iframes | `test/browser-domains.live.test.js` 5B green in exe-CI (Windows Edge): hash-rendered content proven, target=_blank followed via engine meta openedNewTab:true, iframe host + straight-path verification | live browser (CI) | main `c6b4ce3` | PASS | 2026-10-19 |
 | 5C | 2 | Observation and bounded recovery (no blind click loops) | `node --test test/browser.test.js` — LoopJournal stops 3 identical actions cold; slot pool queues; session isolation | node, no browser | main line | PASS | 2026-10-18 |
 | 5D | 2 | Real Windows computer-use scenarios | — | needs Windows runner | — | UNVERIFIED | 2026-10-18 |
-| 5E | 2 | Multi-step real website workflow without unverified completion claims | same suite 5E green: search→product→cart→checkout→confirm, every step cross-checked against SERVER state (cart=[{sku:X900,qty:1}], /order POST recorded) — never page-text-only | live browser (CI) | this branch | PASS | 2026-10-19 |
+| 5E | 2 | Multi-step real website workflow without unverified completion claims | same suite 5E green: search→product→cart→checkout→confirm, every step cross-checked against SERVER state (cart=[{sku:X900,qty:1}], /order POST recorded) — never page-text-only | live browser (CI) | main `c6b4ce3` | PASS | 2026-10-19 |
 
 ## DEL 6 — GENESIS ZERO & Cost (6/9)
 
