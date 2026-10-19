@@ -259,11 +259,19 @@ export function isPlain(v) {
   return p === Object.prototype || p === null;
 }
 
+/* Del 10E (CVE-class): keys that rewrite JS object identity. A config patch
+   containing "__proto__"/"constructor"/"prototype" must NEVER reach a merge
+   or a dotted-path write — sandbox-adversarial test 10E-V2 proved the naive
+   merge made cfg.get('guard.pwned') reachable from payload __proto__. The
+   defense: drop the segment ENTIRELY (not just neutralize the value). */
+const DANGEROUS_SEGS = new Set(['__proto__', 'constructor', 'prototype']);
+
 export function merge(base, patch) {
   if (patch === undefined) return base;
   if (Array.isArray(patch) || !isPlain(patch) || !isPlain(base)) return clone(patch);
   const out = { ...base };
   for (const [k, v] of Object.entries(patch)) {
+    if (DANGEROUS_SEGS.has(k)) continue; // 10E: hostile identity keys vanish here
     if (v === undefined) delete out[k];
     else out[k] = isPlain(v) && isPlain(base[k]) ? merge(base[k], v) : clone(v);
   }
@@ -276,11 +284,15 @@ export function smartMerge(base, patch) {
 }
 
 export function getPath(obj, dotted) {
-  return dotted.split('.').reduce((a, k) => (a == null ? a : a[k]), obj);
+  return dotted.split('.').reduce((a, k) => {
+    if (a == null || DANGEROUS_SEGS.has(k) || !Object.prototype.hasOwnProperty.call(a, k)) return undefined;
+    return a[k];
+  }, obj);
 }
 
 export function setPath(obj, dotted, value) {
   const keys = dotted.split('.');
+  if (keys.some((k) => DANGEROUS_SEGS.has(k))) return obj; // 10E: sabotage-segment write refused
   let cur = obj;
   for (const k of keys.slice(0, -1)) {
     if (!isObj(cur[k])) cur[k] = {};

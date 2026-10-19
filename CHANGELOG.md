@@ -5,6 +5,24 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 — Del 4D (contract domains: command/json/http) + Del 10E (adversarial regressions) — 74/100
+
+### Changed
+- `src/core/mission.js`: `verifyContract` async for real I/O contracts (legacy sync kept as `verifyContractLegacy` documented); three new out-of-the-box domains with NARROW derivation: `command_exits_zero` (two phrasings), `json_topkeys`, `url_contains` — under-deriving is honest, never a false pass.
+- Command domain: hard denylist (rm -rf/sudo/curl|sh/mkfs/fs-write/format/cipher/vssadmin) + real child-process exit code as evidence (timeout-controlled).
+- JSON domain: real `JSON.parse` + top-level key proof + workspace-sandbox on the target file.
+- HTTP domain: real `fetch` (https or localhost-only, size cap + status + needle).
+- 10E: `src/core/config.js` hardened against hostile identity keys (`__proto__|constructor|prototype`): merge drops segments, getPath own-prop only, setPath refuses — a REAL config-pollution vector found and fixed.
+- `docs/ADVERSARIAL.md`: six classified attack vectors with regression tests.
+
+### Verified
+- `test/domains.test.js` 5/5 — all three domains pass/fail/denied + derivation + E2E repair-on-lies. Full suite 390/0.
+- `test/domains-live.test.js` 2/2 (MAJIN_LIVE=1, opencode key): real https google.com check + real `node --version` exit + LIVE longcat mission wrote mission-live.json {answer:42, task:…} VERIFIED sha:c181499c — 72 511 tokens measured.
+- `test/adversarial-regressions.test.js` 5/5 — path containment map, proto pollution, 4MB-args bound, readOnly bypass, eval-content-as-data. CI stays mock-only (live files skip honestly).
+- Sabotage discrimination: T1 universal-pass → 4 reds; T2 fake-exit → 4D.1 red; T3 url-derivation off → 4D.4 red; E1 merge-filter removed → V2 red; all restored green.
+- Bench unchanged: 7/7, 24 400 tokens, $0 (före 24 399 — miljödrift ±1). **74/100.**
+
+
 ## 2026-10-19 (night) — v0.6.8 · Del 3E — HYPERSWARM COMPLETE (67 → 69/100)
 
 ### Changed
