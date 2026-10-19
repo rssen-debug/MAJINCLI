@@ -242,7 +242,7 @@
 
   /* ------------------------- model picker chip ------------------------- */
 
-  const PICKER = { openFlag: false, cache: {}, current: '' };
+  const PICKER = { openFlag: false, cache: {}, current: '', generation: 0 };
 
   function shortModel(ref) {
     return String(ref || '').split('/').pop() || '—';
@@ -255,7 +255,8 @@
     if (!st || !st.routes) return;
     const chat = (st.routes || []).find((r) => r.job === 'chat');
     PICKER.current = chat ? chat.ref : '';
-    chip.textContent = (PICKER.current ? shortModel(PICKER.current) : 'Choose a model') + ' ▾';
+    const configured = (st.providers || []).find(p => p.name === chat?.provider)?.ready;
+    chip.textContent = (PICKER.current && configured ? shortModel(PICKER.current) : 'Choose a model') + ' ▾';
     chip.title = PICKER.current || 'no model set';
     chip.hidden = false;
     chip.setAttribute('aria-haspopup', 'dialog');
@@ -268,19 +269,26 @@
     PICKER.openFlag = !PICKER.openFlag;
     pane.hidden = !PICKER.openFlag;
     $('c-model').setAttribute('aria-expanded', String(PICKER.openFlag));
+    const ticket = ++PICKER.generation;
     if (!PICKER.openFlag) return;
-    fillPicker(pane);
+    pane.textContent = '';
+    pane.tabIndex = -1;
+    pane.setAttribute('aria-modal', 'true');
+    pane.focus();
+    fillPicker(pane, ticket);
   }
 
   function closePicker() {
     PICKER.openFlag = false;
+    PICKER.generation++;
     $('modeldrop').hidden = true;
     $('c-model').setAttribute('aria-expanded', 'false');
     $('c-model').focus();
   }
 
-  async function fillPicker(pane) {
+  async function fillPicker(pane, ticket) {
     const { normalizeCatalog, filterCatalog } = await import('/catalog.js');
+    if (!PICKER.openFlag || ticket !== PICKER.generation) return;
     pane.textContent = '';
     pane.setAttribute('role', 'dialog');
     pane.setAttribute('aria-label', 'Choose a model');
@@ -306,7 +314,7 @@
     search.placeholder = 'Search models or creators…';
     search.setAttribute('aria-label', 'Search models');
     const filters = el('div', 'explorer-filters');
-    const free = el('button', 'filter-chip', 'Free only');
+    const free = el('button', 'filter-chip free-filter', 'Free only');
     free.setAttribute('aria-pressed', 'false');
     const sort = el('select', 'explorer-sort');
     sort.setAttribute('aria-label', 'Sort models');
@@ -314,6 +322,14 @@
       const option = el('option', '', label); option.value = value; sort.append(option);
     }
     filters.append(free, sort);
+    const capabilities = el('div', 'capability-filters');
+    const capabilityState = { tools: false, vision: false, longContext: false };
+    for (const [key, label] of [['tools', 'Tools'], ['vision', 'Vision'], ['longContext', '128k+ context']]) {
+      const button = el('button', 'filter-chip', label);
+      button.setAttribute('aria-pressed', 'false');
+      button.onclick = () => { capabilityState[key] = !capabilityState[key]; button.setAttribute('aria-pressed', String(capabilityState[key])); limit = 60; paint(); };
+      capabilities.append(button);
+    }
     const msg = el('div', 'ob-msg explorer-count');
     msg.setAttribute('role', 'status');
     const list = el('div', 'ob-models md-list');
@@ -327,7 +343,9 @@
     manualInput.setAttribute('aria-label', 'Exact model ID');
     const manualGo = el('button', '', 'Use this ID');
     manual.append(el('p', 'ob-msg', 'For custom or unlisted models. Availability and price are unverified.'), manualInput, manualGo);
-    pane.append(head, provider, search, filters, msg, list, more, manual, manage);
+    const browser = el('div', 'explorer-browser');
+    browser.append(provider, search, filters, capabilities, msg, list, more, manual, manage);
+    pane.append(head, browser);
     let models = [], freeOnly = false, limit = 60, generation = 0, unverified = false;
     const accept = async (id) => {
       msg.textContent = 'Selecting model…';
@@ -340,7 +358,7 @@
     manualGo.onclick = () => { const id = manualInput.value.trim(); if (id) accept(id); };
     function paint() {
       list.textContent = '';
-      const hits = filterCatalog(models, { query: search.value, free: freeOnly, sort: sort.value });
+      const hits = filterCatalog(models, { query: search.value, free: freeOnly, sort: sort.value, ...capabilityState });
       msg.textContent = hits.length + ' of ' + models.length + ' models' + (freeOnly ? ' · zero catalog charges' : unverified ? ' · unverified suggestions' : '');
       if (!hits.length) list.append(el('p', 'explorer-empty', freeOnly ? 'No verified free models here. Try another provider or turn off Free only.' : 'No models match. Try another search or provider.'));
       for (const m of hits.slice(0, limit)) {
@@ -351,9 +369,26 @@
         const bits = [m.free ? 'Free' : m.input == null || m.output == null ? 'Price unknown' : '$' + m.input.toFixed(2) + ' in / $' + m.output.toFixed(2) + ' out · 1M tokens', m.context ? Math.round(m.context / 1000) + 'k context' : '', m.tools ? 'Tools' : '', m.vision ? 'Vision' : ''].filter(Boolean);
         row.append(el('span', 'model-meta' + (m.free ? ' model-free' : ''), bits.join(' · ')));
         row.onclick = () => accept(m.id);
-        list.append(row);
+        const card = el('article', 'model-card');
+        const inspect = el('button', 'model-inspect', 'ⓘ');
+        inspect.type = 'button';
+        inspect.setAttribute('aria-label', 'Inspect ' + m.name);
+        inspect.onclick = () => inspectModel(m, inspect);
+        card.append(row, inspect); list.append(card);
       }
       more.hidden = hits.length <= limit;
+    }
+    function inspectModel(m, origin) {
+      const details = el('section', 'model-detail');
+      const back = el('button', 'model-detail-back', '← Back to models');
+      back.onclick = () => { details.remove(); browser.hidden = false; title.textContent = 'Choose your model'; origin.focus(); };
+      const price = (n) => n == null ? 'Unknown' : '$' + Number(n).toLocaleString(undefined, { maximumFractionDigits: 6 });
+      details.append(back, el('h3', '', m.name), el('span', 'model-id', m.id));
+      const facts = el('dl', 'studio-facts');
+      for (const [label, value] of [['Input / 1M tokens', price(m.input)], ['Output / 1M tokens', price(m.output)], ['Context window', m.context ? Number(m.context).toLocaleString() + ' tokens' : 'Unknown'], ['Tools', m.tools ? 'Supported' : 'Not reported'], ['Vision', m.vision ? 'Supported' : 'Not reported'], ['Zero catalog charges', m.free ? 'Verified in catalog' : 'Not established']]) facts.append(el('dt', '', label), el('dd', '', value));
+      details.append(facts, el('p', '', 'Catalog listing does not verify account access or quota. Additional charges may apply unless all reported prices are zero.'));
+      const use = el('button', 'model-detail-use', 'Use this model'); use.onclick = () => accept(m.id);
+      details.append(use); browser.hidden = true; title.textContent = 'Model information'; pane.append(details); back.focus();
     }
     async function load() {
       const turn = ++generation, name = provider.value;
@@ -378,7 +413,7 @@
     pane.onkeydown = (e) => {
       if (e.key === 'Escape') { e.preventDefault(); closePicker(); }
       if (e.key === 'Tab') {
-        const nodes = [...pane.querySelectorAll('button, input, select')].filter((n) => !n.hidden && !n.disabled);
+        const nodes = [...pane.querySelectorAll('button, input, select')].filter((n) => !n.hidden && !n.disabled && n.getClientRects().length);
         const first = nodes[0], last = nodes.at(-1);
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
@@ -386,6 +421,18 @@
     };
     search.focus(); load();
   }
+  document.addEventListener('keydown', (e) => {
+    if (e.defaultPrevented || !PICKER.openFlag) return;
+    if (e.key === 'Escape') { e.preventDefault(); closePicker(); }
+    if (e.key === 'Tab') {
+      const pane = $('modeldrop');
+      const nodes = [...pane.querySelectorAll('button,input,select,summary,a[href]')].filter(n => !n.disabled && n.getClientRects().length);
+      if (!nodes.length) e.preventDefault();
+      else if (!pane.contains(document.activeElement)) { e.preventDefault(); nodes[0].focus(); }
+      else if (e.shiftKey && document.activeElement === nodes[0]) { e.preventDefault(); nodes.at(-1).focus(); }
+      else if (!e.shiftKey && document.activeElement === nodes.at(-1)) { e.preventDefault(); nodes[0].focus(); }
+    }
+  });
   document.addEventListener('pointerdown', (e) => {
     if (PICKER.openFlag && !$('modeldrop').contains(e.target) && !$('c-model').contains(e.target)) closePicker();
   });

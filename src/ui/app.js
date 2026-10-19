@@ -166,6 +166,12 @@ function moaGauge(ev) {
 
 /* ------------------------------ event pump ------------------------------ */
 function onEvent(ev) {
+  if (ev.type === 'task') S.taskId = ev.task;
+  if (S.stopRequested && ['error', 'answer'].includes(ev.type)) {
+    if (!S.deferredStopEvent || (ev.type === 'error' && S.deferredStopEvent.type !== 'error')) S.deferredStopEvent = ev;
+    return;
+  }
+  if (window.MAJIN_STUDIO) window.MAJIN_STUDIO.onEvent(ev);
   if (ev.type === 'error') { err(ev.message + (ev.hint ? '\n→ ' + ev.hint : '')); return; }
   if (S.failed && ['delta', 'thinking', 'answer'].includes(ev.type)) return;
   if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.onEvent(ev); // Live Agent Vision — real events only
@@ -191,7 +197,7 @@ function onEvent(ev) {
       appendDelta(ev.text);
       break;
     case 'thinking':
-      setThinking(ev.text);
+      if (!window.MAJIN_STUDIO) setThinking(ev.text);
       break;
     case 'tool':
       S.activeTool = toolRow(ev.name);
@@ -207,17 +213,20 @@ function onEvent(ev) {
       break;
     }
     case 'escalate':
-      note('escalating → ' + ev.to + ' (' + (ev.why || 'errors') + ')');
+      if (window.MAJIN_STUDIO) setStatus('Switching model');
+      else note('escalating → ' + ev.to + ' (' + (ev.why || 'errors') + ')');
       break;
     case 'compact':
-      note('compacting context (' + ev.tokens + ' tok)');
+      if (window.MAJIN_STUDIO) setStatus('Updating context');
+      else note('compacting context (' + ev.tokens + ' tok)');
       break;
     case 'plan':
       renderPlan(ev.plan);
       break;
     case 'config':
       S.st = null;
-      note('config: ' + (ev.notes || []).join(' · '));
+      if (window.MAJIN_STUDIO) toast('Settings updated');
+      else note('config: ' + (ev.notes || []).join(' · '));
       refresh();
       break;
     case 'config_error':
@@ -270,10 +279,10 @@ function closeAnswer(ev) {
 
 /* --------------------------------- send --------------------------------- */
 async function send(text) {
-  if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.reset(); // a new run gets a fresh canvas
 
   const input = String(text || '').trim();
   if (!input) return false;
+  if (S.stopRequested) { toast('Waiting for stop confirmation.'); return false; }
   if (input[0] === '/') {
     const ok = await command(input);
     if (ok) return true;
@@ -283,6 +292,9 @@ async function send(text) {
      must NEVER wait for the first one. The /stop command above still reaches
      the running task. */
   if (S.busy) return parallelTask(input);
+  if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.reset(); // a new run gets a fresh canvas
+  if (window.MAJIN_STUDIO) window.MAJIN_STUDIO.setState('connecting');
+  S.taskId = null; S.deferredStopEvent = null;
   S.failed = false; S.lastInput = input; S.completed = false; S.readingHistory = false;
   addMsg('user', 'You', input);
   $('input').value = '';
@@ -330,8 +342,8 @@ async function send(text) {
         onEvent(ev);
       }
     }
-    if (!S.completed && !S.failed) err('The response stream ended before completion.');
-    if (S.cur && !S.failed) closeAnswer({ text: S.curBody, meta: {} });
+    if (!S.completed && !S.failed && !S.stopRequested) err('The response stream ended before completion.');
+    if (S.cur && !S.failed && !S.stopRequested) closeAnswer({ text: S.curBody, meta: {} });
   } catch (e) {
     if (e.name !== 'AbortError') err('connection lost: ' + e.message);
     else {
@@ -345,20 +357,60 @@ async function send(text) {
     $('send').classList.remove('busy');
     $('send').textContent = 'Send →';
     if (S.failed && !$('input').value) { $('input').value = input; autoGrow(); }
-    setStatus(S.failed ? 'Request failed · message preserved' : S.cancelled ? 'Stopped' : 'Ready');
-    S.cur = null; S.cancelled = false;
+    setStatus(S.stopRequested ? 'Stopping task…' : S.failed ? 'Request failed · message preserved' : S.cancelled ? 'Stopped' : 'Ready');
+    if (S.stopRequested && S.cur) { S.cur.b.classList.remove('caret'); if (S.cur.thinking) S.cur.thinking.remove(); }
+    if (!S.stopRequested) S.cur = null;
+    S.cancelled = false;
     refresh(true);
   }
   return true;
 }
 
 async function stop() {
-  if (!S.busy) return;
-  S.abort?.abort();
+  if (!S.busy || S.stopRequested) return;
+  try { await stopObservedTask(S.taskId, S.session); }
+  catch (e) { toast('Could not stop: ' + e.message); }
+}
+
+// One acknowledged backend action keeps Workspace and chat cancellation in sync.
+async function stopObservedTask(id, session) {
+  const main = S.busy && (id ? S.taskId === id : session === S.session);
+  const rec = id ? PLIVE.find(t => t.id === id && !t.finished) : null;
+  if (main) { S.stopRequested = true; S.deferredStopEvent = null; setStatus('Stopping task…'); }
+  if (rec) { rec.stopRequested = true; rec.card.stopb.disabled = true; }
   try {
-    await api('/chat/stop', { method: 'POST', body: { session: S.session } });
-  } catch {
-    /* */
+    const result = await api('/chat/stop', { method: 'POST', body: id ? { task: id } : { session } });
+    if (result.ok !== true) throw new Error(result.error || 'Stop was not confirmed by the server');
+  } catch (e) {
+    if (main) {
+      S.stopRequested = false;
+      if (S.deferredStopEvent) {
+        const busy = S.busy; S.busy = true; onEvent(S.deferredStopEvent); S.busy = busy;
+        if (!busy) { setStatus(S.failed ? 'Request failed · message preserved' : 'Ready'); S.cur = null; }
+      }
+      else setStatus('Stop failed · task may still be running');
+      S.deferredStopEvent = null;
+    }
+    if (rec) {
+      rec.stopRequested = false; rec.card.stopb.disabled = false;
+      if (rec.deferredStopError) taskEvent(rec, 'error', rec.deferredStopError);
+      if (rec.deferredStopDone) finishTask(rec, rec.deferredStopDone);
+    }
+    throw e;
+  }
+  if (main) {
+    S.stopRequested = false; S.failed = false; S.cancelled = true; S.deferredStopEvent = null;
+    S.abort?.abort();
+    if (!S.busy) {
+      if (S.cur) closeAnswer({ text: S.curBody, meta: {} });
+      S.cancelled = false; setStatus('Stopped');
+      if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.onEvent({ type: 'cancelled' });
+    }
+  }
+  if (rec) {
+    rec.stopRequested = false; rec.status = 'stopped'; rec.finished = true; rec.endAt = Date.now();
+    telLeave(rec); paintTel(rec); paintTaskState(rec, 'stopped on request');
+    rec.card.m.classList.add('task-bad'); rec.abort.abort();
   }
 }
 
@@ -567,6 +619,7 @@ function telLeave(rec) {
 function telTickAll() { for (const rec of PLIVE) paintTel(rec); }
 
 function taskEvent(rec, name, ev) {
+  if (rec.stopRequested && name === 'error') { rec.deferredStopError = ev; return; }
   if (name === 'task') {
     rec.id = ev.task;
     rec.session = ev.session;
@@ -621,6 +674,7 @@ function taskEvent(rec, name, ev) {
 }
 
 function finishTask(rec, doneEv) {
+  if (rec.stopRequested) { rec.deferredStopDone = doneEv; return; }
   if (rec.finished) return;
   rec.finished = true;
   rec.endAt = Date.now();
@@ -636,19 +690,9 @@ function finishTask(rec, doneEv) {
 }
 
 async function stopTask(rec) {
-  if (!rec || !rec.id) return;
-  rec.card.stopb.disabled = true;
-  try {
-    await api('/chat/stop', { method: 'POST', body: { task: rec.id } });
-  } catch { /* keep */ }
-  rec.status = 'stopped';
-  rec.finished = true;
-  rec.endAt = Date.now();
-  telLeave(rec);
-  paintTel(rec);
-  paintTaskState(rec, 'stopped on request');
-  rec.card.m.classList.add('task-bad');
-  rec.abort.abort();
+  if (!rec || !rec.id || rec.stopRequested) return;
+  try { await stopObservedTask(rec.id); }
+  catch (e) { toast('Could not stop: ' + e.message); }
 }
 
 /* ------------------------------ live deck --------------------------------
@@ -680,6 +724,10 @@ async function deckTick() {
   try {
     d = await (await fetch('/api/tasks?t=' + encodeURIComponent(TOKEN), { headers: { authorization: 'Bearer ' + TOKEN } })).json();
   } catch { d = null; }
+  if (window.MAJIN_STUDIO) {
+    if (d && Array.isArray(d.tasks)) window.MAJIN_STUDIO.updateTasks(d.tasks);
+    else window.MAJIN_STUDIO.tasksUnavailable();
+  }
   const active = d && Array.isArray(d.tasks) ? d.tasks.filter((t) => ['running', 'waiting', 'paused'].includes(t.status)) : [];
   if (!active.length) { elx.hidden = true; return; }
   elx.hidden = false;
@@ -975,6 +1023,7 @@ async function refresh(quiet) {
     if (window.MAJIN_ONBOARD) window.MAJIN_ONBOARD.maybe(S.st); // first-run wizard + model chip
     if (window.paintPanel) window.paintPanel(st);
     paintRail(st);
+    if (window.MAJIN_STUDIO) window.MAJIN_STUDIO.setUsage(st.usage || {});
     if (!quiet) {
       /* tyst */
     }
@@ -996,26 +1045,23 @@ function showWelcome() {
   const welcome = document.createElement('section');
   welcome.id = 'home';
   welcome.className = 'home';
-  const image = document.createElement('img');
-  image.className = 'home-mark';
-  image.src = '/logo.png';
-  image.alt = '';
-  welcome.append(image);
+  const emblem = el('div', 'home-emblem', '<span class="living-orb" aria-hidden="true"><i></i><i></i><i></i></span>');
+  welcome.append(emblem, el('span', 'eyebrow', 'A SPACE FOR POSSIBILITY'));
   const title = document.createElement('h2');
-  title.append(document.createTextNode('What can I help you '));
+  title.append(document.createTextNode('What will you '));
   const strong = document.createElement('strong');
-  strong.textContent = 'achieve?';
+  strong.textContent = 'bring to life?';
   title.append(strong);
   welcome.append(title);
   const sub = document.createElement('p');
-  sub.textContent = 'A little curiosity. A big idea. Where shall we start?';
+  sub.textContent = 'Think freely. Build boldly. Make it yours.';
   welcome.append(sub);
   const examples = document.createElement('div');
   examples.className = 'home-examples';
   for (const prompt of ['Explore an idea', 'Build something', 'Help me research']) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.textContent = prompt + ' ↗';
+    button.append(el('span', 'prompt-spark', prompt === 'Explore an idea' ? '✧' : prompt === 'Build something' ? '⌘' : '↗'), document.createTextNode(prompt));
     button.onclick = () => { $('input').value = prompt; $('input').focus(); };
     examples.append(button);
   }
@@ -1023,14 +1069,22 @@ function showWelcome() {
   panel.append(welcome);
 }
 
+function closeMobileRail() {
+  if (matchMedia('(max-width:1000px)').matches) {
+    document.body.classList.remove('mobile-rail');
+    document.body.classList.add('rail-off');
+    $('b-rail').setAttribute('aria-expanded', 'false');
+  }
+}
 $('new-chat').onclick = async () => {
-  if (S.busy) { toast('Stop the current task before starting a new chat.'); return; }
+  if (S.busy || S.stopRequested) { toast('Stop the current task before starting a new chat.'); return; }
+  closeMobileRail();
   S.session = 'chat-' + Date.now().toString(36);
   $('input').value = ''; autoGrow();
   await loadHistory(); $('input').focus();
 };
-$('browse-models').onclick = () => window.MAJIN_ONBOARD.togglePicker();
-$('manage-providers').onclick = () => window.MAJIN_ONBOARD.reopen();
+$('browse-models').onclick = () => { closeMobileRail(); window.MAJIN_ONBOARD.togglePicker(); };
+$('manage-providers').onclick = () => { closeMobileRail(); window.MAJIN_ONBOARD.reopen(); };
 $('input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -1040,20 +1094,27 @@ $('input').addEventListener('keydown', (e) => {
 });
 $('send').onclick = () => (S.busy ? stop() : send($('input').value));
 $('input').addEventListener('input', autoGrow);
-$('b-rail').onclick = () => document.body.classList.toggle('rail-off');
+$('b-rail').onclick = () => {
+  if (matchMedia('(max-width:1000px)').matches) {
+    const open = document.body.classList.toggle('mobile-rail');
+    document.body.classList.toggle('rail-off', !open);
+    $('b-rail').setAttribute('aria-expanded', String(open));
+  } else { const off = document.body.classList.toggle('rail-off'); $('b-rail').setAttribute('aria-expanded', String(!off)); }
+};
 $('c-model').onclick = () => window.MAJIN_ONBOARD && window.MAJIN_ONBOARD.togglePicker();
 $('b-quit').onclick = async () => {
-  if ($('b-quit').dataset.arm !== '1') { $('b-quit').dataset.arm = '1'; $('b-quit').textContent = 'quit?'; setTimeout(() => { $('b-quit').dataset.arm = ''; $('b-quit').textContent = '⏻'; }, 3000); return; }
+  if ($('b-quit').dataset.arm !== '1') { $('b-quit').dataset.arm = '1'; $('b-quit').textContent = 'quit?'; setTimeout(() => { $('b-quit').dataset.arm = ''; $('b-quit').textContent = window.MAJIN_STUDIO ? 'Quit MAJIN' : '⏻'; }, 3000); return; }
   $('b-quit').textContent = 'closing…';
   try { await fetch('/api/shutdown?t=' + encodeURIComponent(TOKEN), { method: 'POST' }); } catch { /* it goes away either way */ }
   try { window.close(); } catch { /* browsers may refuse */ }
 };
 $('b-expert').onclick = () => {
+  if (window.MAJIN_STUDIO) { window.MAJIN_STUDIO.open('settings'); return; }
   const simple = document.body.classList.toggle('simple');
   $('b-expert').classList.toggle('on', !simple);
   try { localStorage.setItem('majin.expert', simple ? '0' : '1'); } catch { /* private mode */ }
 };
-try { if (localStorage.getItem('majin.expert') === '1') { document.body.classList.remove('simple'); $('b-expert').classList.add('on'); } } catch { /* private mode */ }
+try { if (!window.MAJIN_STUDIO && localStorage.getItem('majin.expert') === '1') { document.body.classList.remove('simple'); $('b-expert').classList.add('on'); } } catch { /* private mode */ }
 $('b-panel').onclick = () => {
   document.body.classList.toggle('pan-off');
   $('b-panel').classList.toggle('on');
@@ -1075,6 +1136,8 @@ $('b-test').onclick = async () => {
 };
 $('mic').onclick = micToggle;
 $('b-theme').onclick = () => {
+  document.body.classList.add('theme-changing');
+  requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('theme-changing')));
   const light = document.body.classList.toggle('light');
   try { localStorage.setItem('majin.theme', light ? 'light' : 'dark'); } catch { /* private mode */ }
 };
@@ -1145,4 +1208,5 @@ window.addEventListener('load', async () => {
   if (window.paintPanelExtras) window.paintPanelExtras();
   $('input').focus();
 });
+window.MAJIN_CHAT = { stopTask: stopObservedTask };
 window.refresh = refresh; // onboarding + model picker repaint through the same funnel

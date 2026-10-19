@@ -80,9 +80,11 @@
     if (!root) return;
     orb.className = 'core ' + core;
     coreLabel.textContent = CORE_TEXT[core] || '';
+    if (window.MAJIN_STUDIO) window.MAJIN_STUDIO.setState(core);
   }
 
   function setCore(state) {
+    if (['error', 'stopped'].includes(core) && !['error', 'stopped'].includes(state)) return;
     if (core === 'done' && state === 'idle') return; // let "done ✓" breathe until the next run
     core = state;
     paint();
@@ -138,6 +140,7 @@
     btn.type = 'button';
     btn.title = 'Preview a local HTML file without running scripts';
     btn.onclick = async () => {
+      if (window.MAJIN_STUDIO) { window.MAJIN_STUDIO.previewFile(path); return; }
       btn.disabled = true;
       btn.textContent = 'Loading preview…';
       try {
@@ -259,13 +262,26 @@
         addStep(stepRow('🚫', 'tool denied by you', ev.tool || ''));
         setCore('thinking');
         break;
+      case 'moa:start':
+        addStep(stepRow('◇', 'reference round started', String(ev.width || 0) + ' model references'));
+        setCore('thinking');
+        break;
+      case 'moa:ref':
+        addStep(stepRow(ev.ok ? '✓' : '!', 'reference ' + (ev.ref || ''), ev.ok ? 'answered' : 'failed'));
+        break;
+      case 'moa:done':
+        addStep(stepRow('◇', 'reference round finished', String(ev.refs || 0) + ' references'));
+        break;
+      case 'moa:degraded':
+        addStep(stepRow('!', 'reference round degraded', ev.reason || ''));
+        break;
       case 'usage': {
         const u = ev.tokensIn + ev.tokensOut;
         addStep(stepRow('📊', 'steg ' + (ev.step || '?'), u + ' token' + (ev.costUsd ? ' · $' + ev.costUsd.toFixed(4) : '')));
         break;
       }
       case 'answer': {
-        if (core === 'error') break;
+        if (core === 'error' || core === 'stopped') break;
         const meta = ev.meta || {};
         const bits = [
           meta.steps && meta.steps + ' steps',
@@ -299,6 +315,7 @@
   function reset() {
     if (!root) return;
     list.textContent = '';
+    if (window.MAJIN_STUDIO) window.MAJIN_STUDIO.resetRun();
     pendingById.clear();
     pendingByName.clear();
     if (preview) preview.remove();

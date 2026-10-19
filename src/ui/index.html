@@ -248,6 +248,16 @@ body.simple #c-cost{margin-left:auto}
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
 <body class="simple">
+<svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></symbol>
+<symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 14h8M8 17h5"/></symbol>
+</defs></svg>
 <header>
   <img class="logo" src="/logo.png" alt="MAJIN" width="22" height="22">
   <h1 id="brand">MAJIN</h1>
@@ -258,7 +268,7 @@ body.simple #c-cost{margin-left:auto}
   <span class="chip" id="c-tools">tools <b>–</b></span>
   <span class="chip" id="c-cost">$<b>0</b></span>
   <button class="chip" id="c-update" hidden title="New version available" type="button"></button>
-  <span class="spacer"></span>
+  <span class="spacer"></span><button id="b-studio" aria-controls="studio" aria-expanded="false"><svg class="icon"><use href="#i-panel"/></svg><span>Workspace</span><span id="task-count" hidden></span></button>
   <span class="chip" id="c-tg"><i class="led" id="led-tg"></i>telegram</span>
   <span class="chip" id="c-wa"><i class="led" id="led-wa"></i>whatsapp</span>
   <button id="b-mode" title="Permission mode — Assist: ask before every write. Approval: ask before risky work. Full auto: never ask.">approval</button>
@@ -273,12 +283,34 @@ body.simple #c-cost{margin-left:auto}
 
 <div id="app">
   <div id="rail">
-    <button id="new-chat" class="nav-new">＋ New chat</button><button id="browse-models" class="nav-link">◈ Explore models</button><button id="manage-providers" class="nav-link">⚙ Providers</button><h3>YOUR CHATS</h3><div id="sessions"></div>
+    <button id="new-chat" class="nav-new"><svg class="icon"><use href="#i-plus"/></svg>New chat<span class="nav-hint">Ctrl N</span></button>
+    <label class="chat-search"><svg class="icon"><use href="#i-search"/></svg><input id="chat-search" type="search" placeholder="Search chats" aria-label="Search chats"/></label>
+    <h3>RECENT</h3><div id="sessions"></div><p id="chat-empty" hidden>No matching chats</p>
+    <div class="rail-actions"><button id="browse-models" class="nav-link"><svg class="icon"><use href="#i-grid"/></svg>Explore models</button><button id="manage-providers" class="nav-link"><svg class="icon"><use href="#i-sliders"/></svg>Providers</button><span class="rail-caption">Your models. Your space.</span></div>
     <h3>PLAN</h3><div class="plan" id="plan"><div>–</div></div>
     <h3>SCHEDULE</h3><div id="sched" class="kv">no jobs</div>
     <h3>MEMORY</h3><div id="mem" class="kv">–</div>
   </div>
-  <div id="main"><section id="imagine" hidden></section><div id="scroller"></div></div>
+  <div id="main"><section id="imagine" hidden></section><div id="scroller"></div><footer>
+  <div id="run-state" data-state="idle" hidden><span class="living-orb" aria-hidden="true"><i></i><i></i><i></i></span><span id="run-label">Ready</span><button id="run-details">View activity <span aria-hidden="true">↗</span></button></div>
+  <div id="composer">
+    <textarea id="input" placeholder="Ask anything, or build something." rows="1" aria-label="Message MAJIN"></textarea>
+    <button id="send" aria-label="Send message">Send →</button>
+  </div>
+  <div class="crow">
+    <button id="mic" title="Voice input">🎙</button><span id="mic-state"></span>
+    <span class="grow" id="status" role="status" aria-live="polite">Ready</span>
+    <span id="drop" class="drop">drop a file → RE analysis</span>
+  </div>
+</footer></div>
+  <aside id="studio" hidden aria-label="Workspace">
+    <div class="studio-heading"><div><span class="eyebrow">MAJIN STUDIO</span><h2>Workspace</h2></div><button id="studio-close" aria-label="Close workspace"><svg class="icon"><use href="#i-close"/></svg></button></div>
+    <div class="studio-tabs" role="tablist" aria-label="Workspace views"><button id="tab-activity" role="tab" aria-selected="true" aria-controls="view-activity" tabindex="0">Activity</button><button id="tab-files" role="tab" aria-selected="false" aria-controls="view-files" tabindex="-1">Files <span id="file-count">0</span></button><button id="tab-preview" role="tab" aria-selected="false" aria-controls="view-preview" tabindex="-1">Preview</button><button id="tab-settings" role="tab" aria-selected="false" aria-controls="view-settings" tabindex="-1">Settings</button></div>
+    <section id="view-activity" class="studio-view" role="tabpanel" aria-labelledby="tab-activity"><div class="section-heading"><h3>Task constellation</h3><span id="studio-task-summary">No active tasks</span></div><p id="task-connection" hidden role="status"></p><div id="studio-tasks"></div><div id="task-detail" hidden></div><div id="activity-mount"></div></section>
+    <section id="view-files" class="studio-view" role="tabpanel" aria-labelledby="tab-files" hidden><div class="studio-empty"><svg class="icon"><use href="#i-file"/></svg><h3>A place for what you make.</h3><p>Files from the current run appear here when a tool reports a real file.</p></div><div id="studio-files"></div></section>
+    <section id="view-preview" class="studio-view" role="tabpanel" aria-labelledby="tab-preview" hidden><div id="studio-preview"><div class="studio-empty"><svg class="icon"><use href="#i-panel"/></svg><h3>From idea to something real.</h3><p>Select a generated file in Files to inspect its contents or preview its HTML.</p></div></div></section>
+    <section id="view-settings" class="studio-view" role="tabpanel" aria-labelledby="tab-settings" hidden><div class="settings-utilities"></div><div id="settings-mount"></div></section>
+  </aside>
   <div id="panel">
     <h3>ROUTING</h3><div id="routes"></div>
     <h3>MOA</h3><div id="moactl"></div>
@@ -293,22 +325,13 @@ body.simple #c-cost{margin-left:auto}
   </div>
 </div>
 
-<footer>
-  <div id="composer">
-    <textarea id="input" placeholder="What would you like MAJIN to do?" rows="1" aria-label="Message MAJIN"></textarea>
-    <button id="send" aria-label="Send message">Send →</button>
-  </div>
-  <div class="crow">
-    <button id="mic" title="Voice input">🎙</button><span id="mic-state"></span>
-    <span class="grow" id="status" role="status" aria-live="polite">Ready</span>
-    <span id="drop" class="drop">drop a file → RE analysis</span>
-  </div>
-</footer>
+
 <div id="modeldrop" hidden></div>
 <div id="onboard" hidden role="dialog" aria-modal="true" aria-label="MAJIN setup"><div id="ob-card"><div id="ob-body"></div></div></div>
 <div id="toast"></div>
 <script>window.__MAJIN_TOKEN__='__MAJIN_TOKEN__';window.__MAJIN_VERSION__='__MAJIN_VERSION__';</script>
 <script>document.addEventListener('DOMContentLoaded',function(){document.getElementById('v-tag').textContent='v'+window.__MAJIN_VERSION__;});</script>
+<script src="/studio.js"></script>
 <script src="/imagine.js"></script>
 <script src="/onboard.js"></script>
 <script src="/app.js"></script>
