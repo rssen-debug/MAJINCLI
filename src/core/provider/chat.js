@@ -4,6 +4,7 @@
  * Streaming in, tool calls out, retries with backoff, token+cost accounting.
  */
 import { bus } from '../log.js';
+import { admit, record, noteViolation, retryAfterMs, classify, estimateInputTokens } from '../ratelimit.js';
 import { openaiStream, openaiOnce } from './openai.js';
 import { anthropicStream, anthropicOnce } from './anthropic.js';
 import { mockComplete } from './mock.js';
@@ -72,6 +73,9 @@ export function explainError(err, route = {}) {
   return out('provider', '', { retryable: Boolean(err?.retryable) });
 }
 
+const JOBCAT = (job) => (typeof job === 'string' ? (/(?:^|:)chat$/.test(job) ? 'interactive' : (/research|background|scheduler/.test(job) ? 'background' : 'tasks')) : 'tasks');
+const quotaGet = (r) => r?.quota || null;
+
 export async function complete(o) {
   const { route, messages, tools = [], onEvent, signal, maxTokens, temperature, job } = o;
   const max = maxTokens ?? route.maxTokens ?? 4096;
@@ -81,19 +85,29 @@ export async function complete(o) {
   const started = Date.now();
   for (;;) {
     attempt += 1;
+    /* V4 §7 admission: configured quota → queue+reserve; none → instant pass. */
+    const release = await admit({ route, quotaGet, estIn: estimateInputTokens(messages), estOut: max, job: JOBCAT(job), signal });
     try {
       const res = await dispatch({ ...o, maxTokens: max, temperature: temp });
       res.elapsedMs = Date.now() - started;
       res.attempts = attempt;
       res.job = job;
-      if (res.usage) res.usage.costUsd = costOf(route, res.usage);
+      if (res.usage) {
+        res.usage.costUsd = costOf(route, res.usage);
+        record(route, res.usage, quotaGet);
+      }
+      release();
       return res;
     } catch (err) {
+      release();
       const info = explainError(err, route);
       err.majin = info;
+      const cls = classify(err);
+      if (cls.cls === 'rate_limit') noteViolation(route, quotaGet);
       if (info.stop || attempt > retries || signal?.aborted) throw err;
-      const backoff = Math.min(15000, 800 * 2 ** (attempt - 1)) + Math.random() * 400;
-      bus.warn('provider.retry', { job, provider: route.providerName, attempt, backoff: Math.round(backoff), error: err.message });
+      const ra = retryAfterMs(err);
+      const backoff = Math.max(ra, Math.min(15000, 800 * 2 ** (attempt - 1)) + Math.random() * 400);
+      bus.warn('provider.retry', { job, provider: route.providerName, attempt, backoff: Math.round(backoff), retryAfterMs: ra, cls: cls.cls, error: err.message });
       await sleep(backoff, signal);
       if (signal?.aborted) throw err;
     }

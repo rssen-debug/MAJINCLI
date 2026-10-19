@@ -161,3 +161,12 @@ reopens the red state.
 | 12A.3 lie-detector | missing file named "missing or empty"; exit 7 never a success | 0 (engine only) |
 
 The suite never lets a model judge its own work.
+
+
+## GODLIKE V4 §7 — rate-limit orchestrator (2026-10-19)
+
+Deterministic simulator `test/ratelimit-sim.test.js` 8/8 (offline, tiny windows):
+S1 naive 429-burst vs S2 zero-violation throughput (6 calls, wall 1046 ms,
+queue-wait 2893 ms); S3 Retry-After floor; S4 queued-abort cleanliness;
+S5 interactive-priority; S6 AIMD; S8 pass-through with no configured quota.
+Not a live quota measurement — provider RPM/TPM values remain owner-configured.
