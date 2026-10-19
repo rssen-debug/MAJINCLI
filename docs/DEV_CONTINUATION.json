@@ -1,5 +1,5 @@
 {
-  "lastVerifiedMain": "ed98b6d",
+  "lastVerifiedMain": "a606576",
   "lastCompletedMilestone": "GODLIKE V4 \u00a77 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
   "currentWorkstream": "GODLIKE V4 WAVE 2 \u2014 \u00a75 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
@@ -25,7 +25,7 @@
   "implementationScore": 81,
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
-  "nextAction": "P1: durable journal / context / resume (TaskRegistry persistence, plan hydration in normal turn, handoff consume-flag) \u2014 engine side only; UI/Aurora stays with the UI agent branch",
+  "nextAction": "P1: durable journal / context / resume \u2014 plan-load in normal turn (agent.js:187 uses plans.get, not loadPlan), setPlan->persistPlan wiring with honest failure, handoff producer/consumer call sites + consume-once guard (engine only); then P2 adapter capacity/vision (Anthropic image blocks), P3 Windows control (FlaUI/UFO PoC first). UI/Aurora stays with the UI agent branch.",
   "version": "0.9.4",
   "milestone": "P0 honest persistence + per-chat routing merged (PR #63), rebased onto UI-agent main v0.9.3",
   "branch": "main-post-merge"
