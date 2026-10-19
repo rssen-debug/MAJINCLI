@@ -286,6 +286,7 @@ export function missionLimits(cfg) {
   };
   return {
     repairRounds: num(cfg?.get?.('mission.limits.repairRounds'), 1, 0, 3),
+    transientRetries: num(cfg?.get?.('mission.limits.transientRetries'), 1, 0, 3),
     timeoutMs: num(cfg?.get?.('mission.limits.timeoutMs'), 0, 0, 3600000),
     tokenBudget: num(cfg?.get?.('mission.limits.tokenBudget'), 0, 0, 1000000000),
   };
@@ -342,6 +343,7 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
     cap: capOverride > 0 ? capOverride : analysis.workers,
     timeoutMs: limits.timeoutMs,
     signal: controller.signal,
+    maxAttempts: 1 + limits.transientRetries,
     onEvent: (e) => emit({ ...e, mission: true }),
   });
   const parts = [...r.results.values()];

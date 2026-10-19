@@ -325,3 +325,20 @@ allowed to contradict a test.
 - **Abort marks, it does not fabricate.** Parts killed by budget/timeout end
   `blocked` with a LIMIT tag, never `ok`. A limit firing mid-flight must never
   retro-certify half-finished work.
+
+## 2026-10-19 — Del 3C/3D: one accountable recovery owner per layer, locks proven hostile-safe
+
+- **Recovery must have ONE owner per scope.** Provider call (chat.complete),
+  agent turn (loop error counter) and mission scheduler (runSwarm) ALL retried
+  at once: up to 3×4 invisible attempts. For missions the scheduler is now the
+  only owner (workers: retries 0 / errorCap 0). Chat keeps its layered
+  resilience — different product need, same library.
+- **"Transient" is an allowlist.** Only network/rate-limit/5xx shapes retry;
+  everything else is permanent and runs once. A generic "retry on error" gate
+  would duplicate side effects on semantic failures — exactly the failure mode
+  the directive forbids.
+- **Replacement = fresh session, not continuation.** `:a2` sessions start
+  empty because a half-dead worker's context is part of what failed.
+- **Locks are proven hostile-safe, not assumed safe.** The adversarial test
+  WANTS to corrupt; the mutex is what saves it — and the sabotage run proves
+  the test notices when the mutex is gone.

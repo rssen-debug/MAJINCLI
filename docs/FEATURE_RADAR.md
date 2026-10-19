@@ -1,48 +1,50 @@
-# MAJIN FEATURE RADAR — top 5 discoveries (2026-10-19, refreshed after Del 4C)
+# MAJIN FEATURE RADAR — top 5 discoveries (2026-10-19 evening, after Del 3C/3D)
 
 Standing rule from the master brief: every run records its five highest-value
 discoveries in docs. Each item below names where it was found and why it ranks.
 Nothing here is scored — only listed by observed point-density and leverage.
 
-1. **Del 3C/D/E — HYPERSWARM hardiness (6 points on one cluster).** Found in
-   `docs/COMPLETION_MATRIX.md` (3C/3D/3E all UNVERIFIED): transient-failure
-   recovery, corrupt-state adversarial handling and a REAL parallel-vs-sequential
-   wall-clock measurement are the largest contiguous point block besides Reality
-   Engine. The primitives now exist — `runSwarm` has deadlines, aborts and honest
-   blocked states, `missionLimits` proved the mock-harness can script timed
-   streams (`sleepMs`-shaped scripts) — so all three can be tested in one wave.
-   Point-density rank: #2.
+1. **Del 3E — REAL parallel-vs-sequential benchmark (2p, last HYPERSWARM gap).**
+   Found while shipping 3C/3D: the scheduler now has OBSERVABLE recovery
+   (worker_retry events), bounded attempts and honest blocked states — the only
+   missing evidence is a live-model measurement. Needs one live provider key;
+   harness pattern is proven (timed streams + call counters), so with a key the
+   benchmark is a one-evening PR: N independent briefs × parallel(cap=N) vs
+   sequential(cap=1), median wall time + tokens, ≥3 runs. Point-density rank: #1
+   when a key exists, otherwise unbuildable.
 
 2. **Machine-readable verification receipts.** Found in `src/core/mission.js`
    (Del 4A): provenance strings (`[VERIFIED: store/ has 3 files (independently
-   counted), after repair]`) are today text-only inside `textSummary`. Emitting the
-   same records as `<sid>.receipts.jsonl` would feed two deferred phases at once:
-   Del 4D (cross-domain independent checks need a standard evidence record) and the
-   future UI "receipts" view (Del 8) — one file, two phases unlocked.
+   counted), after repair]`) are today text-only inside `textSummary`. Emitting
+   the same records as `<sid>.receipts.jsonl` would feed two deferred phases at
+   once: Del 4D (cross-domain independent checks need a standard evidence
+   record) and the future UI "receipts" view (Del 8) — one file, two phases
+   unlocked. Rank: #2.
 
 3. **Contract types beyond files: `command_exits_zero` and `json_against_schema`.**
-   Found while scoping Del 4A's `buildContracts`: the engine's contract registry is
-   one switch away from two more types. `command_exits_zero` covers "the script ran
-   successfully" claims (verifiable in code, never by model), `json_against_schema`
-   covers structured-output tasks. Both are direct groundwork for Del 4D (real
-   cross-domain tasks with independently checked results, currently 1 domain).
+   Found while scoping Del 4A's `buildContracts`: the engine's contract registry
+   is one switch away from two more types. `command_exits_zero` covers "the
+   script ran successfully" claims (verifiable in code, never by model),
+   `json_against_schema` covers structured-output tasks. Both are direct
+   groundwork for Del 4D (real cross-domain tasks with independently checked
+   results, currently 1 domain). Rank: #3.
 
 4. **Consolidate the two verification engines.** Found in `src/core/mission.js`:
    `verifyClaimedArtifact` (legacy single-file path) and `verifyContract`
-   (contract engine) now coexist, and `verifyContractLegacy` is the glue. Once all
-   briefs produce contracts, the legacy path is dead code. One reality engine means
-   one sabotage surface, one discrimination test set, one set of evidence semantics.
-   Ranked lower than 1–3 because it earns correctness, not acceptance points — but
-   it should land before Del 4D multiplies contract types.
+   (contract engine) now coexist, and `verifyContractLegacy` is the glue. Once
+   all briefs produce contracts, the legacy path is dead code. One reality
+   engine means one sabotage surface, one discrimination test set, one set of
+   evidence semantics. Earns correctness, not acceptance points — but it should
+   land before Del 4D multiplies contract types. Rank: #4.
 
-5. **Del 2C — clarify + replan on contract death.** Found at the intersection of
-   Del 2 (Grand Architect) and Del 4A: when a contract dies and repair also fails,
-   today the part fails. The Grand Architect could instead REPLAN the DAG around
-   the dead contract (different node order, different tool decomposition) before
-   reporting failure. This turns Del 2C from "clarify before starting" into
-   "clarify/replan mid-flight" — worth 3 points and it reuses the repair loop's
-   dead-contract list as the replan trigger.
+5. **Del 2C — clarify + replan on contract death.** Found at the intersection
+   of Del 2 (Grand Architect) and Del 4A: when a contract dies and repair also
+   fails, today the part fails. The Grand Architect could instead REPLAN the
+   DAG around the dead contract (different node order, different tool
+   decomposition) before reporting failure. This turns Del 2C from "clarify
+   before starting" into "clarify/replan mid-flight" — worth 3 points and it
+   reuses the repair loop's dead-contract list as the replan trigger. Rank: #5.
 
-Historical context: previous radar rounds produced the github.research tool
-(see `docs/GITHUB_RESEARCH.md`) — that pipeline remains the delivery channel for
-ecosystem discoveries; this file tracks in-repo discoveries.
+Historical channel: ecosystem discoveries flow through the built-in
+github.research tool (see `docs/GITHUB_RESEARCH.md`); this file tracks
+in-repo discoveries.

@@ -29,6 +29,7 @@ export async function mockComplete(o) {
   const q = textOf(last?.content);
   if (scripted?.length) {
     const step = scripted.shift();
+    if (step.throw) throw new Error(String(step.throw)); /* Del 3C: scripted transient flakes */
     return emit(o, step);
   }
   if (job === 'router') return emit(o, { text: 'code' });
