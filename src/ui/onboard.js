@@ -164,6 +164,7 @@
     back.onclick = () => { OB.provider = null; render(); };
     box.append(back, el('div', 'ob-mark', '✦'), el('h2', 'ob-title', 'Connect ' + p.label));
     const existing = OB.forceEdit ? null : status(p.name);
+    if (p.notes && p.name === 'opencode') box.append(el('p', 'ob-sub', p.notes));
     box.append(el('p', 'ob-sub', existing && existing.ready
       ? 'A key is saved for this provider. Choose a current model to continue.'
       : (p.needsKey ? 'Paste your key once. MAJIN keeps it on this computer.' : 'No API key needed. Make sure the local AI server is running.')));

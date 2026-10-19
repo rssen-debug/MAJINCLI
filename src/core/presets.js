@@ -52,7 +52,7 @@ export const PRESETS = {
     apiKey: null,
     models: ['glm-5.3-flash', 'qwen3.8-flash', 'deepseek-v4.1-flash', 'mimo-v2.6-flash', 'beam-free', 'longcat-2.5-preview-free', 'kimi-k2.6', 'grok-4.6'],
     keyUrl: 'https://opencode.ai/docs/go/',
-    notes: 'OpenAI-compatible gateway with free/flash models; model list read live from its catalog (2026-10-18). Needs an active Go plan or Zen balance.',
+    notes: 'OpenCode Go requires an active subscription. OpenCode restricts its free tier to its own app; a free model name does not grant free API access from MAJIN.',
   },
   nous: {
     label: 'Nous Portal',
@@ -131,7 +131,16 @@ export const PRESETS = {
  * lycka med ett tomt falt men aldrig krava en nyckel for Ollama pa burken.
  */
 export function keylessUrl(baseUrl) {
-  return /:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(String(baseUrl || ''));
+  try {
+    const url = new URL(baseUrl);
+    if (!['http:', 'https:'].includes(url.protocol)) return false;
+    const host = url.hostname.toLowerCase();
+    if (['localhost', '[::1]', '0.0.0.0'].includes(host)) return true;
+    if (!/^\d+\.\d+\.\d+\.\d+$/.test(host)) return false;
+    const parts = host.split('.').map(Number);
+    if (parts.some(n => n > 255)) return false;
+    return parts[0] === 127 || parts[0] === 10 || (parts[0] === 192 && parts[1] === 168) || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31);
+  } catch { return false; }
 }
 
 export function needsKeyFor(entry = {}, preset = null) {
@@ -148,6 +157,7 @@ export function presetCard(name, p) {
     keyUrl: p.keyUrl || null,
     needsKey: (p.kind || 'openai') !== 'mock' && !p.apiKey,
     models: p.models || [],
+    notes: p.notes || '',
   };
 }
 

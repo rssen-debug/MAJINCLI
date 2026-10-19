@@ -105,6 +105,42 @@ test('/healthz and /api/hello stay open', async () => {
   assert.equal(JSON.parse(hello.body).name, 'MAJIN');
 });
 
+test('completed task follow-up is running in the same session, then completes its next run', async () => {
+  const config = JSON.parse((await get(`/api/config?t=${TOKEN}`)).body).config;
+  const routes = Object.fromEntries(Object.keys(config.models.routes).map(job => [job, 'demo/demo-fast']));
+  await get(`/api/config?t=${TOKEN}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ models: { provider: 'demo', routes }, moa: { policy: 'off' } }) });
+  const first = await get(`/api/chat?t=${TOKEN}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ input: 'hi', autopilot: true, stream: false }) });
+  const task = JSON.parse(first.body).task;
+  assert.ok(task);
+  const response = await fetch(base(`/api/chat?t=${TOKEN}`), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ input: 'hi again', task }) });
+  assert.equal(response.status, 200);
+  const running = JSON.parse((await get(`/api/tasks?t=${TOKEN}`)).body).tasks.find(t => t.id === task);
+  assert.equal(running.status, 'running');
+  assert.equal(running.run, 2);
+  await response.text();
+  const done = JSON.parse((await get(`/api/tasks?t=${TOKEN}`)).body).tasks.find(t => t.id === task);
+  assert.equal(done.status, 'done');
+  assert.equal(done.run, 2);
+});
+
+test('workspace data APIs and isolated memory writes work over real HTTP', async (t) => {
+  for (const endpoint of ['state?tools=0', 'tasks', 'usage', 'memory', 'skills', 'dataset', 'tools', 'schedule', 'channels', 'approvals', 'sessions', 'history?session=audit-missing', 'logs?n=3']) {
+    await t.test(endpoint, async () => {
+      const r = await get(`/api/${endpoint}${endpoint.includes('?') ? '&' : '?'}t=${TOKEN}`);
+      assert.equal(r.status, 200, r.body.slice(0, 120));
+      assert.equal(JSON.parse(r.body).ok, true);
+    });
+  }
+  const marker = 'audit-memory-roundtrip-11927';
+  const post = body => get(`/api/memory?t=${TOKEN}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  assert.equal((await post({ text: marker })).status, 200);
+  const saved = JSON.parse((await get(`/api/memory?q=${marker}&t=${TOKEN}`)).body);
+  assert.ok(saved.facts.some(f => f.text === marker));
+  await post({ action: 'forget', query: marker });
+  const forgotten = JSON.parse((await get(`/api/memory?q=${marker}&t=${TOKEN}`)).body);
+  assert.equal(forgotten.facts.some(f => f.text === marker), false);
+});
+
 test('SPA: index, /panel deep links and logo.png are served', async () => {
   const html = await get('/');
   assert.equal(html.status, 200);

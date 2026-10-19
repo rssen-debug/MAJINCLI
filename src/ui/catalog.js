@@ -5,7 +5,7 @@ export function normalizeCatalog(payload) {
     const m = typeof row === 'string' ? { id: row } : row || {};
     const id = m.id || m.name;
     const p = m.pricing;
-    const number = (v) => !['number', 'string'].includes(typeof v) || v === '' || !Number.isFinite(Number(v)) || Number(v) < 0 ? null : Number(v);
+    const number = (v) => !['number', 'string'].includes(typeof v) || String(v).trim() === '' || !Number.isFinite(Number(v)) || Number(v) < 0 ? null : Number(v);
     const input = number(p?.prompt), output = number(p?.completion);
     const charges = p ? Object.values(p).map(number) : [];
     return { id, name: m.name || id, context: m.context_length || m.context_window || null,

@@ -50,3 +50,11 @@ OpenCode live-diagnos: officiell modellkatalog https://opencode.ai/inference/v1/
 - BUDGET-01: chattkommandot /budget sparade mode=limit men budgetspärren kräver cap. Rättat till cap; browser-regressionstest ska läggas till.
 - API-01: även installerad officiell OpenCode CLI 1.18.32, --pure och explicit longcat-2.5-preview-free, returnerade samma FreeTierError/403. Ingen fallback eller betald modell användes. Kvarstående leverantörsåtkomstproblem. MAJIN förklarar nu detta som accesspolicy, inte automatiskt fel nyckel; generisk HTTP403 behandlas också som åtkomstfel.
 - TASK-01 upptäckt vid kodgranskning: uppföljning på avslutad task kördes med oförändrad terminal status, ignorerade telemetry och Workspace höll kvar "done". Åtgärd pågår med uttryckliga run-nummer som skiljer verklig uppföljning från sena events; återstår test.
+
+### Checkpoint 4 — bredare kontroll
+- TASK-01 implementerat: uttrycklig uppföljning ökar run-numret, behåller samma session, återställer per-run-telemetri. Workspace accepterar ny run men avvisar gamla snapshots och sena events. Enhets- och verkligt HTTP-test tillagda; körning pågår.
+- PRICE-01: backend kunde klassificera null/tomma/boolska priser som gratis och ignorera extra avgifter. Korrigerat med strikt prisparsning; extra avgifter bevaras i ursprungliga enheter och blockerar gratisstatus. Tokencost-beräkningen är fortfarande endast en golvuppskattning för modeller med andra avgifter.
+- HOST-01: prefix-regex för lokal server accepterade t.ex. localhost.example.com som lokal/gratis/utan nyckel. Nu parsas hostname och endast riktiga loopback/RFC1918-adresser accepteras. Regressionstester tillagda.
+- OpenCode onboarding visar nu presetens faktiska villkor: Go kräver prenumeration; gratisnamn innebär inte gratis API-åtkomst från MAJIN.
+- Nya HTTP-tester täcker Workspace-datakällor och minnes-spara/sök/glöm i isolerad testprofil. Browser-test kompletterat för /budget och uppföljningars status.
+- Ett tillfälligt Git-fel "No space left on device" inträffade under checkpoint; omförsök med explicita källfiler lyckades. C: hade ca 531 MiB ledigt vid kontroll. Ingen användardata raderades. Kodcheckpoint 6168e61 finns lokalt; ska pushas tillsammans med nästa checkpoint.
