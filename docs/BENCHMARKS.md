@@ -119,3 +119,16 @@ Reproduction command (requires opencode key in ~/.majin/config.json):
 `node scripts/live-bench.mjs` and/or `MAJIN_LIVE=1 node --test test/live-bench.test.js`.
 Without the key both degrade honestly: script exits at the first provider call,
 and the live test skips with a typed reason (CI stays 370/0/7+1 mock always-on).
+
+## Del 4D — contract domains (command / json / http) — live env (2026-10-19)
+
+Mock: `test/domains.test.js` 5/5 (pass/fail/denied per domain + derivation + E2E repair).
+
+| live check | evidence |
+|---|---|
+| real https fetch | `GET https://www.google.com/search?q=majin` → 200, needle "search" found (91 939 bytes) |
+| real command exit | `node --version` → exited 0 (v20.20.2) |
+| live mission (longcat-2.5-preview-free) | wrote `mission-live.json` `{answer:42, task:…}` — VERIFIED sha:c181499c; 72 511 tokens measured live (usage, not estimate) |
+
+Reproduction: `MAJIN_LIVE=1 node --test test/domains-live.test.js` (opencode key).
+Without the key the file skips with a typed reason; CI runs only the mock suite.

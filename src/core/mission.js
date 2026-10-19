@@ -119,6 +119,20 @@ export function buildContracts(input) {
   if (file && cont) contracts.push({ type: 'file_contains', path: file, needle: cont[1] });
   const cnt = /(?:report\s+the\s+number\s+of|count|how\s+many|antal)\s+([a-z]+)?\s*files?\s+in\s+([^(\s,.)]+\/?)/i.exec(t);
   if (cnt) contracts.push({ type: 'count', dir: cnt[2], unit: cnt[1] || null });
+  /* Del 4D — three more domains, verified by CODE (exit code, JSON parse,
+     real HTTP), never by a second model. Narrow phrasing on purpose:
+     under-deriving is honest — fewer checks, never a false pass. */
+  const cmdM = /(?:make|ensure|verify that)\s+(?:the\s+)?command\s+[`"]([^`"]{2,120})[`"]\s+(?:exits?|exit\s+code|returns?)\s*(?:with\s+(?:code\s+)?)?0/i.exec(t);
+  const cmdB = /(?:run|execute)\s+[`"]([^`"]{2,120})[`"]\s+(?:so\s+that|and\s+(?:make\s+sure|verify)\s+)it\s+exits?\s+(?:with\s+code\s+)?0/i.exec(t);
+  const command = (cmdM && cmdM[1]) || (cmdB && cmdB[1]);
+  if (command) contracts.push({ type: 'command_exits_zero', cmd: command.trim() });
+  const jk = /json[^'"]*keys?\s+["']([^"']{3,160})["']/i.exec(t);
+  if (file && jk) {
+    const keys = jk[1].split(/[\s,]+/).map((k) => k.trim().replace(/^["']|["']$/g, '')).filter((k) => /^[A-Za-z_][A-Za-z0-9_.-]{0,48}$/.test(k));
+    if (keys.length) contracts.push({ type: 'json_topkeys', path: file, keys });
+  }
+  const urlM = /fetch\s+(https?:\/\/\S{6,140})\s+and\s+confirm\s+it\s+contains\s+["']([^"']{2,140})["']/i.exec(t);
+  if (urlM) contracts.push({ type: 'url_contains', url: urlM[1], needle: urlM[2] });
   return contracts;
 }
 
@@ -129,7 +143,7 @@ function countFiles(dir) {
 }
 
 /** verify ONE contract against real evidence; never against worker claims */
-export function verifyContract(c, { cfg, partText = '' } = {}) {
+export async function verifyContract(c, { cfg, partText = '' } = {}) {
   const ws = missionWorkspace(cfg);
   if (c.type === 'file_exists') {
     const abs = nodePath.resolve(ws, c.path);
@@ -162,6 +176,52 @@ export function verifyContract(c, { cfg, partText = '' } = {}) {
     return claimed === actual
       ? { ...c, ok: true, evidence: `${c.dir} has ${actual} files (independently counted)` }
       : { ...c, ok: false, evidence: `${c.dir} has ${actual} files — worker claimed ${claimed}` };
+  }
+  if (c.type === 'command_exits_zero') {
+    /* Del 4D: COMMAND domain — evidence = the real exit code. The denylist
+       keeps contract-run commands from ever becoming a host hazard. */
+    const DENY = /(?:\brm\s+-[rf]+\s+[~/&]|\bsudo\b|:\(\)\{|<\(|\bcurl\b[^|]*\|\s*(?:sh|bash)|\bwget\b[^|]*\|\s*(?:sh|bash)|\bmkfs\b|\bdd\s+if=)/i;
+    if (DENY.test(c.cmd)) return { ...c, ok: false, evidence: `refused by contract guardrail: "${c.cmd}"` };
+    try {
+      const { execFileSync } = await import('node:child_process');
+      const out = execFileSync('/bin/sh', ['-c', c.cmd], { cwd: ws, timeout: Number(cfg?.get?.('missions.contractCmdTimeoutMs')) || 15000, encoding: 'utf8', maxBuffer: 256 * 1024 });
+      return { ...c, ok: true, evidence: `"${c.cmd}" exited 0 (${String(out).trim().slice(0, 120) || 'no output'})` };
+    } catch (err) {
+      return { ...c, ok: false, evidence: `"${c.cmd}" failed: exit ${err.status ?? 'signal/timeout'} — ${String(err.stderr || err.message).slice(0, 120)}` };
+    }
+  }
+  if (c.type === 'json_topkeys') {
+    const abs = nodePath.resolve(ws, c.path);
+    const rel = nodePath.relative(ws, abs);
+    if (rel.startsWith('..') || nodePath.isAbsolute(rel)) return { ...c, ok: false, evidence: 'path escapes the workspace' };
+    try {
+      const data = JSON.parse(nodeFs.readFileSync(abs, 'utf8'));
+      if (!data || typeof data !== 'object' || Array.isArray(data)) return { ...c, ok: false, evidence: `${c.path} is JSON, but not an object` };
+      const own = Object.keys(data);
+      const missing = c.keys.filter((k) => !(k in data));
+      return missing.length === 0
+        ? { ...c, ok: true, evidence: `${c.path} valid JSON object, required keys [${c.keys.join(', ')}] (${own.length} total)` }
+        : { ...c, ok: false, evidence: `${c.path} missing keys [${missing.join(', ')}] — has [${own.slice(0, 8).join(', ')}]` };
+    } catch (err) {
+      return { ...c, ok: false, evidence: `${c.path} does not parse as JSON: ${String(err.message).slice(0, 100)}` };
+    }
+  }
+  if (c.type === 'url_contains') {
+    try {
+      const u = new URL(c.url);
+      const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(u.hostname);
+      if (u.protocol !== 'https:' && !local) return { ...c, ok: false, evidence: `url must be https (or localhost in dev): ${c.url}` };
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 10000);
+      const res = await fetch(u, { signal: ctrl.signal, redirect: 'follow' }).finally(() => clearTimeout(timer));
+      const body = (await res.text()).slice(0, 512 * 1024);
+      const found = body.includes(c.needle);
+      return found && res.ok
+        ? { ...c, ok: true, evidence: `GET ${c.url} → ${res.status}, contains "${c.needle}" (${body.length} bytes)` }
+        : { ...c, ok: false, evidence: `GET ${c.url} → ${res.status}, ${found ? 'marker found, status not ok' : `does NOT contain "${c.needle}"`}` };
+    } catch (err) {
+      return { ...c, ok: false, evidence: `fetch failed: ${String(err.message).slice(0, 120)}` };
+    }
   }
   return { ...c, ok: false, evidence: `unknown contract type ${c.type}` };
 }
@@ -268,6 +328,7 @@ export async function compileMission(input, { cfg, maxNodes = 6, modelCall = nul
  * Kor en kor en kompilerad mission: analyzer i KOD bestammer antalet workers;
  * inget annat tillats fatta beslutet. Blocked/fail rapporteras aarligt.
  */
+/* async since 4D — every call site awaits this */
 function verifyContractLegacy(c, { cfg, part }) {
   return verifyContract(c, { cfg, partText: String(part?.value?.text || '') });
 }
@@ -393,7 +454,7 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
       verifiedCount += 1;
       continue;
     }
-    let results = contracts.map((c) => verifyContractLegacy(c, { cfg, part: p }));
+    let results = await Promise.all(contracts.map((c) => verifyContractLegacy(c, { cfg, part: p })));
     let vr = contractVerdict(contracts, results);
     if (vr.ok) { p.verified = vr; verifiedCount += 1; continue; }
     emit({ type: 'mission_verify_fail', id: n.id, reason: contractFailureNames(results).join('; ') });
@@ -411,7 +472,7 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
         const value = await worker({ ...n, input: repairInput }, { signal: null });
         p.value = value;
         chargeBudget(value);
-        results = contracts.map((c) => verifyContractLegacy(c, { cfg, part: p }));
+        results = await Promise.all(contracts.map((c) => verifyContractLegacy(c, { cfg, part: p })));
         vr = contractVerdict(contracts, results);
       }
       if (vr.ok) {
@@ -435,7 +496,7 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
           p.value = value;
           chargeBudget(value);
           if (budgetHit) { p.limit = 'budget'; break; }
-          results = contracts.map((c) => verifyContractLegacy(c, { cfg, part: p }));
+          results = await Promise.all(contracts.map((c) => verifyContractLegacy(c, { cfg, part: p })));
           vr = contractVerdict(contracts, results);
         } catch (err) {
           p.ok = false;
