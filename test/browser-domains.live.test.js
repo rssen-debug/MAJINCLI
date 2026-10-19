@@ -136,11 +136,13 @@ test('5B dynamic navigation, tabs, iframes: new-target followed, hash-nav conten
     await WAIT(800);
     const nt = await run('browser.read', {});
     assert.match(String(nt.result || ''), /NEW-TAB-MARKOR-31/, 'new-tab content proven');
-    /* c — iframe honesty: host element visible; internals via straight path */
-    const host = await run('browser.read', { selector: '#if1' });
-    assert.equal(host.ok, true, 'iframe host element is detected');
+    /* c — iframe honesty: FIRST navigate the session back to the main page
+       (the click above legitimately moved us onto the new tab — reading #if1
+       there would be reading the wrong document) */
     const back = await run('browser.open', { url: base + '/' });
     assert.equal(back.ok, true, 'open returns to the main page session');
+    const host = await run('browser.read', { selector: '#if1' });
+    assert.equal(host.ok, true, 'iframe host element is detected');
     const fr = await run('browser.open', { url: base + '/framevictim' });
     assert.equal(fr.ok, true, 'iframe source page reachable directly');
     const fi = await run('browser.read', {});
