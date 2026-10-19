@@ -7,7 +7,9 @@
   "knownFailures": [
     "squash d97e157 landed an 80/100 main-header line while rows stayed PASS \u2014 direct docs-fix main commit repairs it; rule: after EVERY merge, grep-verify matrix header = expected score AND phase-totals = row-sum",
     "v0.7.3: sessionRoutes pin = models.sessionRoutes{session:{job:ref}}; routeFor(cfg,job,{session}); turn-pinned routes in loop.js (stepJob cache); patch() now persisted/ok:false on failed save; load() heals corrupt main from .bak, never autosaves over corrupt; historyErrors ring in context.js",
-    "v0.9.5: use origin-name for -u pushes, never a PAT-URL \u2014 PAT leaked into .git/config via 'git push -u <url>' and had to be scrubbed (snapshot keeps .git/config out anyway, but local rule: push via inline URL WITHOUT -u, or set upstream separately)"
+    "v0.9.5: use origin-name for -u pushes, never a PAT-URL \u2014 PAT leaked into .git/config via 'git push -u <url>' and had to be scrubbed (snapshot keeps .git/config out anyway, but local rule: push via inline URL WITHOUT -u, or set upstream separately)",
+    "RECONCILED 2026-10-19 (v0.9.7): Linux(460) vs Windows(441) test counts \u2014 EXACT match: their 441 total @de3ad45 + 19 tests from waves P0(+7)/P1(+6)/P2(+6) = 460. Skips: our Linux 17 (6 MAJIN_LIVE-gated, 1 jobs-live, 5 browser-live, 4 installer-dep, 1 Windows-updater \u2014 all carry machine-readable gate reasons); on Windows, S1/S6/R5 (P0/P1 permission tests) skip instead \u2014 no unexplained delta remains.",
+    "v0.9.7: docs/RELEASE_MASTER_DIRECTIVE.md RECONSTRUCTED from owner V5 message (file was missing; per \u00a71.4 no unseen specs claimed preserved; COMPLETION_MATRIX.md remains acceptance matrix of record)."
   ],
   "blockers": [
     "1E/6C: need second-vendor + priced-model keys (owner)",
@@ -26,8 +28,8 @@
   "implementationScore": 81,
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
-  "nextAction": "P3 candidates beyond handover: (a) Windows-control PoC gate (FlaUI/UFO \u2014 needs Windows runner experiment, not blind install); (b) acceptance gap: Linux test count 460 \u2260 their Windows 441 \u2014 reconcile; (c) handover P4/P5: m\u00e4tstyrd parallellisering + f\u00e4rdigheter.",
-  "version": "0.9.6",
-  "milestone": "P2: Anthropic image blocks delivered, screen.capture math + byte-validated receipts",
-  "branch": "main-post-merge"
+  "nextAction": "P5: skills versioning/rollback review vs V5 \u00a73 (skills dir exists \u2014 verify versioning claim honestly); else Windows-control PoC gate via GitHub windows runner (FlaUI/UFO \u2014 PoC-before-bind per handover).",
+  "version": "0.9.7",
+  "milestone": "P4 entry: ratelimit load-proof S9-S12 (measured, not certified); RELEASE_MASTER_DIRECTIVE.md reconstructed; Linux/Windows test counts reconciled",
+  "branch": "feature/p4-load-proof (in PR)"
 }

@@ -5,6 +5,25 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 — P4 entry: load-proof measurements + durable spec + count reconciliation — v0.9.7
+
+### Added
+- **`docs/RELEASE_MASTER_DIRECTIVE.md`** — the missing durable spec, honestly reconstructed from the owner's GODLIKE V5 message (per §1.4: no unseen specifications claimed preserved; `COMPLETION_MATRIX.md` remains the acceptance matrix of record; requirement families registered with provenance).
+- **`test/ratelimit-load.test.js` S9–S12** (load-proof extensions of the S1–S8 simulator):
+  - S9: 20-wide burst under `concurrent:2` — hard ceiling held (measured `maxInFlight=2`, wall 1330ms ≥ 20×120ms/2, zero leak).
+  - S10: same-tick arrivals admit in priority order: measured `interactive → tasks → background` exactly.
+  - S11: reservation lifecycle truth (est → reservation → release → window charges ACTUAL usage 42/8; aborted queued wait = zero reservation, zero window charge, `canceledQueued` recorded).
+  - S12: admission overhead as sandbox DATA: pass-through p50 ≈ 0.005ms / p95 ≈ 0.011ms; configured-ample p50 ≈ 0.008ms / p95 ≈ 0.021ms (Linux sandbox, node 20). **These are measurements, not certifications of the handover's UNCERTIFIED target table** — reported as data with environment.
+
+### Fixed
+- **Test-count truth item closed**: Linux(460) vs Windows(441) count difference reconciled exactly: their 441 total @ `de3ad45` + 19 tests added by waves P0/P1/P2 = 460. All 17 Linux skips carry machine-readable gate reasons (6×MAJIN_LIVE, 1×jobs-live, 5×browser-live, 4×installer-deps, 1×Windows-updater); on Windows, the P0/P1 permission tests skip instead. No unexplained delta remains — recorded in the checkpoint.
+
+### Verified
+- `node --test test/ratelimit-load.test.js` → 4/4 pass.
+- `node --test test/*.test.js` → **447 pass / 0 fail / 17 skipped** (464 total; v0.9.6: 443/460 → +4, zero regressions).
+- Release gate: `build-exe` workflow on tag `v0.9.7` (GitHub Actions, Windows NSIS).
+
+
 ## 2026-10-19 — P2: honest vision + truthful screen capture (UI-agent handover #3, engine side) — v0.9.6
 
 ### Fixed
