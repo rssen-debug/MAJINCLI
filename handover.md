@@ -1,3 +1,62 @@
+# MAJIN handover — v0.9.1 funktionstest och felrättningar
+
+Uppdaterad 2026-10-19. Lokala slutkontroller är gröna. Leveransens GitHub-status och exakta merge-SHA finns i PR https://github.com/rssen-debug/MAJINCLI/pull/59 ; installer/release byggs av CI efter merge. Chats outputs/handover.md kompletteras med leveranskvittot efter publicering.
+
+## Snabböverlämning till nästa utvecklare
+- Repo: https://github.com/rssen-debug/MAJINCLI ; arbetsgren fix/windows-functional-audit ; version 0.9.1.
+- Lokal repo: C:/Users/krist/Documents/Codex/2026-10-19/har-du-tillg-ng-till-min/work/MAJINCLI
+- Denna fil: repo-root handover.md. Användarens läskopia: C:/Users/krist/Documents/Codex/2026-10-19/har-du-tillg-ng-till-min/outputs/handover.md
+- Alla bekräftade produktfel från testkörningarna nedan är rättade med regressionstester. Läs kvarstående åtkomsthinder/begränsningar innan något kallas helt verifierat.
+- Nycklar finns inte här eller i implementationen. Kör isolerat med MAJIN_HOME. Gratis modellnamn räcker inte som kostnadsbevis; ingen betald fallback har använts under denna audit.
+
+## Slutresultat lokalt på Windows
+| Kontroll | Resultat och faktisk omfattning |
+|---|---|
+| Node v24.14 full svit | 431 tester: 416 pass, 15 skip, 0 fail. Provider-key-env borttagna från testprocessen. 34,4 s. |
+| Edge UI acceptance | Pass. 1200 kontrollerade modellposter, filterintersektion/pagination/sortering/exakt sparad route, fokus/Escape, 6 HTTP-felfall, bevarad draft, svar utan delta, lyckat/misslyckat stopp, ny chatt, 390/1440/1920 px, tema, contextual panels, run=2, /budget cap, filnedladdning, sandboxad preview, reduced-motion. Modell/task-fixtures är inte riktiga specialistagenter. Demo-chatt/stopp och filbytes går genom verklig lokal backend. |
+| Verklig browser-tool E2E | 5/5 pass: formulär inkl select/radio/checkbox, hashnavigation, riktig ny flik, iframe-via-direktadress, testbutik sök/kundvagn/beställning, filuppladdning/skärmbild, testansökan med bevis. Alla formulärservrar lokala, inga verkliga köp eller externa meddelanden. |
+| HTTP och persistens | Verkliga serveranrop: minne spara/sök/glöm och bevara äldre anteckningar, skill-fil/lista, framtida schema/lista/radera, felaktig tid 422, task-uppföljning status running -> done i samma session. |
+| Syntax / språk / diff | 160/160 filer parse, npm run i18n, git diff --check pass. |
+| Visuell kontroll | Faktiska Edge-skärmbilder granskade. outputs/audit-ui innehåller bevisbilder; skärmbilden acceptance-failure.png är en sparad FÖRE-fix-failure, inte slutresultatet. |
+| OpenCode live | Officiell katalog nåbar, 85 ID:n. Endast dokumenterad gratis longcat-2.5-preview-free prövad, max_tokens=16 direkt API. HTTP403 FreeTierError både direkt och i installerad officiell CLI 1.18.32 --pure. Ingen lyckad extern inferens. |
+| CI | Linux full svit + UI, nu även full svit på Windows, browser-tool live E2E och bygg/installation/omstart/avinstallation/återinstallation. Aktuell status läses via PR59. |
+
+## Rättade produktfel
+| ID | Repro/fel | Åtgärd |
+|---|---|---|
+| WIN-01 | command_exits_zero startade /bin/sh på Windows | Använder system-shell; riktiga exit 0/3 kontrolleras. |
+| WIN-02 | shell valde alltid pwsh även om det saknades; dirs-import saknades vid default cwd | Probe med fallback PowerShell/cmd, dirs importerat. |
+| BUILD-01 | Windows-tar innehöll dist\\... istället för portabla /-sökvägar | POSIX archive paths, verklig payload-build/listning testad. |
+| CHAT-01 | Svar duplicerades som schemalagt när global bus tappade agent.answer-prefix | Bus reserverar type/id/ts/level; UI-stopprace test passerar. |
+| BUDGET-01 | /budget skrev limit, motorn läser cap | Kommandot skriver cap; browser läser tillbaka korrekt inställning. |
+| TASK-01 | Uppföljning kördes men Registry/Workspace höll kvar done och ignorerade telemetri | Explicit nästa run i samma session, run-nummer i snapshot, gamla callbacks filtreras. |
+| API-02 | POST memory/skills/schedule och DELETE schedule fångades av GET-handlers | GET-villkor; mutationsflöden verifieras över verklig HTTP. |
+| MEMORY-01 | Minnesändringar tappade äldre listprefix; läsning dolde gamla anteckningar | Prefix bevaras, äldre prefixlösa rader återläses, spara/glöm/omstart testat. |
+| API-03 | memory forget gav ok som nästlat objekt | Normalt booleskt ok + removed. |
+| PRICE-01 | null/blank/bool-priser och extra avgifter kunde behandlas som gratis i backend | Strikt typ/finite/nonnegative-validering, extra avgifter blockerar gratisstatus. |
+| HOST-01 | localhost.example.com och andra prefix-lookalikes ansågs lokala/gratis | URL-hostname parsas; endast faktiska loopback/RFC1918-värdar. |
+| BROWSER-01 | Edge sync-dialog följdes som om den kom från klicket; 5 live-tester föll | Kräver openerId från aktuell kontrollerad flik; uppdaterar target vid nya flikar; 5/5 omtest grönt. |
+| ACCESS-01 | HTTP403 visades alltid som fel/deletad API-nyckel | Åtkomstpolicy förklaras separat, inklusive OpenCodes FreeTierError; ingen betaluppmaning i detta fall. |
+
+## Kvarstående hinder och ärliga begränsningar
+1. **OpenCode gratisåtkomst är blockerad av leverantören.** Samma nyckel och gratis-ID gav FreeTierError även i den installerade OpenCode-klienten. Nästa dev bör utreda konto-/klientåtkomst med OpenCode. Försök inte lösa det genom att byta till betalda modeller eller förfalska klientidentitet. Go-preseten behålls för befintliga Go-konton och onboarding visar prenumerations-/gratistier-villkoren.
+2. **Äldre sparade modell-ID:n/presets kan vara inaktuella.** Live-katalog och modellfelsåterhämtning är testade. Användaren måste välja ett faktiskt tillgängligt ID; audit byter inte tyst gamla rutter till andra potentiellt betalda modeller. Varje providers modell-ID och inferens kräver separat verifiering med rätt konto.
+3. **Kostnadssiffror är tokenestimat.** Extra request/image/cache-avgifter räknas inte fullt ut i Usage; de blockerar nu gratisstatus men kan innebära högre faktura. ImportPricing fyller endast luckor och skriver inte över befintliga användarpriser. Inget påstående om exakt totalfaktura.
+4. **Extern slut-till-slut-inferens saknar godkänt resultat.** Demo, stubs, HTTP, lokala browser-flöden och providerfelfall verifierade; inte en riktig OpenCode-agent som slutför ett skapandeuppdrag.
+5. **Externa kontobundna integrationer ej live-verifierade:** Telegram/WhatsApp, riktiga Meta/TikTok/Google Ads-konton, domänregistrering, live trading, verkliga arbetsansökningar/externa meddelanden. Enhets-/stubtest är inte bevis för ägarens konton. Inga sådana externa åtgärder gjordes.
+6. **Historik-UX:** återöppning laddar de senaste 40 meddelandena. 300-meddelandes rendering/scroll testad, men ingen ny äldre-historik-pagination implementerad.
+7. **Lokalt diskutrymme:** ett Git-skrivförsök gav tillfälligt No space left on device; retry lyckades. C: hade ca 0,5–1,1 GiB fritt under auditen. Ingen ägardata raderades.
+
+## Återuppta och verifiera
+- npm test ; npm run check ; npm run i18n
+- Windows Edge UI: MAJIN_UI_BROWSER=msedge npm run test:ui (sätt env i PowerShell, använd isolerad output).
+- Windows browser-tool E2E: MAJIN_BROWSER_LIVE=1 node --test --test-concurrency=1 test/browser.live.test.js test/jobs.live.test.js test/browser-domains.live.test.js
+- gh pr checks 59 --repo rssen-debug/MAJINCLI ; kontrollera att check och exe gäller sista head-SHA innan merge.
+- Installera inte över ägarens app som del av fortsatt automatisk testning. CI kör verklig installation i isolerad runner. Ägarens installerade app har inte uppgraderats i denna audit.
+
+---
+
+## Kronologiska checkpoints
 # MAJIN handover — löpande funktionstest
 
 Senast uppdaterad: 2026-10-19. Status: pågående audit efter v0.9.0.
@@ -72,3 +131,4 @@ OpenCode live-diagnos: officiell modellkatalog https://opencode.ai/inference/v1/
 - BROWSER-01: fix pågår som kräver att nya flikens openerId matchar kontrollerad sida och uppdaterar aktuell target efter varje följd flik. Tabbar som Edge själv öppnar ska aldrig följas. Regressionstest tillagt; verklig browser E2E körs om.
 - Task-uppföljningar kompletterade med run-nummer även på events och completion, så sena callbackar från en tidigare stoppad run inte kan avsluta den nya runnen.
 - PR skapad: https://github.com/rssen-debug/MAJINCLI/pull/59. CI körs; ej mergad ännu. Nästa steg: färdigställ browser-test, kör slutlig helsvit/Edge UI, uppdatera denna logg, push och kontrollera CI för exakt sista commit före merge.
+
