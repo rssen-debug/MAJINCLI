@@ -356,3 +356,16 @@ allowed to contradict a test.
   VERIFIED under the previous objective keeps its verdict by node id and says so
   in plain text ("carried from previous objective"). Re-verifying costs tokens
   for evidence we already hold; hiding the provenance would be lying.
+
+## 2026-10-19 (sen kväll) — Del 6A: one gate, measured cost only, unknown is not zero
+
+- **One guard, two call sites.** `budgetGate` lives in loop.js and is used by
+  the loop for both monthly and per-task decisions — testing the function
+  tests production behavior exactly; synthetic routes and live loop share the
+  same code path.
+- **A per-task cap gates on measured COST, never on token counts.** Ten
+  million free tokens are free; gate vibrancy metrics would break local-model
+  workflows for no safety gain.
+- **"Unknown" is its own state, distinct from both zero and priced.** A cloud
+  model without a price table may not display as $0 (that lies to the user's
+  wallet) — it renders UNKNOWN and, under a cap, does not spend.

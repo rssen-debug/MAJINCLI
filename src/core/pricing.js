@@ -66,6 +66,15 @@ export async function importPricing(cfg, providerName, payload, { source } = {})
  * price data is treated as paid: under a spending cap, "we don't know" must
  * never spend money by default.
  */
+/** Del 6A: an honest price answer. A KNOWN price is either a real pricing table
+   or provably free (local/mock/$0). Everything else is UNKNOWN and must never be
+   displayed as $0. */
+export function priceKnownForRoute(route = {}) {
+  if (isFreeRoute(route)) return true;
+  const p = route.pricing;
+  return Boolean(p && (Number(p.in) > 0 || Number(p.out) > 0));
+}
+
 export function isFreeRoute(route = {}) {
   if (!route || route.kind === 'mock') return true;
   const p = route.pricing;
