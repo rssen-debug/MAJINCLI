@@ -410,7 +410,7 @@ export class Config {
     if (process.env.MAJIN_TOKEN && String(process.env.MAJIN_TOKEN).trim()) this.data.server.token = String(process.env.MAJIN_TOKEN).trim();
     if (Number.isFinite(Number(process.env.MAJIN_PORT))) this.data.server.port = Number(process.env.MAJIN_PORT);
     this.errors = [];
-    this.save();
+    const persisted = this.save();
     for (const fn of this.subs) {
       try {
         fn({ patch: obj, source, prev });
@@ -418,7 +418,11 @@ export class Config {
         void err;
       }
     }
-    return { ok: true, errors: [], diff, applied: obj };
+    if (!persisted) {
+      const err = this.lastSaveError || { message: 'unknown save failure', code: 'save_failed' };
+      return { ok: false, errors: [{ path: '(config)' , msg: `disk save failed: ${err.message}`, code: 'save_failed' }], diff, applied: obj, persisted: false };
+    }
+    return { ok: true, errors: [], diff, applied: obj, persisted: true };
   }
 
   onChange(fn) {
@@ -426,19 +430,31 @@ export class Config {
     return () => this.subs.delete(fn);
   }
 
+  /** P0 (UI-agent handover 2026-10-19): atomic, honestly reported save.
+      tmp-write → fsync → backup current → rename. A write failure leaves the
+      PREVIOUS file intact on disk and returns { ok:false, error } — callers
+      must propagate, never pretend. returns {ok:true} on success. */
   save() {
     const file = this.file || dirs.config;
+    const tmp = `${file}.tmp`;
     try {
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      if (fs.existsSync(file)) fs.copyFileSync(file, `${file}.bak`);
-      fs.writeFileSync(file, JSON.stringify(jsonable(this.data), null, 2) + '\n', 'utf8');
+      const payload = JSON.stringify(jsonable(this.data), null, 2) + '\n';
+      fs.writeFileSync(tmp, payload, 'utf8');
       try {
-        fs.chmodSync(file, 0o600);
-      } catch {
-        /* Windows: nope */
+        const fd = fs.openSync(tmp, 'r');
+        try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+      } catch { /* fsync best-effort */ }
+      try { fs.chmodSync(tmp, 0o600); } catch { /* Windows: nope */ }
+      if (fs.existsSync(file)) {
+        try { fs.copyFileSync(file, `${file}.bak`); } catch { /* backup is best-effort */ }
       }
+      fs.renameSync(tmp, file);
+      try { fs.chmodSync(file, 0o600); } catch { /* Windows: nope */ }
       return true;
-    } catch {
+    } catch (err) {
+      try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* fine */ }
+      this.lastSaveError = { message: String(err?.message || err), code: err?.code || 'save_failed', when: new Date().toISOString() };
       return false;
     }
   }
@@ -745,10 +761,30 @@ export function load() {
   const file = configFile();
   let stored = {};
   let fresh = false;
+  let recoveredFrom = null;
+  const loadIssues = [];
   try {
     stored = JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    fresh = true;
+  } catch (e1) {
+    /* P0: corrupt is NOT the same as absent. Missing file (ENOENT) → fresh.
+       Parse error → try the .bak backup; never auto-save over a file we
+       could not read — that would overwrite the user's last working data.
+       Every anomaly is left in the open via cfg.loadIssues. */
+    if (e1 && e1.code === 'ENOENT') {
+      fresh = true;
+    } else {
+      loadIssues.push({ kind: 'corrupt-main', message: String(e1?.message || e1) });
+      try {
+        stored = JSON.parse(fs.readFileSync(`${file}.bak`, 'utf8'));
+        recoveredFrom = 'bak';
+        fresh = false;
+      } catch (e2) {
+        stored = {};
+        fresh = false; // still NOT fresh: never auto-save over the corrupt file
+        recoveredFrom = null;
+        loadIssues.push({ kind: e2 && e2.code === 'ENOENT' ? 'no-backup' : 'corrupt-backup', message: String(e2?.message || e2) });
+      }
+    }
   }
   const data = expandEnv(merge(clone(DEFAULTS), stored));
   if (!data.server.token) data.server.token = genToken();
@@ -761,7 +797,10 @@ export function load() {
   compileRuntime(cfg);
   cfg.onChange(() => compileRuntime(cfg));
   cfg.isFresh = fresh;
-  if (fresh) cfg.save();
+  if (recoveredFrom) cfg.recoveredFrom = recoveredFrom;
+  if (loadIssues.length) cfg.loadIssues = loadIssues;
+  if (fresh) cfg.save(); // fresh = no file existed; never auto-save over corrupt
+
   return cfg;
 }
 

@@ -1,20 +1,23 @@
 {
-  "lastVerifiedMain": "d97e157",
-  "lastCompletedMilestone": "GODLIKE V4 §7 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
-  "currentWorkstream": "GODLIKE V4 WAVE 2 — §5 adaptive topology dispatch (next isolated worktree)",
+  "lastVerifiedMain": "ce2c557",
+  "lastCompletedMilestone": "GODLIKE V4 \u00a77 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
+  "currentWorkstream": "GODLIKE V4 WAVE 2 \u2014 \u00a75 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
   "activePRs": [],
-  "knownFailures": ["squash d97e157 landed an 80/100 main-header line while rows stayed PASS — direct docs-fix main commit repairs it; rule: after EVERY merge, grep-verify matrix header = expected score AND phase-totals = row-sum"],
+  "knownFailures": [
+    "squash d97e157 landed an 80/100 main-header line while rows stayed PASS \u2014 direct docs-fix main commit repairs it; rule: after EVERY merge, grep-verify matrix header = expected score AND phase-totals = row-sum",
+    "v0.7.3: sessionRoutes pin = models.sessionRoutes{session:{job:ref}}; routeFor(cfg,job,{session}); turn-pinned routes in loop.js (stepJob cache); patch() now persisted/ok:false on failed save; load() heals corrupt main from .bak, never autosaves over corrupt; historyErrors ring in context.js"
+  ],
   "blockers": [
     "1E/6C: need second-vendor + priced-model keys (owner)",
     "5D/11A/11C/12B/12C: must run scripts on a real Windows machine (owner)",
-    "8A-8D: UI owned by another agent — needs their branch merged"
+    "8A-8D: UI owned by another agent \u2014 needs their branch merged"
   ],
   "remainingTasks": [
-    "WAVE 2: adaptive topology dispatch (§5) + critical-path-first scheduling (§8)",
-    "WAVE 3: delta memory protocol (§9)",
-    "WAVE 4: speculative execution lab (§6, disabled by default)",
-    "Perf lab A/B/C/D (§19) once topology variants exist"
+    "WAVE 2: adaptive topology dispatch (\u00a75) + critical-path-first scheduling (\u00a78)",
+    "WAVE 3: delta memory protocol (\u00a79)",
+    "WAVE 4: speculative execution lab (\u00a76, disabled by default)",
+    "Perf lab A/B/C/D (\u00a719) once topology variants exist"
   ],
   "experimentResults": {
     "ratelimit-sim": "8/8 (S1 naive-violation vs S2 zero-violation throughput; sabotage discrimination all three dims)"
@@ -22,5 +25,8 @@
   "implementationScore": 81,
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
-  "nextAction": "start §5 adaptive topology branch with A/B matched-mission evidence"
+  "nextAction": "P1: durable journal / context / resume (TaskRegistry persistence, plan hydration in normal turn, handoff consume-flag) \u2014 engine side only; UI/Aurora stays with the UI agent branch",
+  "version": "0.7.3",
+  "milestone": "P0 honest persistence + per-chat routing (UI-agent handover #1, engine side)",
+  "branch": "feature/p0-save-sessionroute (in PR)"
 }

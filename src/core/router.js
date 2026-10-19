@@ -130,7 +130,22 @@ export async function llmClassify(text, { cfg, candidates = ['code', 're', 'task
 }
 
 /** route ref for a job, with key availability respected. */
-export function routeFor(cfg, job) {
+export function routeFor(cfg, job, opts = {}) {
+  /* P0 (UI-agent handover 2026-10-19): a chat may PIN its own route so a
+     provider switch in chat A never reroutes chat B. Session routes live at
+     models.sessionRoutes = { <sessionId>: { <job>: "provider/model" } } and
+     are an EXPLICIT user choice — no silent fallback when the key is missing;
+     the missing-key error surfaces in that chat instead. */
+  const session = opts.session ? String(opts.session) : null;
+  if (session) {
+    const bound = (cfg.get('models.sessionRoutes') || {})[session] || {};
+    const bref = bound[job] || bound.tasks;
+    if (bref) {
+      const r = safeResolve(cfg, job, bref);
+      if (r) return r;
+      bus.warn('route.session-bad', { session, job, ref: bref, why: 'unresolvable — falling back to the global table' });
+    }
+  }
   const routes = cfg.get('models.routes') || {};
   const ref = routes[job] || routes.tasks || routes.chat;
   const r = safeResolve(cfg, job, ref);
