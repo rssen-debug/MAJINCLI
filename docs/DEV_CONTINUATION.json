@@ -1,5 +1,5 @@
 {
-  "lastVerifiedMain": "a606576",
+  "lastVerifiedMain": "e146f9f",
   "lastCompletedMilestone": "GODLIKE V4 \u00a77 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
   "currentWorkstream": "GODLIKE V4 WAVE 2 \u2014 \u00a75 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
@@ -28,5 +28,5 @@
   "nextAction": "P2: adapter capacity + honest vision (Anthropic image blocks drop + screen.capture FromLTRB + truthful capture receipt).",
   "version": "0.9.5",
   "milestone": "P1 durable journal/resume: plan hydration from disk, exact-once handoff, producer wiring on route switch, served-route journal",
-  "branch": "feature/p1-journal-resume (in PR)"
+  "branch": "main-post-merge"
 }
