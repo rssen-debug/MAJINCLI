@@ -151,3 +151,15 @@ OpenCode live-diagnos: officiell modellkatalog https://opencode.ai/inference/v1/
 - Nytt deterministiskt regressionstest håller tillbaka gammal ready-sida, väntar genom loading, accepterar rätt loader, nekar timeout/nätverksfel och stödjer same-document-navigation utan nytt loaderId. Protokollreferens: https://chromium.googlesource.com/devtools/devtools-frontend/+/refs/heads/chromium/7879/third_party/blink/public/devtools_protocol/domains/Page.pdl
 - Browser-open-felvägen skickar också Browser.close före websocket/process-cleanup, så en misslyckad navigation inte lämnar en återstartad Edge-process.
 - Testbutikens öppning/fill skriver nu konkreta fel/URL-metadata i assert vid ett framtida fel, istället för bara false != true. De 10 browser-enhetstesterna är gröna; verkliga browserflöden körs om.
+
+## v0.9.2 UI refinement — pågår
+Användarens korrigering: byt den generiska välkomsttexten/chipsen och den rosa Send-pillern. Behåll övrig Aurora-design. Implementera avskalad välkomstyta och rund ikonknapp med riktiga Send/Stop-tillstånd, interaktionsanimationer och reduced-motion. Testa visuellt i Edge före leverans. Ingen modellinferens behövs för denna ändring.
+
+### v0.9.2 implementerat och lokalt verifierat
+- Välkomstytan består av en långsamt animerad MAJIN-symbol och ”What’s next?”. Slogan och förslagschips borttagna; övriga Aurora-ytor bevarade.
+- Rund 44 px ikonknapp: pil för skicka, fyrkant för verkligt stopp. Hover-glöd, ikonrörelse och tryckrespons. Stabil klickyta; en första version flyttade knappen och kunde fördröja snabba stoppklick i Edge. Detta upptäcktes och korrigerades.
+- Tomt meddelande inaktiverar skicka; stopp fungerar även med tomt skrivfält. Tillgängliga namn uppdateras mellan Send message och Stop response. Reduced motion respekteras.
+- Windows/Edge: hela browseracceptansen PASS, inklusive Enter-skicka, bekräftat stopp, misslyckat stopp, 6 leverantörsfel, 1200 modeller, filter, Workspace, preview, small viewport. Visuellt granskat desktop, 390 px och stoppläget.
+- Full lokal testsvit: 433 tester, 418 godkända, 15 avsiktligt hoppade, 0 fel. Parse: 160/160. i18n: exit 0. Inga betalda modellkörningar.
+- Evidens finns i arbetschattens outputs/quiet-ui/. Nycklar har inte skrivits i kod eller handover. OpenCode FreeTierError från tidigare audit kvarstår enligt tidigare anteckningar; denna UI-ändring kräver ingen inferens.
+- Nästa steg: push/PR, Linux- och Windows-CI, därefter merge och verifiering av v0.9.2-release.

@@ -35,6 +35,23 @@ try {
   assert.equal(rejectedApproval, true, 'rejected approval acknowledgment never turns into a false allowed state');
   if (await page.locator('#ob-skip').isVisible()) await page.locator('#ob-skip').click();
   assert.equal(await page.evaluate(() => window.__MAJIN_TOKEN__), token, 'server does not rewrite variable names');
+  assert.equal(await page.locator('#home h2').textContent(), 'What’s next?');
+  assert.equal(await page.locator('#home button').count(), 0, 'welcome stays uncluttered');
+  assert.equal(await page.locator('#send').isDisabled(), true, 'empty message cannot be sent');
+  await page.locator('#input').fill('A new idea');
+  assert.equal(await page.locator('#send').isEnabled(), true);
+  const control = await page.locator('#send').evaluate(button => {
+    const style = getComputedStyle(button);
+    return { width: button.offsetWidth, height: button.offsetHeight, radius: style.borderRadius };
+  });
+  assert.deepEqual(control, { width: 44, height: 44, radius: '50%' });
+  await page.locator('#send').hover();
+  await page.screenshot({ path: path.join(output, 'send-ready.png') });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  assert.equal(await page.locator('.home-emblem i').first().evaluate(node => getComputedStyle(node).animationName), 'none');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.locator('#input').fill('');
+  await page.mouse.move(0, 0);
   await page.screenshot({ path: path.join(output, 'phoenix-home.png') });
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.screenshot({ path: path.join(output, 'aurora-wide-home.png') });
@@ -179,7 +196,7 @@ try {
     ]) }));
     await page.locator('#input').fill('hi'); await page.locator('#send').click();
     await page.waitForFunction(() => document.querySelector('#status').textContent.includes('Request failed'));
-    await page.waitForFunction(() => document.querySelector('#send').textContent.includes('Send'));
+    await page.waitForFunction(() => document.querySelector('#send').getAttribute('aria-label') === 'Send message');
     assert.equal(await page.locator('#input').inputValue(), 'hi');
     assert.equal(await page.getByText('False success', { exact: true }).count(), 0);
     assert.equal(await page.getByText('Late content must not replace the error', { exact: true }).count(), 0);
@@ -194,7 +211,7 @@ try {
     ['route', { job: 'chat', model: 'test/model' }], ['compact', { tokens: 20000 }], ['escalate', { to: 'test/model' }], ['thinking', { text: 'internal reasoning must stay out of chat' }], ['delta', { text: 'Hello. ' }], ['delta', { text: 'Ready to create.' }],
     ['answer', { text: 'Hello. Ready to create.' }], ['done', { ok: true }],
   ]) }));
-  await page.locator('#input').fill('hello'); await page.locator('#send').click();
+  await page.locator('#input').fill('hello'); await page.locator('#input').press('Enter');
   await page.waitForFunction(() => document.querySelector('#status').textContent === 'Ready');
   assert.equal(await page.getByText('Hello. Ready to create.', { exact: true }).count(), 1);
   assert.equal(await page.locator('.msg.sys').count(), 0, 'routing, compaction and escalation do not spam transcript');
@@ -245,7 +262,9 @@ try {
   assert.equal(budgetConfig.mode, 'cap', 'chat budget command enables the enforced cap');
   assert.equal(budgetConfig.monthlyUsd, 7);
   await page.locator('#input').fill('hi'); await page.locator('#send').click();
-  await page.waitForFunction(() => document.querySelector('#send').textContent === 'Stop');
+  await page.waitForFunction(() => document.querySelector('#send').getAttribute('aria-label') === 'Stop response');
+  assert.equal(await page.locator('#send').isEnabled(), true, 'Stop remains available with an empty draft');
+  await page.screenshot({ path: path.join(output, 'send-stop.png'), animations: 'disabled' });
   await page.locator('#send').click();
   await page.waitForFunction(() => document.querySelector('#status').textContent === 'Stopped');
   assert.equal(await page.locator('#imagine .core-label').textContent(), 'stopped');
