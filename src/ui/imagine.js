@@ -64,7 +64,11 @@
     orb.setAttribute('aria-hidden', 'true');
     coreLabel = el('span', 'core-label', '');
     const head = el('div', 'core-row');
-    head.append(orb, coreLabel);
+    const toggle = el('button', 'activity-toggle', 'Activity details');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.onclick = () => { const expanded = root.classList.toggle('activity-open'); toggle.setAttribute('aria-expanded', String(expanded)); };
+    head.append(orb, coreLabel, toggle);
     list = el('div', 'steps');
     empty = el('div', 'imagine-empty', 'MAJIN\'s live work appears here — step by step, in real time.');
     root.append(head, empty, list);
@@ -108,7 +112,7 @@
     if (!root) return;
     show();
     list.append(row);
-    row.scrollIntoView({ block: 'nearest' });
+    // Activity must never move the conversation while the reader is scrolling.
   }
 
   function detailEl(obj) {
@@ -260,6 +264,7 @@
         break;
       }
       case 'answer': {
+        if (core === 'error') break;
         const meta = ev.meta || {};
         const bits = [
           meta.steps && meta.steps + ' steps',

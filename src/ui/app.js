@@ -50,10 +50,13 @@ function md(t) {
 }
 
 /* ------------------------------- transcript ----------------------------- */
-function scroll() {
+function scroll(force = false) {
   const s = $('scroller');
-  s.scrollTop = s.scrollHeight;
+  if (force || !S.readingHistory) s.scrollTop = s.scrollHeight;
 }
+$('scroller').addEventListener('scroll', () => {
+  const n = $('scroller'); S.readingHistory = n.scrollHeight - n.clientHeight - n.scrollTop > 100;
+});
 function addMsg(cls, who, text) {
   const welcome = $('home');
   if (welcome) welcome.remove();
@@ -67,7 +70,33 @@ function addMsg(cls, who, text) {
   return { m, b };
 }
 const note = (t) => addMsg('sys', 'MAJIN · notis', t);
-const err = (t) => addMsg('err', 'MAJIN · error', t);
+function err(t) {
+  if (!S.busy) return addMsg('err', 'MAJIN', t);
+  if (S.failed) return;
+  S.failed = true;
+  const a = ensureAgent();
+  a.b.classList.remove('caret');
+  if (a.thinking) a.thinking.remove();
+  a.m.classList.add('err');
+  const title = /\b(401|403)\b|unauthorized|authentication/i.test(t) ? 'Check your provider connection'
+    : /\b402\b|credits|balance/i.test(t) ? 'Provider credits are needed'
+    : /\b429\b|rate.limit/i.test(t) ? 'This provider is busy'
+    : /not a valid model|model.*(not found|not available)|invalid.*model/i.test(t) ? "This model isn't available"
+    : /\b5\d\d\b/.test(t) ? 'The provider is temporarily unavailable' : 'The request could not finish';
+  a.b.textContent = '';
+  a.b.append(el('strong', '', esc(title)), el('p', '', 'Your message is saved. Choose another model or retry when the connection is ready.'));
+  const actions = el('div', 'error-actions');
+  const choose = el('button', '', 'Choose a model');
+  choose.onclick = () => window.MAJIN_ONBOARD.togglePicker();
+  const failedInput = S.lastInput;
+  const retry = el('button', '', 'Retry message');
+  retry.onclick = () => { if (!S.busy) send(failedInput); };
+  const details = el('details', 'error-details');
+  details.append(el('summary', '', 'Technical details'), el('pre', '', esc(t)));
+  actions.append(choose, retry); a.b.append(actions, details);
+  setStatus('Request failed');
+  scroll();
+}
 
 function ensureAgent() {
   if (S.cur) return S.cur;
@@ -136,6 +165,7 @@ function moaGauge(ev) {
 
 /* ------------------------------ event pump ------------------------------ */
 function onEvent(ev) {
+  if (S.failed && ['delta', 'thinking', 'answer'].includes(ev.type)) return;
   if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.onEvent(ev); // Live Agent Vision — real events only
   switch (ev.type) {
     case 'marketing_channel_setup':
@@ -150,7 +180,7 @@ function onEvent(ev) {
     case 'route':
       $('c-route').innerHTML = 'route <b>' + esc(ev.job) + '</b> → ' + esc((ev.model || '?').split('/').pop()) + (ev.confidence != null && ev.confidence < 0.45 ? ' <span style="color:var(--warn)">?</span>' : '');
       $('c-route').classList.add('live');
-      note('job ' + ev.job + ' · ' + (ev.moa && ev.moa.enabled ? 'MOA ' + ev.moa.width + ' → ' + ev.moa.aggregator : 'MOA off') + (ev.tiebreak ? ' · llm tiebreak' : ''));
+      setStatus('Thinking…');
       break;
     case 'step':
       setStatus('step ' + ev.step + '/' + ev.of + ' · ' + (ev.model || '').split('/').pop() + (ev.escalated ? '  · escalated' : ''));
@@ -209,7 +239,7 @@ function onEvent(ev) {
     case 'usage':
       break;
     case 'answer':
-      closeAnswer(ev);
+      if (!S.failed) closeAnswer(ev);
       break;
     case 'error':
       err(ev.message + (ev.hint ? '\n→ ' + ev.hint : ''));
@@ -220,7 +250,7 @@ function onEvent(ev) {
 }
 
 function closeAnswer(ev) {
-  const a = S.cur;
+  const a = S.cur || (ev.text ? ensureAgent() : null);
   if (a) {
     a.b.classList.remove('caret');
     if (a.thinking) a.thinking.remove();
@@ -251,7 +281,8 @@ async function send(text) {
      must NEVER wait for the first one. The /stop command above still reaches
      the running task. */
   if (S.busy) return parallelTask(input);
-  addMsg('user', 'DU', input);
+  S.failed = false; S.lastInput = input; S.completed = false; S.readingHistory = false;
+  addMsg('user', 'You', input);
   $('input').value = '';
   autoGrow();
   S.busy = true;
@@ -268,6 +299,7 @@ async function send(text) {
       body: JSON.stringify({ input, session: S.session }),
       signal: ac.signal,
     });
+    if (!r.ok || !r.body) throw new Error('Request failed (HTTP ' + r.status + ')');
     const reader = r.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
@@ -287,20 +319,28 @@ async function send(text) {
         } catch {
           continue;
         }
-        if (ev.type === 'done') continue;
+        ev.type ||= raw.split('\n').find((l) => l.startsWith('event: '))?.slice(7).trim();
+        if (ev.type === 'done') {
+          S.completed = true;
+          if (ev.ok === false && !S.failed) onEvent({ type: 'error', message: 'The provider could not complete this request.' });
+          continue;
+        }
         onEvent(ev);
       }
     }
-    if (S.cur) closeAnswer({ text: S.curBody, meta: {} });
+    if (!S.completed && !S.failed) err('The response stream ended before completion.');
+    if (S.cur && !S.failed) closeAnswer({ text: S.curBody, meta: {} });
   } catch (e) {
     if (e.name !== 'AbortError') err('connection lost: ' + e.message);
-    else note('cancelled');
+    else { S.cancelled = true; if (S.cur) closeAnswer({ text: S.curBody, meta: {} }); }
   } finally {
     S.busy = false;
     S.abort = null;
     $('send').classList.remove('busy');
     $('send').textContent = 'Send →';
-    setStatus('ready');
+    if (S.failed && !$('input').value) { $('input').value = input; autoGrow(); }
+    setStatus(S.failed ? 'Request failed · message preserved' : S.cancelled ? 'Stopped' : 'Ready');
+    S.cur = null; S.cancelled = false;
     refresh(true);
   }
   return true;
@@ -580,7 +620,7 @@ function finishTask(rec, doneEv) {
   rec.endAt = Date.now();
   telLeave(rec);
   rec.status = doneEv.ok === false || rec.status === 'error' ? 'error' : 'done';
-  paintTaskState(rec, (doneEv.steps ? doneEv.steps + ' steps · ' : '') + (doneEv.usage && doneEv.usage.costUsd ? '$' + doneEv.usage.costUsd.toFixed(4) + ' · ' : '') + 'done');
+  paintTaskState(rec, (doneEv.steps ? doneEv.steps + ' steps · ' : '') + (doneEv.usage && doneEv.usage.costUsd ? '$' + doneEv.usage.costUsd.toFixed(4) + ' · ' : '') + (rec.status === 'error' ? 'failed' : 'done'));
   paintTel(rec);
   paintTaskText(rec, true);
   rec.card.stopb.disabled = true;
@@ -711,6 +751,7 @@ function listen() {
     if (name === 'schedule.done') toast('schedule: ' + (ev.status || 'ok'));
   };
   ['approval:request', 'approval:resolved', 'answer', 'telegram.up', 'telegram.paired', 'telegram.unpaired', 'whatsapp.qr', 'whatsapp.connected', 'whatsapp.close', 'schedule.done', 'schedule.failed', 'tool.denied', 'majin.ui'].forEach((n) => es.addEventListener(n, handle(n)));
+  es.onopen = () => { if (!S.busy) setStatus('Connected'); };
   es.onerror = () => {
     setStatus('reconnecting…');
   };
@@ -936,6 +977,7 @@ async function refresh(quiet) {
   }
 }
 async function loadHistory() {
+  if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.reset();
   const h = await api('/history?session=' + encodeURIComponent(S.session) + '&n=40').catch(() => ({ messages: [] }));
   $('scroller').innerHTML = '';
   (h.messages || []).forEach((m) => addMsg(m.role === 'user' ? 'user' : 'majin', m.role === 'user' ? 'DU' : 'MAJIN', m.content));
@@ -958,11 +1000,11 @@ function showWelcome() {
   title.append(strong);
   welcome.append(title);
   const sub = document.createElement('p');
-  sub.textContent = 'Describe your goal in your own words. MAJIN handles the tools and the details.';
+  sub.textContent = 'A little curiosity. A big idea. Where shall we start?';
   welcome.append(sub);
   const examples = document.createElement('div');
   examples.className = 'home-examples';
-  for (const prompt of ['Build me a website', 'Create an iPhone app', 'Make a 3D scene in Blender']) {
+  for (const prompt of ['Explore an idea', 'Build something', 'Help me research']) {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = prompt + ' ↗';
@@ -973,6 +1015,13 @@ function showWelcome() {
   panel.append(welcome);
 }
 
+$('new-chat').onclick = async () => {
+  if (S.busy) { toast('Stop the current task before starting a new chat.'); return; }
+  S.session = 'chat-' + Date.now().toString(36);
+  await loadHistory(); $('input').focus();
+};
+$('browse-models').onclick = () => window.MAJIN_ONBOARD.togglePicker();
+$('manage-providers').onclick = () => window.MAJIN_ONBOARD.reopen();
 $('input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();

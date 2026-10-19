@@ -25,3 +25,6 @@ build-notes.txt
 
 # the downloadable bundle this session produced (built artifacts, not source)
 MAJIN-PATCHES.zip
+
+# Disposable browser acceptance evidence
+work/

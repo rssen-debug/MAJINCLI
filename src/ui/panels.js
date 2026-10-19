@@ -55,13 +55,13 @@ async function paintHeader(st) {
     }
   }
 
-  const mode = MODE_LABEL[st.guard.mode] || 'approval';
+  const mode = ({ strict: 'assist', confirm: 'approval', off: 'full auto' })[st.guard.mode] || 'approval';
   const bm = $('b-mode');
   if (bm) {
     bm.textContent = mode;
     bm.title = 'Permission mode: ' + mode + ' (guard.mode=' + st.guard.mode + ')';
   }
-  if (st.needsSetup) note('No API key yet — demo mode answers with a mock. Paste a key in the Providers panel, or just tell me: "use the key sk-… for deepseek".');
+
 }
 
 function led(id, cls) {
@@ -79,9 +79,10 @@ async function paintRail(st) {
   for (const it of list) {
     if (seen.has(it.id)) continue;
     seen.add(it.id);
-    const n = el('div', 'sess' + (it.id === S.session ? ' act' : ''), esc(it.id.length > 22 ? it.id.slice(0, 21) + '…' : it.id) + ' <span class="kv">' + (it.messages || 0) + '</span>');
+    const n = el('button', 'sess' + (it.id === S.session ? ' act' : ''), esc(it.id.length > 22 ? it.id.slice(0, 21) + '…' : it.id) + ' <span class="kv">' + (it.messages || 0) + '</span>');
     n.title = (it.lastText || '') + '\n' + (it.mtime || '');
     n.onclick = () => {
+      if (S.busy) { toast('Stop the current task before switching chats.'); return; }
       S.session = it.id;
       box.querySelectorAll('.sess').forEach((x) => x.classList.remove('act'));
       n.classList.add('act');

@@ -195,7 +195,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     if (wantsIndex(p)) {
       const file = path.join(UI_DIR, 'index.html');
       if (!fs.existsSync(file)) return html(res, 200, '<pre>UI missing — run: npm run ui</pre>');
-      const raw = fs.readFileSync(file, 'utf8').replace(/__MAJIN_TOKEN__/g, token).replace(/__MAJIN_VERSION__/g, VERSION).replace(/__MAJIN___/g, cfg.get('name') || 'MAJIN');
+      const raw = fs.readFileSync(file, 'utf8').replace(/'__MAJIN_TOKEN__'/g, JSON.stringify(token)).replace(/'__MAJIN_VERSION__'/g, JSON.stringify(VERSION)).replace(/__MAJIN___/g, cfg.get('name') || 'MAJIN');
       res.setHeader('set-cookie', `majin=${token}; Path=/; SameSite=Lax`);
       return html(res, 200, raw);
     }
@@ -598,12 +598,14 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const listUrl = listModelsUrl(prov);
       if (!listUrl) return json(res, 200, { ok: true, provider: name, models: prov.models || [], note: 'the provider has no model list — type the model name yourself' });
       try {
-        const r = await fetch(listUrl, { headers: prov.apiKey ? { authorization: `Bearer ${prov.apiKey}` } : {}, signal: AbortSignal.timeout(12000) });
+        const r = await fetch(listUrl, { headers: { ...(prov.headers || {}), ...(prov.apiKey ? (prov.kind === 'gemini' ? { 'x-goog-api-key': prov.apiKey } : { authorization: `Bearer ${prov.apiKey}` }) : {}) }, signal: AbortSignal.timeout(12000) });
         const j = await r.json().catch(() => ({}));
-        const models = (j.data || j.models || j || []).map((m) => (typeof m === 'string' ? m : m.id)).filter(Boolean).sort();
+        const { normalizeCatalog } = await import('../../ui/catalog.js');
+        const catalog = normalizeCatalog(j);
+        const models = catalog.map((m) => m.id).sort();
         const { importPricing } = await import('../pricing.js');
         const imp = await importPricing(cfg, name, j, { source: `${name}:/models` }).catch(() => ({ imported: 0, skipped: 0 }));
-        return json(res, 200, { ok: r.ok, provider: name, models: models.slice(0, 400), count: models.length, status: r.status, pricingImported: imp.imported, pricingKnown: imp.imported + imp.skipped });
+        return json(res, 200, { ok: r.ok, ...(!r.ok ? { error: `Catalog request failed (HTTP ${r.status})` } : {}), provider: name, models, catalog, count: models.length, status: r.status, pricingImported: imp.imported, pricingKnown: imp.imported + imp.skipped });
       } catch (err) {
         return json(res, 200, { ok: false, error: err.message, hint: 'network error or a wrong baseUrl' });
       }
