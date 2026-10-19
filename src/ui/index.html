@@ -294,8 +294,8 @@ body.simple #c-cost{margin-left:auto}
   <div id="main"><section id="imagine" hidden></section><div id="scroller"></div><footer>
   <div id="run-state" data-state="idle" hidden><span class="living-orb" aria-hidden="true"><i></i><i></i><i></i></span><span id="run-label">Ready</span><button id="run-details">View activity <span aria-hidden="true">↗</span></button></div>
   <div id="composer">
-    <textarea id="input" placeholder="Ask anything, or build something." rows="1" aria-label="Message MAJIN"></textarea>
-    <button id="send" aria-label="Send message">Send →</button>
+    <textarea id="input" placeholder="Message MAJIN" rows="1" aria-label="Message MAJIN"></textarea>
+    <button id="send" type="button" aria-label="Send message" title="Send message" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path class="send-arrow" d="M12 19V5m-6 6 6-6 6 6"/><rect class="send-stop" x="6" y="6" width="12" height="12" rx="2"/></svg></button>
   </div>
   <div class="crow">
     <button id="mic" title="Voice input">🎙</button><span id="mic-state"></span>

@@ -301,8 +301,7 @@ async function send(text) {
   autoGrow();
   S.busy = true;
   S.t0 = Date.now();
-  $('send').classList.add('busy');
-  $('send').textContent = 'Stop';
+  syncSendButton();
   setStatus('working…');
   const ac = new AbortController();
   S.abort = ac;
@@ -354,8 +353,7 @@ async function send(text) {
   } finally {
     S.busy = false;
     S.abort = null;
-    $('send').classList.remove('busy');
-    $('send').textContent = 'Send →';
+    syncSendButton();
     if (S.failed && !$('input').value) { $('input').value = input; autoGrow(); }
     setStatus(S.stopRequested ? 'Stopping task…' : S.failed ? 'Request failed · message preserved' : S.cancelled ? 'Stopped' : 'Ready');
     if (S.stopRequested && S.cur) { S.cur.b.classList.remove('caret'); if (S.cur.thinking) S.cur.thinking.remove(); }
@@ -873,10 +871,18 @@ function speak(t) {
 }
 
 /* ------------------------------- composer ------------------------------- */
+function syncSendButton() {
+  const button = $('send');
+  button.classList.toggle('busy', S.busy);
+  button.disabled = !S.busy && !$('input').value.trim();
+  button.setAttribute('aria-label', S.busy ? 'Stop response' : 'Send message');
+  button.title = S.busy ? 'Stop response' : 'Send message';
+}
 function autoGrow() {
   const i = $('input');
   i.style.height = 'auto';
   i.style.height = Math.min(240, i.scrollHeight + 2) + 'px';
+  syncSendButton();
 }
 const CMDS = ['/status', '/tools', '/route', '/moa', '/guard', '/model', '/provider', '/pair', '/schedule', '/memory', '/analyze', '/selftest', '/stop', '/clear', '/session', '/budget', '/help'];
 async function command(line) {
@@ -1047,26 +1053,9 @@ function showWelcome() {
   welcome.id = 'home';
   welcome.className = 'home';
   const emblem = el('div', 'home-emblem', '<span class="living-orb" aria-hidden="true"><i></i><i></i><i></i></span>');
-  welcome.append(emblem, el('span', 'eyebrow', 'A SPACE FOR POSSIBILITY'));
   const title = document.createElement('h2');
-  title.append(document.createTextNode('What will you '));
-  const strong = document.createElement('strong');
-  strong.textContent = 'bring to life?';
-  title.append(strong);
-  welcome.append(title);
-  const sub = document.createElement('p');
-  sub.textContent = 'Think freely. Build boldly. Make it yours.';
-  welcome.append(sub);
-  const examples = document.createElement('div');
-  examples.className = 'home-examples';
-  for (const prompt of ['Explore an idea', 'Build something', 'Help me research']) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.append(el('span', 'prompt-spark', prompt === 'Explore an idea' ? '✧' : prompt === 'Build something' ? '⌘' : '↗'), document.createTextNode(prompt));
-    button.onclick = () => { $('input').value = prompt; $('input').focus(); };
-    examples.append(button);
-  }
-  welcome.append(examples);
+  title.textContent = 'What’s next?';
+  welcome.append(emblem, title);
   panel.append(welcome);
 }
 
