@@ -1,26 +1,26 @@
 {
-  "lastVerifiedMain": "a2971d1",
-  "lastCompletedMilestone": "GODLIKE V4 \u00a77 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
-  "currentWorkstream": "GODLIKE V4 WAVE 2 \u2014 \u00a75 adaptive topology dispatch (next isolated worktree)",
+  "lastVerifiedMain": "f456e74",
+  "lastCompletedMilestone": "GODLIKE V4 §7 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
+  "currentWorkstream": "GODLIKE V4 WAVE 2 — §5 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
   "activePRs": [],
   "knownFailures": [
-    "squash d97e157 landed an 80/100 main-header line while rows stayed PASS \u2014 direct docs-fix main commit repairs it; rule: after EVERY merge, grep-verify matrix header = expected score AND phase-totals = row-sum",
+    "squash d97e157 landed an 80/100 main-header line while rows stayed PASS — direct docs-fix main commit repairs it; rule: after EVERY merge, grep-verify matrix header = expected score AND phase-totals = row-sum",
     "v0.7.3: sessionRoutes pin = models.sessionRoutes{session:{job:ref}}; routeFor(cfg,job,{session}); turn-pinned routes in loop.js (stepJob cache); patch() now persisted/ok:false on failed save; load() heals corrupt main from .bak, never autosaves over corrupt; historyErrors ring in context.js",
-    "v0.9.5: use origin-name for -u pushes, never a PAT-URL \u2014 PAT leaked into .git/config via 'git push -u <url>' and had to be scrubbed (snapshot keeps .git/config out anyway, but local rule: push via inline URL WITHOUT -u, or set upstream separately)",
-    "RECONCILED 2026-10-19 (v0.9.7): Linux(460) vs Windows(441) test counts \u2014 EXACT match: their 441 total @de3ad45 + 19 tests from waves P0(+7)/P1(+6)/P2(+6) = 460. Skips: our Linux 17 (6 MAJIN_LIVE-gated, 1 jobs-live, 5 browser-live, 4 installer-dep, 1 Windows-updater \u2014 all carry machine-readable gate reasons); on Windows, S1/S6/R5 (P0/P1 permission tests) skip instead \u2014 no unexplained delta remains.",
-    "v0.9.7: docs/RELEASE_MASTER_DIRECTIVE.md RECONSTRUCTED from owner V5 message (file was missing; per \u00a71.4 no unseen specs claimed preserved; COMPLETION_MATRIX.md remains acceptance matrix of record)."
+    "v0.9.5: use origin-name for -u pushes, never a PAT-URL — PAT leaked into .git/config via 'git push -u <url>' and had to be scrubbed (snapshot keeps .git/config out anyway, but local rule: push via inline URL WITHOUT -u, or set upstream separately)",
+    "RECONCILED 2026-10-19 (v0.9.7): Linux(460) vs Windows(441) test counts — EXACT match: their 441 total @de3ad45 + 19 tests from waves P0(+7)/P1(+6)/P2(+6) = 460. Skips: our Linux 17 (6 MAJIN_LIVE-gated, 1 jobs-live, 5 browser-live, 4 installer-dep, 1 Windows-updater — all carry machine-readable gate reasons); on Windows, S1/S6/R5 (P0/P1 permission tests) skip instead — no unexplained delta remains.",
+    "v0.9.7: docs/RELEASE_MASTER_DIRECTIVE.md RECONSTRUCTED from owner V5 message (file was missing; per §1.4 no unseen specs claimed preserved; COMPLETION_MATRIX.md remains acceptance matrix of record)."
   ],
   "blockers": [
     "1E/6C: need second-vendor + priced-model keys (owner)",
     "5D/11A/11C/12B/12C: must run scripts on a real Windows machine (owner)",
-    "8A-8D: UI owned by another agent \u2014 needs their branch merged"
+    "8A-8D: UI owned by another agent — needs their branch merged"
   ],
   "remainingTasks": [
-    "WAVE 2: adaptive topology dispatch (\u00a75) + critical-path-first scheduling (\u00a78)",
-    "WAVE 3: delta memory protocol (\u00a79)",
-    "WAVE 4: speculative execution lab (\u00a76, disabled by default)",
-    "Perf lab A/B/C/D (\u00a719) once topology variants exist"
+    "WAVE 2: adaptive topology dispatch (§5) + critical-path-first scheduling (§8)",
+    "WAVE 3: delta memory protocol (§9)",
+    "WAVE 4: speculative execution lab (§6, disabled by default)",
+    "Perf lab A/B/C/D (§19) once topology variants exist"
   ],
   "experimentResults": {
     "ratelimit-sim": "8/8 (S1 naive-violation vs S2 zero-violation throughput; sabotage discrimination all three dims)"
@@ -28,8 +28,8 @@
   "implementationScore": 81,
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
-  "nextAction": "Dispatch win-control-poc on main post-merge; collect probe-result.json; record ADOPT/DEFER for the Windows-control adapter with evidence (raw-UIA-first vs FlaUI vs UFO) in docs/DEV_CONTINUATION.json decisions.",
+  "nextAction": "Dispatch win-control-poc workflow on main (workflow now on default branch); poll run; fetch uia-probe-result artifact; record ADOPT/DEFER for Windows-control adapter (raw-UIA-first vs FlaUI vs UFO) backed by probe-result.json; then tag v0.9.9 and verify release assets.",
   "version": "0.9.9",
   "milestone": "Windows-control PoC scaffold (raw UIA probe, dispatch-gated; evidence pending)",
-  "branch": "feature/win-control-poc (in PR)"
+  "branch": "main (post-merge)"
 }
