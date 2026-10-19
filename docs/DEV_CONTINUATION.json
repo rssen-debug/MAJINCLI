@@ -1,5 +1,5 @@
 {
-  "lastVerifiedMain": "cb88d7b",
+  "lastVerifiedMain": "0947972",
   "lastCompletedMilestone": "GODLIKE V4 \u00a77 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
   "currentWorkstream": "GODLIKE V4 WAVE 2 \u2014 \u00a75 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
@@ -31,5 +31,5 @@
   "nextAction": "P5: skills versioning/rollback review vs V5 \u00a73 (skills dir exists \u2014 verify versioning claim honestly); else Windows-control PoC gate via GitHub windows runner (FlaUI/UFO \u2014 PoC-before-bind per handover).",
   "version": "0.9.7",
   "milestone": "P4 entry: ratelimit load-proof S9-S12 (measured, not certified); RELEASE_MASTER_DIRECTIVE.md reconstructed; Linux/Windows test counts reconciled",
-  "branch": "feature/p4-load-proof (in PR)"
+  "branch": "main-post-merge"
 }
