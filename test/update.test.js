@@ -15,6 +15,11 @@ import { spawnSync } from 'node:child_process';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const U = await import('../src/core/update.js');
+const { VERSION } = await import('../src/core/version.js');
+/* A mocked "new release" must ALWAYS be newer than the repo's own version —
+   hardcoding '0.9.9' exploded the moment the repo itself shipped 0.9.9
+   (current == latest → no notice, and the runtime-state test went red). */
+const MOCK_LATEST = (() => { const [M, m] = VERSION.split('.').map(Number); return `${M}.${m + 1}.0`; })();
 
 /** load() reads MAJIN_HOME every call, so an isolated home is one env var. */
 function fakeHome(t) {
@@ -49,9 +54,9 @@ function response(body, status = 200) {
 }
 
 const RELEASE = (name = 'MAJIN-Setup.exe', size = 3_400_000) => ({
-  tag_name: 'v0.9.9',
-  html_url: 'https://github.com/rssen-debug/slurps/releases/tag/v0.9.9',
-  body: `sha256 ${'a'.repeat(64)} · ${size} bytes · MAJIN 0.9.9`,
+  tag_name: `v${MOCK_LATEST}`,
+  html_url: `https://github.com/rssen-debug/slurps/releases/tag/v${MOCK_LATEST}`,
+  body: `sha256 ${'a'.repeat(64)} · ${size} bytes · MAJIN ${MOCK_LATEST}`,
   published_at: '2026-10-01T10:00:00Z',
   assets: [{ name, size, browser_download_url: `https://example.invalid/${name}`, id: 7 }],
 });
@@ -96,13 +101,13 @@ test('a new release is reported, remembered, and not re-asked within the interva
   };
   const first = await U.checkForUpdate({ cfg, version: '0.1.0', fetchImpl, now: 1_000_000, force: true });
   assert.equal(calls, 1);
-  assert.equal(first.latest, '0.9.9');
+  assert.equal(first.latest, MOCK_LATEST);
   assert.equal(first.asset.name, 'MAJIN-Setup.exe');
   assert.equal(first.error, null);
-  assert.equal(U.notice(first, '0.1.0'), 'MAJIN 0.9.9 is available (you have 0.1.0)');
+  assert.equal(U.notice(first, '0.1.0'), `MAJIN ${MOCK_LATEST} is available (you have 0.1.0)`);
 
   const stored = cfg.get('updates');
-  assert.equal(stored.latest, '0.9.9', 'the answer is cached in config, so a restart does not re-ask');
+  assert.equal(stored.latest, MOCK_LATEST, 'the answer is cached in config, so a restart does not re-ask');
   assert.equal(stored.checkedVersion, '0.1.0');
   assert.equal(stored.asset.url, 'https://example.invalid/MAJIN-Setup.exe', 'and the download url comes along');
 
@@ -110,7 +115,7 @@ test('a new release is reported, remembered, and not re-asked within the interva
   assert.equal(calls, 1, 'a second call inside the interval must not touch the network again');
   assert.equal(second.skipped, 'too soon');
   assert.equal(second.fromCache, true);
-  assert.equal(second.latest, '0.9.9', 'and it still answers from the cache');
+  assert.equal(second.latest, MOCK_LATEST, 'and it still answers from the cache');
 
   const later = await U.checkForUpdate({ cfg, version: '0.1.0', fetchImpl, now: 1_000_000 + 25 * 3600 * 1000 });
   assert.equal(calls, 2, 'after the interval it asks again');
@@ -157,9 +162,9 @@ test('a release without an installer still tells the truth about it', async (t) 
     cfg,
     version: '0.1.0',
     force: true,
-    fetchImpl: async () => response({ tag_name: 'v0.9.9', html_url: 'u', assets: [] }),
+    fetchImpl: async () => response({ tag_name: `v${MOCK_LATEST}`, html_url: 'u', assets: [] }),
   });
-  assert.equal(info.latest, '0.9.9');
+  assert.equal(info.latest, MOCK_LATEST);
   assert.equal(info.asset, null);
   assert.match(info.note, /no MAJIN-Setup\.exe/, 'this is exactly the "empty release" case the user asked about');
 });
@@ -204,9 +209,9 @@ test('the runtime exposes the update state and the server serves it', async (t) 
   try {
     assert.equal(rt.state({ includeTools: false }).update, null, 'nothing checked yet, so nothing to show');
     const info = await rt.update.check({ force: true, fetchImpl: async () => response(RELEASE()) });
-    assert.equal(info.latest, '0.9.9');
+    assert.equal(info.latest, MOCK_LATEST);
     const st = rt.state({ includeTools: false });
-    assert.equal(st.update.latest, '0.9.9', 'the state carries it to the window');
+    assert.equal(st.update.latest, MOCK_LATEST, 'the state carries it to the window');
     assert.match(st.update.notice, /is available/);
     assert.equal(typeof rt.update.download, 'function');
   } finally {
