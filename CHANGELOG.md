@@ -5,6 +5,20 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 — Del 5A + 5B + 5E (real browser domains) — 80/100
+
+### Changed
+- `src/core/browser.js`: browser launch is now bounded-retry (2 attempts, fresh port, longer deadline) — the runner-policy Edge-flake that blocked two CI runs in a row is gone from the engine (error text unchanged, honest).
+- `.github/workflows/build-exe.yml`: the browser live-gate now runs `test/browser-domains.live.test.js` alongside browser.live + jobs.live.
+- New `test/browser-domains.live.test.js`: 5A forms/select/radio/consent observed AT THE SERVER, 5B hash-nav + target=_blank + iframe-straight-path, 5E multi-step webshop with server-state cross-checks at every step.
+
+### Verified
+- exe-CI live round (run 3927xxx…, commit c066a34): **5/5 pass** — 5A posted `{"name":"Siri Testsson","mail":"siri@test.dev","stack":"node","level":"senior","consent":"on"}` + thanks-words; 5B new-tab followed + hash content + frame path; 5E cart `X900×1` + order recorded before any claim.
+- Full suite: 380 pass / 0 fail / 13 skipped (live-browser files stay key-gated).
+- Retry hardening self-discriminating: attempts=1 → 2/3 red (run 39265517682); attempts=2 retry → 3/3 green.
+- Bench unchanged (browser wave, no new spend). **80/100.**
+
+
 ## 2026-10-19 — Del 4D (contract domains: command/json/http) + Del 10E (adversarial regressions) — 74/100
 
 ### Changed
