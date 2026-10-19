@@ -11,10 +11,12 @@ Live den 19 oktober 2026 med användarens nyckel (nyckeln finns inte i dokumente
 | Zen GET /zen/v1/models | 200, 47 modeller |
 | Go GET /zen/go/v1/models | 200, 37 modeller |
 | Zen POST chat/completions, longcat-2.5-preview-free, max 16 tokens | 403, FreeTierError |
+| Go via MAJIN complete(), LongCat Free, max 128, 19:33:51 UTC | OK, stop, 52 tokens |
+| Go via MAJIN complete(), streaming, max 128, 19:34:08 UTC | OK, deltas OK, stop, 38 tokens |
 
-Leverantörens svar: free tier kan endast användas inifrån OpenCode. Det bevisar inte en ogiltig nyckel. Bilden från användaren visar tidigare 200-anrop och senare 403. Kontot har alltså fungerat någon gång, men det senaste direkta testet från MAJIN nekades. Tidigare audit testade även den officiella OpenCode-klienten och fick samma åtkomstfel. Ingen betald modell eller fallback har använts.
+Det senaste testet FUNGERAR via Go, både vanligt svar och streaming genom MAJIN:s egen providerkod. Zen nekade samma fria modell med app-only FreeTierError tidigare i denna audit. Ett första Go-prov med max 16 gav tom text vid den mycket låga tokenbudgeten; max 128 gav OK. Bildens blandning av 200 och 403 är förenlig med dessa varierande resultat. Tidigare audit fick också 403. Inget av detta bevisar en ogiltig nyckel. Ingen betald modell eller fallback har använts. Prisfältet i modellistan saknas; transportens costUsd=0 är inte separat bevis för kontofakturering. Den valda LongCat-modellen är dokumenterad som gratis av OpenCode.
 
-Dev behöver lösa: verifiera konto-/free-tier-behörighet med OpenCode och använd en uttryckligen tillåten integration om de erbjuder sådan. Försök inte låtsas vara OpenCode med förfalskade klientheaders. Om tjänsten fortsätter neka måste användaren välja en annan provider. Katalog-200 är aldrig bevis för fungerande inferens.
+Dev behöver bevaka: Go fungerar i senaste liveprovet, men verifiera konto-/free-tier-behörighet med OpenCode om 403 återkommer. Behåll separata Go- och Zen-endpoints. Försök inte låtsas vara OpenCode med förfalskade klientheaders. Om tjänsten fortsätter neka måste användaren välja en annan provider. Katalog-200 är aldrig bevis för fungerande inferens.
 
 ## Providerfixar i denna leverans
 - src/core/provider/catalog.js är gemensam källa för /api/models och majin.provider(action=models).
@@ -44,8 +46,8 @@ Protokoll- och HTTP-integrationer använder kontrollerade lokala servrar, inga a
 ## Verifiering hittills
 - Full lokal Windows-svit: 441 tester, 426 pass, 15 skip, 0 fail.
 - Nya tester: Anthropic/Gemini/Qwen-pagination, cross-origin-skydd, miljönycklar, full katalog >400 via riktig HTTP-route, bevarad katalog efter 401, riktiga lokala chat-anrop för tre protokoll och Windows installer-startfel/startack.
-- Edge browser: update-knapp vid senaste version, bekräftelse/dubbelklick, versionsbyte med draft/session-restore samt tidigare UI-acceptans. Ny custom-provider-save kontrolleras också före merge.
-- Ingen betald inferens. OpenCode-livefelet ovan återstår externt.
+- Edge browser: update-knapp vid senaste version, bekräftelse/dubbelklick, versionsbyte med draft/session-restore samt tidigare UI-acceptans. Custom Anthropic-provider med eget namn sparades genom riktig API-route och valdes i model picker.
+- Ingen betald inferens. Senaste Go-inferensen fungerar; Zen/app-only-403 och varierande kontobehörighet kvarstår som bevakning, inte ett globalt förbud.
 - CI, merge och release-länkar fylls i arbetschattens outputs/handover.md efter leverans.
 
 ## Officiella protokollreferenser

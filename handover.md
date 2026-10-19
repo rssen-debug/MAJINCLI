@@ -180,3 +180,6 @@ Full lokal Windows-svit: 441 tester, 426 pass, 15 skip, 0 fail. Den första omk�
 
 ### Lokal verifiering klar
 Edge: även custom Anthropic-anslutning med eget namn sparades via riktig API-route och valdes i modellväljaren; huvuddesignen visuellt bevarad. Tester för updater/draft/session och övrig browseracceptans PASS. Full svit 426 pass, 15 skip, 0 fail. Ingen egen datainstallation ändrad. Nästa steg är PR och CI före merge.
+
+### Korrigerat OpenCode-liveutfall — 19:34 UTC, senaste bevis
+OpenCode Go fungerar nu med användarens nyckel och longcat-2.5-preview-free via MAJIN complete(): vanligt svar OK (52 tokens) och streaming OK med deltas OK (38 tokens), maxTokens 128. Zen gav tidigare 403 FreeTierError. MaxTokens 16 på Go gav tom text, så en för liten testbudget kan ge missvisande tomt svar. Ingen betald modell/fallback körd. Tidigare kategoriska formuleringar om gratisåtkomst korrigerade i preset, feltext och dev-dokument. Evidens utan nyckel: outputs/opencode-live-check.json. Behåll Go/Zen åtskilda och lova inte stabil framtida åtkomst utifrån ett lyckat prov.

@@ -52,7 +52,7 @@ export const PRESETS = {
     apiKey: null,
     models: ['glm-5.3-flash', 'qwen3.8-flash', 'deepseek-v4.1-flash', 'mimo-v2.6-flash', 'beam-free', 'longcat-2.5-preview-free', 'kimi-k2.6', 'grok-4.6'],
     keyUrl: 'https://opencode.ai/docs/go/',
-    notes: 'OpenCode Go requires an active subscription. OpenCode restricts its free tier to its own app; a free model name does not grant free API access from MAJIN.',
+    notes: 'Go and Zen have separate access rules. Free-model requests may work or return FreeTierError depending on account access. Choose a live model; a catalog listing alone does not verify inference access.',
   },
   opencodezen: {
     label: 'OpenCode Zen', kind: 'openai', baseUrl: 'https://opencode.ai/zen/v1',
