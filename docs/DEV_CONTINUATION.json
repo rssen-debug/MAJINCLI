@@ -1,10 +1,10 @@
 {
-  "lastVerifiedMain": "4e6cd5e (pre-wave, becomes post-merge)",
-  "lastCompletedMilestone": "Del 12A shipped (v0.7.1, 81/100)",
-  "currentWorkstream": "GODLIKE V4 WAVE 2 — HYPERSWARM OMEGA §7 rate-limit orchestrator",
-  "currentBranch": "feature/ratelimit-omega",
+  "lastVerifiedMain": "d97e157",
+  "lastCompletedMilestone": "GODLIKE V4 §7 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
+  "currentWorkstream": "GODLIKE V4 WAVE 2 — §5 adaptive topology dispatch (next isolated worktree)",
+  "currentBranch": "main (post-merge)",
   "activePRs": [],
-  "knownFailures": [],
+  "knownFailures": ["squash d97e157 landed an 80/100 main-header line while rows stayed PASS — direct docs-fix main commit repairs it; rule: after EVERY merge, grep-verify matrix header = expected score AND phase-totals = row-sum"],
   "blockers": [
     "1E/6C: need second-vendor + priced-model keys (owner)",
     "5D/11A/11C/12B/12C: must run scripts on a real Windows machine (owner)",
@@ -22,5 +22,5 @@
   "implementationScore": 81,
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
-  "nextAction": "merge feature/ratelimit-omega (v0.7.2), then §5 adaptive topology as next isolated worktree"
+  "nextAction": "start §5 adaptive topology branch with A/B matched-mission evidence"
 }
