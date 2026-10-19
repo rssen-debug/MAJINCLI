@@ -207,6 +207,12 @@ async function httpJson(url, { timeoutMs = 5000 } = {}) {
 
 
 
+// Browser-owned sign-in/sync pages may appear after startup. A new page alone
+// is not evidence that the user's click opened it: require the current opener.
+export function isChildTarget(target, browser) {
+  return target.type === 'page' && target.openerId === browser.targetId && target.targetId !== browser.targetId && !target.attached && !browser.knownTabs.has(target.targetId);
+}
+
 /** Launch (or reuse) the browser for ONE agent session and navigate it. */
 export async function openFor({ session, url = null, headless = true, cfgGet = null, pool = null, exe = null, wsFactory = null } = {}) {
   session = String(session || 'default');
@@ -287,7 +293,7 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     thePool.release(session);
     sess.delete(session);
   };
-  const b = { session, sessionId, send: null, goto: null, eval: null, close, proc, slot, knownTabs: new Set(bornTabs.map((t) => t.targetId)) };
+  const b = { session, sessionId, targetId, send: null, goto: null, eval: null, close, proc, slot, knownTabs: new Set(bornTabs.map((t) => t.targetId)) };
   /* send reads b.sessionId EVERY call — smarttab can re-wire it later */
   const send = (method, params = {}, opts = null) => sendRaw({ sessionId: b.sessionId, method, params }, opts);
   b.send = send;
@@ -322,12 +328,14 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     const deadline = Date.now() + windowMs;
     while (Date.now() < deadline) {
       const { targetInfos = [] } = await cdp('Target.getTargets');
-      const mine = targetInfos.find((t) => t.targetId === targetId);
+      const mine = targetInfos.find((t) => t.targetId === b.targetId);
       /* a NEW tab, born after our spawn — never the stale initial blank tab */
-      const spawnTarget = targetInfos.find((t) => t.type === 'page' && t.targetId !== targetId && !t.attached && !b.knownTabs.has(t.targetId));
+      const spawnTarget = targetInfos.find((t) => isChildTarget(t, b));
       if (spawnTarget) {
         const { sessionId: s2 } = await cdp('Target.attachToTarget', { targetId: spawnTarget.targetId, flatten: true });
         b.sessionId = s2;
+        b.targetId = spawnTarget.targetId;
+        b.knownTabs.add(spawnTarget.targetId);
         const meta = await b.eval('(() => ({ url: location.href, title: document.title }))()');
         await new Promise((r) => setTimeout(r, 300));
         return { followed: true, ...meta };

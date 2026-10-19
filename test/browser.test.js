@@ -128,5 +128,12 @@ test('followNewTarget never follows the stale initial tab (the about:blank wire)
      the server had already seen the real submit. Rule: tabs born after spawn. */
   const src = (await import('node:fs')).readFileSync(new URL('../src/core/browser.js', import.meta.url), 'utf8');
   assert.match(src, /knownTabs\s*:\s*new Set\(bornTabs/, 'birth tabs are remembered');
-  assert.match(src, /spawnTarget = targetInfos\.find\(\(t\) => t\.type === 'page' && t\.targetId !== targetId && !t\.attached && !b\.knownTabs\.has\(t\.targetId\)\)/, 'only post-birth tabs are followable');
+  const { isChildTarget } = await import('../src/core/browser.js');
+  const browser = { targetId: 'our-page', knownTabs: new Set(['initial-blank', 'our-page']) };
+  assert.equal(isChildTarget({ type: 'page', targetId: 'initial-blank' }, browser), false);
+  assert.equal(isChildTarget({ type: 'page', targetId: 'edge-sync-dialog' }, browser), false, 'an unrelated browser-owned page must never receive the agent actions');
+  assert.equal(isChildTarget({ type: 'page', targetId: 'other-popup', openerId: 'other-page' }, browser), false);
+  assert.equal(isChildTarget({ type: 'page', targetId: 'our-popup', openerId: 'our-page' }, browser), true);
+  browser.targetId = 'our-popup'; browser.knownTabs.add('our-popup');
+  assert.equal(isChildTarget({ type: 'page', targetId: 'nested-popup', openerId: 'our-popup' }, browser), true, 'following a tab updates the opener for subsequent clicks');
 });

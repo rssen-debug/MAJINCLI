@@ -44,6 +44,10 @@ test('explicit follow-up starts another observable run in the same session', () 
   assert.equal(t.session, session);
   assert.equal(t.run, 2);
   assert.equal(t.toolsRun, 0);
+  r.setStatus(t.id, 'done', 1);
+  r.event(t.id, 'tool_result', { tool: 'old-tool', ms: 999 }, 1);
+  assert.equal(t.status, 'running', 'late completion from an earlier stopped run cannot finish its follow-up');
+  assert.equal(t.toolsRun, 0);
   r.event(t.id, 'tool_result', { tool: 'fs.read', ms: 8 });
   assert.equal(r.snapshot()[0].toolsRun, 1);
   assert.equal(r.snapshot()[0].run, 2);

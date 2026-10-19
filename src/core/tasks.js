@@ -80,10 +80,11 @@ export class TaskRegistry {
     return this.active().sort((a, b) => a.created - b.created);
   }
 
-  setStatus(id, status) {
+  setStatus(id, status, run = null) {
     const t = this.get(id);
     if (!t) throw new Error(`unknown task: ${id}`);
     if (!STATUSES.has(status)) throw new Error(`unknown status: ${status}`); // garbage never survives — even on terminal tasks
+    if (run !== null && run !== t.run) return t;
     if (TERMINAL.has(t.status)) return t; // terminal tasks never move again
     t.status = status;
     t.updated = Date.now();
@@ -115,9 +116,10 @@ export class TaskRegistry {
   }
 
   /** Keep a capped, timestamped trail of what the task emitted. */
-  event(id, type, data = null) {
+  event(id, type, data = null, run = null) {
     const t = this.get(id);
     if (!t || TERMINAL.has(t.status)) return;
+    if (run !== null && run !== t.run) return;
     t.events.push({ type: String(type), data, at: Date.now() });
     if (t.events.length > MAX_EVENTS) t.events.splice(0, t.events.length - MAX_EVENTS);
     /* coarse status from the event stream — approvals make a task WAIT, and

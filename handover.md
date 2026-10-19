@@ -65,3 +65,10 @@ OpenCode live-diagnos: officiell modellkatalog https://opencode.ai/inference/v1/
 - /api/memory forget svarade dessutom ok som ett nästlat objekt. Returnerar nu normalt booleskt ok med removed.
 - Browser-testet passerar igen, inklusive verklig demo-inferens/stopp, felaktig Stop-ack, /budget cap och Workspace run=2. Ingen betald inferens.
 - CI kompletterad med hela npm test även på Windows, utöver Linux-svit, Edge browser-tool E2E och installationstester.
+
+### Checkpoint 6 — slutlig lokal kontroll och ytterligare browser-fynd
+- Nuvarande Windows helsvit: 431 tester, 416 godkända, 15 överhoppade, 0 fel, med provider-API-nycklar borttagna ur testprocessens miljö. Syntax 160/160 och i18n grönt.
+- Separat verklig browser-tool E2E gav initialt 5 fel på denna dator. Orsak: Edge öppnade sin egen sync-confirmation-dialog efter startup; tabbföljaren tog alla nya page-targets för klicköppnade flikar. Då hamnade fortsatta formulärklick/navigation/uppladdning på fel sida.
+- BROWSER-01: fix pågår som kräver att nya flikens openerId matchar kontrollerad sida och uppdaterar aktuell target efter varje följd flik. Tabbar som Edge själv öppnar ska aldrig följas. Regressionstest tillagt; verklig browser E2E körs om.
+- Task-uppföljningar kompletterade med run-nummer även på events och completion, så sena callbackar från en tidigare stoppad run inte kan avsluta den nya runnen.
+- PR skapad: https://github.com/rssen-debug/MAJINCLI/pull/59. CI körs; ej mergad ännu. Nästa steg: färdigställ browser-test, kör slutlig helsvit/Edge UI, uppdatera denna logg, push och kontrollera CI för exakt sista commit före merge.

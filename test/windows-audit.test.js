@@ -1,8 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectShell, shellTools } from '../src/core/tools/shell.js';
-import { explainError, ProviderError } from '../src/core/provider/chat.js';
-import { bus } from '../src/core/log.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-windows-audit-'));
+process.env.MAJIN_HOME = home;
+const { dirs } = await import('../src/core/paths.js');
+fs.mkdirSync(dirs.workspace, { recursive: true });
+test.after(() => fs.rmSync(home, { recursive: true, force: true }));
+const { selectShell, shellTools } = await import('../src/core/tools/shell.js');
+const { explainError, ProviderError } = await import('../src/core/provider/chat.js');
+const { bus } = await import('../src/core/log.js');
 
 test('global events retain their namespace and sequence when payload carries its own type/id', () => {
   let received;
