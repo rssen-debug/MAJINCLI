@@ -50,6 +50,7 @@ export const dirs = {
   memory: path.join(D, 'memory'),
   sessions: path.join(D, 'sessions'),
   skills: path.join(D, 'skills'),
+  adapters: path.join(D, 'adapters'),
   rules: path.join(D, 'rules'),
   logs: path.join(D, 'logs'),
   out: path.join(D, 'out'),

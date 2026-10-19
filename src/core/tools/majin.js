@@ -16,6 +16,7 @@ import { dirs } from '../paths.js';
 import { bus } from '../log.js';
 import { VERSION } from '../version.js';
 import { detect as detectRe } from '../binary/external.js';
+import { validateAdapter } from '../adapters.js';
 
 const mask = (v) => (!v ? '' : v.length <= 6 ? '•••' : `${v.slice(0, 3)}…${v.slice(-2)}`);
 
@@ -332,9 +333,19 @@ export const majinTools = [
     group: 'majin',
     risk: 'write',
     desc: 'Learned skills (markdown in data/skills): list | save | read | delete | match. A skill is how a kind of task is done, step by step.',
-    params: { action: 'string: list | save | read | delete | match [list|save|read|delete|match]', name: 'string: name', when: 'string: when to use it', steps: 'string: the steps (markdown)', tools: 'array: tools it uses', query: 'string: for match' },
-    async run({ action = 'list', name = '', when = '', steps = '', tools = '', query = '' }, ctx) {
+    params: { action: 'string: list | save | read | delete | match | report | enable [list|save|read|delete|match|report|enable]', name: 'string: name', when: 'string: when to use it', steps: 'string: the steps (markdown)', tools: 'array: tools it uses', query: 'string: for match', ok: 'boolean: did the skill work (report)', why: 'string: why it failed (report)' },
+    async run({ action = 'list', name = '', when = '', steps = '', tools = '', query = '', ok = null, why = '' }, ctx) {
       const s = ctx.skills;
+      if (action === 'report') {
+        if (ok === null || ok === undefined) return { ok: false, error: { code: 'incomplete', message: 'name + ok required' } };
+        const r = s.recordOutcome(name, { ok: Boolean(ok), why });
+        if (!r.ok) return { ok: false, error: { code: 'not_found', message: r.why } };
+        return { result: `skill "${name}": fails=${r.fails} streak=${r.streak}${r.disabled ? ' DISABLED (repeat failures — a human can majin.skill action=enable when the world changed)' : ''}`, meta: r, summary: `outcome ${r.disabled ? 'DISABLED' : 'recorded'}` };
+      }
+      if (action === 'enable') {
+        const r = s.enable(name);
+        return r.ok ? { result: `skill "${name}" re-enabled`, summary: 'skill enabled' } : { ok: false, error: { code: 'not_found', message: r.why } };
+      }
       if (action === 'save') {
         if (!name || !steps) return { ok: false, error: { code: 'incomplete', message: 'name + steps required' } };
         const r = s.save({ name, when, steps, tools });
@@ -827,6 +838,37 @@ export const majinTools = [
         return r.ok ? { result: `rated ${r.id} as ${r.rating > 0 ? 'good' : 'bad'}`, meta: r } : { ok: false, error: { code: 'not_found', message: r.error } };
       }
       return { ok: false, error: { code: 'bad_action', message: `${action} — use status|on|off|stats|list|export|purge|rate` } };
+    },
+  }),
+
+  def({
+    name: 'majin.adapter',
+    group: 'majin',
+    risk: 'write',
+    desc: 'Safe external adapters (Del 7B): validate | create | list | remove. An adapter is a DECLARATIVE http-json descriptor (no code, https only, permission class read | external-write | external-post); an invalid adapter is never written to disk.',
+    params: {
+      action: 'string: validate | create | list | remove [validate|create|list|remove]',
+      spec: 'object: {name, kind:"http-json", baseUrl, permission, headers, mapping, timeoutMs, rate:{maxPerHour}}',
+      name: 'string: adapter name (for remove)',
+    },
+    async run({ action = 'list', spec = null, name = '' }, ctx) {
+      const a = ctx.adapters;
+      if (!a) return { ok: false, error: { code: 'no_adapters', message: 'adapter store missing' } };
+      if (action === 'validate') {
+        const issues = validateAdapter(spec || {});
+        return { result: issues.length ? `INVALID:\n- ${issues.join('\n- ')}` : 'valid', meta: { issues, valid: !issues.length }, summary: issues.length ? `${issues.length} issue(s)` : 'valid' };
+      }
+      if (action === 'create') {
+        const r = a.create(spec || {});
+        if (!r.ok) return { ok: false, error: { code: 'invalid_adapter', message: `refused — adapter is NEVER written when it fails validation:\n- ${(r.issues || []).join('\n- ')}`, hint: 'fix the spec; close adapters are validated hard' } };
+        return { result: `adapter \"${r.adapter.name}\" created (${r.adapter.permission}, ${r.adapter.baseUrl})`, meta: { adapter: r.adapter }, summary: 'adapter created' };
+      }
+      if (action === 'remove') {
+        const r = a.remove(name);
+        return r.ok ? { result: `removed ${name}`, summary: 'adapter removed' } : { ok: false, error: { code: 'not_found', message: r.why } };
+      }
+      const list = a.list();
+      return { result: `${list.length} adapters in ${a.dir}:\n${list.map((x) => `- ${x.name} [${x.permission}] ${x.baseUrl}`).join('\n') || '(none)'}`, meta: { count: list.length }, summary: `${list.length} adapters` };
     },
   }),
 ];

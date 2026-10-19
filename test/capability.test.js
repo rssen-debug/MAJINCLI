@@ -81,7 +81,7 @@ test('tools.search ligger som verktyg och fungerar i readOnly-läge', async () =
 
 test('registrerat: schemas och list ändras inte av capability-lagret', () => {
   assert.ok(reg.has('tools.search'), 'tools.search ska vara ett riktigt verktyg');
-  assert.ok(reg.list().length > 100, `listan växte till 103+: fick ${reg.list().length}`);
+  assert.ok(reg.list().length > 100, `listan växte till 104+: fick ${reg.list().length}`);
   const names = reg.list().map((t) => t.name);
   assert.equal(new Set(names).size, names.length, 'inga dubbletter');
 });
