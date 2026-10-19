@@ -19,7 +19,7 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 
 ### Verified
 - `node --test test/p0-save-sessionroute.test.js` → 7/7 pass.
-- `node --test test/*.test.js` → 395 pass / 0 fail / 16 skipped (was 388 pass on v0.7.2; +7 new, zero regressions).
+- `node --test test/*.test.js` (rebased onto v0.9.3 main) → **431 pass / 0 fail / 17 skipped** (448 total; de3ad45 alone failed 4 version-literal tests first, fixed by 0.9.4 literal alignment; zero regressions from P0).
 - Release gate: `build-exe` workflow on tag `v0.9.4` (GitHub Actions, Windows NSIS).
 
 
