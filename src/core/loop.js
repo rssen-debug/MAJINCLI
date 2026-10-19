@@ -9,6 +9,7 @@ import { routeFor } from './router.js';
 import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
+import { guardToolContent } from './injection.js';
 
 /*
  * Väljer vilka scheman modellen får se detta steg. Standard: hela den synliga
@@ -154,10 +155,15 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       else errors = Math.max(0, errors - 1);
       toolLog.push({ tool: r.name, args: r.args ?? {}, ok, error: ok ? null : r.out.error?.message || 'unknown error', ms: r.out.ms, summary: summarize(r.out) });
       onEvent({ type: 'tool_result', label, step: steps, callId: r.id, tool: r.name, ok, ms: r.out.ms ?? null, error: r.out.error || null, spilled: r.out.spilled || null, summary: summarize(r.out), meta: r.out.meta || null });
+      /* Del 10C: outside data is scanned for override attempts. Clean
+         results stay byte-identical (zero token tax); a hit is annotated in
+         the very message the model reads AND surfaced as an event. */
+      const guarded = guardToolContent(r.name, ok ? String(r.out.result ?? '(ok)') : `ERROR [${r.out.error?.code || 'error'}]: ${r.out.error?.message}\n${r.out.error?.hint ? `HINT: ${r.out.error.hint}` : ''}`);
+      if (guarded.hits.length) onEvent({ type: 'injection_warning', label, step: steps, tool: r.name, patterns: guarded.hits.map((h) => h.id) });
       messages.push({
         role: 'tool',
         tool_call_id: r.id,
-        content: ok ? String(r.out.result ?? '(ok)') : `ERROR [${r.out.error?.code || 'error'}]: ${r.out.error?.message}\n${r.out.error?.hint ? `HINT: ${r.out.error.hint}` : ''}`,
+        content: guarded.text,
       });
     }
 

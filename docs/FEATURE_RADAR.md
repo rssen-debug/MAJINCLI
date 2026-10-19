@@ -1,4 +1,4 @@
-# MAJIN FEATURE RADAR — top 5 discoveries (2026-10-19 night, after Del 7D — Skill Compiler COMPLETE)
+# MAJIN FEATURE RADAR — top 5 discoveries (2026-10-19 night, wave 3: 9D+10C — Del 9 COMPLETE 5/5)
 
 Standing rule from the master brief: every run records its five highest-value
 discoveries in docs. Each item names where it was found and why it ranks.
@@ -14,7 +14,7 @@ Nothing here is scored — only listed by observed point-density and leverage.
    for scheduled jobs (Del 9D) and browser actions (Del 5B) — reuse before
    invention.
 
-2. **Registry-count pins are intentional tripwires — but they cost a sweep.**
+2. **NEW — Silent no-op doc edits are the most expensive cheap bug.** Found shipping 7D+9D/10C: two DECISIONS entries never landed because a `replace()` anchor ('# DECISIONS') did not match the real heading ('# Decisions') — the failure was silent and invisible to the suite until re-verified manually. Rule now: every docs edit asserts `count==1` AND is grep-verified post-write; a docs trio isn't done until the target lines are re-read from disk. Rank: #2 because it guards the whole evidence chain.
    Found while shipping 7B: `103` was hardcoded in 5 test files (agent, jobs,
    server, subset, capability). Adding one tool red-lighted 4 suites. This is
    GOOD design (it forces every new tool through review), but the pins should

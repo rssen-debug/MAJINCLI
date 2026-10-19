@@ -369,3 +369,38 @@ allowed to contradict a test.
 - **"Unknown" is its own state, distinct from both zero and priced.** A cloud
   model without a price table may not display as $0 (that lies to the user's
   wallet) — it renders UNKNOWN and, under a cap, does not spend.
+
+## 2026-10-19 (natt) — Del 7B+7C
+1. **Adapters are descriptors, never code.** JSON + allowlisted fields; validation
+   is the security boundary, so it runs INSIDE `create()` — you cannot opt out.
+2. **Failure state lives ON DISK, not in memory.** Two agents (or a crash+restart)
+   share one truth; a success streak cannot be faked by process lifetime.
+3. **Disable is honest, not fatal.** A repeat-fail skill is filtered from selection
+   and prompt, but the file stays with its history; `enable()` resurrects it when
+   the world changed. Data only dies by explicit user deletes.
+
+## 2026-10-19 (natt, fortsatt) — Del 7D
+1. **Execution re-validates, always.** An attacker who can edit the data dir
+   still cannot sneak a hostile descriptor past execution — validation re-runs
+   from the on-disk bytes on EVERY call.
+2. **External writes need two yeses.** approved:true from the caller AND a live
+   decision through the engine's approvals singleton; one without the other
+   never posts; a denial is recorded and the wire stays cold.
+3. **Self-disable beats silent retries.** Three consecutive failures park the
+   adapter; callers get `adapter_disabled` with an enable-hint, not another
+   doomed hop. A human `enable` resurrects after the world changed.
+
+## 2026-10-19 (natt, fortsatt 2) — Del 9D + 10C
+1. **Detection must be free when absent.** The injection defense annotates only
+   on a hit; clean tool results stay byte-identical, so the bench holds parity
+   without a token tax on honesty.
+2. **Corpus lists justify every entry.** Each pattern maps to an observed
+   override style; a positive corpus fixture regression-proofs catches, a
+   negative corpus guards false positives.
+3. **Environmental drift is named, never hidden.** Bench moved 24400→24399 this
+   wave; branch-vs-main parity (identical bytes measured on both) proved the
+   cause external — the report says so explicitly rather than silently.
+
+*(Correction note: the 7B/7C and 7D entries above were re-committed after a
+silent no-op docs edit was discovered — the earlier runs' code, tests and
+matrix rows were unaffected; only these prose entries went missing briefly.)*
