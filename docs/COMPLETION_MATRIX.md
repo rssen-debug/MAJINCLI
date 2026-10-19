@@ -5,7 +5,7 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 74 / 100** (verified against branch `feature/reality-4d-10e` (pre-release), 2026-10-19).
+**Score so far: 80 / 100** (verified against branch `feature/reality-5abe` (pre-release), 2026-10-19).
 
 | Phase | Max | Earned |
 |---|---:|---:|
@@ -13,7 +13,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 2. Grand Architect | 12 | 12 |
 | 3. HYPERSWARM | 10 | 10 |
 | 4. Reality Engine | 16 | 16 |
-| 5. Browser & Computer Use | 10 | 2 |
+| 5. Browser & Computer Use | 10 | 8 |
 | 6. GENESIS ZERO & Cost | 9 | 6 |
 | 7. Skill Compiler | 8 | 8 |
 | 8. UI & Imagination | 8 | 0 |
@@ -61,17 +61,17 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 4A | 4 | Explicit verification contracts + evidence provenance | Contract engine in `src/core/mission.js`: `buildContracts` derives typed contracts from the mission brief (`file_exists` — stat>0 + sha256[:8], path-escape guarded; `file_contains` — `readFileSync.includes(needle)` on REAL content; `count` — independent `fs.readdir` recount compared against the worker's "N files" claim). `verifyContract` checks CODE-side, never by asking a second model. Dead contracts force a repair round naming the dead contracts; parts only ship when contracts re-verify. Summary carries provenance: `[VERIFIED: store/ has 3 files (independently counted), after repair]`. `test/mission.test.js` 12/12 — t10 content-lie caught, t11 count-lie caught, t12 honest count → no repair. Discrimination: skipping the recount turns ONLY t11 red; rubber-stamping `includes()` turns ONLY t10 red. | mock | PR #40 | PASS | 2026-10-18 |
 | 4B | 4 | Detect and repair intentionally introduced failures | `test/mission.test.js` 20/20 — lying workers detected, one repair round turns a fake write into a real `fs.write`; fail-first proven on pre-fix code | mock | `a0a08b0` | PASS | 2026-10-18 |
 | 4C | 4 | Retry/budget/timeout/approval limits respected | One policy object `missionLimits(cfg)` (defaults in config.js: repairRounds 1 / timeoutMs 0 / tokenBudget 0, hard clamps 0..3 / 3600000 / 1e9) enforced in CODE in `runMission`: budgetedWorker charges real measured usage per worker and aborts the swarm past the cap (verify→repair included), AbortController+deadline reach runSwarm, repair loop is `rounds < repairRounds` and fails HONESTLY with markers — `[LIMIT:RETRY]` / `[LIMIT:BUDGET]` / `[LIMIT:TIMEOUT]` named in the mission summary, return object carries `limits`/`limitsHit`/`usedTokens`. `test/mission.test.js` t13–t15 (15/15): permanently-lying worker runs EXACTLY 1+1+2 worker-calls (counted via mock `calls`, not asserted from prose), token cap 40 stops worker #2 from ever starting, 120 ms wall budget cuts a ~1.7 s mock stream. Discrimination: budget gate off → t14 red; rounds +96 → t13 red; deadline/signal pass-through removed → t15 red (bench proof the caps are free when idle: identical 24399 tokens / 22 calls 7/7). Side-effect approvals remain governed by guard/exec policy (tests in test/guard*). | mock | PR #41 | PASS | 2026-10-19 |
-| 4D | 4 | Real cross-domain tasks with independently checked results | `test/domains.test.js` 5/5 (command/json_topkeys/url_contains + E2E repair-on-lies); `test/domains-live.test.js` 2/2 with MAJIN_LIVE=1 (real https google fetch + real `node --version` exit + LIVE longcat session wrote mission-live.json {answer:42, task:…}, VERIFIED sha, tokens measured live) | bench + opencode live | branch `feature/reality-4d-10e` | PASS | 2026-10-19 |
+| 4D | 4 | Real cross-domain tasks with independently checked results | `test/domains.test.js` 5/5 (command/json_topkeys/url_contains + E2E repair-on-lies); `test/domains-live.test.js` 2/2 with MAJIN_LIVE=1 (real https google fetch + real `node --version` exit + LIVE longcat session wrote mission-live.json {answer:42, task:…}, VERIFIED sha, tokens measured live) | bench + opencode live | main `497cde3` | PASS | 2026-10-19 |
 
 ## DEL 5 — Browser & Computer Use (2/10)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
-| 5A | 2 | Forms and interactive controls | — | needs real browser | — | UNVERIFIED | 2026-10-18 |
-| 5B | 2 | Dynamic navigation, tabs, iframes | `test/browser.test.js` covers wire discovery only | — | — | UNVERIFIED | 2026-10-18 |
+| 5A | 2 | Forms and interactive controls | `test/browser-domains.live.test.js` 5A green in exe-CI (Windows Edge): text/select/radio/consent posted + observed AT THE SERVER: {"name":"Siri Testsson","mail":"siri@test.dev","stack":"node","level":"senior","consent":"on"}; thanks-words proven | live browser (CI) | this branch | PASS | 2026-10-19 |
+| 5B | 2 | Dynamic navigation, tabs, iframes | `test/browser-domains.live.test.js` 5B green in exe-CI (Windows Edge): hash-rendered content proven, target=_blank followed via engine meta openedNewTab:true, iframe host + straight-path verification | live browser (CI) | this branch | PASS | 2026-10-19 |
 | 5C | 2 | Observation and bounded recovery (no blind click loops) | `node --test test/browser.test.js` — LoopJournal stops 3 identical actions cold; slot pool queues; session isolation | node, no browser | main line | PASS | 2026-10-18 |
 | 5D | 2 | Real Windows computer-use scenarios | — | needs Windows runner | — | UNVERIFIED | 2026-10-18 |
-| 5E | 2 | Multi-step real website workflow without unverified completion claims | `jobs.test.js` has form-fill state machine; live probe gated | — | — | UNVERIFIED | 2026-10-18 |
+| 5E | 2 | Multi-step real website workflow without unverified completion claims | same suite 5E green: search→product→cart→checkout→confirm, every step cross-checked against SERVER state (cart=[{sku:X900,qty:1}], /order POST recorded) — never page-text-only | live browser (CI) | this branch | PASS | 2026-10-19 |
 
 ## DEL 6 — GENESIS ZERO & Cost (6/9)
 
@@ -117,7 +117,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 10B | 1 | Secret protection and privacy | `test/provider-flow.test.js` — saved key never echoed; `cfg.redacted()` masks | — | `cc604d2` | PASS | 2026-10-18 |
 | 10C | 1 | Prompt-injection resistance (web/repo/doc) | `src/core/injection.js`: 11-pattern override corpus; `scanInjection` catches every corpus line with zero false positives on clean text; `guardToolContent` wired into THE loop's tool-result message path — infected results are annotated in the very message the model reads (`INJECTION-PATTERN WARNING` + UNTRUSTED-DATA marker) and emitted as `injection_warning` events; clean results pass byte-identical (zero token tax). Live-loop proof: poisoned file from ws is annotated already in the next model call (mock lastCalls inspection), clean sibling passes untouched; final answer honestly reports the attempt | `node --test test/adversarial.test.js` (3: corpus breadth/false-positives; annotate-vs-clean; live loop E2E incl. event + message-level assertions) | 3-way discrimination: A1 (scan off → all red), A2 (corpus emptied → all red), A3 (detect-but-never-annotate → 10C.2/10C.3 red), restored green | **PASS** | 2026-10-19 |
 | 10D | 1 | Process/file isolation + cancellations actually stop work | `test/readonly.test.js` 6/6 (read-only turns cannot touch); workspace escape refusal in `resolveIn` | mock | main line | PASS | 2026-10-18 |
-| 10E | 1 | Real adversarial regression tests | `test/adversarial-regressions.test.js` 5/5 across 6 classes (docs/ADVERSARIAL.md); REAL bug found+fixed: config `__proto__` patch could reach guard.pwned — merge/getPath/setPath hardened; sabotage E1 (filter removed) → V2 red | bench (mock harness) | branch `feature/reality-4d-10e` | PASS | 2026-10-19 |
+| 10E | 1 | Real adversarial regression tests | `test/adversarial-regressions.test.js` 5/5 across 6 classes (docs/ADVERSARIAL.md); REAL bug found+fixed: config `__proto__` patch could reach guard.pwned — merge/getPath/setPath hardened; sabotage E1 (filter removed) → V2 red | bench (mock harness) | main `497cde3` | PASS | 2026-10-19 |
 
 ## DEL 11 — Windows Installer, Updates & Delivery (2/4)
 

@@ -122,7 +122,7 @@ jobs:
           MAJIN_BROWSER_LIVE: '1'
         run: |
           $env:MAJIN_HOME = "$env:GITHUB_WORKSPACE\.livedemo"
-          node --test --test-concurrency=1 test/browser.live.test.js test/jobs.live.test.js
+          node --test --test-concurrency=1 test/browser.live.test.js test/jobs.live.test.js test/browser-domains.live.test.js
 
       - name: the installer must install, run, survive a restart and uninstall
         # One verifier for CI and for a person's own laptop: the same script the

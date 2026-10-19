@@ -132,3 +132,20 @@ Mock: `test/domains.test.js` 5/5 (pass/fail/denied per domain + derivation + E2E
 
 Reproduction: `MAJIN_LIVE=1 node --test test/domains-live.test.js` (opencode key).
 Without the key the file skips with a typed reason; CI runs only the mock suite.
+
+## Del 5A/5B/5E — browser domains live in exe-CI (2026-10-19, Windows runner Edge)
+
+Evidence extracted from the CI gate step log (`build-exe.yml`, commit c066a34):
+
+| row | server-side / engine proof |
+|---|---|
+| 5A forms & controls | posted form observed: `{"name":"Siri Testsson","mail":"siri@test.dev","stack":"node","level":"senior","consent":"on"}` + thanks-words on screen |
+| 5B dynamic nav/tabs/iframes | new tab followed (`openedNewTab:true`), hash-rendered `#dyn` content proven, iframe host + frame URL verified the straight way |
+| 5E multi-step webshop | cart POST `X900 qty 1` + order POST recorded server-side before final confirmation claim |
+
+Step suite: 5/5 pass (browser.live 2 + jobs.live 1 + browser-domains 3).
+
+Flake-class fixed this wave (engine, not test): Edge launch gets one bounded
+retry with a fresh port — proven by runs 39265517682 (1 attempt → 2/3 red)
+→ c066a34 (retry → 3/3 green). The retry IS the sabotage cycle: removing it
+reopens the red state.
