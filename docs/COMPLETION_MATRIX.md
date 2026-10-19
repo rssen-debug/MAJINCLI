@@ -5,12 +5,12 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 53 / 100** (verified against main `f5b3712`, v0.6.2-rc, 2026-10-19).
+**Score so far: 56 / 100** (verified against the Del 2C PR head, 2026-10-19).
 
 | Phase | Max | Earned |
 |---|---:|---:|
 | 1. Persistent Sessions & Handoff | 10 | 8 |
-| 2. Grand Architect | 12 | 9 |
+| 2. Grand Architect | 12 | 12 |
 | 3. HYPERSWARM | 10 | 8 |
 | 4. Reality Engine | 16 | 12 |
 | 5. Browser & Computer Use | 10 | 2 |
@@ -21,7 +21,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 10. Security & Privacy | 5 | 3 |
 | 11. Windows & Updates | 4 | 2 |
 | 12. Final Acceptance | 3 | 0 |
-| **TOTAL** | **100** | **53** |
+| **TOTAL** | **100** | **56** |
 
 ---
 
@@ -35,13 +35,13 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 1D | 2 | Interrupted work resumes without duplicate side effects; uncertain outcomes are externally inspected first; explicit Resume/Retry/Cancel/Start Fresh | `node --test test/resume.test.js` — 6/6: crash mid-plan (s1 not re-written), crash-in-write-window (evidence closes journal gap), corrupted outcome never accepted (sabotage-proven red), cancel/startFresh semantics, plus a WIRED end-to-end turn whose fs.write lands in the journal with the true sha256 | mock + real runtime loop | main after PR #39 | PASS | 2026-10-18 |
 | 1E | 2 | Live handoff between two different real providers (DeepSeek→Qwen →OpenCode→Ollama) | Only one real provider ran live so far (opencode Go free); two-provider switch not executed | needs 2 live providers | — | UNVERIFIED | 2026-10-18 |
 
-## DEL 2 — Grand Architect (9/12)
+## DEL 2 — Grand Architect (12/12) ✅ COMPLETE
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
 | 2A | 3 | Diverse natural-language missions pass predefined interpretation checks (Swe+Eng, numbered, inline, semicolon, informal) | `node --test test/mission.test.js` — tests 1, 6, 7 green (numbered multiline, inline `(1)…`, comma/semicolon, GENESIS ZERO) | mock | `4233339` → `a0a08b0` | PASS | 2026-10-18 |
 | 2B | 3 | Dependency graphs and execution order validated | mission.test.js test 2 (cycles, max nodes, damaged deps rejected); `test/swarm.test.js` 10/10 (DAG order) | mock | `933a982` | PASS | 2026-10-18 |
-| 2C | 3 | Ambiguity, change and failure-driven replanning work | No replanning loop; no clarifying-question path when goal is ambiguous | — | — | FAIL | 2026-10-18 |
+| 2C | 3 | Ambiguity, change and failure-driven replanning work | Three mechanisms in `src/core/mission.js`, all bounded by config and all carrying markers: (1) **Clarify path** — compile prompt may answer `{"clarify":"..."}` → `kind: clarify` with ZERO workers and ZERO side effects (workspace asserted empty); (2) **failure-driven replan** — when repairRounds exhaust with dead contracts, one bounded strategy-change attempt (`mission.limits.replanRounds`, default 1 clamp 0..2) runs with a different-method prompt, charged to the same budget, re-verified against the SAME contracts → success marked `after replan`, failure marked `[LIMIT:REPLAN]`; (3) **objective change mid-flight** — `carry` grafts previously VERIFIED parts by node id: zero re-runs, zero repeated side effects, summary says `carried from previous objective`. task calls counted through every path. `test/mission.test.js` 20/20 (t17–t20). Discrimination: clarify ignored → t17 red; replan dead → t13+t18 red; carry bypassed → t20 red; knob ignored → t13+t19 red. Honest cost note: the clarify compile-rule adds ≈1 estimated token per compile call (bench 24399→24400 measured). | mock | PR #44 | PASS | 2026-10-19 |
 | 2D | 3 | Real end-to-end complex goals through the normal chat path | `node /home/user/live-verify-oc.mjs <key>` — mission compiled, 2 workers, files written and `[VERIFIED: …]` in summary | opencode Go free (longcat) | `a0a08b0` | PASS | 2026-10-18 |
 
 ## DEL 3 — HYPERSWARM (8/10)
@@ -59,7 +59,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
 | 4A | 4 | Explicit verification contracts + evidence provenance | Contract engine in `src/core/mission.js`: `buildContracts` derives typed contracts from the mission brief (`file_exists` — stat>0 + sha256[:8], path-escape guarded; `file_contains` — `readFileSync.includes(needle)` on REAL content; `count` — independent `fs.readdir` recount compared against the worker's "N files" claim). `verifyContract` checks CODE-side, never by asking a second model. Dead contracts force a repair round naming the dead contracts; parts only ship when contracts re-verify. Summary carries provenance: `[VERIFIED: store/ has 3 files (independently counted), after repair]`. `test/mission.test.js` 12/12 — t10 content-lie caught, t11 count-lie caught, t12 honest count → no repair. Discrimination: skipping the recount turns ONLY t11 red; rubber-stamping `includes()` turns ONLY t10 red. | mock | PR #40 | PASS | 2026-10-18 |
-| 4B | 4 | Detect and repair intentionally introduced failures | `test/mission.test.js` 15/15 — lying workers detected, one repair round turns a fake write into a real `fs.write`; fail-first proven on pre-fix code | mock | `a0a08b0` | PASS | 2026-10-18 |
+| 4B | 4 | Detect and repair intentionally introduced failures | `test/mission.test.js` 20/20 — lying workers detected, one repair round turns a fake write into a real `fs.write`; fail-first proven on pre-fix code | mock | `a0a08b0` | PASS | 2026-10-18 |
 | 4C | 4 | Retry/budget/timeout/approval limits respected | One policy object `missionLimits(cfg)` (defaults in config.js: repairRounds 1 / timeoutMs 0 / tokenBudget 0, hard clamps 0..3 / 3600000 / 1e9) enforced in CODE in `runMission`: budgetedWorker charges real measured usage per worker and aborts the swarm past the cap (verify→repair included), AbortController+deadline reach runSwarm, repair loop is `rounds < repairRounds` and fails HONESTLY with markers — `[LIMIT:RETRY]` / `[LIMIT:BUDGET]` / `[LIMIT:TIMEOUT]` named in the mission summary, return object carries `limits`/`limitsHit`/`usedTokens`. `test/mission.test.js` t13–t15 (15/15): permanently-lying worker runs EXACTLY 1+1+2 worker-calls (counted via mock `calls`, not asserted from prose), token cap 40 stops worker #2 from ever starting, 120 ms wall budget cuts a ~1.7 s mock stream. Discrimination: budget gate off → t14 red; rounds +96 → t13 red; deadline/signal pass-through removed → t15 red (bench proof the caps are free when idle: identical 24399 tokens / 22 calls 7/7). Side-effect approvals remain governed by guard/exec policy (tests in test/guard*). | mock | PR #41 | PASS | 2026-10-19 |
 | 4D | 4 | Real cross-domain tasks with independently checked results | Only the file domain verified live so far | opencode live | — | UNVERIFIED (1 domain) | 2026-10-18 |
 

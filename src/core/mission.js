@@ -176,7 +176,7 @@ import nodeCrypto from 'node:crypto';
 
 const COMPILE_SYS = `You extract a SMALL parallel task graph from a goal. Reply with ONLY the JSON, no prose, no fences.
 Schema: {"nodes":[{"id":"snake_case","input":"<self-contained worker instruction>","deps":[],"estMs":30000}]}
-Rules: 2-6 nodes. deps = ids that must finish first; [] when independent. estMs: honest wall estimate in ms (20000-60000 typical model-work). Every input must be self-contained - a worker sees ONLY its own input. Never include secrets or file paths you were not given.`;
+Rules: 2-6 nodes. deps = ids that must finish first; [] when independent. estMs: honest wall estimate in ms (20000-60000 typical model-work). Every input must be self-contained - a worker sees ONLY its own input. Never include secrets or file paths you were not given. If the GOAL is dangerously ambiguous (you cannot tell WHICH file/url/item is meant and guessing would risk the wrong side effect), answer instead with ONLY {"clarify":"one short question naming the missing choice"}.`;
 
 // Deterministisk grafreserv: list-items blir oberoende noder. Beslutet foljer
 // forfarande EXAKT kod - modell bara nar den kan. Modell misslyckas != mission dør.
@@ -251,6 +251,11 @@ export async function compileMission(input, { cfg, maxNodes = 6, modelCall = nul
     return { kind: 'single', reason: `compiler call failed: ${String(err.message || err).slice(0, 120)}` };
   }
   const parsed = extractJson(text);
+  /* Del 2C: ambiguity is answered with a QUESTION, not a guessed graph. Only a
+     real structured clarify counts (never parse a nodes-graph out of it). */
+  if (parsed && typeof parsed.clarify === 'string' && parsed.clarify.trim().length >= 8 && !Array.isArray(parsed.nodes)) {
+    return { kind: 'clarify', question: parsed.clarify.trim().slice(0, 300), gate, origin: 'model' };
+  }
   const rawNodes = parsed && Array.isArray(parsed.nodes) ? parsed.nodes : heuristicNodes(input, maxNodes);
   if (!rawNodes) return { kind: 'single', reason: 'compiler returned no JSON graph (parse failed) and no deterministic list graph could be extracted' };
   const nodes = validateCompiled(rawNodes, maxNodes);
@@ -287,13 +292,19 @@ export function missionLimits(cfg) {
   return {
     repairRounds: num(cfg?.get?.('mission.limits.repairRounds'), 1, 0, 3),
     transientRetries: num(cfg?.get?.('mission.limits.transientRetries'), 1, 0, 3),
+    replanRounds: num(cfg?.get?.('mission.limits.replanRounds'), 1, 0, 2),
     timeoutMs: num(cfg?.get?.('mission.limits.timeoutMs'), 0, 0, 3600000),
     tokenBudget: num(cfg?.get?.('mission.limits.tokenBudget'), 0, 0, 1000000000),
   };
 }
 
-export async function runMission({ cfg, registry, session, input, emit = () => {}, memory = null, maxNodes = 6, modelCall = null, capOverride = 0 }) {
+export async function runMission({ cfg, registry, session, input, emit = () => {}, memory = null, maxNodes = 6, modelCall = null, capOverride = 0, carry = null }) {
   const compiled = await compileMission(input, { cfg, maxNodes, modelCall });
+  if (compiled.kind === 'clarify') {
+    /* Del 2C: the clarify path carries ZERO side effects — no workers, no files. */
+    emit({ type: 'mission_clarify', question: compiled.question });
+    return { kind: 'clarify', question: compiled.question, compiled, textSummary: [`⚠ Clarify before I touch anything: ${compiled.question}`] };
+  }
   if (compiled.kind !== 'mission') return { kind: 'single', compiled };
   const analysis = analyzeSwarm(compiled.nodes, { overheadMs: Number(cfg.get('agent.swarm.workerOverheadMs')) || 1500 });
   const worker = subagentWorker({ cfg, registry, sessionPrefix: `${(session || 'sw')}:mission`, emit, memory });
@@ -321,8 +332,16 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
     }
     return false;
   };
+  const carried = (id) => (carry && typeof carry === 'object' ? carry[id] : null);
   const budgetedWorker = async (node, ctx) => {
     if (budgetHit) throw new Error('LIMIT:BUDGET — token cap already spent');
+    /* Del 2C: objective changed mid-flight. A part already VERIFIED under the
+       previous objective is carried, never re-run — zero repeated side effects. */
+    const c0 = carried(node.id);
+    if (c0 && c0.verified) {
+      emit({ type: 'mission_carried', id: node.id });
+      return { text: c0.value?.text || c0.text || '', usage: null, carried: true, verifiedSummary: c0.verifiedSummary || null };
+    }
     const v = await worker(node, ctx);
     chargeBudget(v);
     return v;
@@ -355,6 +374,7 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
      kunna pekas ut i workspace efter kastning, annars aer delen ärligt misslyckad. */
   let verifiedCount = 0;
   let repairedCount = 0;
+  let replannedCount = 0;
   for (let i = 0; i < compiled.nodes.length; i++) {
     const n = compiled.nodes[i];
     const p = parts[i];
@@ -362,7 +382,17 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
     /* Del 4A: typed contracts for every claim in the node input; every failing
        contract names its own evidence. */
     const contracts = buildContracts(n.input);
-    if (!contracts.length) continue;
+    if (!contracts.length) {
+      if (p.value && p.value.carried) { p.carried = true; p.verified = { ok: true, summary: 'carried from previous objective' }; verifiedCount += 1; }
+      continue;
+    }
+    /* carried verified part: trust the recorded verdict, name the provenance */
+    if (p.value && p.value.carried && p.value.verifiedSummary) {
+      p.carried = true;
+      p.verified = { ok: true, summary: p.value.verifiedSummary };
+      verifiedCount += 1;
+      continue;
+    }
     let results = contracts.map((c) => verifyContractLegacy(c, { cfg, part: p }));
     let vr = contractVerdict(contracts, results);
     if (vr.ok) { p.verified = vr; verifiedCount += 1; continue; }
@@ -391,7 +421,36 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
         repairedCount += 1;
         verifiedCount += 1;
         emit({ type: 'mission_repaired', id: n.id, contracts: contracts.length, rounds: roundsUsed });
-      } else if (p.limit === 'budget' || p.limit === 'timeout') {
+      }
+      /* Del 2C: failure-driven REPLAN. Repair failed the same way N times — the
+         strategy itself is wrong. One bounded replan round, charged to the same
+         budget, verified against the SAME contracts, then honest failure. */
+      let replansUsed = 0;
+      while (!vr.ok && p.limit !== 'budget' && p.limit !== 'timeout' && replansUsed < limits.replanRounds) {
+        replansUsed += 1;
+        emit({ type: 'mission_replan', id: n.id, round: replansUsed, why: contractFailureNames(results).join('; ') });
+        try {
+          const replanInput = `${n.input}\\n\\n[STRATEGY CHANGE REQUIRED: the previous ${roundsUsed + 1} attempt(s) failed verification (${contractFailureNames(results).join('; ')}). Do NOT repeat the same approach — pick a different method (different tool, different decomposition), produce REAL evidence, then report. Answer ONLY with the result.]`;
+          const value = await worker({ ...n, input: replanInput, replan: true }, { signal: null });
+          p.value = value;
+          chargeBudget(value);
+          if (budgetHit) { p.limit = 'budget'; break; }
+          results = contracts.map((c) => verifyContractLegacy(c, { cfg, part: p }));
+          vr = contractVerdict(contracts, results);
+        } catch (err) {
+          p.ok = false;
+          p.error = `replan error: ${String(err && err.message || err).slice(0, 200)}`;
+          break;
+        }
+      }
+      if (vr.ok && replansUsed > 0) {
+        p.verified = vr;
+        p.replanned = true;
+        replannedCount += 1;
+        verifiedCount += 1;
+        emit({ type: 'mission_replanned', id: n.id, rounds: replansUsed });
+      }
+      if (vr.ok) { /* repaired or replanned — markers already emitted */ } else if (p.limit === 'budget' || p.limit === 'timeout') {
         p.ok = false;
         limitsHit.add(p.limit);
         p.error = `verification halted by [LIMIT:${p.limit.toUpperCase()}] with dead contracts: ${contractFailureNames(results).join('; ')}`;
@@ -401,7 +460,9 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
       } else {
         p.ok = false;
         limitsHit.add('retry');
-        p.error = `verification failed on contracts after ${roundsUsed} repair round(s) [LIMIT:RETRY]: ${contractFailureNames(results).join('; ')}`;
+        const tag = replansUsed > 0 ? `repair(s) + ${replansUsed} replan(s) [LIMIT:REPLAN]` : 'repair round(s) [LIMIT:RETRY]';
+        p.error = `verification failed on contracts after ${roundsUsed} ${tag}: ${contractFailureNames(results).join('; ')}`;
+        if (replansUsed > 0) limitsHit.add('replan');
         r.failCount += 1;
         r.okCount -= 1;
         emit({ type: 'mission_verify_failed', id: n.id, reason: p.error });
@@ -425,6 +486,8 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
     blockedCount: r.blockedCount,
     verifiedCount,
     repairedCount,
+    replannedCount,
+    carriedCount: parts.filter((pp) => pp && pp.carried).length,
     limits,
     limitsHit: [...limitsHit],
     usedTokens,
@@ -432,7 +495,7 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
     nodes: compiled.nodes.length,
     textSummary: parts.map((p, i) => {
       const n = compiled.nodes[i];
-      if (p && p.ok === true && p.verified) return `✓ ${n.id}: ${String(p.value?.text || '').slice(0, 220)} [VERIFIED: ${p.verified.summary}${p.repaired ? ', after repair' : ''}]`;
+      if (p && p.ok === true && p.verified) return `✓ ${n.id}: ${String(p.value?.text || '').slice(0, 220)} [VERIFIED: ${p.verified.summary}${p.carried ? ', carried from previous objective' : p.replanned ? ', after replan' : p.repaired ? ', after repair' : ''}]`;
       if (p && p.ok === true) return `✓ ${n.id}: ${String(p.value?.text || '').slice(0, 220)} [reported, not independently verifiable]`;
       if (p && p.ok === false) return `✗ ${n.id}: ${p.error}`;
       if (p && p.blocked) {
