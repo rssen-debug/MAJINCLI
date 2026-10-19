@@ -297,7 +297,7 @@ test('VERIFICATION CONTRACTS: count — correct first answer verified WITHOUT ne
 
 /* ---------------- Del 4C: hard limits respected, in code ---------------- */
 
-test('PRODUCTION LIMITS: worker-calls never exceed rounds even with a permanently lying worker [LIMIT:RETRY]', async () => {
+test('PRODUCTION LIMITS: worker-calls never exceed repair+replan caps even with a permanently lying worker [LIMIT:REPLAN]', async () => {
   const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-4c-retry-'));
   fs.writeFileSync(path.join(ws, 'song.txt'), 'Darwin was a naturalist.'); /* needle never contains "survival of the fittest" */
   const rt = await createRuntime({ channels: false, scheduler: false });
@@ -312,21 +312,22 @@ test('PRODUCTION LIMITS: worker-calls never exceed rounds even with a permanentl
     { id: 'p2', input: 'say done in three words, no more', deps: [], estMs: 1000 },
   ] });
   setScript('mission:compile', [{ text: dag }]);
-  /* initial + 2 lying repairs — the needle is never written, nothing can save p1 */
+  /* initial + 2 lying repairs + 1 lying REPLAN (2C) — needle never written */
   setScript('sub:tasks', [
     { text: 'I wrote the phrase survival of the fittest into song.txt.' },
     { text: 'done done done.' },
     { text: 'Repair 1 done: song.txt now says survival of the fittest.' },
     { text: 'Repair 2 done: song.txt now says survival of the fittest.' },
-    { text: 'SHOULD NEVER BE CONSUMED — more repairs would violate the cap.' },
+    { text: 'REPLANNED approach done: song.txt now says survival of the fittest. (still lying)' },
+    { text: 'SHOULD NEVER BE CONSUMED — more attempts would violate the caps.' },
   ]);
   resetCalls();
   const m = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'limR', input: '1. write song.txt that contains the exact phrase "survival of the fittest"\n2. tell me it is done', emit: () => {}, capOverride: 1 });
   const taskCalls = lastCalls().filter((c) => c.key === 'sub:tasks').length;
-  assert.equal(taskCalls, 4, `expected 1 initial + 1 trivial + 2 repairs = 4 worker calls, got ${taskCalls} — cap not enforced`);
-  assert.match(m.textSummary.join('\n'), /\[LIMIT:RETRY\]/, 'summary must carry the LIMIT:RETRY marker');
-  assert.ok(m.limitsHit.includes('retry'), JSON.stringify(m.limitsHit));
-  assert.equal(m.failCount, 1, 'p1 must fail honestly after the cap, never loop forever');
+  assert.equal(taskCalls, 5, `expected 1 initial + 1 trivial + 2 repairs + 1 replan = 5 worker calls, got ${taskCalls} — caps not enforced`);
+  assert.match(m.textSummary.join('\n'), /\[LIMIT:REPLAN\]/, 'repair exhausted + replan exhausted must carry the LIMIT:REPLAN marker');
+  assert.ok(m.limitsHit.includes('replan'), JSON.stringify(m.limitsHit));
+  assert.equal(m.failCount, 1, 'p1 must fail honestly after repair AND replan, never loop forever');
   await rt.shutdown();
 });
 
@@ -417,5 +418,122 @@ test('RESILIENCE: a provider flake mid-mission is absorbed by ONE bounded replac
   assert.equal(retry.attempt, 2);
   assert.match(String(retry.why), /ECONNRESET/i);
   assert.ok((fs.readdirSync(path.join(ws)) || []).length >= 0);
+  await rt.shutdown();
+});
+
+/* ---------------- Del 2C: ambiguity, change and failure-driven replanning ---------------- */
+
+test('CLARIFY: a dangerously ambiguous goal is answered with a question — zero workers, zero side effects', async () => {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-2c-clar-'));
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  rt.cfg.patch({
+    models: { provider: 'demo', routes: { tasks: 'demo/demo-fast', tools: 'demo/demo-fast', chat: 'demo/demo-fast' } },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
+    guard: { mode: 'off' }, moa: { policy: 'off' }, workspace: ws,
+  }, { persist: false });
+  setScript('mission:compile', [{ text: '{"clarify":"Which file do you mean — song.txt or budget.txt? They both exist."}' }]);
+  setScript('sub:tasks', [{ text: 'NO WORKER SHOULD EVER RUN.' }]);
+  resetCalls();
+  const m = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'clarS', input: '1. fixen the file now\n2. tell me it is done done done done done', emit: () => {}, capOverride: 1 });
+  assert.equal(m.kind, 'clarify', JSON.stringify(m.textSummary));
+  assert.ok(/song\.txt/.test(m.question) && /budget\.txt/.test(m.question), 'question must name the missing choice');
+  assert.equal(lastCalls().filter((c) => c.key === 'sub:tasks').length, 0, 'a question costs ZERO worker calls');
+  assert.match(m.textSummary.join('\n'), /Clarify before I touch anything/);
+  assert.deepEqual(fs.readdirSync(ws), [], 'workspace untouched until the user answers');
+  await rt.shutdown();
+});
+
+test('REPLAN: when repair keeps lying, ONE strategy-change attempt produces the real evidence and is VERIFIED', async () => {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-2c-replan-'));
+  fs.writeFileSync(path.join(ws, 'song.txt'), 'Darwin was a naturalist.');
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  rt.cfg.patch({
+    models: { provider: 'demo', routes: { tasks: 'demo/demo-fast', tools: 'demo/demo-fast', chat: 'demo/demo-fast' } },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
+    guard: { mode: 'off' }, moa: { policy: 'off' }, workspace: ws,
+  }, { persist: false });
+  setScript('mission:compile', [{ text: JSON.stringify({ nodes: [{ id: 'p1', input: 'write song.txt that contains the exact phrase "survival of the fittest"', deps: [], estMs: 1000 }, { id: 'p2', input: 'say done in three words, no more', deps: [], estMs: 1000 }] }) }]);
+  setScript('sub:tasks', [
+    { text: 'I wrote the phrase survival of the fittest into song.txt.' },          /* 1: initial lie */
+    { text: 'done done done.' },                                                     /* 2: p2 */
+    { toolCalls: [{ name: 'fs.write', args: { path: 'song.txt', content: 'repair attempt: wallace was a naturalist.' } }] }, /* 3: repair TOOL writes WRONG content */
+    { text: 'Repair done: song.txt now says survival of the fittest. (still a lie)' },/* 4: repair prose contradicts disk */
+    { toolCalls: [{ name: 'fs.write', args: { path: 'song.txt', content: 'REPLANNED: survival of the fittest — Darwin 1859.' } }] }, /* 5: replan TOOL writes the REAL phrase */
+    { text: 'New strategy: rewrote song.txt with the exact phrase survival of the fittest.' }, /* 6: replan prose matches disk */
+    { text: 'SHOULD NEVER BE CONSUMED — a verified replan ends the loop.' },
+  ]);
+  resetCalls();
+  const m = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'rplS', input: '1. write song.txt that contains the exact phrase "survival of the fittest"\n2. tell me it is done', emit: () => {}, capOverride: 1 });
+  assert.equal(m.failCount, 0, JSON.stringify(m.textSummary));
+  assert.equal(m.replannedCount, 1, 'the strategy-change attempt produced the evidence');
+  assert.equal(lastCalls().filter((c) => c.key === 'sub:tasks').length, 6, 'exactly 1+1+2+2 worker calls');
+  assert.match(m.textSummary.join('\n'), /contains "survival of the fittest", after replan\]/);
+  const final = fs.readFileSync(path.join(ws, 'song.txt'), 'utf8');
+  assert.ok(final.includes('survival of the fittest'), 'the DISK (not the prose) must carry the phrase');
+  await rt.shutdown();
+});
+
+test('REPLAN KNOB: with replanRounds=0 a dead contract skips the strategy change entirely (respects the cap)', async () => {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-2c-knob-'));
+  fs.writeFileSync(path.join(ws, 'song.txt'), 'Darwin was a naturalist.');
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  rt.cfg.patch({
+    models: { provider: 'demo', routes: { tasks: 'demo/demo-fast', tools: 'demo/demo-fast', chat: 'demo/demo-fast' } },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
+    guard: { mode: 'off' }, moa: { policy: 'off' }, workspace: ws,
+    mission: { limits: { repairRounds: 1, timeoutMs: 0, tokenBudget: 0, transientRetries: 1, replanRounds: 0 } },
+  }, { persist: false });
+  setScript('mission:compile', [{ text: JSON.stringify({ nodes: [{ id: 'p1', input: 'write song.txt that contains the exact phrase "survival of the fittest"', deps: [], estMs: 1000 }, { id: 'p2', input: 'say done in three words, no more', deps: [], estMs: 1000 }] }) }]);
+  setScript('sub:tasks', [
+    { text: 'I wrote the phrase survival of the fittest into song.txt.' },
+    { text: 'done done done.' },
+    { text: 'Repair done: song.txt now says survival of the fittest. (lie)' },
+    { text: 'SHOULD NEVER BE CONSUMED — replanRounds=0 forbids the strategy change.' },
+  ]);
+  resetCalls();
+  const m = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'rplK', input: '1. write song.txt that contains the exact phrase "survival of the fittest"\n2. tell me it is done', emit: () => {}, capOverride: 1 });
+  assert.equal(lastCalls().filter((c) => c.key === 'sub:tasks').length, 3, '1 initial + 1 trivial + 1 repair = 3; a replan would be #4');
+  assert.match(m.textSummary.join('\n'), /\[LIMIT:RETRY\]/, 'without replan the honest failure keeps the LIMIT:RETRY marker');
+  assert.ok(m.limitsHit.includes('retry'));
+  assert.equal(m.replannedCount, 0);
+  await rt.shutdown();
+});
+
+test('CARRY: changing the objective mid-flight keeps VERIFIED parts — they are never re-run and keep their provenance', async () => {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-2c-carry-'));
+  fs.mkdirSync(path.join(ws, 'store'));
+  for (const f of ['a.txt', 'b.txt']) fs.writeFileSync(path.join(ws, 'store', f), f);
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  rt.cfg.patch({
+    models: { provider: 'demo', routes: { tasks: 'demo/demo-fast', tools: 'demo/demo-fast', chat: 'demo/demo-fast' } },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
+    guard: { mode: 'off' }, moa: { policy: 'off' }, workspace: ws,
+  }, { persist: false });
+  setScript('mission:compile', [
+    { text: JSON.stringify({ nodes: [{ id: 'p1', input: 'report the number of files in store/', deps: [], estMs: 1000 }] }) },
+    { text: JSON.stringify({ nodes: [{ id: 'p1', input: 'report the number of files in store/', deps: [], estMs: 1000 }, { id: 'p2b', input: 'say changed in three words, no more', deps: [], estMs: 1000 }] }) },
+  ]);
+  /* objective A: single-part run overcompile? compile forces min 2 nodes — so add p2 for A too */
+  setScript('mission:compile', [
+    { text: JSON.stringify({ nodes: [{ id: 'p1', input: 'report the number of files in store/', deps: [], estMs: 1000 }, { id: 'p2', input: 'say done in three words, no more', deps: [], estMs: 1000 }] }) },
+    { text: JSON.stringify({ nodes: [{ id: 'p1', input: 'report the number of files in store/', deps: [], estMs: 1000 }, { id: 'p2b', input: 'say changed in three words, no more', deps: [], estMs: 1000 }] }) },
+  ]);
+  setScript('sub:tasks', [
+    { text: 'There are 2 files in store/.' },
+    { text: 'done done done.' },
+    { text: 'changed changed changed.' },
+    { text: 'SHOULD NEVER BE CONSUMED — carried parts cost zero calls.' },
+  ]);
+  resetCalls();
+  const m1 = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'carS', input: '1. report the number of files in store/\n2. tell me it is done', emit: () => {}, capOverride: 1 });
+  assert.equal(m1.verifiedCount, 1, JSON.stringify(m1.textSummary));
+  /* objective changes: keep p1, replace p2 with p2b. carry the verified verdict. */
+  const carry = { p1: { value: { text: 'There are 2 files in store/.' }, verified: true, verifiedSummary: m1.nodes ? m1.textSummary[0].match(/VERIFIED: ([^\]]+)\]/)?.[1] : 'store/ has 2 files (independently counted)' } };
+  const m2 = await runMission({ cfg: rt.cfg, registry: rt.registry, session: 'carS', input: '1. report the number of files in store/\n2. now tell me something CHANGED instead', emit: () => {}, capOverride: 1, carry });
+  const calls = lastCalls().filter((c) => c.key === 'sub:tasks').length;
+  assert.equal(calls, 3, `p1 initial + p2 + p2b = 3; carrying p1 must cost ZERO new calls, got ${calls}`);
+  assert.equal(m2.carriedCount, 1, JSON.stringify(m2.textSummary));
+  assert.match(m2.textSummary.join('\n'), /carried from previous objective/);
+  assert.match(m2.textSummary.join('\n'), /changed changed changed\./);
   await rt.shutdown();
 });

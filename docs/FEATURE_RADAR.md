@@ -1,4 +1,4 @@
-# MAJIN FEATURE RADAR — top 5 discoveries (2026-10-19 evening, after Del 3C/3D)
+# MAJIN FEATURE RADAR — top 5 discoveries (2026-10-19 late evening, after Del 2C)
 
 Standing rule from the master brief: every run records its five highest-value
 discoveries in docs. Each item below names where it was found and why it ranks.
@@ -37,13 +37,14 @@ Nothing here is scored — only listed by observed point-density and leverage.
    evidence semantics. Earns correctness, not acceptance points — but it should
    land before Del 4D multiplies contract types. Rank: #4.
 
-5. **Del 2C — clarify + replan on contract death.** Found at the intersection
-   of Del 2 (Grand Architect) and Del 4A: when a contract dies and repair also
-   fails, today the part fails. The Grand Architect could instead REPLAN the
-   DAG around the dead contract (different node order, different tool
-   decomposition) before reporting failure. This turns Del 2C from "clarify
-   before starting" into "clarify/replan mid-flight" — worth 3 points and it
-   reuses the repair loop's dead-contract list as the replan trigger. Rank: #5.
+5. **Loop observability: unify `error`, `worker_retry` and `mission_limit` into one event taxonomy.**
+   Found while wiring Del 3C/2C: recovery surface now emits `error` (loop),
+   `worker_retry` (swarm), `mission_limit` / `mission_clarify` / `mission_replan`
+   (mission) from three layers with three shapes. Del 8's Live Agent
+   Visualization will need ONE documented event vocabulary — a small
+   `docs/EVENTS.md` contract + shape assertions in `test/mission.test.js` —
+   before the UI agent builds on sand. Earns integration quality, not matrix
+   points. Rank: #5.
 
 Historical channel: ecosystem discoveries flow through the built-in
 github.research tool (see `docs/GITHUB_RESEARCH.md`); this file tracks

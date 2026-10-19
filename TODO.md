@@ -6,11 +6,11 @@ autopilot/teamwork/dashboard additions).
 
 ## Hög prioritet
 
-- **Completion matrix: 53/100** (`docs/COMPLETION_MATRIX.md`). Del 1D + 3C + 3D + 4A + 4C SHIPPED
-  (contracts engine; hard LIMIT caps; bounded transient replacement; adversarial lock proof;
-  swarm 15/15, mission 16/16). Next in point-density order: **Del 3E** (live parallel-vs-
-  sequential benchmark — BLOCKED: no live provider key on this machine), **Del 2C**
-  (clarify + replan, 3p), **Del 1E** (live two-provider handoff — BLOCKED: second provider).
+- **Completion matrix: 56/100** (`docs/COMPLETION_MATRIX.md`). Del 1D + 2C + 3C + 3D + 4A + 4C
+  SHIPPED — **DEL 2 GRAND ARCHITECT COMPLETE (12/12)**. Next in point-density order: **Del 3E**
+  (live parallel-vs-sequential benchmark — BLOCKED: no live provider key), **Del 1E**
+  (two-provider handoff — BLOCKED: second provider), then Del 5B/6A-adjacent sandbox items
+  per docs/FEATURE_RADAR.md.
 
 - ~~**opencode-free-PLC test**~~ **VERIFIERAT 2026-10-18 kväll** — båda
   free-modellerna (longcat-2.5-preview-free, beam-free) svarade genom

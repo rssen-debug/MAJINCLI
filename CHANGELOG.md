@@ -5,6 +5,41 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 (evening, part 2) — Del 2C: clarify-before-touch, failure-driven replan, carried objectives
+
+### Changed
+- **Ambiguity is answered with a question, not a guessed graph.** The mission
+  compiler may answer `{"clarify":"which file do you mean — X or Y?"}`; MAJIN
+  returns `kind: clarify` and launches NOTHING — no workers, no side effects,
+  the workspace stays byte-identical until the user answers. The rule costs
+  ≈1 estimated token per compile call (measured: bench 24399→24400).
+- **After repeated identical failure: change strategy, in one bounded step.**
+  When repairRounds exhaust with dead contracts, one replan round (config
+  `mission.limits.replanRounds`, default 1, clamp 0..2) re-runs the part with
+  a different-method prompt, charged to the same budget, re-verified against
+  the SAME contracts. Success carries `after replan`; failure carries
+  `[LIMIT:REPLAN]`. Previously those missions just failed with `[LIMIT:RETRY]`.
+- **Objectives can change mid-mission without losing verified work.** Passing
+  `carry: { nodeId: { value, verified, verifiedSummary } }` to `runMission`
+  grafts previously verified parts into the new DAG: they are never re-run
+  (zero calls, zero repeated side effects) and the summary names the
+  provenance: `carried from previous objective`.
+
+### Verified
+- `node --test test/mission.test.js` → 20/20. t17: ambiguous goal → question,
+  0 worker calls, workspace untouched; t18: lie → repair-lie → replanned
+  worker writes the real sentence with a REAL tool call → VERIFIED
+  `contains "survival of the fittest", after replan`, disk inspected; t19:
+  replanRounds=0 → no strategy change, `[LIMIT:RETRY]`; t20: changed
+  objective → 3 calls total (carried p1 costs zero), provenance marker.
+- **Discrimination:** clarify ignored → t17 red; replan dead → t13+t18 red;
+  carry bypassed → t20 red; knob ignored → t13+t19 red; sane 20/20.
+- Full suite 345/0/7, i18n clean, bench 7/7 (t13's expected marker now
+  honestly reads LIMIT:REPLAN — repair still bounded first).
+- Side effect of honest testing: the verify loop caught OUR test writing
+  empty content via fs.write's wrong arg name — the engine works on us too.
+
+
 ## 2026-10-19 (del 2) — Del 3C/3D: bounded transient replacement + adversarial lock proof
 
 ### Changed

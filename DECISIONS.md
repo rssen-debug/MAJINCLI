@@ -342,3 +342,17 @@ allowed to contradict a test.
 - **Locks are proven hostile-safe, not assumed safe.** The adversarial test
   WANTS to corrupt; the mutex is what saves it — and the sabotage run proves
   the test notices when the mutex is gone.
+
+## 2026-10-19 (kväll) — Del 2C: ask before touching, replan once, carry what already passed
+
+- **A question is cheaper than a wrong side effect.** The clarify path exists
+  only at compile time, costs zero workers and zero writes, and its question
+  must NAME the missing choice. It is deliberately NOT a new agent loop.
+- **Repair floods a puddle; replan re-routes the pipe.** Repair retries the same
+  instruction N times (bounded); only THEN does one strategy-change attempt run
+  (also bounded), against the SAME contracts. The order is load-bearing: strategy
+  change is expensive, retry is cheap.
+- **Carried work trusts the recorded verdict, not re-verification.** A part
+  VERIFIED under the previous objective keeps its verdict by node id and says so
+  in plain text ("carried from previous objective"). Re-verifying costs tokens
+  for evidence we already hold; hiding the provenance would be lying.
