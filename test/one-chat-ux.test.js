@@ -35,7 +35,7 @@ test('automatically detects existing provider environment keys without copying s
 
 test('first run is one connection decision, not a wall of provider cards', () => {
   const onboard = read('src/ui/onboard.js');
-  assert.match(onboard, /Connect and start/, 'one primary action');
+  assert.match(onboard, /Save and choose model/, 'one primary action leads to explicit model selection');
   assert.match(onboard, /Choose your AI/, 'plain language');
   assert.match(onboard, /connected\(\)/, 'detect configured providers first');
   assert.match(onboard, /policy: 'off'/, 'onboarding stays single model');
