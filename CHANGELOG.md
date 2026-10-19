@@ -5,6 +5,23 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+## 2026-10-19 — P2: honest vision + truthful screen capture (UI-agent handover #3, engine side) — v0.9.6
+
+### Fixed
+- **Anthropic vision no longer drops pixels**: the adapter used to flatten every multimodal content array through `textOf()` — OpenAI-format `image_url` parts silently vanished while the model was told an image arrived. `toAnthropic` now maps `image_url` data: URLs to real `{ type:'image', source:{ type:'base64', media_type, data } }` blocks and http(s) URLs to `{ type:'url' }` sources; text parts are preserved; genuinely unhandled parts are dropped **but announced** (`bus: anthropic.parts-dropped`) — never silently.
+- **screen.capture region math**: the tool contract says `x,y,width,height`, but the Windows backend fed them straight into `[Rectangle]::FromLTRB(left,top,RIGHT,BOTTOM)` — any region not starting at 0,0 captured the wrong rectangle. `ltrbFromRegion()` now converts honestly; malformed regions return a typed `bad_region` error instead of garbage coordinates.
+- **The capture receipt is the BYTES now**: capture lands in a unique temp file (`.cap-<pid>-<ts>.part`), the PNG magic must validate, and only then is it atomically renamed into place. A failed/empty/non-PNG capture reports `invalid_png` (or `no_file`) — the old "stdout said saved / a file exists" receipt could lie. Result meta gains `validatedPng` + `bytes`. PowerShell path escaping hardened (`psQuote` — apostrophes cannot break the command string).
+
+### Added
+- Exported, test-covered helpers: `toAnthropic` (provider mapping), `ltrbFromRegion`, `psQuote`, `validatePngBytes`.
+- `test/p2-vision-capture.test.js` — V1–V6 (image-block mapping data:/http, announced drops, adapter regressions, region math incl. rejections, PNG-magic validation incl. truncated/garbage, PS-quoting).
+
+### Verified
+- `node --test test/p2-vision-capture.test.js` → 6/6 pass.
+- `node --test test/*.test.js` → **443 pass / 0 fail / 17 skipped** (460 total; v0.9.5: 437/454 → +6 new, zero regressions).
+- Release gate: `build-exe` workflow on tag `v0.9.6` (GitHub Actions, Windows NSIS).
+
+
 ## 2026-10-19 — P1: durable journal, resume and route-switch handoffs (UI-agent handover #2, engine side) — v0.9.5
 
 ### Fixed

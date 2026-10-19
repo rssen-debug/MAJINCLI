@@ -3,10 +3,38 @@
  * the OpenAI path, so tools/MOA/agent never know which dialect they are on.
  */
 import { ProviderError } from './chat.js';
+import { bus } from '../log.js';
 
 const TIMEOUT_MS = Number(process.env.MAJIN_LLM_TIMEOUT || 180000);
 
-function toAnthropic(messages) {
+/* P2 (handover 2026-10-19): the adapter used to flatten every content array
+   through textOf() — OpenAI-format image parts were silently dropped and the
+   model was told the picture 'arrived' while it never saw a single pixel.
+   Anthropic wants { type:'image', source } blocks; map honestly, and count
+   anything we had to drop instead of pretending. */
+const DATA_URL = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i;
+
+function mapParts(parts) {
+  const out = [];
+  let dropped = 0;
+  for (const p of parts) {
+    if (typeof p === 'string') { out.push({ type: 'text', text: p }); continue; }
+    if (!p || typeof p !== 'object') { dropped += 1; continue; }
+    if (p.type === 'text' && (p.text ?? '') !== '') { out.push({ type: 'text', text: String(p.text) }); continue; }
+    if (p.type === 'image_url') {
+      const url = String(p.image_url?.url || '');
+      const d = url.match(DATA_URL);
+      if (d) { out.push({ type: 'image', source: { type: 'base64', media_type: d[1].toLowerCase(), data: d[2] } }); continue; }
+      if (/^https?:\/\//i.test(url)) { out.push({ type: 'image', source: { type: 'url', url } }); continue; }
+      dropped += 1; continue;
+    }
+    dropped += 1;
+  }
+  if (dropped) bus.emit('anthropic.parts-dropped', { dropped }, 'warn');
+  return out;
+}
+
+export function toAnthropic(messages) {
   const system = messages.filter((m) => m.role === 'system').map((m) => textOf(m.content)).join('\n\n');
   const out = [];
   for (const m of messages) {
@@ -20,6 +48,11 @@ function toAnthropic(messages) {
       if (m.content) content.push({ type: 'text', text: textOf(m.content) });
       for (const tc of m.tool_calls) content.push({ type: 'tool_use', id: tc.id, name: tc.name, input: parseArgs(tc) });
       out.push({ role: 'assistant', content });
+      continue;
+    }
+    if (Array.isArray(m.content)) {
+      const mapped = mapParts(m.content);
+      out.push({ role: m.role, content: mapped.length ? mapped : [{ type: 'text', text: textOf(m.content) || ' ' }] });
       continue;
     }
     out.push({ role: m.role, content: textOf(m.content) });

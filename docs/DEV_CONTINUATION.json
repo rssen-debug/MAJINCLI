@@ -26,8 +26,8 @@
   "implementationScore": 81,
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
-  "nextAction": "P2: adapter capacity + honest vision (Anthropic image blocks drop + screen.capture FromLTRB + truthful capture receipt).",
-  "version": "0.9.5",
-  "milestone": "P1 durable journal/resume: plan hydration from disk, exact-once handoff, producer wiring on route switch, served-route journal",
-  "branch": "main-post-merge"
+  "nextAction": "P3 candidates beyond handover: (a) Windows-control PoC gate (FlaUI/UFO \u2014 needs Windows runner experiment, not blind install); (b) acceptance gap: Linux test count 460 \u2260 their Windows 441 \u2014 reconcile; (c) handover P4/P5: m\u00e4tstyrd parallellisering + f\u00e4rdigheter.",
+  "version": "0.9.6",
+  "milestone": "P2: Anthropic image blocks delivered, screen.capture math + byte-validated receipts",
+  "branch": "feature/p2-vision-honesty (in PR)"
 }
