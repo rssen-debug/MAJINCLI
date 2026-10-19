@@ -213,6 +213,19 @@ export function isChildTarget(target, browser) {
   return target.type === 'page' && target.openerId === browser.targetId && target.targetId !== browser.targetId && !target.attached && !browser.knownTabs.has(target.targetId);
 }
 
+export async function waitForNavigation(navigation, read, { attempts = 150, delayMs = 100, wait = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+  if (navigation.errorText) throw new Error(`Navigation failed: ${navigation.errorText}`);
+  if (navigation.isDownload) throw new Error('The URL started a download instead of opening a page');
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const document = await read();
+      if ((!navigation.loaderId || document.loaderId === navigation.loaderId) && ['interactive', 'complete'].includes(document.readyState)) return document;
+    } catch { /* execution contexts can disappear while a document commits */ }
+    await wait(delayMs);
+  }
+  throw new Error('Navigation did not produce a ready document before the timeout');
+}
+
 /** Launch (or reuse) the browser for ONE agent session and navigate it. */
 export async function openFor({ session, url = null, headless = true, cfgGet = null, pool = null, exe = null, wsFactory = null } = {}) {
   session = String(session || 'default');
@@ -273,10 +286,10 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     thePool.release(session);
     throw new Error('the browser debug port never came up — the browser may be blocked by a policy on this machine');
   }
-  let ws = null;
+  let ws = null, cdp = null;
   try {
     ws = await wsConnect(version.webSocketDebuggerUrl, wsFactory);
-  const cdp = cdpRpc(ws);
+  cdp = cdpRpc(ws);
   const sendRaw = ({ sessionId = null, method, params = {} }, opts = null) =>
     cdp(method, params, { sessionId, ...(opts || {}) });
 
@@ -307,20 +320,14 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
   b.send = send;
   b.goto = async (u) => {
     await send('Page.enable');
-    await send('Page.navigate', { url: u });
-    /* Page.navigate returns at initiation, never at arrival — wait until the
-       document actually answers, else every read-after-nav is a coin flip */
-    for (let i = 0; i < 40; i++) {
-      await new Promise((r) => setTimeout(r, 100));
-      try {
-        const state = await b.eval('document.readyState');
-        if (state === 'interactive' || state === 'complete') break;
-      } catch { /* mid-navigation throws are normal */ }
-    }
-    /* evidence first: report what the PAGE says happened, not what we asked for */
-    const rs = await b.eval('document.readyState');
-    const meta = await b.eval('(() => ({ url: location.href, title: document.title }))()');
-    return { readyState: rs, ...meta };
+    const navigation = await send('Page.navigate', { url: u });
+    // readyState from the previous about:blank is not navigation evidence.
+    // CDP's loaderId identifies the document committed by this navigation.
+    return waitForNavigation(navigation, async () => {
+      const { frameTree } = await send('Page.getFrameTree');
+      const meta = await b.eval('(() => ({ readyState: document.readyState, url: location.href, title: document.title }))()');
+      return { ...meta, loaderId: frameTree.frame.loaderId };
+    });
   };
   b.eval = async (expression) => {
     const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
@@ -357,6 +364,7 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
   } catch (e) {
     /* safety net: a browser exists by now — never leak the process/ws/slot,
        whatever broke between spawn and a working session */
+    try { if (cdp) await cdp('Browser.close', {}, { timeoutMs: 3000 }); } catch { /* gone */ }
     try { ws?.close(); } catch { /* gone */ }
     try { if (!proc.killed) proc.kill(); } catch { /* gone */ }
     thePool.release(session);

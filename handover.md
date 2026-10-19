@@ -144,3 +144,10 @@ OpenCode live-diagnos: officiell modellkatalog https://opencode.ai/inference/v1/
 
 ### Checkpoint 8 — sista lokala gröna resultat
 432 tester: 417 pass, 15 skip, 0 fail (26,3 s). Edge UI pass inklusive avvisad approval-ack. Fem verkliga browser-tool E2E pass inklusive kontroll att browser.close stänger debugporten. Syntax 160/160 före sista komplettering samt syntaxcheck av ändrade JS-filer pass; språkcheck pass. Denna slutliga kod ska nu verifieras av CI före merge. Inga fler källändringar planerade om CI är grönt.
+
+### Checkpoint 9 — CI fångade ytterligare navigationsrisk
+- CI-run 39304092994: Linux full svit 418 pass/14 skip/0 fail; Windows full svit 417 pass/15 skip/0 fail; byggen skapade. Browser E2E 4/5 pass, testbutikens första fill #q returnerade ok=false (browser.open hade returnerat ok=true). Ej mergat. Automatisk CI-rapport skapade issue #60.
+- BROWSER-03: kodgranskning bekräftade att goto väntade på document.readyState utan att identifiera det NYA dokumentet. Ett gammalt about:blank med readyState=complete kunde räknas som färdig navigation. Nu krävs Page.navigate-resultatets loaderId i Page.getFrameTree samt interactive/complete. Nav-fel och utebliven färdig sida ger ärliga fel istället för framgång. Detta adresserar en bekräftad race i koden; CI-felets tidigare logg saknade detaljer om fill-felet, så nytt omtest krävs för att fastställa CI-resultatet.
+- Nytt deterministiskt regressionstest håller tillbaka gammal ready-sida, väntar genom loading, accepterar rätt loader, nekar timeout/nätverksfel och stödjer same-document-navigation utan nytt loaderId. Protokollreferens: https://chromium.googlesource.com/devtools/devtools-frontend/+/refs/heads/chromium/7879/third_party/blink/public/devtools_protocol/domains/Page.pdl
+- Browser-open-felvägen skickar också Browser.close före websocket/process-cleanup, så en misslyckad navigation inte lämnar en återstartad Edge-process.
+- Testbutikens öppning/fill skriver nu konkreta fel/URL-metadata i assert vid ett framtida fel, istället för bara false != true. De 10 browser-enhetstesterna är gröna; verkliga browserflöden körs om.

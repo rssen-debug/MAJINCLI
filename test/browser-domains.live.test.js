@@ -173,8 +173,10 @@ test('5E multi-step webshop: search→product→cart→checkout→confirm — ev
   const reg = await mkReg();
   try {
     const run = (n, a) => reg.exec(n, a, { session: 'd5e' });
-    assert.equal((await run('browser.open', { url: base + '/' })).ok, true);
-    assert.equal((await run('browser.fill', { selector: '#q', value: 'widget' })).ok, true);
+    const opened = await run('browser.open', { url: base + '/' });
+    assert.equal(opened.ok, true, JSON.stringify(opened));
+    const filled = await run('browser.fill', { selector: '#q', value: 'widget' });
+    assert.equal(filled.ok, true, JSON.stringify({ opened: opened.meta, filled }));
     assert.equal((await run('browser.click', { selector: 'button' })).ok, true, 'search submitted');
     await WAIT(900);
     assert.equal((await run('browser.click', { selector: '#p1' })).ok, true, 'product clicked');

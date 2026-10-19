@@ -119,7 +119,22 @@ test('openFor reuse never navigates the page away (the eval-vs-goto coin flip)',
   const reuse = src.slice(src.indexOf('const existing = sess.get(session)'), src.indexOf('const thePool'));
   assert.match(reuse, /if \(url && url !== 'about:blank'\)\s+await existing\.goto\(url\)/, 'reuse navigates ONLY on explicit url');
   assert.doesNotMatch(reuse, /url = 'about:blank'/, 'no silent default navigation target');
-  assert.match(src, /Page\.navigate[\s\S]{0,400}document\.readyState/, 'goto waits for the document before asking questions');
+  assert.match(src, /return waitForNavigation\(navigation/, 'goto waits for the new document before asking questions');
+});
+
+test('navigation rejects a ready old document and waits for the committed loader', async () => {
+  const { waitForNavigation } = await import('../src/core/browser.js');
+  const documents = [
+    { loaderId: 'old', readyState: 'complete', url: 'about:blank' },
+    { loaderId: 'new', readyState: 'loading' },
+    { loaderId: 'new', readyState: 'complete', url: 'http://fixture/form' },
+  ];
+  const result = await waitForNavigation({ loaderId: 'new' }, async () => documents.shift(), { wait: async () => {} });
+  assert.equal(result.url, 'http://fixture/form');
+  assert.equal(documents.length, 0);
+  await assert.rejects(waitForNavigation({ loaderId: 'new' }, async () => ({ loaderId: 'old', readyState: 'complete' }), { attempts: 2, wait: async () => {} }), /timeout/);
+  await assert.rejects(waitForNavigation({ errorText: 'net::ERR_CONNECTION_REFUSED' }, async () => ({})), /CONNECTION_REFUSED/);
+  assert.equal((await waitForNavigation({}, async () => ({ readyState: 'interactive' }))).readyState, 'interactive', 'same-document navigation has no new loader ID');
 });
 
 test('followNewTarget never follows the stale initial tab (the about:blank wire)', async () => {
