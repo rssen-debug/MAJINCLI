@@ -1,12 +1,13 @@
 {
-  "lastVerifiedMain": "e146f9f",
+  "lastVerifiedMain": "00b09f5",
   "lastCompletedMilestone": "GODLIKE V4 \u00a77 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
   "currentWorkstream": "GODLIKE V4 WAVE 2 \u2014 \u00a75 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
   "activePRs": [],
   "knownFailures": [
     "squash d97e157 landed an 80/100 main-header line while rows stayed PASS \u2014 direct docs-fix main commit repairs it; rule: after EVERY merge, grep-verify matrix header = expected score AND phase-totals = row-sum",
-    "v0.7.3: sessionRoutes pin = models.sessionRoutes{session:{job:ref}}; routeFor(cfg,job,{session}); turn-pinned routes in loop.js (stepJob cache); patch() now persisted/ok:false on failed save; load() heals corrupt main from .bak, never autosaves over corrupt; historyErrors ring in context.js"
+    "v0.7.3: sessionRoutes pin = models.sessionRoutes{session:{job:ref}}; routeFor(cfg,job,{session}); turn-pinned routes in loop.js (stepJob cache); patch() now persisted/ok:false on failed save; load() heals corrupt main from .bak, never autosaves over corrupt; historyErrors ring in context.js",
+    "v0.9.5: use origin-name for -u pushes, never a PAT-URL \u2014 PAT leaked into .git/config via 'git push -u <url>' and had to be scrubbed (snapshot keeps .git/config out anyway, but local rule: push via inline URL WITHOUT -u, or set upstream separately)"
   ],
   "blockers": [
     "1E/6C: need second-vendor + priced-model keys (owner)",
