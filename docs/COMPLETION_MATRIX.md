@@ -5,7 +5,7 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 53 / 100** (verified against the Del 3C/3D PR head, 2026-10-19).
+**Score so far: 53 / 100** (verified against main `f5b3712`, v0.6.2-rc, 2026-10-19).
 
 | Phase | Max | Earned |
 |---|---:|---:|
