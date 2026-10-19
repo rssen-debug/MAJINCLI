@@ -483,3 +483,33 @@ test('/api/keys/claim + /api/tool: pairing flow and tool calls', async () => {
   assert.equal(badTool.error.code, 'unknown_tool');
   assert.match(badTool.error.message, /does not exist|finns inte/);
 });
+
+// This uses the actual server route, not a mocked browser response.
+test('/api/models discovers every Anthropic page and preserves the last good list after failure', async (t) => {
+  let rejectCatalog = false;
+  const seen = [];
+  const stub = http.createServer((req, res) => {
+    seen.push({ url: req.url, key: req.headers['x-api-key'], version: req.headers['anthropic-version'] });
+    res.setHeader('content-type', 'application/json');
+    if (rejectCatalog) { res.writeHead(401); res.end(JSON.stringify({ error: { message: 'invalid key' } })); return; }
+    if (req.url.includes('after_id=')) res.end(JSON.stringify({ data: [{ id: 'claude-final' }], has_more: false }));
+    else res.end(JSON.stringify({ data: Array.from({ length: 650 }, (_, i) => ({ id: 'claude-' + i })), has_more: true, last_id: 'claude-649' }));
+  });
+  await new Promise(resolve => stub.listen(0, '127.0.0.1', resolve));
+  t.after(() => stub.close());
+  const added = JSON.parse((await get(`/api/provider?t=${TOKEN}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'add', name: 'catalog-fixture', kind: 'anthropic', baseUrl: `http://127.0.0.1:${stub.address().port}/v1`, apiKey: 'catalog-fixture-key' }) })).body);
+  assert.equal(added.ok, true);
+  const result = JSON.parse((await get(`/api/models?provider=catalog-fixture&t=${TOKEN}`)).body);
+  assert.equal(result.ok, true);
+  assert.equal(result.count, 651);
+  assert.ok(seen.every(req => req.key === 'catalog-fixture-key' && req.version === '2023-06-01'));
+  const cfg = JSON.parse((await get(`/api/config?t=${TOKEN}`)).body).config;
+  assert.equal(cfg.providers['catalog-fixture'].models.length, 651);
+  assert.doesNotMatch(JSON.stringify(result), /catalog-fixture-key/);
+  rejectCatalog = true;
+  const failed = JSON.parse((await get(`/api/models?provider=catalog-fixture&t=${TOKEN}`)).body);
+  assert.equal(failed.ok, false);
+  assert.equal(failed.models, undefined);
+  const afterFailure = JSON.parse((await get(`/api/config?t=${TOKEN}`)).body).config;
+  assert.equal(afterFailure.providers['catalog-fixture'].models.length, 651);
+});

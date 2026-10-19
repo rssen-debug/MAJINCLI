@@ -18,13 +18,18 @@ async function paintHeader(st) {
   const cu = $('c-update');
   if (cu) {
     const upd = st.update || null;
-    const show = Boolean(upd && (upd.available || (upd.notice && !upd.error)));
+    const show = Boolean(upd && !upd.error && upd.status !== 'up_to_date' && (upd.available || upd.notice));
     cu.hidden = !show;
-    if (show) {
+    if (!show) { cu.dataset.arm = ''; cu.dataset.target = ''; cu.onclick = null; }
+    if (show && !cu.dataset.installing) {
+      if (cu.dataset.target !== upd.latest) { cu.dataset.arm = ''; cu.dataset.target = upd.latest; }
+      cu.disabled = false;
       cu.innerHTML = 'update <b>' + String(upd.latest || '?').replace(/[<>&]/g, '') + '</b>';
       cu.title = (upd.notice || '') + (upd.url ? ' · ' + upd.url : '') + ' · click to update in place';
+      if (cu.dataset.arm) cu.innerHTML = 'install <b>' + String(upd.latest).replace(/[<>&]/g, '') + '</b>?';
       cu.style.cursor = 'pointer';
       cu.onclick = async () => {
+        if (cu.dataset.installing) return;
         if (!cu.dataset.arm) {
           cu.dataset.arm = '1';
           cu.innerHTML = 'install <b>' + String(upd.latest || '?').replace(/[<>&]/g, '') + '</b>?';
@@ -32,6 +37,7 @@ async function paintHeader(st) {
           return;
         }
         cu.dataset.arm = '';
+        cu.dataset.installing = '1'; cu.disabled = true;
         cu.innerHTML = 'update <b>installing…</b>';
         try {
           const r = await api('/update', { method: 'POST', body: { action: 'install' } });
@@ -43,11 +49,13 @@ async function paintHeader(st) {
             const page = (r.releaseUrl) || (upd && upd.url) || 'https://github.com/rssen-debug/MAJINCLI/releases';
             try { window.open(page, '_blank', 'noopener'); } catch { /* pop-up blocker — note below has the URL */ }
             note('one-click install is Windows-only — the release page just opened: ' + page);
+            cu.dataset.installing = ''; cu.disabled = false;
             cu.innerHTML = 'update <b>page opened</b>';
           } else {
             throw new Error((r && r.error) || 'install failed');
           }
         } catch (e) {
+          cu.dataset.installing = ''; cu.disabled = false;
           cu.innerHTML = 'update <b>failed</b>';
           note('the update did not work: ' + e.message + ' — the release page has it: ' + ((upd && upd.url) || 'github'));
         }

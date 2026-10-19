@@ -10,7 +10,7 @@ import path from 'node:path';
 import { def } from './registry.js';
 import { validatePatch, JOBS } from '../config.js';
 import { parseIntent } from '../routes.js';
-import { PRESETS, listModelsUrl, needsKeyFor } from '../presets.js';
+import { PRESETS, needsKeyFor } from '../presets.js';
 import { complete } from '../provider/chat.js';
 import { dirs } from '../paths.js';
 import { bus } from '../log.js';
@@ -134,17 +134,13 @@ export const majinTools = [
       if (action === 'models') {
         const p = providers[name];
         if (!p) return { ok: false, error: { code: 'no_provider', message: `unknown provider ${name}` } };
-        const url = listModelsUrl({ kind: p.kind, baseUrl: p.baseUrl });
-        if (!url) return { ok: false, error: { code: 'unsupported', message: `${p.kind} has no /models endpoint`, hint: 'set the models manually' } };
-        const r = await fetch(url, { headers: { authorization: `Bearer ${p.apiKey}` } }).catch((e) => ({ ok: false, err: e }));
-        if (!r.ok) return { ok: false, error: { code: 'list_failed', message: (r.err?.message || `HTTP ${r.status}`), hint: 'check the key and baseUrl' } };
-        const j = await r.json().catch(() => ({}));
-        const ids = (j.data || j.models || []).map((m) => m.id || m.name).filter(Boolean);
-        await ctx.cfg.patch({ providers: { [name]: { models: ids.slice(0, 400) } } });
+        const { discoverModels } = await import('../provider/catalog.js');
+        const { payload, ...catalog } = await discoverModels(p);
+        if (!catalog.ok) return { ok: false, error: { code: 'list_failed', message: catalog.error, hint: catalog.hint } };
+        ctx.cfg.patch({ providers: { [name]: { models: catalog.models } } });
         const { importPricing } = await import('../pricing.js');
-        const imp = await importPricing(ctx.cfg, name, j, { source: `${name}:/models` }).catch(() => ({ imported: 0 }));
-        const priceNote = imp.imported ? ` — ${imp.imported} model prices rode in with the list` : '';
-        return { result: `${name}: ${ids.length} models (saved ${Math.min(400, ids.length)} in config)${priceNote}\n${ids.slice(0, 120).join('\n')}`, summary: `${ids.length} models` };
+        await importPricing(ctx.cfg, name, payload, { source: name + ':/models' }).catch(() => {});
+        return { result: name + ': ' + catalog.count + ' models (all saved)\n' + catalog.models.slice(0, 120).join('\n'), meta: catalog, summary: catalog.count + ' models' };
       }
       if (action === 'add') {
         if (!name) return { ok: false, error: { code: 'no_name', message: 'give a provider name (or pick a preset)', hint: 'majin.provider({action:"add",name:"deepseek",apiKey:"sk-…"})' } };

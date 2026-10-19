@@ -1,6 +1,6 @@
 /**
  * MAJIN — provider presets.
- * A preset is just a base URL + auth shape. Every model in the universe works
+ * A preset is just a base URL + auth shape. Providers use their documented protocols
  * because MAJIN talks OpenAI-compatible chat/completions and rewrites the URL for
  * the three providers that insist on their own dialect.
  */
@@ -53,6 +53,17 @@ export const PRESETS = {
     models: ['glm-5.3-flash', 'qwen3.8-flash', 'deepseek-v4.1-flash', 'mimo-v2.6-flash', 'beam-free', 'longcat-2.5-preview-free', 'kimi-k2.6', 'grok-4.6'],
     keyUrl: 'https://opencode.ai/docs/go/',
     notes: 'OpenCode Go requires an active subscription. OpenCode restricts its free tier to its own app; a free model name does not grant free API access from MAJIN.',
+  },
+  opencodezen: {
+    label: 'OpenCode Zen', kind: 'openai', baseUrl: 'https://opencode.ai/zen/v1',
+    keyEnv: 'OPENCODE_API_KEY', keyUrl: 'https://opencode.ai/docs/zen/', models: [],
+    notes: 'Pay-as-you-go API, separate from Go. A free model can still be restricted to the OpenCode app. Catalog listing does not prove inference access.',
+  },
+  qwen: {
+    label: 'Qwen · Alibaba Cloud', kind: 'openai',
+    baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    keyEnv: 'DASHSCOPE_API_KEY', keyUrl: 'https://www.alibabacloud.com/help/en/model-studio/get-api-key', models: [],
+    notes: 'Use the endpoint matching your key region/workspace. Override the endpoint in connection options when needed.',
   },
   nous: {
     label: 'Nous Portal',
@@ -179,20 +190,20 @@ export function splitModel(ref, cfg) {
     if (preset?.models?.includes(s)) return { provider: p, model: s };
   }
   const def = cfg?.models?.provider || providers[0] || 'mock';
-  return { provider: def, model: s.includes('/') ? s.split('/').pop() : s };
+  return { provider: def, model: s };
 }
 
 /** OpenAI-compatible chat endpoint for a provider. */
 export function chatUrl(provider) {
   const base = String(provider.baseUrl || '').replace(/\/+$/, '');
   if (provider.kind === 'anthropic') return `${base}/messages`;
-  if (provider.kind === 'gemini') return base; // model appended per-request
+  if (provider.kind === 'gemini') return `${base.replace(/\/openai$/, '')}/openai/chat/completions`;
   return `${base}/chat/completions`;
 }
 
 export function listModelsUrl(provider) {
   const base = String(provider.baseUrl || '').replace(/\/+$/, '');
   if (provider.kind === 'gemini') return `${base}/models`;
-  if (provider.kind === 'anthropic') return null;
+  if (/^https:\/\/[^/]+(?:aliyuncs\.com)(?:\/|$)/i.test(base) && /\/compatible-mode\/v1$/.test(base)) return `${base.replace(/\/compatible-mode\/v1$/, '')}/api/v1/models?capabilities=TG&capabilities=Reasoning&page_size=100`;
   return `${base}/models`;
 }
