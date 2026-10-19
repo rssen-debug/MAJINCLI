@@ -115,7 +115,7 @@ export function buildContracts(input) {
   const contracts = [];
   const file = findClaimedArtifact(t);
   if (file) contracts.push({ type: 'file_exists', path: file });
-  const cont = /contain(?:ing|s)?\s+(?:the\s+(?:word|text|string)\s+)?["']([^"']{1,80})["']/i.exec(t);
+  const cont = /contain(?:ing|s)?\s+(?:the\s+(?:exact\s+)?(?:word|text|string|phrase|line)\s+)?["']([^"']{1,80})["']/i.exec(t);
   if (file && cont) contracts.push({ type: 'file_contains', path: file, needle: cont[1] });
   const cnt = /(?:report\s+the\s+number\s+of|count|how\s+many|antal)\s+([a-z]+)?\s*files?\s+in\s+([^(\s,.)]+\/?)/i.exec(t);
   if (cnt) contracts.push({ type: 'count', dir: cnt[2], unit: cnt[1] || null });
@@ -276,18 +276,78 @@ function contractVerdict(contracts, results) {
   return { ok: true, summary: results.map((r) => r.evidence).join('; ') };
 }
 
+/** Del 4C: the hard caps a mission runs under. One policy object, read from
+   config, enforced in CODE (never by asking the model to restrain itself).
+   0 means OFF for time/token caps; repair rounds default to 1. */
+export function missionLimits(cfg) {
+  const num = (v, dflt, lo, hi) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt;
+  };
+  return {
+    repairRounds: num(cfg?.get?.('mission.limits.repairRounds'), 1, 0, 3),
+    timeoutMs: num(cfg?.get?.('mission.limits.timeoutMs'), 0, 0, 3600000),
+    tokenBudget: num(cfg?.get?.('mission.limits.tokenBudget'), 0, 0, 1000000000),
+  };
+}
+
 export async function runMission({ cfg, registry, session, input, emit = () => {}, memory = null, maxNodes = 6, modelCall = null, capOverride = 0 }) {
   const compiled = await compileMission(input, { cfg, maxNodes, modelCall });
   if (compiled.kind !== 'mission') return { kind: 'single', compiled };
   const analysis = analyzeSwarm(compiled.nodes, { overheadMs: Number(cfg.get('agent.swarm.workerOverheadMs')) || 1500 });
   const worker = subagentWorker({ cfg, registry, sessionPrefix: `${(session || 'sw')}:mission`, emit, memory });
+
+  /* Del 4C: hard limits, enforced in code. budgetHit/timeoutHit are set by the
+     wrappers below, never by the model. */
+  const limits = missionLimits(cfg);
+  const controller = new AbortController();
+  const limitsHit = new Set();
+  let usedTokens = 0;
+  let budgetHit = false;
+  let timeoutHit = false;
+  const usageOf = (v) => {
+    const u = v?.usage;
+    return (Number(u?.input) || 0) + (Number(u?.output) || 0);
+  };
+  const chargeBudget = (v) => {
+    usedTokens += usageOf(v);
+    if (limits.tokenBudget > 0 && usedTokens > limits.tokenBudget && !budgetHit) {
+      budgetHit = true;
+      limitsHit.add('budget');
+      emit({ type: 'mission_limit', limit: 'budget', usedTokens, cap: limits.tokenBudget });
+      controller.abort();
+      return true;
+    }
+    return false;
+  };
+  const budgetedWorker = async (node, ctx) => {
+    if (budgetHit) throw new Error('LIMIT:BUDGET — token cap already spent');
+    const v = await worker(node, ctx);
+    chargeBudget(v);
+    return v;
+  };
+  let timeoutTimer = null;
+  if (limits.timeoutMs > 0) {
+    timeoutTimer = setTimeout(() => {
+      timeoutHit = true;
+      limitsHit.add('timeout');
+      emit({ type: 'mission_limit', limit: 'timeout', timeoutMs: limits.timeoutMs });
+      controller.abort();
+    }, limits.timeoutMs);
+    timeoutTimer.unref?.();
+  }
+
   const r = await runSwarm({
-    nodes: compiled.nodes.map((n) => ({ id: n.id, deps: n.deps, estMs: n.estMs, input: n.input, run: worker })),
+    nodes: compiled.nodes.map((n) => ({ id: n.id, deps: n.deps, estMs: n.estMs, input: n.input, run: budgetedWorker })),
     cap: capOverride > 0 ? capOverride : analysis.workers,
-    signal: null,
+    timeoutMs: limits.timeoutMs,
+    signal: controller.signal,
     onEvent: (e) => emit({ ...e, mission: true }),
   });
   const parts = [...r.results.values()];
+  if (limits.timeoutMs > 0) {
+    for (const p of parts) if (p && p.blocked && p.reason === 'deadline') { timeoutHit = true; limitsHit.add('timeout'); break; }
+  }
 
   /* VERIFY→REPAIR (max 1 per del, maskin i koden): pAsstaadda artefakter mAste
      kunna pekas ut i workspace efter kastning, annars aer delen ärligt misslyckad. */
@@ -305,22 +365,41 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
     let vr = contractVerdict(contracts, results);
     if (vr.ok) { p.verified = vr; verifiedCount += 1; continue; }
     emit({ type: 'mission_verify_fail', id: n.id, reason: contractFailureNames(results).join('; ') });
+    /* Del 4C: bounded repair. Each round is charged to the same budget, the
+       loop honors the mission timeout, and after repairRounds the part fails
+       HONESTLY with a LIMIT marker — never an endless retry. */
     try {
-      const why = contractFailureNames(results).join('; ');
-      const repairInput = `${n.input}\n\n[VERIFICATION FAILED on contracts: ${why}. Do it FOR REAL now: for every failing contract, produce the real evidence (fs.write the file again with the EXACT required content; report NO number or fact you cannot prove). Do not claim success before the evidence exists on disk or in your answer.]`;
-      const value = await worker({ ...n, input: repairInput }, { signal: null });
-      p.value = value;
-      results = contracts.map((c) => verifyContractLegacy(c, { cfg, part: p }));
-      vr = contractVerdict(contracts, results);
+      let roundsUsed = 0;
+      while (roundsUsed < limits.repairRounds && !vr.ok) {
+        if (budgetHit) { limitsHit.add('budget'); p.limit = 'budget'; break; }
+        if (timeoutHit) { p.limit = 'timeout'; break; }
+        roundsUsed += 1;
+        const why = contractFailureNames(results).join('; ');
+        const repairInput = `${n.input}\\n\\n[VERIFICATION FAILED on contracts: ${why}. Do it FOR REAL now: for every failing contract, produce the real evidence (fs.write the file again with the EXACT required content; report NO number or fact you cannot prove). Do not claim success before the evidence exists on disk or in your answer.]`;
+        const value = await worker({ ...n, input: repairInput }, { signal: null });
+        p.value = value;
+        chargeBudget(value);
+        results = contracts.map((c) => verifyContractLegacy(c, { cfg, part: p }));
+        vr = contractVerdict(contracts, results);
+      }
       if (vr.ok) {
         p.verified = vr;
         p.repaired = true;
+        p.repairRounds = roundsUsed;
         repairedCount += 1;
         verifiedCount += 1;
-        emit({ type: 'mission_repaired', id: n.id, contracts: contracts.length });
+        emit({ type: 'mission_repaired', id: n.id, contracts: contracts.length, rounds: roundsUsed });
+      } else if (p.limit === 'budget' || p.limit === 'timeout') {
+        p.ok = false;
+        limitsHit.add(p.limit);
+        p.error = `verification halted by [LIMIT:${p.limit.toUpperCase()}] with dead contracts: ${contractFailureNames(results).join('; ')}`;
+        r.failCount += 1;
+        r.okCount -= 1;
+        emit({ type: 'mission_verify_failed', id: n.id, reason: p.error });
       } else {
         p.ok = false;
-        p.error = `verification failed on contracts: ${contractFailureNames(results).join('; ')}`;
+        limitsHit.add('retry');
+        p.error = `verification failed on contracts after ${roundsUsed} repair round(s) [LIMIT:RETRY]: ${contractFailureNames(results).join('; ')}`;
         r.failCount += 1;
         r.okCount -= 1;
         emit({ type: 'mission_verify_failed', id: n.id, reason: p.error });
@@ -333,6 +412,7 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
     }
   }
 
+  if (timeoutTimer) clearTimeout(timeoutTimer);
   return {
     kind: 'mission',
     compiled,
@@ -343,6 +423,9 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
     blockedCount: r.blockedCount,
     verifiedCount,
     repairedCount,
+    limits,
+    limitsHit: [...limitsHit],
+    usedTokens,
     workers: analysis.workers,
     nodes: compiled.nodes.length,
     textSummary: parts.map((p, i) => {
@@ -350,7 +433,10 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
       if (p && p.ok === true && p.verified) return `✓ ${n.id}: ${String(p.value?.text || '').slice(0, 220)} [VERIFIED: ${p.verified.summary}${p.repaired ? ', after repair' : ''}]`;
       if (p && p.ok === true) return `✓ ${n.id}: ${String(p.value?.text || '').slice(0, 220)} [reported, not independently verifiable]`;
       if (p && p.ok === false) return `✗ ${n.id}: ${p.error}`;
-      if (p && p.blocked) return `↷ ${n.id}: blocked — ${p.reason}`;
+      if (p && p.blocked) {
+        const limitTag = p.reason === 'deadline' ? ' [LIMIT:TIMEOUT]' : (p.reason === 'cancelled' && budgetHit ? ' [LIMIT:BUDGET]' : (p.reason === 'cancelled' && timeoutHit ? ' [LIMIT:TIMEOUT]' : ''));
+        return `↷ ${n.id}: blocked — ${p.reason}${limitTag}`;
+      }
       return `? ${n.id}: unknown`;
     }),
   };

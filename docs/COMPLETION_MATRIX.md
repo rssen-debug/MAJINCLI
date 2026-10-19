@@ -5,14 +5,14 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 45 / 100** (verified against main `b4ae1d2`, v0.6.0-rc, 2026-10-18).
+**Score so far: 49 / 100** (verified against the Del 4C PR head, 2026-10-19).
 
 | Phase | Max | Earned |
 |---|---:|---:|
 | 1. Persistent Sessions & Handoff | 10 | 8 |
 | 2. Grand Architect | 12 | 9 |
 | 3. HYPERSWARM | 10 | 4 |
-| 4. Reality Engine | 16 | 8 |
+| 4. Reality Engine | 16 | 12 |
 | 5. Browser & Computer Use | 10 | 2 |
 | 6. GENESIS ZERO & Cost | 9 | 3 |
 | 7. Skill Compiler | 8 | 2 |
@@ -21,7 +21,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 10. Security & Privacy | 5 | 3 |
 | 11. Windows & Updates | 4 | 2 |
 | 12. Final Acceptance | 3 | 0 |
-| **TOTAL** | **100** | **45** |
+| **TOTAL** | **100** | **49** |
 
 ---
 
@@ -54,13 +54,13 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 3D | 2 | Parallel work cannot corrupt shared resources (locks, worktrees, ownership) | `fs.write` serializes per path via `locked()`; no adversarial corruption test | — | — | UNVERIFIED | 2026-10-18 |
 | 3E | 2 | Real model runs show measurable benefit where parallelism applies | Workers ran live but no against-sequential benchmark of wall time/tokens | — | — | UNVERIFIED | 2026-10-18 |
 
-## DEL 4 — Reality Engine (8/16)
+## DEL 4 — Reality Engine (12/16)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
 | 4A | 4 | Explicit verification contracts + evidence provenance | Contract engine in `src/core/mission.js`: `buildContracts` derives typed contracts from the mission brief (`file_exists` — stat>0 + sha256[:8], path-escape guarded; `file_contains` — `readFileSync.includes(needle)` on REAL content; `count` — independent `fs.readdir` recount compared against the worker's "N files" claim). `verifyContract` checks CODE-side, never by asking a second model. Dead contracts force a repair round naming the dead contracts; parts only ship when contracts re-verify. Summary carries provenance: `[VERIFIED: store/ has 3 files (independently counted), after repair]`. `test/mission.test.js` 12/12 — t10 content-lie caught, t11 count-lie caught, t12 honest count → no repair. Discrimination: skipping the recount turns ONLY t11 red; rubber-stamping `includes()` turns ONLY t10 red. | mock | PR #40 | PASS | 2026-10-18 |
-| 4B | 4 | Detect and repair intentionally introduced failures | `test/mission.test.js` 12/12 — lying workers detected, one repair round turns a fake write into a real `fs.write`; fail-first proven on pre-fix code | mock | `a0a08b0` | PASS | 2026-10-18 |
-| 4C | 4 | Retry/budget/timeout/approval limits respected | Swarm timeouts + agent step caps exist; no budget cap and no acceptance test that limits hard-stop execution | — | — | UNVERIFIED | 2026-10-18 |
+| 4B | 4 | Detect and repair intentionally introduced failures | `test/mission.test.js` 15/15 — lying workers detected, one repair round turns a fake write into a real `fs.write`; fail-first proven on pre-fix code | mock | `a0a08b0` | PASS | 2026-10-18 |
+| 4C | 4 | Retry/budget/timeout/approval limits respected | One policy object `missionLimits(cfg)` (defaults in config.js: repairRounds 1 / timeoutMs 0 / tokenBudget 0, hard clamps 0..3 / 3600000 / 1e9) enforced in CODE in `runMission`: budgetedWorker charges real measured usage per worker and aborts the swarm past the cap (verify→repair included), AbortController+deadline reach runSwarm, repair loop is `rounds < repairRounds` and fails HONESTLY with markers — `[LIMIT:RETRY]` / `[LIMIT:BUDGET]` / `[LIMIT:TIMEOUT]` named in the mission summary, return object carries `limits`/`limitsHit`/`usedTokens`. `test/mission.test.js` t13–t15 (15/15): permanently-lying worker runs EXACTLY 1+1+2 worker-calls (counted via mock `calls`, not asserted from prose), token cap 40 stops worker #2 from ever starting, 120 ms wall budget cuts a ~1.7 s mock stream. Discrimination: budget gate off → t14 red; rounds +96 → t13 red; deadline/signal pass-through removed → t15 red (bench proof the caps are free when idle: identical 24399 tokens / 22 calls 7/7). Side-effect approvals remain governed by guard/exec policy (tests in test/guard*). | mock | PR #41 | PASS | 2026-10-19 |
 | 4D | 4 | Real cross-domain tasks with independently checked results | Only the file domain verified live so far | opencode live | — | UNVERIFIED (1 domain) | 2026-10-18 |
 
 ## DEL 5 — Browser & Computer Use (2/10)

@@ -312,6 +312,6 @@ export function subagentWorker({ cfg, registry, sessionPrefix = 'swarm', emit = 
       memory,
     });
     if (res.error) throw new Error(String(res.error).slice(0, 300));
-    return { text: res.text, steps: res.steps, tools: res.tools || [] };
+    return { text: res.text, steps: res.steps, tools: res.tools || [], usage: res.usage || null };
   };
 }

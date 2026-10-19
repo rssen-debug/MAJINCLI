@@ -1,15 +1,17 @@
-# MAJIN FEATURE RADAR — top 5 discoveries (2026-10-18, refreshed after Del 4A)
+# MAJIN FEATURE RADAR — top 5 discoveries (2026-10-19, refreshed after Del 4C)
 
 Standing rule from the master brief: every run records its five highest-value
 discoveries in docs. Each item below names where it was found and why it ranks.
 Nothing here is scored — only listed by observed point-density and leverage.
 
-1. **Del 4C — hard execution caps (retry / budget / timeout / approval).** Found in
-   `docs/COMPLETION_MATRIX.md` (4C UNVERIFIED): swarm timeouts and agent step caps
-   exist in `src/core/swarm.js`, but there is no budget cap and no acceptance test
-   proving a hard stop. An obvious token budget already flows through bench
-   counters (`scripts/bench.mjs` prints tokens/run), so a `mission.budget` cap with
-   a fail-hard test is the next cheap 4 points. Point-density rank: #1.
+1. **Del 3C/D/E — HYPERSWARM hardiness (6 points on one cluster).** Found in
+   `docs/COMPLETION_MATRIX.md` (3C/3D/3E all UNVERIFIED): transient-failure
+   recovery, corrupt-state adversarial handling and a REAL parallel-vs-sequential
+   wall-clock measurement are the largest contiguous point block besides Reality
+   Engine. The primitives now exist — `runSwarm` has deadlines, aborts and honest
+   blocked states, `missionLimits` proved the mock-harness can script timed
+   streams (`sleepMs`-shaped scripts) — so all three can be tested in one wave.
+   Point-density rank: #2.
 
 2. **Machine-readable verification receipts.** Found in `src/core/mission.js`
    (Del 4A): provenance strings (`[VERIFIED: store/ has 3 files (independently
