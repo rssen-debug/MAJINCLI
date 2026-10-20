@@ -5,19 +5,19 @@
   "priority": [
     {
       "rank": 1,
-      "id": "qa-glm-acceptance-closeout",
-      "wave": "metaspår",
-      "desc": "Hämta slutresultaten från den interaktiva/GLM-lane som det (Astra) driver; härma 33/12-tabellen in i status-matrisen.",
-      "blocker": "väntar på run 39474266667",
-      "evidence": "qa-artifacts/ + docs/evidence/"
+      "id": "audit-w1-acceptance-and-score",
+      "wave": "evidence",
+      "desc": "Verify W1 original DoD: three independent offline fixture repos, >=95% own catalog discovery; attach real UFO scan evidence. Publish explicit weighted scoring rubric before presenting any numeric /100.",
+      "status": "OPEN",
+      "evidence": "test/absorb.test.js; docs/MAJIN_100_STATUS.md"
     },
     {
       "rank": 2,
-      "id": "W1-absorb",
-      "wave": "W1",
-      "desc": "'majin absorb <repo>': machine-readable capability map + integration report; verifikation mot MAJIN:s egt verktygskatalog; inga fullföljde-absorptions-påståenden.",
-      "test": "npm test test/absorb.test.js + fixture-repo",
-      "status": "IMPLEMENTERAD + basverifierad (5 tester ✓, riktigt repo-scan microsoft/UFO ✓: 851 filer, MIT, modulvärme uppmätt)"
+      "id": "qa-glm-acceptance-closeout",
+      "wave": "metaspår",
+      "desc": "Hämta slutresultaten från den interaktiva/GLM-lane som det (Astra) driver; härma 33/12-tabellen in i status-matrisen.",
+      "blocker": "Historical run 39474266667 completed with failure; reconcile per-scenario evidence instead of waiting for this run",
+      "evidence": "qa-artifacts/ + docs/evidence/"
     },
     {
       "rank": 3,
@@ -129,6 +129,13 @@
       "done": "W1 absorb implementerad: src/core/absorb.js (statisk radar, licens-detektion, dep-parse, modul-signatur-scan, gap-analys mot ALL_TOOLS) + CLI 'majin absorb <repo>' + test/absorb.test.js (5 gröna) + i18n-fix (English-only policy) + full regression 565/547/0/18 ✓ + riktigt bevis: UFO-scannad",
       "percent": 31,
       "next": "W2 research-engine (PLAN→SEARCH→FETCH→EXTRACT→CROSS-CHECK→SYNTHESIZE→VERIFY) eller GLM-acceptance-closeout om run 39474266667 landat"
+    },
+    {
+      "round": 3,
+      "date": "2026-10-20",
+      "done": "Independent documentation audit: W1 already implemented, removed redundant implementation item; historic Windows run 39474266667 failed; 31/100 not reproducible without scoring rubric; QA-MATRIX path missing on branch.",
+      "percent": null,
+      "next": "Validate W1 acceptance gaps and 33-scenario matrix; implement W2 without rebuilding W1"
     }
   ]
 }
