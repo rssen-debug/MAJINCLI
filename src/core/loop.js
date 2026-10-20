@@ -47,6 +47,19 @@ export function expandDiscoveredTools(current, toolResult, registry, { readOnly 
   return [...names];
 }
 
+/**
+ * Only explicit execution requests count: not questions asking how to do it.
+ * Small LLMs sometimes say "done" without even trying a tool. Such answers
+ * get one bounded recovery opportunity and an honest incomplete verdict.
+ */
+export function requiresRealAction(input) {
+  const t = String(input || '').trim();
+  if (!t || /^(?:hur|how|why|varför|what|vad|explain|förklara|tell me|berätta|visa hur|can you explain)\b/i.test(t)) return false;
+  const request = /^(?:(?:please|snälla|kan du|could you|jag vill att du|i want you to|du ska)\s+)?(?:create|write|save|edit|modify|delete|remove|build|make|download|open|take|search|apply|skapa|skriv|spara|redigera|ändra|radera|ta bort|bygg|öppna|ladda ner|sök|ansök|ta en)\b/i;
+  const artifact = /(?:\b[\w.-]+\.(?:txt|md|json|js|mjs|jsx|ts|tsx|html|css|py|csv|png|jpg|pdf|docx|sol)\b|\bfile\b|\bfil(?:en|er)?\b|\bwebb(?:sida|plats)\b|\bwebsite\b|\bbrowser\b|\bwebbläsare\b|\bscreenshot\b|\bskärmbild\b|\bjobs?\b|\bjobb\b|\bagent\b)/i;
+  return request.test(t) && artifact.test(t);
+}
+
 /** Del 6A: ONE guard, two call sites. Monthly ledger check before a call costs
    anything; per-task check after each measured step. Returns null to proceed,
    or a result object hard-stopping the loop HONESTLY (errorKind 'budget'). */
@@ -81,6 +94,8 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     messages.splice(firstSystem < 0 ? 0 : firstSystem + 1, 0, anchor);
   }
   const toolLog = [];
+  const actionGoal = !ctx?.readOnly && allowTools && requiresRealAction(initialGoal);
+  let actionRetries = 0;
   let steps = 0;
   let errors = 0;
   let escalated = false;
@@ -194,6 +209,20 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
 
     const calls = res.toolCalls || [];
     if (!calls.length) {
+      // A model cannot mark an executable goal completed without making a
+      // SINGLE real tool call. One bounded retry can recover a missed tool.
+      if (actionGoal && toolLog.length === 0) {
+        if (actionRetries < 1 && steps < limit) {
+          actionRetries += 1;
+          onEvent({ type: 'missing_action_retry', label, step: steps, reason: 'no tool call for executable goal' });
+          messages.push({ role: 'assistant', content: res.text || '(no action taken)' });
+          messages.push({ role: 'user', content: 'Your previous response executed ZERO tools. The user asked for an actual action, not a description. Call the real tool now (or tools.search to discover it); never claim done unless a verifiable tool has run.' });
+          continue;
+        }
+        return { text: 'I could not verify the requested action: no tool was executed. The task is NOT complete. ' +
+          (res.text ? ('Model reply: ' + res.text.slice(0, 250)) : ''),
+          steps, toolLog, usage: tally, escalated, incomplete: true, stopReason: 'missing_tool_evidence' };
+      }
       if (res.text) messages.push({ role: 'assistant', content: res.text });
       return { text: res.text || answer, steps, toolLog, usage: tally, escalated, stopReason: res.stopReason };
     }
