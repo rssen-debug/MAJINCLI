@@ -27,6 +27,87 @@ export class Memory {
     this.cfg = cfg;
     this.dir = resolveData(cfg?.get('memory.dir'), dirs.memory);
     fs.mkdirSync(this.dir, { recursive: true });
+    /* WAVE 3 (§9) — delta memory protocol. facts.md stays the materialized
+       view (read path untouched); every mutation additionally lands in an
+       append-only delta log under a monotonic revision. That makes memory
+       changes auditable, lets sessions detect staleness via an injection
+       ledger, and turns no-op writes into measurable saves instead of
+       silent full-file rewrites. */
+    this.stateFile = path.join(this.dir, 'memory-state.json');
+    this.deltasFile = path.join(this.dir, 'memory-deltas.jsonl');
+    const st = this._loadState();
+    this._rev = st.rev;
+    this._sessions = st.sessions;
+  }
+
+  _loadState() {
+    try {
+      const st = JSON.parse(fs.readFileSync(this.stateFile, 'utf8'));
+      return {
+        rev: Number.isFinite(st.rev) && st.rev >= 0 ? Math.floor(st.rev) : 0,
+        sessions: st.sessions && typeof st.sessions === 'object' ? { ...st.sessions } : {},
+      };
+    } catch { return { rev: 0, sessions: {} }; }
+  }
+
+  _saveState() {
+    try {
+      const tmp = this.stateFile + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify({ rev: this._rev, sessions: this._sessions }) + '\n');
+      fs.renameSync(tmp, this.stateFile);
+    } catch (err) {
+      bus.debug('memory.state.failed', { error: err.message });
+    }
+  }
+
+  /** Current memory revision (monotonic; 0 = never mutated this store). */
+  rev() { return this._rev; }
+
+  _bump(kind, text) {
+    this._rev += 1;
+    this._saveState();
+    try {
+      fs.appendFileSync(this.deltasFile, JSON.stringify({ rev: this._rev, ts: new Date().toISOString(), kind, text: String(text || '').slice(0, 300) }) + '\n');
+    } catch (err) {
+      bus.debug('memory.delta.failed', { error: err.message });
+    }
+  }
+
+  /**
+   * Entries recorded AFTER fromRev, oldest first. Corrupt lines are skipped
+   * individually — a torn write must never kill the whole protocol.
+   * @param {number} fromRev
+   */
+  deltaSince(fromRev = 0, { limit = 200 } = {}) {
+    const base = Number.isFinite(fromRev) ? Math.floor(fromRev) : 0;
+    let lines = [];
+    try { lines = fs.readFileSync(this.deltasFile, 'utf8').split('\n').filter(Boolean); } catch { return []; }
+    const out = [];
+    for (const l of lines.slice(-2000)) {
+      try {
+        const e = JSON.parse(l);
+        if (Number.isFinite(e.rev) && e.rev > base) out.push(e);
+      } catch { /* torn line — skip the entry, keep the log */ }
+    }
+    return out.slice(0, limit);
+  }
+
+  /* --- injection ledger: which rev did a session last SEE injected? --- */
+  noteInjected(session = 'main') {
+    const sid = String(session || 'main');
+    if (this._sessions[sid] === this._rev) return { ok: true, rev: this._rev, wrote: false };
+    this._sessions[sid] = this._rev;
+    this._saveState();
+    return { ok: true, rev: this._rev, wrote: true };
+  }
+  injectedRev(session = 'main') {
+    const v = this._sessions[String(session || 'main')];
+    return Number.isFinite(v) ? v : null;
+  }
+  /** >0 means the session is THIS many memory mutations behind. */
+  staleness(session = 'main') {
+    const v = this.injectedRev(session);
+    return v === null ? this._rev : Math.max(0, this._rev - v);
   }
 
   get factsFile() {
@@ -62,13 +143,22 @@ export class Memory {
       const inter = [...tk].filter((w) => ek.has(w)).length;
       return ek.size && inter / Math.max(1, new Set([...tk, ...ek]).size) > 0.75;
     });
-    const line = dup >= 0 ? `- ${clean}${tags.length ? ` \`${tags.join('` \`')}\`` : ''}` : `- ${clean}${tags.length ? ` \`${tags.join('` \`')}\`` : ''}`;
-    if (dup >= 0) existing[dup] = line.replace(/^- /, '- ');
+    const line = `${clean}${tags.length ? ` \`${tags.join('` \`')}\`` : ''}`;
+    /* §9 no-op write elimination: an identical fact at the same slot changes
+       NOTHING, so the old unconditional full-file rewrite is provably a
+       wasted write. Skip it and say so — the delta protocol reports saves,
+       it does not hide work. */
+    if (dup >= 0 && existing[dup] === line) {
+      bus.debug('memory.remember.noop', { chars: clean.length });
+      return { ok: true, count: existing.length, replaced: null, unchanged: true, file: this.factsFile, rev: this._rev };
+    }
+    if (dup >= 0) existing[dup] = line;
     else existing.unshift(line);
     const capped = existing.slice(0, this.cfg?.get('memory.maxNotes') || 400);
     fs.writeFileSync(this.factsFile, `# Minnen\n\n${capped.map(f => '- ' + f.replace(/^- /, '')).join('\n')}\n`);
-    bus.info('memory.remember', { dup: dup >= 0, chars: clean.length });
-    return { ok: true, count: capped.length, replaced: dup >= 0 ? clean : null, file: this.factsFile };
+    this._bump(dup >= 0 ? 'update' : 'add', clean);
+    bus.info('memory.remember', { dup: dup >= 0, chars: clean.length, rev: this._rev });
+    return { ok: true, count: capped.length, replaced: dup >= 0 ? clean : null, file: this.factsFile, rev: this._rev };
   }
 
   forget(query) {
@@ -79,8 +169,14 @@ export class Memory {
       const inter = [...q].filter((w) => k.has(w)).length;
       return !(inter >= 1 && inter / Math.max(1, q.size) > 0.5);
     });
+    const removed = existing.length - keep.length;
+    /* §9: no match → nothing changed → no rewrite, no revision bump. The
+       event-before (silent full rewrite of identical bytes) is the class of
+       silent waste delta memory exists to kill. */
+    if (removed === 0) return { ok: true, removed: 0, rev: this._rev };
     fs.writeFileSync(this.factsFile, `# Minnen\n\n${keep.map(f => '- ' + f.replace(/^- /, '')).join('\n')}\n`);
-    return { ok: true, removed: existing.length - keep.length };
+    this._bump('forget', query);
+    return { ok: true, removed, rev: this._rev };
   }
 
   event(type, data = {}) {
@@ -135,7 +231,30 @@ export class Memory {
   }
 
   stats() {
-    return { facts: this.facts().length, events: this.recentEvents(1000).length, dir: this.dir };
+    return { facts: this.facts().length, events: this.recentEvents(1000).length, dir: this.dir, rev: this._rev };
+  }
+
+  /**
+   * §9 delta memory for the event stream: rotate the unbounded events.jsonl
+   * to a rev-stamped archive and keep only the newest `keep` entries as the
+   * active working set. Content is preserved (archived, not deleted), entry
+   * count is returned so callers can verify conservation.
+   */
+  compactEvents(keep = 200) {
+    const keepN = Math.max(1, Math.floor(Number(keep) || 200));
+    let lines = [];
+    try { lines = fs.readFileSync(this.eventsFile, 'utf8').split('\n').filter(Boolean); } catch { return { ok: true, archived: null, kept: 0, total: 0 }; }
+    if (lines.length <= keepN) return { ok: true, archived: null, kept: lines.length, total: lines.length };
+    const archive = path.join(this.dir, `events.r${this._rev}.n${lines.length}.jsonl`);
+    try {
+      fs.writeFileSync(archive, lines.join('\n') + '\n');
+      fs.writeFileSync(this.eventsFile, lines.slice(-keepN).join('\n') + '\n');
+    } catch (err) {
+      bus.debug('memory.compactEvents.failed', { error: err.message });
+      return { ok: false, error: err.message, archived: null, total: lines.length };
+    }
+    bus.info('memory.compactEvents', { total: lines.length, kept: keepN, archive: path.basename(archive) });
+    return { ok: true, archived: archive, kept: keepN, total: lines.length };
   }
 }
 

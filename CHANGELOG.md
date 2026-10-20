@@ -6,6 +6,32 @@ GitHub Actions CI unless stated otherwise; nothing here claims a browser or huma
 without saying so explicitly. Version tags map 1:1 to git tags.
 
 
+
+## 2026-10-20 — WAVE 3: delta memory protocol (§9) — v0.9.11
+
+### Added
+- **Memory revisions + append-only delta log** (`memory-state.json` atomic tmp+rename, `memory-deltas.jsonl`):
+  every `remember`/`forget` mutation bumps a monotonic rev and records `{rev, ts, kind: add|update|forget, text}`.
+  facts.md stays the materialized view — the read path is untouched (zero regression risk by construction).
+  `deltaSince(rev)` is order-true and tolerates torn log lines entry-by-entry.
+- **No-op write elimination** (the protocol's first measurable win): `remember` of an already-identical fact and
+  `forget` with no match no longer rewrite facts.md wholesale — skipped writes are reported (`unchanged: true`)
+  instead of silently happening. Old behavior rewrote the full 400-fact file on every call either way.
+- **`compactEvents(keep)`**: rotates unbounded `events.jsonl` to a rev-stamped archive (`events.r<rev>.n<total>.jsonl`)
+  keeping the newest entries as the active working set. Nothing deleted — archived; totals returned for
+  conservation checks.
+- **Session injection ledger**: `noteInjected(session)` / `injectedRev(session)` / `staleness(session)` persisted
+  in the rev state; `agent.js` stamps the ledger on every memory injection, so "which memory revision has this
+  chat actually seen?" is observable evidence, not hope. `stats()` now carries `rev`.
+
+### Verified
+- 6 new deterministic tests (`test/w3-delta-memory.test.js`, isolated tmp dirs, real files): rev bump + delta
+  kinds; identical-fact no-op (file size + rev + delta log all unchanged); forget only-bumps-on-removal;
+  order-true deltaSince surviving a torn line; compactEvents conservation + newest-kept + idempotence;
+  ledger persistence across a simulated restart incl. staleness arithmetic.
+- Full local suite: **482 tests, 465 pass, 0 fail, 17 skip** (all skips machine-gated).
+
+
 ## 2026-10-20 — WAVE 2: adaptive topology dispatch + critical-path-first scheduling (§5+§8) — v0.9.10
 
 ### Added
