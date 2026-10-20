@@ -334,7 +334,7 @@ jobs:
           $n = 0; while (-not (Test-Path $exe) -and $n -lt 30) { Start-Sleep -Seconds 2; $n += 2 }
           if (-not (Test-Path $exe)) { throw "installed exe missing (exit=$($proc.ExitCode))" }
           "installed at $exe"
-      - name: Verify this session IS interactive (honesty gate — c02 ready)
+      - name: Verify this session IS interactive (honesty gate - c02 ready)
         shell: powershell
         run: |
           $b = [Environment]::UserInteractive
