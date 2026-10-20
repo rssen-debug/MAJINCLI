@@ -179,7 +179,7 @@ await caseRun('05', 'build-ai-agent',
     const exists = has(agentName);
     const src = read(agentName);
     const parse = exists ? spawnSync(process.execPath, ['--check', f(agentName)], { encoding:'utf8',timeout:10000 }) : null;
-    const exported = /export\s+(?:async\s+)?function\s+respond\s*\(|export\\s+(?:const|let)\s+respond\b/.test(src);
+    const exported = /export\s+(?:async\s+)?function\s+respond\s*\(|export\s+(?:const|let)\s+respond\b/.test(src);
     // Generated code executes in a read-only, unprivileged, NO-NETWORK
     // container with ONLY this temporary QA workspace mounted.
     const runCLI = marker => spawnSync('docker', ['run', '--rm', '--pull=never', '--network','none',
