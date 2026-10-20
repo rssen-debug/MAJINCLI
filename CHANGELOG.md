@@ -15,6 +15,47 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 
 
 
+
+## 2026-10-20 — WAVE 11: bidirectional cap tuning, every decision logged with why + per-input evidence — v0.9.19
+
+### Changed (user directive)
+- **`runSwarm` adaptive concurrency is now two-directional.** DOWN (contraction, existing):
+  proven overrun ≥ factor freezes the cap at measured width. NEW **UP (recovery)**: after a
+  freeze, proven within-estimate completions (cumulative ratio ≤ 1.25) reopen **exactly one
+  lane per decision tick**, never past the declared `cap` — the orchestrator may tune up/down,
+  but only on measured evidence, never on hope.
+- **Every decision is logged with WHY, the new cap, and per-input evidence.** Each
+  `topology_adapt` event now carries a human-readable `why` (measured ratio, factor, sample
+  count, annotated-est/actual sums), `capBefore`/`capNow`, `evidence {samples, estSumMs,
+  actSumMs, worstInputs}` and `perInput` (worst-ratio inputs, sorted desc, top 3) — "how
+  capped per input" is data, not prose.
+- **Flood-honesty bound** (`maxAdaptations`, default 50, configurable): decision floods mute
+  adaptive control — and the mute itself is logged exactly once (`adaptive_flood_mute`), so
+  silence can never hide oscillation. Task results are never eaten by muting.
+- Direction discipline: overruns always `capNow < capBefore`; recoveries always
+  `+1 ≤ capN`. Un-annotated grids never adapt (unchanged legacy rule).
+
+### Fixed during the wave (design lesson, recorded)
+- First T2/T4 scenario builds let fast within-estimate tasks complete BEFORE the overrun wave,
+  masking the cumulative ratio — the freeze they were testing never fired. Redesigned with
+  dependency waves (goods gated on the bad wave) so causality is explicit. Rule: when a test
+  observes an adaptation, the scenario must PROVE the precondition happened first.
+
+### Verified
+- `test/w11-cap-tuning-log.test.js` — 5 tests: enriched overrun event shape, recovery (+1
+  lane, ≤cap, logged, only-on-proof), quiet/un-annotated silence, bounded flood mute,
+  direction discipline. Full suite: **534 / 517 / 0 / 17**.
+
+### Fixed during PR review (CI evidence)
+- **package-lock.json shipped CORRUPT (zero package entries)** — `npm ci` died in the check
+  job. Lock restored from the last healthy commit (`3c422dd`, 294 entries) and re-bumped
+  JSON-aware (root + packages[""] only — the naive full-text replace that preceded it is now
+  a banned pattern for structured files). **release-gate hardened**: `package-lock.json
+  structure` (entry count) is now part of the version-literals check, and a w6 sabotage test
+  proves an empty lock blocks the gate. Rule added to knownFailures: never text-replace into
+  package-lock; always JSON-aware edit + structure assert after any bump.
+
+
 ## 2026-10-20 — WAVE 10: skill visit telemetry — a per-skill counter the agent can see — v0.9.18
 
 ### Added (user directive)

@@ -237,7 +237,7 @@ export function isTransientFailure(msg) {
  *    width active when the overrun was proven. Deterministic, evented, and
  *    reported in the result; `adaptive:false` restores the legacy fixed cap.
  */
-export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, onEvent = () => {}, maxAttempts = 1, adaptive = true, overrunFactor = 2 }) {
+export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, onEvent = () => {}, maxAttempts = 1, adaptive = true, overrunFactor = 2, maxAdaptations = 50 }) {
   validateGraph(nodes);
   const attempts = new Map(nodes.map((n) => [n.id, 0]));
   const maxAttemptsN = Math.max(1, Math.min(4, Number(maxAttempts) || 1));
@@ -280,7 +280,10 @@ export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, o
   const adaptations = [];
   const adaptiveOn = adaptive !== false;
   const factorN = Math.max(1, Number(overrunFactor) || 2);
+  const recoveryRatio = 1.25;      /* reopen only on proven within-estimate work */
+  const maxAdaptN = Math.max(1, Math.min(500, Number(maxAdaptations) || 50)); /* bounded: floods end adaptive control LOUDLY */
   let frozenCap = null; // null = full capN; frozen to the width at proof-time
+  let adaptationsMuted = false;
 
   const measuredRatio = () => {
     let est = 0, act = 0;
@@ -291,6 +294,48 @@ export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, o
       }
     }
     return est > 0 ? act / est : 1; // unannotated grids never adapt — legacy behavior
+  };
+
+  /* WAVE 11 (user directive): every cap change MUST clearly log WHY, the new
+     cap, and HOW capped per input — the evidence, not a vibe. */
+  const adaptEvidence = () => {
+    const per = [];
+    let estSum = 0, actSum = 0;
+    for (const [id, r] of results) {
+      if (r && r.ok === true && Number.isFinite(r.ms)) {
+        const e = byIdLocal.get(id) && byIdLocal.get(id).estMs;
+        if (Number.isFinite(e) && e > 0) {
+          estSum += e; actSum += r.ms;
+          per.push({ id, estMs: e, ms: r.ms, ratio: Math.round((r.ms / e) * 100) / 100 });
+        }
+      }
+    }
+    per.sort((a, b) => b.ratio - a.ratio);
+    return { samples: per.length, estSumMs: Math.round(estSum), actSumMs: Math.round(actSum), worstInputs: per.slice(0, 3) };
+  };
+
+  const logAdapt = (kind, capBefore, capNext, evidence, measured) => {
+    if (adaptations.length >= maxAdaptN) {
+      if (!adaptationsMuted) {
+        adaptationsMuted = true;
+        const flood = { type: 'topology_adapt', reason: 'adaptive_flood_mute', why: `adaptation flood: ${maxAdaptN} decisions reached — adaptive control muted so silence cannot hide oscillation`, evidence };
+        adaptations.push(flood); onEvent(flood);
+      }
+      return false;
+    }
+    const round = (x) => Math.round(x * 100) / 100;
+    const ev = {
+      type: 'topology_adapt', reason: kind,
+      why: kind === 'overrun'
+        ? `measured overrun ${round(measured)}x >= factor ${factorN} across ${evidence.samples} annotated input(s) (est ${evidence.estSumMs}ms vs actual ${evidence.actSumMs}ms) — concurrency contracts to the proven width`
+        : `recovery: measured ratio ${round(measured)}x <= ${recoveryRatio} after contraction — reopened one lane toward cap ${capN}`,
+      measuredRatio: round(measured), factor: factorN,
+      capBefore, capNow: capNext,
+      evidence, perInput: evidence.worstInputs,
+    };
+    adaptations.push(ev);
+    onEvent(ev);
+    return true;
   };
 
   const launchOne = (n) => {
@@ -352,15 +397,27 @@ export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, o
     const launchable = pending.filter((n) => readyFor(n));
     /* §8: longest critical tail first; ties keep declaration order. */
     launchable.sort((a, b) => (rankMap.get(b.id) - rankMap.get(a.id)) || (declIndex.get(a.id) - declIndex.get(b.id)));
-    /* §5: contraction on proven overrun — measured before each launch tick. */
+    /* §5 + WAVE 11: adaptive cap control, BOTH directions, every decision
+       logged with why/evidence per input.
+       DOWN (contraction): proven overrun >= factorN → freeze at measured width.
+       UP (recovery): after a freeze, proven within-estimate work (<= 1.25x)
+       reopens ONE lane per tick, never past capN. Every change: logAdapt —
+       or silence itself, if floods mute adaptation, gets logged. */
     let capNow = capN;
-    if (adaptiveOn && launchable.length) {
+    if (adaptiveOn && launchable.length && !adaptationsMuted) {
       const ratio = measuredRatio();
-      if (frozenCap === null && ratio >= factorN) {
-        frozenCap = Math.max(1, inFlight.size);
-        const ev = { type: 'topology_adapt', reason: 'overrun', measuredRatio: Math.round(ratio * 100) / 100, capBefore: capN, capNow: frozenCap };
-        adaptations.push(ev);
-        onEvent(ev);
+      if (ratio >= factorN) {
+        const next = Math.max(1, Math.min(frozenCap ?? inFlight.size, inFlight.size || 1, capN));
+        if (frozenCap === null || next !== frozenCap) {
+          const before = frozenCap ?? capN;
+          frozenCap = next;
+          logAdapt('overrun', before, next, adaptEvidence(), ratio);
+        } else {
+          frozenCap = next;
+        }
+      } else if (frozenCap !== null && frozenCap < capN && ratio <= recoveryRatio) {
+        logAdapt('recovery', frozenCap, frozenCap + 1, adaptEvidence(), ratio);
+        frozenCap += 1;
       }
       if (frozenCap !== null) capNow = Math.min(capN, frozenCap);
     }

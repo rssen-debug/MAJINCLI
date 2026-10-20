@@ -34,10 +34,16 @@ const pass = (name, detail = '') => results.push({ check: name, ok: true, detail
 /* 1 — version literals across the five release files */
 function checkVersionLiterals() {
   const v = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
+  /* W11 postmortem (2026-10-20): a wave once shipped a lock with ZERO packages
+     (corrupt) — npm ci died in CI. The lock must carry real structure, not
+     just two version strings. */
+  const lock = JSON.parse(fs.readFileSync(path.join(ROOT, 'package-lock.json'), 'utf8'));
+  const lockPkgCount = Object.keys(lock.packages || {}).length;
   const spots = [
     ['package.json', JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version],
-    ['package-lock.json root', JSON.parse(fs.readFileSync(path.join(ROOT, 'package-lock.json'), 'utf8')).version],
-    ['package-lock.json packages[""]', JSON.parse(fs.readFileSync(path.join(ROOT, 'package-lock.json'), 'utf8')).packages[''].version],
+    ['package-lock.json root', lock.version],
+    ['package-lock.json packages[""]', lock.packages[''].version],
+    ['package-lock.json structure', lockPkgCount > 10 ? v : `(CORRUPT: only ${lockPkgCount} package entries — must be the full graph)`],
   ];
   /* containment rule (how the wave-bump actually writes): every release
      file must carry the CURRENT version string. First-match extraction was
