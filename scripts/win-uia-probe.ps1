@@ -25,7 +25,7 @@ param(
 )
 
 $result = [ordered]@{
-  schema    = 'majin.win-uia-probe.v2.1'
+  schema    = 'majin.win-uia-probe.v2.2'
   timestamp = (Get-Date).ToUniversalTime().ToString('o')
   env = [ordered]@{
     osVersion    = [System.Environment]::OSVersion.VersionString
@@ -264,14 +264,95 @@ if ($np -and -not $script:result.p3_notepad.readBackMatches) {
   }
 }
 
+# P6: WinForms controlled fixture — a real desktop app with zero external dependencies.
+# Drives a classic TextBox via UIA ValuePattern: the core capability question answered on real
+# Windows even though modern UWP-style Notepad exposes no text patterns (P3/P5 gap evidence).
+$p6 = [ordered]@{
+  ran = $true; formShown = $false; windowFound = $false; editFound = $false
+  editControlType = $null; valuePatternOk = $false; setValueOk = $false
+  readBackOk = $false; readBackMatches = $false; clearedOk = $false; note = $null
+}
+try {
+  Add-Type -AssemblyName System.Windows.Forms
+  $p6marker = "MAJIN-P6-" + ([guid]::NewGuid().ToString("N").Substring(0,8))
+  $p6win = "MAJIN-P6-FIXTURE-" + (Get-Random)
+  $s6 = [Hashtable]::Synchronized(@{ close = $false; shown = $false })
+  $th = New-Object System.Threading.Thread ({
+      param($w,$m,$s)
+      Add-Type -AssemblyName System.Windows.Forms
+      $form = New-Object System.Windows.Forms.Form
+      $form.Text = $w; $form.Name = $m
+      $form.TopMost = $true
+      $form.Width = 480; $form.Height = 200
+      $tb = New-Object System.Windows.Forms.TextBox
+      $tb.Name = "MAJINProbeEdit"
+      $tb.Multiline = $true
+      $tb.Dock = [System.Windows.Forms.DockStyle]::Fill
+      $form.Controls.Add($tb)
+      $form.Add_Shown({ $s.shown = $true; $tb.Focus() })
+      $timer = New-Object System.Windows.Forms.Timer
+      $timer.Interval = 250
+      $timer.Add_Tick({ if ($s.close) { $timer.Stop(); $form.Close() } })
+      $timer.Start()
+      [System.Windows.Forms.Application]::Run($form)
+    })
+  $th.SetApartmentState([System.Threading.ApartmentState]::STA)
+  $th.Start(@($p6win, $p6marker, $s6))
+  for ($i=0; $i -lt 40 -and -not $s6.shown; $i++) { Start-Sleep -Milliseconds 250 }
+  $p6.formShown = [bool]$s6.shown
+  if ($s6.shown) {
+    $w6 = $null
+    for ($i=0; $i -lt 40 -and -not $w6; $i++) {
+      $w6 = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst(
+        [System.Windows.Automation.TreeScope]::Children,
+        (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $p6win)))
+      if (-not $w6) { Start-Sleep -Milliseconds 250 }
+    }
+    if ($w6) {
+      $p6.windowFound = $true
+      $e6 = $null
+      $condEdit = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
+      for ($i=0; $i -lt 20 -and -not $e6; $i++) {
+        $e6 = $w6.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condEdit)
+        if (-not $e6) { Start-Sleep -Milliseconds 200 }
+      }
+      if ($e6) {
+        $p6.editFound = $true
+        $p6.editControlType = $e6.Current.ControlType.ProgrammaticName
+        try {
+          $s6p = [System.Windows.Automation.ValuePattern]::Pattern
+          $v6 = $e6.GetCurrentPattern($s6p)
+        } catch { $v6 = $null }
+        if ($v6) {
+          $p6.valuePatternOk = $true
+          try {
+            $e6.SetFocus() | Out-Null
+            $v6.SetValue($p6marker)
+            $p6.setValueOk = $true
+            $p6.readBackOk = $true
+            $p6.readBackMatches = ($v6.Current.Value -eq $p6marker)
+            if ($p6.readBackMatches) {
+              $v6.SetValue("")
+              $p6.clearedOk = ($v6.Current.Value -eq "")
+            }
+          } catch { $p6.note = "value lane: $($_.Exception.Message)" }
+        } else { $p6.note = "Edit found but no ValuePattern" }
+      } else { $p6.note = "no Edit descendant under fixture window" }
+    } else { $p6.note = "fixture window not found in UIA root" }
+    $s6.close = $true
+    Start-Sleep -Milliseconds 600
+  } else { $p6.note = "fixture form never reached Shown state" }
+} catch { $p6.note = "P6 lane exception: $($_.Exception.Message)" }
+$script:result.p6_winformsFixture = $p6
+
 # cleanup notepad
 if ($proc -and -not $proc.HasExited) {
   try { Stop-Process -Id $proc.Id -Force -ErrorAction Stop; $script:result.p3_notepad.closedOk = $true } catch { $script:result.p3_notepad.closedOk = $false }
 } elseif ($proc) { $script:result.p3_notepad.closedOk = $true }
 
 $script:result.capabilities.locateControls = $script:result.capabilities.locateControls -or ($script:result.p5_subtreeAndFallback.nodeCount -gt 0)
-$script:result.capabilities.textInput = $script:result.p3_notepad.setValueOk -or $script:result.p5_subtreeAndFallback.fallbackValueWriteOk -or $script:result.p5_subtreeAndFallback.sendKeysOk
-$script:result.capabilities.readBack  = $script:result.p3_notepad.readBackMatches -or $script:result.p5_subtreeAndFallback.fallbackReadBackMatches -or $script:result.p5_subtreeAndFallback.sendKeysOk
+$script:result.capabilities.textInput = $script:result.p3_notepad.setValueOk -or $script:result.p5_subtreeAndFallback.fallbackValueWriteOk -or $script:result.p5_subtreeAndFallback.sendKeysOk -or $script:result.p6_winformsFixture.setValueOk
+$script:result.capabilities.readBack  = $script:result.p3_notepad.readBackMatches -or $script:result.p5_subtreeAndFallback.fallbackReadBackMatches -or $script:result.p5_subtreeAndFallback.sendKeysOk -or $script:result.p6_winformsFixture.readBackMatches
 
 $result | ConvertTo-Json -Depth 10 | Set-Content -Path $OutFile -Encoding utf8
 Write-Output ($result | ConvertTo-Json -Depth 10)
