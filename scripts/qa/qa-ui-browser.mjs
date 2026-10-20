@@ -252,25 +252,29 @@ async function main() {
     persisted ? CL.CI : CL.FAIL, `reloaded transcript tail still contains earlier content`, { tail: afterReload.slice(-140) });
 
   /* u12 — error/help state: stop button while generating */
-  let stopVisible = false, stopWorked = null;
+  let stopVisible = false, stopWorked = null, stage = 'init', stageErr = null;
   try {
     await page.fill('#input', 'Write a very long essay about granite.');
     await page.click('#send');
-    await page.waitForTimeout(2500);
-    stopVisible = await page.evaluate(() => { const b = document.getElementById('b-stop'); return Boolean(b && !b.hidden && !b.disabled); });
+    stage = 'await-visible';
+    await page.locator('#b-stop').waitFor({ state: 'visible', timeout: 12000 });
+    stopVisible = true;
     await shot(page, 'u12-stop');
-    if (stopVisible) {
-      const lenBefore = await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0);
-      await page.click('#b-stop');
-      await page.waitForTimeout(3000);
-      const lenAfterClick = await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0);
-      await page.waitForTimeout(5000);
-      const lenAfterSettle = await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0);
-      stopWorked = lenAfterClick === lenAfterSettle && lenAfterSettle >= lenBefore;
-    }
-  } catch (err) { /* recorded below */ }
+    stage = 'click';
+    const lenBefore = await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0);
+    await page.click('#b-stop');
+    stage = 'settle';
+    await page.waitForTimeout(3000);
+    const lenAfterClick = await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0);
+    await page.waitForTimeout(5000);
+    const lenAfterSettle = await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0);
+    const inputFree = await page.evaluate(() => !document.getElementById('input').disabled);
+    stopWorked = lenAfterClick === lenAfterSettle && lenAfterSettle >= lenBefore && inputFree;
+    stage = 'done';
+  } catch (err) { stageErr = String(err).slice(0, 180); }
   rec('u12', 'interrupt control appears and halts generation', LANE,
-    stopVisible ? CL.CI : CL.FAIL, `stop control visible during generation=${stopVisible}${stopWorked === null ? '' : `; UI-lane halt evidence (scroller froze)=${stopWorked}`}`, { stopVisible, stopWorked });
+    (stopVisible && stopWorked) ? CL.CI : CL.FAIL, `stop control visible=${stopVisible}; halts generation=${stopWorked} (stopped at stage=${stage}${stageErr ? `: ${stageErr}` : ''})`,
+    { stopVisible, stopWorked, stage, stageErr });
 
   await browser.close();
   await stopServer();
