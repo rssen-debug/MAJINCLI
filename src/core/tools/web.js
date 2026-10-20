@@ -9,6 +9,7 @@ import { def } from './registry.js';
 import { resolveIn } from './files.js';
 import { bus } from '../log.js';
 import { openFor, closeFor, isOpen, journal } from '../browser.js';
+import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, VERSION as GROUND_V } from '../browser-ground.js';
 
 const followedSafe = (fol) => (fol && fol.followed === true ? true : false);
 
@@ -270,14 +271,25 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     group: 'web',
     risk: 'exec',
     desc: 'Click an element by CSS selector and report what actually happened (element text + URL after the click). Screenshots via browser.shot when you need to look.',
-    params: { selector: 'string: CSS selector of the thing to click' },
-    examples: ['browser.click({selector:"button[type=submit]"})'],
-    async run({ selector }, ctx) {
+    params: {
+      selector: 'string: CSS selector of the thing to click (optional — or give ref)',
+      ref: 'string: numbered element reference from browser.elements, e.g. "e3" (optional — or give selector)',
+    },
+    examples: ['browser.click({selector:"button[type=submit]"})', 'browser.click({ref:"e3"})'],
+    async run({ selector, ref }, ctx) {
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
-      journal.guard(session, `browser.click:${selector}`);
+      if (!selector && !ref) return { ok: false, error: { code: 'bad_input', message: 'give selector or ref (from browser.elements)' } };
+      journal.guard(session, `browser.click:${selector || ref}`);
       const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
-      const sel = JSON.stringify(String(selector));
+      let sel;
+      if (ref) {
+        const cached = recallRef(session, ref);
+        if (!cached) return { ok: false, error: { code: 'ref_unknown', message: `no element known for ref "${ref}" in this session — run browser.elements first to ground the page` } };
+        sel = JSON.stringify(`[data-majin-ref=${JSON.stringify(String(ref))}]`);
+      } else {
+        sel = JSON.stringify(String(selector));
+      }
       const hit = await b.eval(`(() => {
         const el = document.querySelector(${sel});
         if (!el) return { found: false };
@@ -286,7 +298,10 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         el.click();
         return { found: true, tag: String(el.tagName).toLowerCase(), text: t };
       })()`);
-      if (!hit.found) return { ok: false, error: { code: 'no_such_element', message: `no clickable element matches ${selector}`, hint: 'browser.read the page and pick a selector from the real text' } };
+      if (!hit.found) {
+        const code = ref ? 'ref_stale' : 'no_such_element';
+        return { ok: false, error: { code, message: ref ? `element ${ref} vanished from the DOM (page re-rendered?) — run browser.elements again for fresh refs; clicking a NEW node by assumption is refused` : `no clickable element matches ${selector}`, hint: 'browser.elements the page and click by number — CSS guesses are only the fallback' } };
+      }
       /* a click may spawn a NEW tab (target=_blank, window.open): follow it
          so the agent lands where the page actually went */
       const fol = await (b.followNewTarget ? b.followNewTarget({ windowMs: 1500 }) : { followed: false });
@@ -382,6 +397,47 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
   }),
 
   def({
+    name: 'browser.elements',
+    group: 'web',
+    risk: 'read',
+    desc: 'W6 Set-of-Marks grounding: number every interactive element on the open page, draw the matching pink marks on screen, and return the references so browser.click({ref:"eN"}) hits deterministically instead of guessing. Refs are of-the-moment evidence; a re-rendered DOM makes them stale (browser.click then says ref_stale honestly).',
+    params: { refresh: 'string: "true" = re-walk the DOM now and replace the cached refs (optional, default: false)' },
+    examples: ['browser.elements({})'],
+    async run({ refresh }, ctx) {
+      const session = ctx.session || 'default';
+      journal.guard(session, 'browser.elements');
+      if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
+      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
+      if (String(refresh) === 'true') clearRefs(session);
+      const payload = await b.eval(GROUND_JS).catch((e) => ({ error: String(e?.message || e) }));
+      if (payload?.error) return { ok: false, error: { code: 'ground_eval', message: 'page walk failed: ' + payload.error } };
+      rememberRefs(session, payload.elements || []);
+      return {
+        ok: true,
+        result: renderElementsText(payload),
+        meta: { version: GROUND_V, count: payload.count, url: payload.url, title: payload.title },
+        summary: `${payload.count} elements grounded on this page`,
+      };
+    },
+  }),
+def({
+    name: 'browser.clear_marks',
+    group: 'web',
+    risk: 'write',
+    desc: 'Remove all pink Set-of-Marks overlay numbers and cached refs — honest teardown marker (refs become ref_unknown after this).',
+    params: { noParams: 'string: none (optional)' },
+    examples: ['browser.clear_marks({})'],
+    async run(_, ctx) {
+      const session = ctx.session || 'default';
+      journal.guard(session, 'browser.clear_marks');
+      if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser open' } };
+      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
+      await b.eval(CLEAR_JS).catch(() => undefined);
+      clearRefs(session);
+      return { ok: true, result: 'marks + cached refs cleared on the page', summary: 'marks cleared' };
+    },
+  }),
+def({
     name: 'browser.close',
     group: 'web',
     risk: 'write',

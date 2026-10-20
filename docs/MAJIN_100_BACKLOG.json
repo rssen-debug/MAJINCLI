@@ -53,7 +53,7 @@
       "id": "W4-teams-upgrade",
       "wave": "W4",
       "desc": "Persistent roles, shared task-scoped memory, delegated work, budgets, checkpoints, restart-recovery on swarm.js basen.",
-      "status": "INCOMPLETE"
+      "status": "VERIFIED-CORE concrect-instantierad: docs/REUSE.md (register + evidence per komponent) + browser-ground.js SoM-power-transfer (browser-use-mönstret adaptation to egen CDP-brygga, zero-copy) med real-Live-Chromium-bevis (ground-to-click-ref-verkade, marks+clear+re-ground stablil) + browser.click({ref:\"eN\"}) extension med ref_unknown/ref_stale honest-fail + browser.clear_marks teal-down + golden 126 to 128 + full svit 641/623/0/18"
     },
     {
       "rank": 8,
@@ -199,6 +199,13 @@
       "done": "UI-specens gap #6 (stream-switch cross-chat, sjalv-rapporterad OPEN i forra push) NU STANGD: acceptance-gates P0.6a-c added to scripts/ui-repair-test.mjs (real SSE-stream into chat-A via API mid-flight, switch to chat-B, verify no leak, switch back). Test FIRST: P0.6b was RED -> real bug: window.S was undefined in classic-script global scope (const top-level scripts don't attach); chats.js wrote to a ghost object — clicks never moved the actual session. Fix: explicit window.S = S alias in app.js. Also P0.5a/b robustness-gates. 30/30 gates + full suite 633/615/0/18",
       "percent": 60,
       "next": "W14 self-audit eller W6 power-transfer eller win-runner acceptance for CU + headline-chrome pa Windows (env-gate)"
+    },
+    {
+      "round": 13,
+      "date": "2026-10-20",
+      "done": "W6 POWER TRANSFER instantiated concretely: docs/REUSE.md register (chokidar/UFO/browser-use-pattern/TradingAgents/pkg-med-evidence-rader) + SoM-grounding for browser.adaptern (browser-use-patenne adaptation, aldrig kopierad rampi): browser.elements (marks+refs) + browser.click-ref extension (selector eller ref) + browser.clear_marks med ref-tears; 6/6 unit + live-Chromium-bevis (fick-titeln ändrad via e1-klick, marks-drawn-clear-stabe) + full regression 641/623/0/18",
+      "percent": 63,
+      "next": "W14 self-audit (systemet auditar sin egen arlighet-top-down, mock-hantering foralltating) eller W4 browser-control-loop"
     }
   ]
 }
