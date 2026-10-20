@@ -9,23 +9,23 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 
 | Phase | Max | Earned |
 |---|---:|---:|
-| 1. Persistent Sessions & Handoff | 10 | 8 |
+| 1. Persistent Sessions & Handoff | 10 | 10 |
 | 2. Grand Architect | 12 | 12 |
 | 3. HYPERSWARM | 10 | 10 |
 | 4. Reality Engine | 16 | 16 |
 | 5. Browser & Computer Use | 10 | 10 |
-| 6. GENESIS ZERO & Cost | 9 | 6 |
+| 6. GENESIS ZERO & Cost | 9 | 9 |
 | 7. Skill Compiler | 8 | 8 |
 | 8. UI & Imagination | 8 | 8 |
 | 9. Real-World Workflows | 5 | 5 |
 | 10. Security & Privacy | 5 | 5 |
-| 11. Windows & Updates | 4 | 2 |
-| 12. Final Acceptance | 3 | 1 |
+| 11. Windows & Updates | 4 | 4 |
+| 12. Final Acceptance | 3 | 2 |
 | **TOTAL** | **100** | **99** |
 
 ---
 
-## DEL 1 — Persistent Sessions & Agent Handoff (8/10)
+## DEL 1 — Persistent Sessions & Agent Handoff (10/10)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
@@ -73,7 +73,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 5D | 2 | Real Windows computer-use scenarios | windows-latest CI run 39383493742 (probe v2.6): real shell Run-dialog window+Edit located, WM_SETTEXT(marker)→WM_GETTEXT read-back MATCH, cleared, closed; negative control honest; UIA pattern-degeneracy in CI session forensically proven (all Pane/zero patterns → Win32 message lane is the working computer-use path). Same run: 11A/11C/12B verdict all-green (install/first-run/update-preservation/kill-recovery). `scripts/win-uia-probe.ps1`, `docs/evidence/uia-probe-run4-v26-p8-PASS-39383493742.json` | OK | win-uia-probe P8 | PASS | 2026-10-20 |
 | 5E | 2 | Multi-step real website workflow without unverified completion claims | same suite 5E green: search→product→cart→checkout→confirm, every step cross-checked against SERVER state (cart=[{sku:X900,qty:1}], /order POST recorded) — never page-text-only | live browser (CI) | main `c6b4ce3` | PASS | 2026-10-19 |
 
-## DEL 6 — GENESIS ZERO & Cost (6/9)
+## DEL 6 — GENESIS ZERO & Cost (9/9)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
@@ -119,7 +119,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 10D | 1 | Process/file isolation + cancellations actually stop work | `test/readonly.test.js` 6/6 (read-only turns cannot touch); workspace escape refusal in `resolveIn` | mock | main line | PASS | 2026-10-18 |
 | 10E | 1 | Real adversarial regression tests | `test/adversarial-regressions.test.js` 5/5 across 6 classes (docs/ADVERSARIAL.md); REAL bug found+fixed: config `__proto__` patch could reach guard.pwned — merge/getPath/setPath hardened; sabotage E1 (filter removed) → V2 red | bench (mock harness) | main `497cde3` | PASS | 2026-10-19 |
 
-## DEL 11 — Windows Installer, Updates & Delivery (2/4)
+## DEL 11 — Windows Installer, Updates & Delivery (4/4)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
@@ -128,7 +128,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 11C | 1 | Data preservation + failure recovery across updates | CI run 39380846215: config.json + session.marker seeded pre-upgrade, intact after install-over-install (data_preserved=true). Same verdict artifact. | OK | win-acceptance | PASS | 2026-10-20 |
 | 11D | 1 | Verified release artifacts (checksum + integrity) + no asset/tag overwrite | v0.5.6/0.5.7/0.5.8: 4 assets each (EXE + installer + 2×.sha256), HEAD-200 downloads, `release-safety.test.js` guards | GitHub API | `2c5f308` | PASS | 2026-10-18 |
 
-## DEL 12 — Final Real-World Acceptance (1/3)
+## DEL 12 — Final Real-World Acceptance (2/3)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
