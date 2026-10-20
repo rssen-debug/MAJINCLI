@@ -1,5 +1,5 @@
 {
-  "lastVerifiedMain": "6897e18",
+  "lastVerifiedMain": "fd488ab",
   "lastCompletedMilestone": "GODLIKE V4 §7 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
   "currentWorkstream": "GODLIKE V4 WAVE 2 — §5 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
@@ -35,7 +35,7 @@
   "nextAction": "Perf lab A/B/C/D (§19): A/B single-agent vs topology-variant benchmarks using the shipped WAVE 2/4 primitives",
   "version": "0.9.12",
   "milestone": "WAVE 4: speculative execution lab §6 (off by default, waste-budgeted, audited) — local 471p/488t/0f/17s",
-  "branch": "feature/w4-speculate (in PR)",
+  "branch": "main (post-merge)",
   "decisions": {
     "windows-control-adapter": {
       "decision": "ADOPT raw UIA (System.Windows.Automation, zero deps) as control API; two-tier text I/O (patterns first, SendInput fallback + read-back); DEFER FlaUI (same bridge, .NET dep, fixes nothing measured); DEFER UFO/OmniParser vision lane (cost + OmniParser license caution stands)",
