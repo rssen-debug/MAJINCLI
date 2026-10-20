@@ -29,11 +29,11 @@ try {
     report.model = chosen;
     record('passed', 'catalog lists allowlisted low-cost model ' + chosen);
     const route = { apiKey: key, baseUrl: root, endpoint: root + '/chat/completions', model: chosen, extraHeaders: { 'x-opencode-session': 'majin-qa-' + process.env.GITHUB_RUN_ID, 'user-agent': 'majin-coding-agent/1.0', 'x-opencode-client': 'majin' } };
-    const result = await openaiOnce({ route, messages: [{ role: 'user', content: 'Reply exactly MAJIN_OK' }], maxTokens: 40, temperature: 0 });
+    const result = await openaiOnce({ route, messages: [{ role: 'user', content: 'Reply exactly MAJIN_OK' }], maxTokens: 600, temperature: 0 });
     assert.ok(result.text && result.text.trim().length > 0, 'empty model response');
     record('passed', 'MAJIN openaiOnce produced real low-cost-model completion');
     const tools = [{ name: 'qa_echo', description: 'Return the provided text', parameters: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] } }];
-    const answer = await openaiOnce({ route, messages: [{ role: 'user', content: 'Use the qa_echo tool with text set to MAJIN_TOOL_OK. Do not answer in plain text.' }], tools, maxTokens: 128, temperature: 0 });
+    const answer = await openaiOnce({ route, messages: [{ role: 'user', content: 'Use the qa_echo tool with text set to MAJIN_TOOL_OK. Do not answer in plain text.' }], tools, maxTokens: 650, temperature: 0 });
     if (answer.toolCalls.some(x => x.name === 'qa_echo')) record('passed', 'MAJIN tool-call parsing from real low-cost model');
     else { record('failed', 'MAJIN tool-call parsing', 'Model did not call the provided tool'); process.exitCode = 1; }
   }
