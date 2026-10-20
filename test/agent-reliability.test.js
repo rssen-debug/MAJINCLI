@@ -91,3 +91,22 @@ test('incomplete and blocked turns cannot become successful reusable auto-skills
   }
   assert.ok(source.includes("Mission incomplete"), 'partial mission may be falsely reported done');
 });
+
+
+test('an exhausted delegated worker is FAILED, never counted as a success', async () => {
+  const { setScript } = await import('../src/core/provider/mock.js');
+  const rt = await createRuntime({channels:false,scheduler:false});
+  const routes = Object.fromEntries(['chat','tasks','tools','analysis','code','research','final','summarize','router','aggregator'].map(x=>[x,'demo/demo-fast']));
+  const saved = rt.cfg.patch({models:{provider:'demo',routes},moa:{policy:'off'},guard:{mode:'off'},agent:{maxSteps:4}});
+  assert.equal(saved.ok,true);
+  setScript('sub:tasks', [{text:'I started, but have not completed the task',
+    toolCalls:[{name:'fs.list',args:{path:'.'}}]}]);
+  const output = await rt.registry.exec('agent.delegate', {
+    tasks:[{task:'List and verify two separate files, do not stop after one step',job:'tasks',maxSteps:1}],
+    parallel:false
+  }, {session:'qa-subagent'});
+  assert.equal(output.ok,true, JSON.stringify(output.error));
+  assert.equal(output.meta.failed,1,'a subagent that reached the step limit must be reported failed');
+  assert.match(String(output.result),/FEL:/);
+  await rt.shutdown();
+});
