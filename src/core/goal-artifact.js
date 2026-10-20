@@ -14,7 +14,10 @@ const TARGET = /(?<![\/\\\w.-])([\w-]+\.(?:txt|md|json|js|mjs|jsx|ts|tsx|html|cs
 /** Only unambiguous BASENAMES under the MAJIN workspace are automatically checked. */
 export function explicitTarget(input, workspace) {
   if (typeof input !== 'string' || typeof workspace !== 'string' || !workspace) return null;
-  const names = [...input.matchAll(TARGET)].map((m) => m[1]);
+  // Product/runtime names such as "Node.js" are not output artifacts.
+  // Preserve lowercase "node.js" when the user deliberately names a file.
+  const names = [...input.matchAll(TARGET)].map((m) => m[1])
+    .filter((name) => name !== 'Node.js');
   const unique = [...new Set(names)];
   if (unique.length !== 1) return null;
   const name = unique[0];
