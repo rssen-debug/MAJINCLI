@@ -101,7 +101,7 @@ const SCENARIOS = [
     input: 'run with 4 references',
     job: 'tasks',
     steps: [{ text: 'should not be used' }],
-    expect: { config: { path: 'moa.width', value: 4 }, avoid: /.*/ },
+    expect: { config: { path: 'moa.width', value: 4 }, avoid: /.*/, usage: { maxRequests: 1 } },
   },
   {
     name: 'guard-approval',
@@ -187,6 +187,7 @@ async function main() {
       const evs = [];
       approvalHits = 0;
       const approvals = [];
+      const usageBefore = rt.usage.summary(); /* W12: usage arm — ledger delta per scenario */
       const t0 = process.hrtime.bigint();
       let out = null;
       let err = null;
@@ -203,6 +204,12 @@ async function main() {
         err = e;
       }
       const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+      const usageAfter = rt.usage.summary();
+      const usageDelta = {
+        requests: (usageAfter.requests || 0) - (usageBefore.requests || 0),
+        tokens: (usageAfter.tokens || 0) - (usageBefore.tokens || 0),
+        costUsd: +(((usageAfter.costUsd || 0) - (usageBefore.costUsd || 0))).toFixed(6),
+      };
       if (sc.guard) rt.cfg.patch({ guard: { mode: 'confirm' } }, { persist: false });
 
       const toolEvents = evs.filter((e) => e.type === 'tool_result');
@@ -229,6 +236,15 @@ async function main() {
         const got = rt.cfg.get(sc.expect.config.path);
         check(`config ${sc.expect.config.path}=${sc.expect.config.value}`, got === sc.expect.config.value, `got ${got}`);
       }
+      /* W12 usage arm: codify REQUEST truth (measured, not aspirational) and
+         the free-by-design rule (cost must stay 0 in the mock arm). */
+      check('cost stays 0 (free arm)', usageDelta.costUsd === 0, `costUsd=${usageDelta.costUsd}`);
+      if (sc.expect.usage) {
+        const u = sc.expect.usage;
+        if (u.zeroRequests) check('usage: zero model requests', usageDelta.requests === 0, `requests=${usageDelta.requests}`);
+        if (u.maxRequests != null) check(`usage: requests ≤ ${u.maxRequests}`, usageDelta.requests <= u.maxRequests, `requests=${usageDelta.requests}`);
+        if (u.minRequests != null) check(`usage: requests ≥ ${u.minRequests}`, usageDelta.requests >= u.minRequests, `requests=${usageDelta.requests}`);
+      }
 
       const stepEvs = evs.filter((e) => e.type === 'step');
       const toolChars = stepEvs.reduce((a, e) => a + (e.toolChars || 0), 0);
@@ -245,6 +261,7 @@ async function main() {
         tools: names.length,
         toolNames: names,
         events: evs.length,
+        usage: usageDelta,
         ok: checks.every((c) => c.ok),
         checks,
       });
@@ -271,6 +288,11 @@ async function main() {
     tools: +(list.reduce((a, b) => a + b.tools, 0) / list.length).toFixed(2),
     steps: +(list.reduce((a, b) => a + b.steps, 0) / list.length).toFixed(2),
     events: list[0].events,
+    usage: {
+      requests: +(list.reduce((a, x) => a + (x.usage?.requests || 0), 0) / list.length).toFixed(2),
+      tokens: Math.round(list.reduce((a, x) => a + (x.usage?.tokens || 0), 0) / list.length),
+      costUsd: +(list.reduce((a, x) => a + (x.usage?.costUsd || 0), 0) / list.length).toFixed(6),
+    },
   }));
   /* HYPERSWARM-matning tidigt (kors fore resultatlistan skrivs) */
   let swarmSummary = null;
@@ -391,7 +413,15 @@ async function main() {
       tokens: usage.tokens || 0,
       costUsd: +(usage.costUsd || 0).toFixed(4),
     },
-    ok: results.length > 0 && results.every((r) => r.ok),
+    usageLedger: {
+      requestsSum: results.reduce((a, r) => a + (r.usage?.requests || 0), 0),
+      tokensSum: results.reduce((a, r) => a + (r.usage?.tokens || 0), 0),
+      conservedRequests: results.reduce((a, r) => a + (r.usage?.requests || 0), 0) === (usage.requests || 0),
+      conservedTokens: results.reduce((a, r) => a + (r.usage?.tokens || 0), 0) === (usage.tokens || 0),
+    },
+    ok: results.length > 0 && results.every((r) => r.ok)
+      && results.reduce((a, r) => a + (r.usage?.requests || 0), 0) === (usage.requests || 0)
+      && results.reduce((a, r) => a + (r.usage?.tokens || 0), 0) === (usage.tokens || 0),
   };
 
   await rt.shutdown();
@@ -411,10 +441,10 @@ async function main() {
   } else {
     const pad = (s, n) => String(s).padEnd(n);
     process.stdout.write(`\nMAJIN bench — mock provider, ${turns} turn(s) per scenario${withSubset ? ' (all vs subset)' : ''}\n`);
-    process.stdout.write(`${pad('scenario', 18)}${pad('pass', 7)}${pad('avg', 8)}${pad('p50', 8)}${pad('p95', 8)}${pad('tools', 7)}${pad('steps', 7)}events\n`);
+    process.stdout.write(`${pad('scenario', 18)}${pad('pass', 7)}${pad('avg', 8)}${pad('p50', 8)}${pad('p95', 8)}${pad('tools', 7)}${pad('steps', 7)}${pad('req', 5)}${pad('tok', 7)}events\n`);
     process.stdout.write('-'.repeat(72) + '\n');
     for (const r of rows) {
-      process.stdout.write(`${pad(r.scenario, 18)}${pad(`${r.pass}/${r.runs}`, 7)}${pad(`${r.msAvg}ms`, 8)}${pad(`${r.msP50}ms`, 8)}${pad(`${r.msP95}ms`, 8)}${pad(r.tools, 7)}${pad(r.steps, 7)}${r.events}\n`);
+      process.stdout.write(`${pad(r.scenario, 18)}${pad(`${r.pass}/${r.runs}`, 7)}${pad(`${r.msAvg}ms`, 8)}${pad(`${r.msP50}ms`, 8)}${pad(`${r.msP95}ms`, 8)}${pad(r.tools, 7)}${pad(r.steps, 7)}${pad(String(r.usage.requests), 5)}${pad(String(r.usage.tokens), 7)}${r.events}\n`);
     }
     const t = verdict.totals;
     process.stdout.write('-'.repeat(72) + '\n');
