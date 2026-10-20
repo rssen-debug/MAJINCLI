@@ -102,17 +102,37 @@ function body(route, { messages, tools, maxTokens, temperature, stream, toolChoi
   return { ...b, ...(extra || {}) };
 }
 
-async function send(route, payload, { signal } = {}) {
+/**
+ * Scope the provider deadline to the ENTIRE response (headers + JSON/SSE body).
+ * Prior send() cleared its timeout immediately after fetch() returned headers,
+ * so a stalled Ollama stream could hang a turn despite agent.stop().
+ */
+async function withResponse(route, payload, { signal } = {}, consume) {
   const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(new Error(isLocalRoute(route) ? 'local model timeout' : 'timeout')), isLocalRoute(route) ? TIMEOUT_LOCAL_MS : TIMEOUT_MS);
-  to.unref?.();
-  const onAbort = () => ctrl.abort(new Error('aborted'));
-  signal?.addEventListener?.('abort', onAbort, { once: true });
+  const local = isLocalRoute(route);
+  const maxMs = local ? TIMEOUT_LOCAL_MS : TIMEOUT_MS;
+  const timeout = setTimeout(() => ctrl.abort(new Error('model response deadline exceeded')), maxMs);
+  // Keep the timer referenced while a response body is still pending.
+  const onAbort = () => ctrl.abort(signal.reason || new Error('aborted'));
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener?.('abort', onAbort, { once: true });
   try {
-    const res = await fetch(route.endpoint || route.baseUrl, { method: 'POST', headers: headersFor(route), body: JSON.stringify(payload), signal: ctrl.signal });
-    return res;
+    const res = await fetch(route.endpoint || route.baseUrl, {
+      method: 'POST', headers: headersFor(route), body: JSON.stringify(payload), signal: ctrl.signal,
+    });
+    return await consume(res);
+  } catch (err) {
+    if (ctrl.signal.aborted && !signal?.aborted) {
+      throw new ProviderError((local ? 'Local model' : 'Model') + ' timed out before finishing its response (' + maxMs + ' ms)', {
+        status: 0, code: 'model_timeout', retryable: false,
+        hint: local
+          ? 'The local inference endpoint stalled. Check Ollama/model CPU load or raise MAJIN_LLM_LOCAL_TIMEOUT.'
+          : 'The model endpoint stalled. Check the provider or raise MAJIN_LLM_TIMEOUT.',
+      });
+    }
+    throw err;
   } finally {
-    clearTimeout(to);
+    clearTimeout(timeout);
     signal?.removeEventListener?.('abort', onAbort);
   }
 }
@@ -138,7 +158,7 @@ async function fail(res) {
 
 export async function openaiOnce(o) {
   const { route, tools = [], messages, signal, maxTokens, temperature, onEvent } = o;
-  const res = await send(route, body(route, { messages, tools, maxTokens, temperature, stream: false, extra: o.extra }), { signal });
+  return withResponse(route, body(route, { messages, tools, maxTokens, temperature, stream: false, extra: o.extra }), { signal }, async (res) => {
   if (!res.ok) await fail(res);
   const json = await res.json();
   const choice = json.choices?.[0];
@@ -157,11 +177,12 @@ export async function openaiOnce(o) {
     stopReason: choice?.finish_reason || 'stop',
     raw: { id: json.id, model: json.model },
   };
+  });
 }
 
 export async function openaiStream(o) {
   const { route, tools = [], messages, signal, maxTokens, temperature, onEvent } = o;
-  const res = await send(route, body(route, { messages, tools, maxTokens, temperature, stream: true, extra: o.extra }), { signal });
+  return withResponse(route, body(route, { messages, tools, maxTokens, temperature, stream: true, extra: o.extra }), { signal }, async (res) => {
   if (!res.ok) await fail(res);
   const ctype = String(res.headers.get('content-type') || '');
   if (res.ok && !/event-stream/i.test(ctype)) {
@@ -247,6 +268,7 @@ export async function openaiStream(o) {
     stopReason: finish,
     raw: {},
   };
+  });
 }
 
 function usage(u, text, toolCalls) {
