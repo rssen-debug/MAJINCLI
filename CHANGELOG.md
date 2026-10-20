@@ -11,6 +11,33 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 
 
 
+
+## 2026-10-20 — WAVE 7: radar closure — skill outcome telemetry routes, truncation tells the truth — v0.9.15
+
+### Changed
+- **`Skills.match()` = outcome-aware (radar #3 → ADOPT).** Token relevance still dominates
+  (score × 10); outcome history is a small visible reputation: streak ≥ 3 → +2, fails ≥ 1 → −1.
+  `boost` and `rank` are exposed on every result, ties break by name (deterministic). A failing
+  skill with the better keyword fit still wins — evidence beats enthusiasm, never overrides
+  competence. Disk state is the source, so two agents rank identically (Del 7C preserved).
+- **`Skills.prompt()` no longer truncates silently (radar #5 → ADOPT).** Past `maxInPrompt`,
+  the prompt itself says "(N more learned skills not shown…)" and the log channel carries
+  `skill.pruned {shown, eligible, max, hidden}` (same convention as `skill.outcome`) — the UI
+  can surface "N hidden" instead of the catalog pretending to be complete. Disabled skills are
+  excluded from the eligible count.
+
+### Decided
+- **Radar #2 (canonical tool-count) → DEFER.** Five suites red-lighting on a new tool IS the
+  review gate the master directive wants; single-sourcing the literal would dismantle it.
+  Revisit only if the owner prefers a canonical count over forced review.
+
+### Verified
+- `test/w7-skill-telemetry.test.js` — 7 tests: streak-promotion, fail-demotion, token-dominance
+  over reputation, determinism, pruned-event payload + prompt text, silence at/below max,
+  disabled excluded from eligible. Full suite **510 / 493 / 0 / 17**; P5/skill-failure suites
+  unaffected (11/11).
+
+
 ## 2026-10-20 — WAVE 6: §12 machinery — matrix-integrity CI gate + executable release gate — v0.9.14
 
 ### Added

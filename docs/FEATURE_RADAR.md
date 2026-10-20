@@ -39,6 +39,22 @@ Nothing here is scored — only listed by observed point-density and leverage.
    memory (Del 7 makes that likely).
 ---
 
+## WAVE 7 decisions (2026-10-20, v0.9.15)
+
+### IMPLEMENTED — skill outcome telemetry in routing (radar #3 → ADOPT)
+- `Skills.match()` ranks by `score*10 + boost`: streak≥3 → +2, fails≥1 → −1; `boost`/`rank`
+  exposed; name tie-break → deterministic. Token relevance dominates by design.
+- Evidence: w7 R1–R4 (promotion/demotion/dominance/determinism on disk-state fixtures).
+
+### IMPLEMENTED — honest prompt truncation (radar #5 → ADOPT)
+- `Skills.prompt()` past `maxInPrompt` appends "(N more learned skills not shown…)" and logs
+  `skill.pruned {shown, eligible, max, hidden}` on the log channel (skill.outcome convention).
+- Evidence: w7 R5–R7 (payload, silence at/below max, disabled excluded from eligible).
+
+### DEFERRED — canonical tool-count (radar #2 → DEFER)
+- Rationale: five suites red-lighting when a tool is added IS the forced review gate; a single
+  canonical literal would remove it. Revisit only with owner approval of the trade.
+
 ## V4 wave additions (2026-10-19 evening, wave: HYPERSWARM OMEGA §7 done)
 
 ### IMPLEMENTED — Rate-limit orchestrator (LiteLLM-router + Netflix concurrency-limits inspired)

@@ -30,15 +30,16 @@
     "w3-delta-memory": "rev+delta log+ledger shipped; no-op writes eliminated (measured by file-size/rev unchanged); compactEvents conservation proven; 6/6 tests",
     "w4-speculate": "lab shipped off-by-default; measured-win only when confirm settles; waste budget self-closes (runs stays 2 in arithmetic test); 6/6",
     "w5-perf-lab": "A×1.002 B×1.003 (parity, honest); C trade 199ms adaptive vs 133ms legacy; D ranker 68.57->6.01ms @2000 nodes after O(n²)->O(n) fix found BY the lab; 5/5 tests",
-    "12A-live-reverify": "2026-10-20 main 24fcd5d: MAJIN_LIVE=1 acceptance-live 3/3 (create+VERIFIED, edit preserving original, lie-detector) — row point now counted in all totals; score stays 81/100 (no manufacture)"
+    "12A-live-reverify": "2026-10-20 main 24fcd5d: MAJIN_LIVE=1 acceptance-live 3/3 (create+VERIFIED, edit preserving original, lie-detector) — row point now counted in all totals; score stays 81/100 (no manufacture)",
+    "w7-skill-telemetry": "ADOPT: outcome boost (streak>=3 +2, fails>=1 -1) on top of 10x token relevance; pruned-event on maxInPrompt overflow. 7/7 fixture tests."
   },
   "implementationScore": 81,
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
-  "nextAction": "Waves 2-5 complete. Perf lab located a real O(n²) and fixed it (68.57->6.01ms @2000). Next: evaluate remaining radar items or await owner Windows gates; keep release discipline for v1.0.0 readiness review",
-  "version": "0.9.14",
-  "milestone": "v0.9.14 SHIPPED (release-gate verified online: 4 assets, exe sha256 match) — 486p/503t/0f/17s; §12 machinery now CI-enforced",
-  "branch": "main (post-merge)",
+  "nextAction": "Waves 2-7 shipped (v0.9.10..v0.9.15). Remaining: owner Windows gates (5D/11A/11C/12B/12C), UI-agent merge (8A-8D), second free-provider key (1E/6C). v1.0.0 readiness review per §12 once Windows gates land.",
+  "version": "0.9.15",
+  "milestone": "WAVE 7: skill outcome telemetry in routing + honest prompt truncation (radar #3/#5 ADOPT, #2 DEFER); 493p/510t/0f/17s",
+  "branch": "feature/w7-skill-telemetry (in PR)",
   "decisions": {
     "windows-control-adapter": {
       "decision": "ADOPT raw UIA (System.Windows.Automation, zero deps) as control API; two-tier text I/O (patterns first, SendInput fallback + read-back); DEFER FlaUI (same bridge, .NET dep, fixes nothing measured); DEFER UFO/OmniParser vision lane (cost + OmniParser license caution stands)",
