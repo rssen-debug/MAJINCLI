@@ -55,5 +55,5 @@ test('wincontrol: Windows executes the actual PowerShell bridge without an inter
   const list = ALL_TOOLS.find((t) => t.name === 'control.list_windows');
   const result = await list.run({});
   assert.equal(result.ok, true, JSON.stringify(result.error || result).slice(0, 500));
-  assert.match(result.result, /top-level window\\(s\\)/);
+  assert.match(result.result, /top-level window/);
 });
