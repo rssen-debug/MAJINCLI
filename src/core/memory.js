@@ -474,6 +474,18 @@ export class Skills {
     return out;
   }
 
+  /* WAVE 7 / radar #3 ADOPT: outcome history counts as a SMALL reputation
+     weight, visible and deterministic. Token relevance still dominates
+     (×10), a proven skill (streak ≥ 3) gets +2, a failing one (fails ≥ 1)
+     gets −1. The boost never rescues a keyword mismatch — a skill that does
+     not match the task stays off the list, and heavy token winners still win:
+     evidence beats enthusiasm, but never overrides competence. */
+  static outcomeBoost(meta) {
+    const streak = Number(meta?.streak) || 0;
+    const fails = Number(meta?.fails) || 0;
+    return (streak >= 3 ? 2 : 0) + (fails >= 1 ? -1 : 0);
+  }
+
   match(text, k = 4) {
     const q = tokenize(text);
     if (!q.size) return [];
@@ -483,18 +495,27 @@ export class Skills {
         const t = tokenize(`${s.name} ${s.when}`);
         let score = 0;
         for (const w of q) if (t.has(w)) score += 1;
-        return { ...s, score };
+        const boost = Skills.outcomeBoost(s.meta);
+        return { ...s, score, boost, rank: score * 10 + boost };
       })
       .filter((s) => s.score > 0)
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => b.rank - a.rank || a.name.localeCompare(b.name)) /* deterministic ties */
       .slice(0, k);
   }
 
   prompt() {
     const max = this.cfg?.get('skills.maxInPrompt') || 12;
-    const list = this.list().filter((s) => !s.disabled).slice(0, max);
+    const eligible = this.list().filter((s) => !s.disabled);
+    const list = eligible.slice(0, max);
     if (!list.length) return '';
-    return `Learned skills (follow them when they fit):\n${list.map((s) => `- ${s.name} — ${s.when}\n${s.steps.split('\n').slice(0, 12).map((l) => `    ${l}`).join('\n')}`).join('\n')}`;
+    /* WAVE 7 / radar #5 ADOPT: silent truncation made honest — when skills
+       grow past maxInPrompt the prompt says so, and the bus carries the
+       numbers so the UI/CLI can surface "N skills not shown" instead of
+       pretending the catalog is complete. */
+    if (eligible.length > max) {
+      bus.info('skill.pruned', { shown: list.length, eligible: eligible.length, max, hidden: eligible.length - max });
+    }
+    return `Learned skills (follow them when they fit):\n${list.map((s) => `- ${s.name} — ${s.when}\n${s.steps.split('\n').slice(0, 12).map((l) => `    ${l}`).join('\n')}`).join('\n')}` + (eligible.length > max ? `\n(${eligible.length - max} more learned skills not shown — see the skills list)` : '');
   }
 }
 
