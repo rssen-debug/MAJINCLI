@@ -4,7 +4,7 @@
 
 > Ärlighetsregel: ingen % utan reproducerbart bevis. Gamla COMPLETION_MATRIX.md (100/100 på papper) motsägs av uppmätta artefakter och ersätts av DENNA fil som sanning.
 
-## Total ekvivalent status: **37/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
+## Total ekvivalent status: **40/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
 
 ## Per-våg (VERIFIED kräver artefakt, INTE bara att koden finns)
 
@@ -16,7 +16,7 @@
 | W4 Standing agent teams | **INCOMPLETE** | src/core/swarm.js finns (HYPERSWARM-papper); persistent identity/shared memory/budgets/checkpoint/recovery obevit |
 | W5 Event flows | **MISSING** | schedule.js finns (✅ CRUD-verifierad i QA), men inga trigger-typer utanför cron, ingen webhook/file-event/event-history |
 | W6 Power Transfer | **MISSING** | är beroende av W1 |
-| W7 Mission loop | **INCOMPLETE** | src/core/mission.js finns; GOAL→PLAN→EXECUTE→VERIFY→REPAIR→COMPLETE kontraktsbevisad acceptance-svit saknas |
+| W7 Mission loop | **VERIFIED-CORE (recovery)** | kontrakt+verify→repair→replan fanns; checkpoint-persistens + crash-recovery tillagd: resumed missions fortsatter utan att sidoeffekter upprepas (bevisat med raknare); 3 nya tester + full 583/565/0/18 |
 | W8 Channel expansion | **PARTIAL** | telegram.js + whatsapp.js finns (parity med v1.0.0); Discord/Slack/Matrix/Email saknas; send/receive-verifiering per kanal saknas |
 | W9 Memory sync | **MISSING** | ingen sync-modul |
 | W10 Learning loop | **MISSING** | ingen skills/learning-modul (tools/meta.js är introspection, inte learning) |

@@ -39,7 +39,7 @@
       "id": "W7-mission-contract-acceptance",
       "wave": "W7",
       "desc": "Mission engine GOAL→PLAN→EXECUTE→VERIFY→REPAIR→COMPLETE med artifact/outcome-contract per mission + independent verification; bounded retries; blocked-state.",
-      "status": "INCOMPLETE"
+      "status": "VERIFIED-DELTA (checkpoint/recovery finns ej tidigare): mission-checkpoint.js (id-stabilitet, writeState atomic, readState, journal.jsonl, carryFromState) + runMission checkpoint-integration (per-verified-milestone state.json + final blocked|complete + mission_resumed-emit + redo-work-proof: carried nodes exekveras aldrig igen) + workerOverride-injection för offline testbarhet + test 3/3 (inclidering reboot-scenario med counter-bevist att alpha endast skrevs 1 gång tross två körningar)"
     },
     {
       "rank": 6,
@@ -143,6 +143,13 @@
       "done": "W3 EXECUTION BACKENDS: executors.js (enhetlig jobb-interface: startJob/handle/settled/cancelled) + tools exec.backends(-inventory, measured) exec.start exec.wait exec.cancel exec.logs (5 verktyg; guard-risk exec via framework) + test/executors.test.js 7/7 ✓ + verifierad lokal körning + real timeout/cancellation/output-caps + honest docker/ssh-unavailable error pathways (FORBIDDEN-tyngt) + golden guards uppdaterade medvetet 109→114 + full svit 580/562/0/18 ✓",
       "percent": 37,
       "next": "W7 mission-contract acceptance (GOAL→PLAN→EXECUTE→VERIFY→REPAIR→COMPLETE med beviskontrakt) — misson.js finns delvis; contract-laget med bevisartifakter"
+    },
+    {
+      "round": 5,
+      "date": "2026-10-20",
+      "done": "W7 mission checkpoints+recovery implementerat pa toppen av befintlig robust mission.js (kontrakt, verify→repair→replan, budget/timeout-limits fanns redan): persistents till disk per verified-milestone + complete|blocked-final + resume-via-carry (+emit mission_resumed); 3 nya tester grant (checkpoint-modulen, stopp+sforesoning resume med counter-bevist att ingen sida-effektuppter, blocked-state som aldrig lyfter fullfoljande claims); full svit 583/565/0/18",
+      "percent": 40,
+      "next": "W5 event-flows (schedule, file change, webhook, github event support pa schedule.js basen) eller W4/W13"
     }
   ]
 }
