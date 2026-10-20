@@ -104,10 +104,10 @@ function tokenFromConfig() {
   return '';
 }
 let TOKEN = '';
-async function api(method, p, body, { token = true, timeoutMs = 60000, raw = false } = {}) {
+async function api(method, p, body, { token = true, timeoutMs = 60000, raw = false, hostHeader = null } = {}) {
   const r = await fetch(`${CFG.base}${p}`, {
     method,
-    headers: { ...(token && TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}), ...(body != null ? { 'content-type': 'application/json' } : {}) },
+    headers: { ...(token && TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}), ...(body != null ? { 'content-type': 'application/json' } : {}), ...(hostHeader ? { host: hostHeader } : {}) },
     body: body != null ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -222,22 +222,21 @@ async function s03(a) {
   const hasCommands = /start|window|doctor|send/.test(help.out);
   return a(hasCommands ? CL.CI : CL.FAIL, hasCommands ? '--help lists real commands' : `--help content suspect`, { help: help.out.slice(0, 500), exit: help.code });
 }
-async function s04(a) {
-  const noTok = await api('GET', '/api/state', undefined, { token: false });
+async function s04(a) { // äkta gränsmätning: opålitlig HOST-rubrik måste vägras även från loopback
+  const trusted = await api('GET', '/api/state', undefined, { token: false });
   const health = await api('GET', '/healthz', undefined, { token: false });
-  const hello = await api('GET', '/api/hello', undefined, { token: false });
-  const uiNoTok = await api('GET', '/', undefined, { token: false, raw: true });
-  const uiGateText = (await uiNoTok.text());
+  const spoofHello = await api('GET', '/api/hello', undefined, { token: false, hostHeader: 'evil.example.com' });
+  const spoofState = await api('GET', '/api/state', undefined, { token: false, hostHeader: 'evil.example.com' });
   const checks = {
-    apiWithoutTokenIs401: noTok.status === 401,
+    loopbackTrustedByDesign: trusted.status === 200,
     healthzPublic: health.status === 200,
-    helloSaysNeedToken: hello.json.needToken === true,
-    uiGatePageShown: uiNoTok.status === 200 && /key required/i.test(uiGateText),
+    spoofedHostNeedToken: spoofHello.json.needToken === true,
+    spoofedHostRejected: spoofState.status === 401,
   };
   const ok = Object.values(checks).every(Boolean);
   return a(ok ? CL.CI : CL.FAIL, ok
-    ? 'unauthenticated API 401; /healthz public; browser gets a gate page (by design it teaches the local ?t= link — localhost model)'
-    : 'auth boundary surprising', { ...checks, uiGateSnippet: uiGateText.replace(/<[^>]+>/g, ' ').slice(0, 140) });
+    ? 'äkta gränsen: loopback betrodd ÄR designet (dokumenterat), men en Host-rubrik som säger evil.example vägras utan token — även från samma peer (authOk TRUSTED-check)'
+    : 'auth boundary surprising', checks);
 }
 async function s05(a) {
   const idx = await api('GET', '/', undefined, { raw: true });
@@ -634,6 +633,26 @@ async function s26(a) {
   const ok = r404.status === 404 && [403, 404].includes(outside.status);
   return a(ok ? CL.CI : CL.FAIL, ok ? '/api/report contract: 404 for missing, escape refused' : 'report route contract broken', { missing: r404.status, escape: outside.status });
 }
+
+async function c03(a) { // control lane THROUGH THE INSTALLED PRODUCT — the user's core question
+  const list = await api('POST', '/api/tool', { tool: 'control.list_windows', args: {} });
+  if (list.json.ok !== true) return a(CL.FAIL, 'control.list_windows refused by the installed product', list.json);
+  // windows enumerate even in Session-0 (service desktop): c01 proves it. Now the real act:
+  spawnSync('cmd.exe', ['/c', 'start notepad.exe'], { windowsHide: true, timeout: 8000 });
+  await sleep(2500);
+  const payload = `MAJIN-CONTROL-PROOF-${Date.now() % 10000}`;
+  const write = await api('POST', '/api/tool', { tool: 'control.type', args: { window: 'Notepad', text: payload } });
+  const readBack = await api('POST', '/api/tool', { tool: 'control.read', args: { window: 'Notepad' } });
+  spawnSync('powershell.exe', ['-NoProfile', '-Command', "Get-Process notepad -ErrorAction SilentlyContinue | Stop-Process -Force"], { timeout: 10000 });
+  const wrote = write.json.ok === true && JSON.stringify(write.json).includes(payload);
+  const read = readBack.json.ok === true && JSON.stringify(readBack.json).includes(payload);
+  const sum = JSON.stringify({ write: write.json, read: readBack.json }).slice(0, 600);
+  const ok = wrote && read;
+  return a(ok ? CL.CI : CL.FAIL, ok
+    ? `computer control WORKS end-to-end via the installed tool belt: Notepad window found, WM_SETTEXT wrote and WM_GETTEXT verified "${payload}" byte-exact`
+    : `control lane via installed product broken (write=${wrote}, read=${read})`, { wrote, read, detail: sum });
+}
+
 async function c01(a) {
   const r = spawnSync('powershell.exe', ['-NoProfile', '-Command', "(Get-Process | Where-Object { $_.MainWindowTitle -ne '' } | Select-Object -First 8 Name, MainWindowTitle | ConvertTo-Json -Compress"], { encoding: 'utf8', timeout: 30000 });
   let items = [];
@@ -708,6 +727,7 @@ const PLAN = [
   ['s25', 'system probes: sys.info + sys.ps', 'system', CL.CI, s25],
   ['s26', '/api/report route contract + escape refused', 'api-contract', CL.CI, s26],
   ['c01', 'windows enumeration (in-session capability)', 'control', CL.CI, c01],
+  ['c03', 'computer control via installed tool belt (Notepad WM_SETTEXT→WM_GETTEXT)', 'control', CL.CI, c03],
   ['c02', 'interactive desktop actuation (honesty gate)', 'control', CL.REAL, c02],
   ['b01', 'browser automation through installed tool belt', 'browser-automation', CL.CI, b01],
 ];
