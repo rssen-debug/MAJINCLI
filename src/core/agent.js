@@ -487,7 +487,7 @@ export class Agent {
       const trivial = decision.job === 'chat' && !toolsUsed && (res.text || '').length < 200;
       let finalText = res.text;
       let moaInfo = null;
-      if (turnPlan.moa.enabled && !res.aborted && !trivial) {
+      if (turnPlan.moa.enabled && !res.aborted && !res.incomplete && !res.blocked && !res.error && !res.fatal && !trivial) {
         const evidence = summarizeRun(res, messages);
         const moaRes = await moaRun({
           cfg,
@@ -508,11 +508,13 @@ export class Agent {
       /* user line already journaled at turn start (R4) */
       appendHistory(session, { role: 'assistant', content: finalText, steps: res.steps, tools: res.toolLog.length });
       if (cfg.get('memory.auto') && toolsUsed) {
-        this.memory?.event?.('turn', { summary: firstLine(input), tools: [...new Set(res.toolLog.map((t) => t.tool))].slice(0, 8).join(','), ok: !res.error });
-        const facts = res.toolLog.filter((t) => t.ok).length >= 4 ? await this.harvestFacts(input, res, messages) : [];
+        this.memory?.event?.('turn', { summary: firstLine(input), tools: [...new Set(res.toolLog.map((t) => t.tool))].slice(0, 8).join(','), ok: !res.error && !res.incomplete && !res.blocked && !res.aborted && !res.fatal });
+        const facts = !res.error && !res.incomplete && !res.blocked && !res.aborted && !res.fatal && res.toolLog.filter((t) => t.ok).length >= 4 ? await this.harvestFacts(input, res, messages) : [];
         for (const f of facts) this.memory?.remember?.(f, [decision.job]);
       }
-      if (cfg.get('skills.auto') && res.steps >= 5 && !res.error) {
+      if (cfg.get('skills.auto') && res.steps >= 5 && !res.error && !res.fatal &&
+          !res.incomplete && !res.blocked && !res.aborted &&
+          res.toolLog?.some((t) => t.ok) && res.toolLog.every((t) => t.ok)) {
         const skill = suggestSkill(input, res);
         if (skill) {
           const saved = this.skills.save(skill);
@@ -530,7 +532,9 @@ export class Agent {
         route: turnPlan.route,
         moa: moaInfo,
         escalated: res.escalated,
-        incomplete: res.incomplete,
+        incomplete: Boolean(res.incomplete || res.blocked || res.fatal),
+        blocked: res.blocked || null,
+        stopReason: res.stopReason || (res.incomplete ? 'step_limit' : null),
         error: res.error,
         errorKind: res.errorKind,
         errorHint: res.errorHint,
