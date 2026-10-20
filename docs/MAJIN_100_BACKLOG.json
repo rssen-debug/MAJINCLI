@@ -46,7 +46,7 @@
       "id": "W5-event-flows",
       "wave": "W5",
       "desc": "Trigger-typer: schedule, file change, webhook, email, github-event; durable queue, dedupe, retry limits, history, authorization före extern kommunikation.",
-      "status": "MISSING"
+      "status": "IMPLEMENTERAD + basverifierad: flows.js engine (durable state.json+history capped 100, dedupe content-hash window, rate-limit fires/hour, bounded retries ingen retry-vaggmotiv-morkerlang, renderTemplate whitelist) + opener chokidar@4 file-trigger (OFFENl-rebjudformst sjs betw*sse: fil changed detekterad i live tmp-dir) + github-event-dedupe-logik + webhook-intake /api/flows/hook/<id> under samma token-gate + flows.* verktyg×6 + approval-gate respekterad (waiting_approval registrerad honest) + 8/8 tester + chokidar-jusfiering i DECISIONS.md"
     },
     {
       "rank": 7,
@@ -150,6 +150,13 @@
       "done": "W7 mission checkpoints+recovery implementerat pa toppen av befintlig robust mission.js (kontrakt, verify→repair→replan, budget/timeout-limits fanns redan): persistents till disk per verified-milestone + complete|blocked-final + resume-via-carry (+emit mission_resumed); 3 nya tester grant (checkpoint-modulen, stopp+sforesoning resume med counter-bevist att ingen sida-effektuppter, blocked-state som aldrig lyfter fullfoljande claims); full svit 583/565/0/18",
       "percent": 40,
       "next": "W5 event-flows (schedule, file change, webhook, github event support pa schedule.js basen) eller W4/W13"
+    },
+    {
+      "round": 6,
+      "date": "2026-10-20",
+      "done": "W5 EVENT FLOWS: flows engine + 6 verktyg (add/list/enable/remove/trigger/webhook.recorded) + server-route POST /api/flows/hook/<id> (token-gated, samma guard som allt annat) + cho-chokidar@4 runtime-dependency verified (live watch detektion) + bundle-styrka 1MB+3incl flows-tools i bundle + 8/8 fixtures + golden uppdatering medveten 114→120 + npm test 591/575/0/16",
+      "percent": 43,
+      "next": "W8 kanal-utokad (Discord/Slack/Matrix/Email — reuse modelenbaust on telegram/whatsapp patterns) eller W13 never-stuck"
     }
   ]
 }

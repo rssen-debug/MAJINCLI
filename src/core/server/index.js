@@ -691,6 +691,14 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const out = await registry.exec('majin.dataset', { ...body }, { ...rt.ctx, session: 'ui-api', step: 1 });
       return json(res, out.ok === false ? 422 : 200, { ok: out.ok !== false, text: out.result, meta: out.meta || null, error: out.error?.message || null, hint: out.error?.hint || null });
     }
+    if (p.startsWith('/api/flows/hook/') && req.method === 'POST') {
+      /* W5: webhook intake — same token gate as every other route; flow actions
+         run through the shared approval guard (approval-required -> recorded). */
+      const flowIdStr = decodeURIComponent(p.slice('/api/flows/hook/'.length));
+      const body = await readJson(req);
+      const r = await registry.exec('flows.webhook.recorded', { id: flowIdStr, payload: body || {} }, { ...rt.ctx, session: 'flows-hook', step: 1 });
+      return json(res, r.ok ? 200 : 404, r.ok ? { ok: true, meta: r.meta } : { ok: false, error: r.error?.message || 'no such flow' });
+    }
     if (p === '/api/tool' && req.method === 'POST') {
       const body = await readJson(req);
       const name = String(body.tool || body.name || '');

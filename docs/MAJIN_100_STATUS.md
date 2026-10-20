@@ -4,7 +4,7 @@
 
 > Ärlighetsregel: ingen % utan reproducerbart bevis. Gamla COMPLETION_MATRIX.md (100/100 på papper) motsägs av uppmätta artefakter och ersätts av DENNA fil som sanning.
 
-## Total ekvivalent status: **40/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
+## Total ekvivalent status: **43/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
 
 ## Per-våg (VERIFIED kräver artefakt, INTE bara att koden finns)
 
@@ -14,7 +14,7 @@
 | W2 Research-motor | **VERIFIED-CORE + ENV-BLOCK-ANT*** | research.run implementerad (pipeline, ledger, konfliktflaggor); 8/8 fixtures ✓ + hela suiten 573/555/0/18 ✓; real-net-integration begränsad av sandbox-egress (DuckDuckGo/Bing 0/0) — verifieras i acceptance-lane |
 | W3 Execution-backends | **VERIFIED-CORE (lokal) + HONEST GATE (docker/ssh)** | exec.* ×5 implementerade, plattform-säkra (powershell|bash); docker:valuektra validerad på CI häringen valuektra: ärliga docker_unavailable/ssh_host_required med FORBIDDEN-policy uppmätta; 7/7 tester ✓ + hela sviten 580/562/0/18 |
 | W4 Standing agent teams | **INCOMPLETE** | src/core/swarm.js finns (HYPERSWARM-papper); persistent identity/shared memory/budgets/checkpoint/recovery obevit |
-| W5 Event flows | **MISSING** | schedule.js finns (✅ CRUD-verifierad i QA), men inga trigger-typer utanför cron, ingen webhook/file-event/event-history |
+| W5 Event flows | **VERIFIED-CORE** | flows.* ×6 motorn implementerad: file (chokidar-reel direktetdbesyst), webhook (HTTP intake), github-poll (dedupe), manual (renderTemplate), manual/schedule triggers; dedupe+rate-limit+bounded-retries+approval-gate bevisade; 8/8 tester + full 591/575/0/16 |
 | W6 Power Transfer | **MISSING** | är beroende av W1 |
 | W7 Mission loop | **VERIFIED-CORE (recovery)** | kontrakt+verify→repair→replan fanns; checkpoint-persistens + crash-recovery tillagd: resumed missions fortsatter utan att sidoeffekter upprepas (bevisat med raknare); 3 nya tester + full 583/565/0/18 |
 | W8 Channel expansion | **PARTIAL** | telegram.js + whatsapp.js finns (parity med v1.0.0); Discord/Slack/Matrix/Email saknas; send/receive-verifiering per kanal saknas |
