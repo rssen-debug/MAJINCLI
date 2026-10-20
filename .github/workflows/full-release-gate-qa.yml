@@ -1,0 +1,43 @@
+name: Full MAJIN release gate (independent QA)
+on:
+  push:
+    branches: [qa/full-release-gate-20261020]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-suite-windows:
+    runs-on: [self-hosted, windows, interactive-desktop, majin-qa]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse and integrity checks
+        shell: powershell
+        run: |
+          npm run check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Full Windows test suite
+        shell: powershell
+        run: |
+          npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Windows diagnostics
+        shell: powershell
+        run: |
+          node src/cli/majin.js doctor --full
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  full-suite-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse and integrity checks
+        run: npm run check
+      - name: Full Linux test suite
+        run: npm test
