@@ -34,14 +34,14 @@
     "w5-perf-lab": "A×1.002 B×1.003 (parity, honest); C trade 199ms adaptive vs 133ms legacy; D ranker 68.57->6.01ms @2000 nodes after O(n²)->O(n) fix found BY the lab; 5/5 tests",
     "12A-live-reverify": "2026-10-20 main 24fcd5d: MAJIN_LIVE=1 acceptance-live 3/3 (create+VERIFIED, edit preserving original, lie-detector) — row point now counted in all totals; score stays 81/100 (no manufacture)",
     "w7-skill-telemetry": "ADOPT: outcome boost (streak>=3 +2, fails>=1 -1) on top of 10x token relevance; pruned-event on maxInPrompt overflow. 7/7 fixture tests.",
-    "w8-swarm-baseline": "offline A/B: serial cap=1 472ms vs parallel cap=8 72ms = 6.56x median; overlap 0 vs 28(C8,2); parity OK; chain 193ms vs crit 192ms, deps respected. CI-reproducible twin of live 3E (4.29x)."
+    "w8-swarm-baseline": "offline A/B: serial cap=1 472ms vs parallel cap=8 72ms = 6.56x median; overlap 0 vs 28(C8,2); parity OK; chain 193ms vs crit 192ms, deps respected. CI-reproducible twin of live 3E (4.29x).",
+    "2026-10-20-external-audit-response": "Audited matrix row-level: unearned = 19 pts (11 rows), NOT 20. Claimed PR #79 = GitHub 404, does not exist. Open PRs: 0. ui/* branches exist unpulled, UI agent owns them. Actions dispatched: win-uia-probe (5D), win-acceptance-install workflow built (11A/11C/12B), Ollama second-provider investigation started per owner order."
   },
   "implementationScore": 81,
-  "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
   "nextAction": "Waves 2-7 shipped (v0.9.10..v0.9.15). Remaining: owner Windows gates (5D/11A/11C/12B/12C), UI-agent merge (8A-8D), second free-provider key (1E/6C). v1.0.0 readiness review per §12 once Windows gates land.",
   "version": "0.9.20",
-  "milestone": "v0.9.20 SHIPPED (gate-verified: 4 assets, exe sha256 match). W12 bench usage arms + ledger-conservation gate — 524p/541t/0f/17s",
+  "milestone": "AUDIT + frontier automation wave v0.9.20: external audit reconciled (19 pts, PR79 404), readiness-score drift field removed, win-acceptance workflow + uia-probe dispatch, Ollama second-provider feasibility in progress",
   "branch": "main (post-merge)",
   "decisions": {
     "windows-control-adapter": {
@@ -58,5 +58,8 @@
       },
       "ownerGate": "text-I/O acceptance on real interactive Windows session (owner), probe reusable via workflow_dispatch"
     }
-  }
+  },
+  "notes": [
+    "2026-10-20 audit: DEV_CONTINUATION carried stale \"realWorldReadiness:68\" — REMOVED. Single source of truth for any X/100 score = docs/COMPLETION_MATRIX.md (five-way gate-checked). Never keep two score-ish numbers anywhere."
+  ]
 }

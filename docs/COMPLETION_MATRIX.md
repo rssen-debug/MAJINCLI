@@ -140,16 +140,19 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 
 ## Current frontier (remaining 19 unearned points, by row)
 
-| ID | Pts | What blocks it |
-|---|---:|---|
-| 1E | 2 | live two-provider handoff — needs a SECOND free provider credential (only opencode exists) |
-| 5D | 2 | real Windows computer-use scenarios (owner machine / suitable runner) — see v0.9.9 UIA evidence + raw-UIA decision |
-| 6C | 3 | comparable verified quality at lower measured cost — needs a priced/free comparison matrix |
-| 8A–8D | 8 | UI & Imagination rows — UI owned by OTHER agent (do not touch); needs their branch merged |
-| 11A | 1 | clean Windows install + first run (owner/disposable Windows) |
-| 11C | 1 | data preservation across a real old→new upgrade (owner/disposable Windows) |
-| 12B | 1 | real Windows user-journey + recovery suite (owner/disposable Windows) |
-| 12C | 1 | release candidate passes ALL mandatory integration gates — last, after the Windows rows |
+**Audit 2026-10-20 (external review + own row-level recount): exactly 19, not 20.**
+Eleven UNVERIFIED assertion rows: 1E(2) 5D(2) 6C(3) 8A–8D(2+2+2+2=8) 11A(1) 11C(1) 12B(1) 12C(1)
+= 19 = 100 − 81. This list is documentation, NOT assertion rows — plaintext on purpose so no
+automated scan can double-count it.
+
+- **1E (2)** — live two-provider handoff — needs a SECOND free provider (opencode exists; local Ollama or another free key candidate — investigation in flight 2026-10-20).
+- **5D (2)** — real Windows computer-use scenarios (owner machine / suitable runner) — see v0.9.9 UIA evidence + raw-UIA decision; `win-control-poc` workflow re-dispatched 2026-10-20 for fresh CI evidence.
+- **6C (3)** — comparable verified quality at lower measured cost — needs a priced/free comparison matrix (paired with the second-provider work).
+- **8A–8D (8)** — UI & Imagination rows — UI owned by OTHER agent (do not touch); needs their branch merged. *2026-10-20 audit: claimed "PR #79" does not exist (GitHub 404); ui/* branches unpulled — nothing to recover in-repo.*
+- **11A (1)** — clean Windows install + first run — now automated: `.github/workflows/win-acceptance-install.yml` (dispatch-gated).
+- **11C (1)** — data preservation across a real install-over-install — same workflow (11A/11C/12B verdict JSON).
+- **12B (1)** — real Windows user-journey + recovery — same workflow (`_serve` mid-task hard-kill + restart; deeper in-app journeys still need a fuller installation script — honest split).
+- **12C (1)** — release candidate passes ALL mandatory integration gates — last, after the Windows rows.
 
 Executive summary of who can earn what without new credentials: nothing — every open row needs
 either the owner's Windows session (5D, 11A, 11C, 12B → 12C), the other agent's UI merge (8A–8D),
