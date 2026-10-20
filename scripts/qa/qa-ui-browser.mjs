@@ -239,8 +239,16 @@ async function main() {
   let u10 = { listed: false };
   try {
     await api('POST', '/api/tool', { tool: 'fs.write', args: { path: 'qa-ui/browse-me.md', content: `# QA UI check\n${marker}\n` } }, token);
-    await page.click('#tab-files', { timeout: 8000 });
-    await page.waitForTimeout(2000);
+    await page.click('#tab-files', { timeout: 20000 });
+    // vy-lista kan polla långsamt på CI — vänta TILLS markören eller tom lista svarnaor
+    await page.waitForFunction(
+      (mrk) => {
+        const t = document.getElementById('view-files')?.textContent || '';
+        return new RegExp(mrk + '|browse-me').test(t) || document.querySelector('#view-files .fx-row');
+      },
+      marker.replace(/-/g, '\-'), { timeout: 20000 },
+    ).catch(() => {});
+    await page.waitForTimeout(1200);
     const filesText = await page.evaluate(() => document.getElementById('view-files')?.textContent || '');
     await shot(page, 'u10-files');
     u10 = { listed: /browse-me\.md|qa-ui/.test(filesText), sample: filesText.slice(0, 160), marker };
