@@ -98,7 +98,7 @@
       "id": "W9-memory-sync",
       "wave": "W9",
       "desc": "Opt-in device sync: separation user/project/agent, kryptering, conflict detection, recovery history, export/delete.",
-      "status": "MISSING"
+      "status": "VERIFIED-CORE: src/core/memory-sync.js (majin-memory-sync/1) bidirectional delta-sync med spawnId-sidecars + ledger + tombstone-resurrect-guard + memory.sync verktyg (dryRun plan-lage som reset.plan); 6/6 unit ink. echo-resurrection-negative+idempotens + full svit; utvecklingen fangade: B-re-add av A:glomt-faktum pre-commit (guard-addition), desc-marker-derivering (optional-marker)"
     },
     {
       "rank": 14,
@@ -213,6 +213,13 @@
       "done": "W14 SELF-AUDIT: majin.self_audit (5 regler, evidence-bearing); utvecklingen fangade sjalv 2 falska positiver pre-commit (diwithTyped-diagnostics i re.js + auditors egna symbolanenergalengder) — korrigerade INNAN landning (detektorer comprehensive dieskall inte lata ga vissel); 7/7 unit + live-audit verdict 'notes only' (1 kand låg TODO) + npm test fulla svit; golden 128 to 129",
       "percent": 66,
       "next": "W4 browser-control-loop (nu med SoM-grounding under) eller win-runner acceptance eller W6 fortsatt absorption (ny registry-row per commit)"
+    },
+    {
+      "round": 15,
+      "date": "2026-10-20",
+      "done": "W9 MEMORY SYNC: src/core/memory-sync.js + memory.sync verktyg; forsta korning bevisade ECHO-TOMBSTONE-buggen (peer re-added en glomd faktum) — resurrect-guard med tidsstampeln løste det och testen hails nu att skip CETECHT raknas, inte tyst; 6/6 unit + golden 130 + full svit",
+      "percent": 69,
+      "next": "W10-learning-loop eller W8-channels kvarvarande eller win-runner acceptance"
     }
   ]
 }
