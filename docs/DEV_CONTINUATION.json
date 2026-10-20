@@ -1,5 +1,5 @@
 {
-  "lastVerifiedMain": "cc612c1",
+  "lastVerifiedMain": "ccac543",
   "lastCompletedMilestone": "GODLIKE V4 §7 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
   "currentWorkstream": "GODLIKE V4 WAVE 2 — §5 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
@@ -37,7 +37,7 @@
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
   "nextAction": "Waves 2-5 complete. Perf lab located a real O(n²) and fixed it (68.57->6.01ms @2000). Next: evaluate remaining radar items or await owner Windows gates; keep release discipline for v1.0.0 readiness review",
   "version": "0.9.14",
-  "milestone": "WAVE 6: matrix-integrity CI gate + executable release-gate (sabotage-proven); 486p/503t/0f/17s local",
+  "milestone": "v0.9.14 SHIPPED (release-gate verified online: 4 assets, exe sha256 match) — 486p/503t/0f/17s; §12 machinery now CI-enforced",
   "branch": "main (post-merge)",
   "decisions": {
     "windows-control-adapter": {
