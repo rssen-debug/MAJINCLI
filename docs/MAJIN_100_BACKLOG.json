@@ -60,7 +60,7 @@
       "id": "W8-channels-discord-slack-matrix-email",
       "wave": "W8",
       "desc": "Lägg till saknade adappters (reuse-existing), verify send/receive per kanal före production-ready-märkning.",
-      "status": "PARTIAL"
+      "status": "VERIFIED-CORE (delstang): wire-level loopback-harndja = sendWebhook over REAL socket signatur-validerad byte-for-byte pa receiversidan (HMAC-ehholigon trading), strict-parning (URL-normalize-laundring blockerad: 127.1/2130706433/@/mapped-IPv6 alla refused), streamed non-2xx fel, utuppeReg nya test/channels-wire.test.js 4/4; live-send mot discord/slack/matrix skanna pa credentials (home NOT TESTED-aven ferdigtstalld, creds saknas i sandbox)"
     },
     {
       "rank": 9,
@@ -227,6 +227,13 @@
       "done": "W10 LEARNING-LOOP: learn.js + 3 verity — auto-demotions vid ater-upprepning av verified-triggert (proof KAN inte sigas halla), verify krev mätnhi, listing sorterar demoted-first (aldrig gom das daliga); 7/7 unit + golden 133 + full svit; en server-golden 130→133 missed fangades av sviten oven fixat",
       "percent": 71,
       "next": "W8-channels rest eller win-runner acceptance-pack eller integration: agenten anvander learn.js vid each detected mistake (stake-harder-loop)"
+    },
+    {
+      "round": 17,
+      "date": "2026-10-21",
+      "done": "W8 CHANতর channels-rest: HMAC-webhook holl-bar via REAL loopback-socket (receiver recompudents signatur byte-exaxt + parseky times); testet fangade normalization-laundring FOR mooni => bytte till stran-niva strict-pattern (forbribk teching describes the hardening); 4/4 wire-tester + 12/12 channels-total (source-exs stringn-anchoring + trust-annotation documented i modulhuvud); full svit",
+      "percent": 73,
+      "next": "W12 pink-cursor win-runner acceptance-pack, eller VERIFIED-delta for W1/W2/W3/W5, eller W6-absorbesademec - forsta-marken-llt"
     }
   ]
 }

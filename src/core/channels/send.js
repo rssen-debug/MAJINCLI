@@ -72,8 +72,22 @@ export const sendMatrix = async (cfg, { room, text, homeserver = null }, fetchFn
   return { ok: true, eventId: r.json?.event_id || null, status: r.status };
 };
 
+/* STRING-LEVEL canonical check — deliberately NOT new URL(url).hostname,
+   because the WHATWG host parser NORMALIZES 127.1, 2130706433, zero-padded
+   octets into 127.0.0.1 and would thus launder obfuscated forms through us.
+   Only to-the-letter canonical loopback passes; credentials (@), integer
+   encodings, netmask shorthands, IPv4-mapped IPv6 and typo-domains all fail. */
+export function isLoopbackUrl(url) {
+  return /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:[0-9]{1,5})?(\/|$)/i.test(String(url || ''));
+}
+
 export const sendWebhook = async (cfg, { url, payload = {}, headersExtra = {}, secret = null }, fetchFn = fetch) => {
-  if (!url || !/^https:\/\//.test(url)) return { ok: false, error: { code: 'forbidden', message: 'Webhook-URL must be https:// (plain-text posting of payloads over http is forbidden)' } };
+  /* http is forbidden — EXCEPT loopback: an attacker cannot route 127.0.0.1
+     elsewhere, and local bots/receivers (our own integration tests, Home
+     Assistant etc.) live there. Everything else stays https-only. */
+  const httpsOk = /^https:\/\//.test(url || '');
+  const loopOk = /^http:\/\//.test(url || '') && isLoopbackUrl(url);
+  if (!httpsOk && !loopOk) return { ok: false, error: { code: 'forbidden', message: 'Webhook-URL must be https:// — http only for loopback receivers (127.0.0.1/localhost/[::1]); posting payloads over plain http to the open network is forbidden' } };
   const bodyStr = JSON.stringify(payload ?? {});
   const headers = { ...headersExtra };
   if (secret) headers['x-majin-signature'] = 'sha256=' + crypto.createHmac('sha256', String(secret)).update(bodyStr).digest('hex');
