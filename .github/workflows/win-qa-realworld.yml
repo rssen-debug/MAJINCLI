@@ -24,7 +24,7 @@ on:
       models:
         description: 'Ollama models to pull (csv)'
         required: false
-        default: 'llama3.2:1b,qwen2.5:0.5b,smollm2:135m'
+        default: 'smollm2:135m,qwen2.5:0.5b,llama3.2:1b'
         type: string
       source:
         description: 'published = test the release users get · branch-build = build+install THIS ref (repair loop)'
@@ -149,11 +149,9 @@ jobs:
           # windows-latest CPU-runner — global throw på första modellen hade stoppat
           # hela mätningen trots att smollm2:135m hade kunnat bära audit-mekaniken.
           # Ärlig ordning: smallest → largest, minst en modell måste warma tydligt.
-          $pulled = @(ollama-win\ollama.exe list --quiet 2>$null | ForEach-Object { $_.Split([char]32)[0] })
-          $warmable = @(if ($pulled -contains 'smollm2:135m') { 'smollm2:135m' } + @('qwen2.5:0.5b','llama3.2:1b') + ($pulled | Where-Object { 'smollm2:135m','qwen2.5:0.5b','llama3.2:1b' -notcontains $_ })) | Select-Object -Unique
+          $wOrder = @('smollm2:135m','qwen2.5:0.5b','llama3.2:1b')
           $warmed = @()
-          foreach ($mm in $warmable) {
-            if (-not $mm) { continue }
+          foreach ($mm in $wOrder) {
             "warming $mm (num_predict=1, keep_alive=10m)…"
             $body = @{ model = $mm; messages = @(@{ role = 'user'; content = 'ok' }); stream = $false; keep_alive = '10m'; options = @{ num_predict = 1 } } | ConvertTo-Json -Depth 5
             $okw = $false
@@ -168,9 +166,9 @@ jobs:
                 Start-Sleep 5
               }
             }
-            if (-not $okw) { Write-Output ("::warning::warm-up never completed for " + $mm + " — honest measurement continues if any smaller/alternative model warmed; the d-route scenarios mark transport-not-quality") }
+            if (-not $okw) { Write-Output ("::warning::warm-up never completed for " + $mm + " — audit continues on smaller/any warmed model (run 39424144421: llama3.2:1b aldrig inom 3x420s på CI-CPU)") }
           }
-          if ($warmed.Count -eq 0) { throw "no model could serve a 1-token reply within 3×420 s — audit impossible honestly" }
+          if ($warmed.Count -eq 0) { throw "no model could serve a 1-token reply within 3x420 s — audit impossible honestly" }
           "warm and ready: $($warmed -join ', ')"
           Set-Content qa-stage\QA_WARM_MODELS ($warmed -join ',')
         env:
