@@ -14,7 +14,10 @@ const TARGET = /(?<![\/\\\w.-])([\w-]+\.(?:txt|md|json|js|mjs|jsx|ts|tsx|html|cs
 /** Only unambiguous BASENAMES under the MAJIN workspace are automatically checked. */
 export function explicitTarget(input, workspace) {
   if (typeof input !== 'string' || typeof workspace !== 'string' || !workspace) return null;
-  const names = [...input.matchAll(TARGET)].map((m) => m[1]);
+  // Product/runtime names such as "Node.js" are not output artifacts.
+  // Preserve lowercase "node.js" when the user deliberately names a file.
+  const names = [...input.matchAll(TARGET)].map((m) => m[1])
+    .filter((name) => name !== 'Node.js');
   const unique = [...new Set(names)];
   if (unique.length !== 1) return null;
   const name = unique[0];
@@ -51,6 +54,28 @@ export function inspectRequestedArtifact(input, workspace) {
           !/<button\b[^>]*\bstyle\s*=/i.test(data) &&
           !/(?:\bbutton(?:\.[\w-]+)?|\.cta|\.btn)\s*(?::[\w-]+)?\s*\{/i.test(data)) {
         missing.push('requested styled CTA button (missing button CSS rule or inline style)');
+      }
+    }
+    if (/\.mjs$/i.test(target.name)) {
+      const asksRespond = /\brespond\s*\(\s*message\s*\)/i.test(input);
+      const asksExport = /\bexport\s+(?:a\s+)?(?:function\s+)?respond\b/i.test(input) ||
+        /\bexport\s+function\s+respond/i.test(input);
+      const asksCLI = /\bCLI\b|command.line\s+(?:entrypoint|interface)/i.test(input);
+      const asksArgs = /\b(?:different|argument|process\.argv|QA_PING)\b/i.test(input);
+      if (asksRespond && !/(?:function\s+respond\s*\(|(?:const|let)\s+respond\s*=)/i.test(data)) {
+        missing.push('requested respond(message) implementation');
+      }
+      if (asksExport && !/(?:export\s+(?:async\s+)?function\s+respond\s*\(|export\s+(?:const|let)\s+respond\s*=)/i.test(data)) {
+        missing.push('requested exported respond(message)');
+      }
+      if (asksCLI && !/(?:console\.log\s*\(|process\.stdout\.write\s*\()/i.test(data)) {
+        missing.push('requested CLI output entrypoint');
+      }
+      if (asksCLI && asksArgs && !/process\.argv/i.test(data)) {
+        missing.push('requested CLI argument handling (process.argv)');
+      }
+      if (/non.placeholder|helpful/i.test(input) && /(?:your response here|\bTODO\b|\bplaceholder\b)/i.test(data)) {
+        missing.push('placeholder code is not a working response');
       }
     }
     const exact = /\bEXACTLY\s+(?:"([^"]{1,150})"|'([^']{1,150})'|([A-Za-z0-9_-]{3,150}))/i.exec(input);
