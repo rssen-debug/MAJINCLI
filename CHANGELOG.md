@@ -16,6 +16,32 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 
 
 
+
+## 2026-10-20 — WAVE 12 (§3): bench usage arms — per-scenario requests/tokens/cost — v0.9.20
+
+### Added
+- **Usage arms in `scripts/bench.mjs`** — every scenario now measures its model spend through
+  the real `rt.usage.summary()` ledger (delta around the run): `requests`, `tokens`, `costUsd`
+  per scenario row, shown in the table (`req`/`tok` columns) and the JSON verdict.
+- **Ledger conservation as a gate** — the per-scenario deltas must sum EXACTLY to the global
+  usage summary (requests AND tokens), or the bench verdict fails. Double-counting and leaks
+  now break the bench, not just prod.
+- **Free-by-design check per arm** — every scenario asserts `costUsd === 0`; a mock arm that
+  spends money is a contradiction, now immediately visible.
+- **Codified self-config truth** — `maxRequests: 1`. Measured today: 1 intent-parse request /
+  ~1,105 tokens (the no-model-call aspiration remains a DEFERRED candidate, now data-backed);
+  the bench fails loudly if usage ever climbs past the budget.
+
+### Measured (mock arm, 2026-10-20)
+- Per-scenario: fs.write 3req/3,044tok · fs.read 3/3,103 · re.analyze 3/4,115 · shell.run
+  3/3,124 · multi-step 5/5,640 · self-config 1/1,105 · guard-approval 4/4,802 — sum 22/24,933
+  == global totals (conservation OK), $0 everywhere.
+
+### Verified
+`test/w12-bench-usage-arms.test.js` (6): visibility, conservation, free-arm, self-config
+budget, multi-step visibility. Full suite **541 / 524 / 0 / 17**.
+
+
 ## 2026-10-20 — WAVE 11: bidirectional cap tuning, every decision logged with why + per-input evidence — v0.9.19
 
 ### Changed (user directive)
