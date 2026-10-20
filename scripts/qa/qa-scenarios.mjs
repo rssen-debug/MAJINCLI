@@ -815,7 +815,7 @@ async function b01(a) {
   const shot = await api('POST', '/api/tool', { tool: 'browser.shot', args: { path: 'qa-audit/example.png' } }, { timeoutMs: 60000 });
   const body = String(read.json.result || '');
   console.log('[QA b01 evidence]', JSON.stringify({open:open.json, read:read.json, shot:shot.json}).slice(0,1800));
-  const ok = read.json.ok === true && /Example Domain/i.test(body);
+  const ok = open.json.ok === true && open.json.meta?.title === 'Example Domain' && read.json.ok === true && /documentation examples|documentation example|exemple|أمثلة|示例/i.test(body) && shot.json.ok === true;
   const shotRef = shot.json.ok === true ? 'saved' : String(shot.json.error?.message || 'failed');
   return a(ok ? CL.CI : CL.FAIL, ok ? `real browser automation through the installed app: opened example.com, read text ("Example Domain" found), screenshot ${shotRef}` : 'browser read-back incomplete', { open: true, readPreview: body.slice(0, 100), shot: shotRef, shotMeta: shot.json.meta || null, readError: read.json.error || null, readOk: read.json.ok || false });
 }
