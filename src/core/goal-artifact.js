@@ -65,3 +65,28 @@ export function inspectRequestedArtifact(input, workspace) {
     reason: missing.length ? 'artifact contract failed: ' + missing.join('; ') : 'target artifact independently verified on disk',
   };
 }
+
+
+/**
+ * Only for explicit, unambiguous SINGLE-FILE creation goals in the top-level
+ * agent. If the model invents an absolute /tmp path or a different filename,
+ * pin fs.write to the exact workspace-relative filename requested by the
+ * user. This avoids stray writes while keeping arbitrary multi-file workflows
+ * and user-explicit absolute paths untouched.
+ *
+ * Caller must separately prove the request is actionable and not read-only.
+ */
+export function pinSingleFileWrite(input, workspace, tool, args) {
+  if (tool !== 'fs.write' || !args || typeof args.path !== 'string' || !args.path.trim()) return null;
+  const target = explicitTarget(input, workspace);
+  if (!target) return null;
+  const attempted = path.resolve(target.workspace, args.path);
+  if (attempted === target.path) return null;
+  return {
+    args: { ...args, path: target.name },
+    originalPath: args.path,
+    requestedPath: target.name,
+    corrected: true,
+    reason: 'single explicitly named output artifact is pinned to user-specified workspace basename',
+  };
+}
