@@ -330,7 +330,7 @@ jobs:
   qa-interactive:
     name: interactive desktop lane (self-hosted runner with real screen)
     needs: qa-realworld
-    if: ${{ always() && (github.event.inputs.runner == 'self-hosted' || env.QA_IS_BRANCH == 'true') }}
+    if: ${{ always() && (github.event.inputs.runner == 'self-hosted' || (github.event_name == 'push' && github.ref == 'refs/heads/qa/majin-release-validation-20261020')) }}
     runs-on: [self-hosted, windows, interactive-desktop, majin-qa]
     timeout-minutes: 45
     steps:
