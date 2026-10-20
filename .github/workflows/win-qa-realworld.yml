@@ -26,6 +26,12 @@ on:
         required: false
         default: 'smollm2:135m,qwen2.5:0.5b,llama3.2:1b'
         type: string
+      runner:
+        description: 'hosted = GitHub windows-latest (Session-0, sanningsspar för API/kontrakt) | self-hosted = interaktivón desktop i eget nät (control-c02/u-serier kan mäta)'
+        required: false
+        default: 'hosted'
+        type: choice
+        options: [hosted, self-hosted]
       source:
         description: 'published = test the release users get · branch-build = build+install THIS ref (repair loop)'
         required: false
@@ -299,3 +305,60 @@ jobs:
           name: qa-ui-evidence
           path: qa-ui-evidence/
           retention-days: 90
+
+  qa-interactive:
+    name: interactive desktop lane (self-hosted runner with real screen)
+    needs: qa-realworld
+    if: ${{ github.event.inputs.runner == 'self-hosted' }}
+    runs-on: [self-hosted, windows, interactive-desktop, majin-qa]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: "Fetch the branch-built installer from the artifact"
+        uses: actions/download-artifact@v4
+        with: { name: branch-installer, path: qa-stage }
+      - name: Install silently ON THIS REAL DESKTOP (measured)
+        shell: pwsh
+        run: |
+          $proc = Start-Process .\qa-stage\MAJIN-Setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          $exe = "$env:LOCALAPPDATA\Programs\MAJIN\majin-win-x64.exe"
+          if (-not (Test-Path $exe)) { $exe = "$env:ProgramFiles\MAJIN\majin-win-x64.exe" }
+          $n = 0; while (-not (Test-Path $exe) -and $n -lt 30) { Start-Sleep -Seconds 2; $n += 2 }
+          if (-not (Test-Path $exe)) { throw "installed exe missing (exit=$($proc.ExitCode))" }
+          "installed at $exe"
+      - name: Verify this session IS interactive (honesty gate — c02 ready)
+        shell: pwsh
+        run: |
+          $b = [Environment]::UserInteractive
+          "UserInteractive=$b"
+          if (-not $b) { throw "claiming interactive but the session measured non-interactive — runner was started as a service, not via run.cmd in a logged-on desktop" }
+      - name: Ollama + models (smallest-first on this real machine)
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest 'https://github.com/ollama/ollama/releases/download/v0.12.6/ollama-windows-amd64.zip' -OutFile ollama.zip
+          Expand-Archive -Path ollama.zip -DestinationPath ollama-win -Force
+          Start-Process -FilePath "$((Get-Location).Path)\ollama-win\ollama.exe" -ArgumentList 'serve' -WindowStyle Hidden | Out-Null
+          $t0 = Get-Date; $ok = $false
+          while (((Get-Date) - $t0).TotalSeconds -lt 120) { try { $r = Invoke-WebRequest 'http://127.0.0.1:11434/api/tags' -TimeoutSec 3 -UseBasicParsing; if ($r.StatusCode -eq 200) { $ok = $true; break } } catch { Start-Sleep 2 } }
+          if (-not $ok) { throw 'ollama serve down' }
+          & ollama-win\ollama.exe pull smollm2:135m | Out-Default
+      - name: Run interactive scenarios (c02-ready subset + control ops on real desktop)
+        shell: pwsh
+        env:
+          QA_INTERACTIVE: 'true'
+          QA_MODELS_IN: 'smollm2:135m'
+          QA_ARTIFACT: ${{ format('interactive-selfhost @{0}', github.sha) }}
+        run: |
+          $exe = "$env:LOCALAPPDATA\Programs\MAJIN\majin-win-x64.exe"
+          if (-not (Test-Path $exe)) { $exe = "$env:ProgramFiles\MAJIN\majin-win-x64.exe" }
+          $env:QA_EXE = $exe; $env:QA_EVID = "$PWD\qa-evidence"
+          node scripts/qa/qa-scenarios.mjs 2>&1 | Tee-Object -Variable out
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload interactive evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: qa-interactive-evidence, path: qa-evidence/, retention-days: 90 }
+
