@@ -49,8 +49,11 @@ jobs:
           New-Item -ItemType Directory -Force qa-stage | Out-Null
           npm ci | Out-Null
           python -m pip install --quiet ziglang
-          node scripts/build-setup.mjs *>&1 | Tee-Object -FilePath setup.log
+          # ORDNINGEN ÄR KRITISK (mätt 2026-10-20, run 39421716141): build-exe.mjs
+          # rmSync:ar allt utom bundle-step.cjs/node-sea i dist/ — ett setup.exe
+          # byggt FÖRE dör där. Därför: exe först, setup sist.
           node scripts/build-exe.mjs *>&1 | Tee-Object -FilePath build.log
+          node scripts/build-setup.mjs *>&1 | Tee-Object -FilePath setup.log
           if (-not (Test-Path dist/setup/majin-setup.exe)) { throw "branch build produced no installer — see setup.log/build.log" }
           Copy-Item dist/setup/majin-setup.exe qa-stage\MAJIN-Setup.exe
           $h = (Get-FileHash qa-stage\MAJIN-Setup.exe -Algorithm SHA256).Hash.ToLower()
