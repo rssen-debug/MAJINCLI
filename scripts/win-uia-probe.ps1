@@ -24,6 +24,23 @@ param(
   [string]$OutFile = 'probe-result.json'
 )
 
+# Self-logging: every phase leaves a breadcrumb, and ANY fatal error still
+# emits a diagnostic probe-result.json instead of dying silently.
+$script:progress = @()
+function Mark($m) { $script:progress += $m; Write-Host "MARK $m" }
+trap {
+  $em = [ordered]@{
+    schema = 'majin.win-uia-probe.v2.2'
+    fatalError = $_.Exception.Message
+    atLine = "$($_.InvocationInfo.ScriptLineNumber)"
+    progress = $script:progress
+  }
+  try { $em | ConvertTo-Json -Depth 6 | Set-Content -Path $OutFile -Encoding utf8 } catch {}
+  Write-Error "PROBE_FATAL: $($_.Exception.Message)"
+  exit 3
+}
+Mark 'probe-start'
+
 $result = [ordered]@{
   schema    = 'majin.win-uia-probe.v2.2'
   timestamp = (Get-Date).ToUniversalTime().ToString('o')
@@ -62,13 +79,15 @@ $result = [ordered]@{
 
 function Add-Note([string]$n) { $script:result.notes += $n }
 
+Mark 'P1-begin'
 # ---------- P1: assemblies + root enumeration ----------
 try {
   Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes -ErrorAction Stop
   $script:result.p1_assemblyAndRoot.loaded = $true
 } catch {
   $script:result.notes += "UIA assemblies failed to load: $($_.Exception.Message)"
-  $result | ConvertTo-Json -Depth 10 | Set-Content -Path $OutFile -Encoding utf8
+  Mark 'emit'
+$result | ConvertTo-Json -Depth 10 | Set-Content -Path $OutFile -Encoding utf8
   Write-Output ($result | ConvertTo-Json -Depth 10 -Compress)
   exit 3
 }
@@ -264,6 +283,7 @@ if ($np -and -not $script:result.p3_notepad.readBackMatches) {
   }
 }
 
+Mark 'P6-begin'
 # P6: WinForms controlled fixture — a real desktop app with zero external dependencies.
 # Drives a classic TextBox via UIA ValuePattern: the core capability question answered on real
 # Windows even though modern UWP-style Notepad exposes no text patterns (P3/P5 gap evidence).
@@ -347,6 +367,7 @@ try {
 } catch { $p6.note = "P6 lane exception: $($_.Exception.Message)" }
 $script:result.p6_winformsFixture = $p6
 
+Mark 'cleanup-notepad'
 # cleanup notepad
 if ($proc -and -not $proc.HasExited) {
   try { Stop-Process -Id $proc.Id -Force -ErrorAction Stop; $script:result.p3_notepad.closedOk = $true } catch { $script:result.p3_notepad.closedOk = $false }
@@ -356,6 +377,7 @@ $script:result.capabilities.locateControls = $script:result.capabilities.locateC
 $script:result.capabilities.textInput = $script:result.p3_notepad.setValueOk -or $script:result.p5_subtreeAndFallback.fallbackValueWriteOk -or $script:result.p5_subtreeAndFallback.sendKeysOk -or $script:result.p6_winformsFixture.setValueOk
 $script:result.capabilities.readBack  = $script:result.p3_notepad.readBackMatches -or $script:result.p5_subtreeAndFallback.fallbackReadBackMatches -or $script:result.p5_subtreeAndFallback.sendKeysOk -or $script:result.p6_winformsFixture.readBackMatches
 
+Mark 'emit'
 $result | ConvertTo-Json -Depth 10 | Set-Content -Path $OutFile -Encoding utf8
 Write-Output ($result | ConvertTo-Json -Depth 10)
 exit 0
