@@ -522,7 +522,7 @@ test('/api/tools exposes live JSON Schema contracts, not only parameter names', 
   for (const [name, required] of Object.entries({
     'shell.run': ['command'],
     'browser.open': ['url'],
-    'fs.write': ['path'],
+    'fs.write': ['path', 'content'],
     'sys.ps': [],
   })) {
     const t = j.tools.find((tool) => tool.name === name);
