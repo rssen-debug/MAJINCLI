@@ -53,6 +53,28 @@ export function inspectRequestedArtifact(input, workspace) {
         missing.push('requested styled CTA button (missing button CSS rule or inline style)');
       }
     }
+    if (/\.mjs$/i.test(target.name)) {
+      const asksRespond = /\brespond\s*\(\s*message\s*\)/i.test(input);
+      const asksExport = /\bexport\s+(?:a\s+)?(?:function\s+)?respond\b/i.test(input) ||
+        /\bexport\s+function\s+respond/i.test(input);
+      const asksCLI = /\bCLI\b|command.line\s+(?:entrypoint|interface)/i.test(input);
+      const asksArgs = /\b(?:different|argument|process\.argv|QA_PING)\b/i.test(input);
+      if (asksRespond && !/(?:function\s+respond\s*\(|(?:const|let)\s+respond\s*=)/i.test(data)) {
+        missing.push('requested respond(message) implementation');
+      }
+      if (asksExport && !/(?:export\s+(?:async\s+)?function\s+respond\s*\(|export\s+(?:const|let)\s+respond\s*=)/i.test(data)) {
+        missing.push('requested exported respond(message)');
+      }
+      if (asksCLI && !/(?:console\.log\s*\(|process\.stdout\.write\s*\()/i.test(data)) {
+        missing.push('requested CLI output entrypoint');
+      }
+      if (asksCLI && asksArgs && !/process\.argv/i.test(data)) {
+        missing.push('requested CLI argument handling (process.argv)');
+      }
+      if (/non.placeholder|helpful/i.test(input) && /(?:your response here|\bTODO\b|\bplaceholder\b)/i.test(data)) {
+        missing.push('placeholder code is not a working response');
+      }
+    }
     const exact = /\bEXACTLY\s+(?:"([^"]{1,150})"|'([^']{1,150})'|([A-Za-z0-9_-]{3,150}))/i.exec(input);
     const wanted = exact?.[1] || exact?.[2] || exact?.[3];
     if (wanted && data.trim() !== wanted) missing.push('requested exact content differs');
