@@ -320,6 +320,14 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Isolate MAJIN QA data from the user's actual configuration
+        shell: powershell
+        run: |
+          $home = Join-Path $env:RUNNER_TEMP ("majin-qa-" + $env:GITHUB_RUN_ID)
+          New-Item -ItemType Directory -Force $home | Out-Null
+          "MAJIN_HOME=$home" | Out-File -FilePath $env:GITHUB_ENV -Encoding ascii -Append
+          "QA_HOME=$home" | Out-File -FilePath $env:GITHUB_ENV -Encoding ascii -Append
+          "MAJIN QA isolated state: $home"
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - name: "Fetch the branch-built installer from the artifact"

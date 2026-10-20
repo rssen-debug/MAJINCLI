@@ -700,16 +700,16 @@ async function s26(a) {
 // A control probe there is BLOCKED, not proof that Windows computer control failed.
 function hostedGuiBlocked(a, action) {
   if (process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_ENVIRONMENT === 'self-hosted') return false;
-  a(CL.BLOCKED, `${action} needs a visible interactive desktop; the hosted service cannot prove that operation`, {
+  return a(CL.BLOCKED, `${action} needs a visible interactive desktop; the hosted service cannot prove that operation`, {
     runnerEnvironment: process.env.RUNNER_ENVIRONMENT || 'github-hosted',
     sessionName: process.env.SESSIONNAME || null,
     remedy: 'use runner=self-hosted with a logged-on console desktop',
   });
-  return true;
 }
 
 async function c03(a) { // control lane THROUGH THE INSTALLED PRODUCT — the user's core question
-  if (hostedGuiBlocked(a, 'control.type')) return;
+  const blocked = hostedGuiBlocked(a, 'control.type');
+  if (blocked) return blocked;
   const list = await api('POST', '/api/tool', { tool: 'control.list_windows', args: {} });
   if (list.json.ok !== true) return a(CL.FAIL, 'control.list_windows refused by the installed product', list.json);
   // windows enumerate even in Session-0 (service desktop): c01 proves it. Now the real act:
@@ -730,7 +730,8 @@ async function c03(a) { // control lane THROUGH THE INSTALLED PRODUCT — the us
 
 
 async function c04(a) { // BM_CLICK via fragmentet — Run-dialog min OK lyssnar
-  if (hostedGuiBlocked(a, 'control.click_button')) return;
+  const blocked = hostedGuiBlocked(a, 'control.click_button');
+  if (blocked) return blocked;
   spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Start-Process rundll32.exe -ArgumentList "shell32,#61"'], { windowsHide: true, timeout: 6000 });
   await sleep(2200);
   const type = await qaApprovedTool('control.type', { window: 'Run', text: 'notepad.exe' });
