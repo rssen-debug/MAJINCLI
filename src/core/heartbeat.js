@@ -93,7 +93,15 @@ export class Heartbeat {
   /* Deduped, hop-counted event ingestion — nothing stored that is not
      a real bus event with a real payload. */
   ingest(pattern, ev) {
-    const key = `${pattern}:${JSON.stringify(ev ?? {}).slice(0, 160)}`;
+    // Event-bus timestamps differ between identical events on a fast machine,
+    // especially Windows. Deduplicate by semantic payload, not volatile clock
+    // metadata. Keep the original event in the queue for accurate evidence.
+    const stable = ev && typeof ev === 'object' ? { ...ev } : ev;
+    if (stable && typeof stable === 'object') {
+      delete stable.ts;
+      delete stable.timestamp;
+    }
+    const key = `${pattern}:${JSON.stringify(stable ?? {}).slice(0, 160)}`;
     const hash = crypto.createHash('sha256').update(key).digest('hex').slice(0, 16);
     const prevAt = this.seen.get(hash) || 0;
     if (prevAt !== 0 && this.now() - prevAt < this.minGapMs) return false; /* prevAt===0 = never seen before — first sighting always counts */
