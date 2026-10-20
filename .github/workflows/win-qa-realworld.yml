@@ -339,7 +339,7 @@ jobs:
         run: |
           $b = [Environment]::UserInteractive
           "UserInteractive=$b"
-          if (-not $b) { throw "claiming interactive but the session measured non-interactive — runner was started as a service, not via run.cmd in a logged-on desktop" }
+          if (-not $b) { throw "interactive desktop check failed: UserInteractive=false; run run.cmd in a logged-on console, not as a service" }
       - name: Ollama + models (smallest-first on this real machine)
         shell: powershell
         run: |
