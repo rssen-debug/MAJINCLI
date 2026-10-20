@@ -42,7 +42,7 @@ trap {
 Mark 'probe-start'
 
 $result = [ordered]@{
-  schema    = 'majin.win-uia-probe.v2.5'
+  schema    = 'majin.win-uia-probe.v2.6'
   timestamp = (Get-Date).ToUniversalTime().ToString('o')
   env = [ordered]@{
     osVersion    = [System.Environment]::OSVersion.VersionString
@@ -413,6 +413,11 @@ public static extern System.IntPtr FindWindowEx(System.IntPtr hwndParent, System
 public static extern System.IntPtr SendMessage(System.IntPtr hWnd, uint Msg, System.IntPtr wParam, string lParam);
 [System.Runtime.InteropServices.DllImport("user32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode)]
 public static extern int SendMessage(System.IntPtr hWnd, uint Msg, int wParam, System.Text.StringBuilder lParam);
+public delegate bool EnumWindowsProc(System.IntPtr hWnd, System.IntPtr lParam);
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern bool EnumChildWindows(System.IntPtr hWndParent, EnumWindowsProc lpEnumFunc, System.IntPtr lParam);
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern int GetClassName(System.IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
 "@
   if ($dlgProc -and -not $dlgProc.HasExited) { Stop-Process -Id $dlgProc.Id -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500 }
   Start-Process -FilePath "explorer.exe" -ArgumentList 'shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}' | Out-Null
@@ -423,7 +428,16 @@ public static extern int SendMessage(System.IntPtr hWnd, uint Msg, int wParam, S
   }
   if ($dlgHwnd -ne [IntPtr]::Zero) {
     $p8.windowFound = $true
-    $editHwnd = [MAJINP8.Win32]::FindWindowEx($dlgHwnd, [IntPtr]::Zero, 'Edit', $null)
+    $editHwnd = [IntPtr]::Zero
+    $cb = [MAJINP8.Win32+EnumWindowsProc]{ param($h,$l)
+        $cls = New-Object System.Text.StringBuilder -ArgumentList 64
+        [void][MAJINP8.Win32]::GetClassName($h, $cls, 64)
+        if ($cls.ToString() -eq 'Edit') { $script:p8e = $h; return $false }
+        return $true
+    }
+    $script:p8e = [IntPtr]::Zero
+    [void][MAJINP8.Win32]::EnumChildWindows($dlgHwnd, $cb, [IntPtr]::Zero)
+    $editHwnd = $script:p8e
     if ($editHwnd -ne [IntPtr]::Zero) {
       $p8.editFound = $true
       [void][MAJINP8.Win32]::SendMessage($editHwnd, 0x000C, [IntPtr]::Zero, $p7marker)     # WM_SETTEXT
