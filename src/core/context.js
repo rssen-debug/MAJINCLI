@@ -79,12 +79,14 @@ export async function compact({ cfg, messages, brief }) {
     String(m.content || '').startsWith('ACTIVE GOAL:'));
   const anchors = [originalSystem, originalGoal].filter(Boolean);
   const anchoredTail = tail.filter((m) => !anchors.includes(m));
-  const route = cfg.resolveModel(cfg.get('models.routes.summarize'), 'summarize');
   const dialog = head
     .map((m) => `${m.role}: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '').slice(0, 900)}`)
     .join('\n')
     .slice(-24000);
   try {
+    // Summarizer route resolution can itself fail (missing key/model). Even then
+    // compaction must keep the working system prompt and goal, not abort the turn.
+    const route = cfg.resolveModel(cfg.get('models.routes.summarize'), 'summarize');
     const res = await complete({
       route,
       job: 'summarize',
