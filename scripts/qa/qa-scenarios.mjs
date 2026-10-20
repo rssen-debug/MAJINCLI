@@ -448,6 +448,54 @@ async function chatExpectToken(a, tokenWord, retries = 2, extra = {}) {
   evidWrite(`${extra.id || 'chat'}-transcript`, { attempts });
   return { ok: false, attempts };
 }
+/**
+ * A01: goal -> REAL model -> MAJIN agent tool loop -> byte-exact artifact.
+ * No file writes through the QA harness: only the agent's fs.write can create it.
+ * One constrained repair turn is allowed if the first turn omitted the artifact.
+ * Runs in a fresh QA_HOME; never touches a user's real workspace.
+ */
+async function a01(a) {
+  if (process.env.QA_OPENCODE_GO !== 'true') return a(CL.SKIP, 'requires live OpenCode Go QA configuration');
+  const filename = 'qa-goal-proof-' + crypto.randomBytes(5).toString('hex') + '.txt';
+  const marker = 'MAJIN_GOAL_' + crypto.randomBytes(10).toString('hex');
+  const target = path.join(CFG.home, 'workspace', filename);
+  const session = 'qa-goal-' + crypto.randomBytes(4).toString('hex');
+  const firstInput = 'Complete this real task using the fs.write tool: create file ' + filename +
+    ' in your workspace, containing EXACTLY this one line with no additional characters: ' + marker +
+    '. Do not merely claim success; actually call the file tool.';
+  const attempts = [];
+  const oldCfg = (await api('GET', '/api/config')).json;
+  const previousAllow = oldCfg?.config?.tools?.allow ?? '*';
+  try {
+    // Restrict this evaluation turn to a tiny file-tool sandbox.
+    const patched = await api('PATCH', '/api/config', { tools: { allow: ['fs.write', 'fs.read', 'fs.list'] } });
+    if (patched.json?.ok !== true) return a(CL.FAIL, 'could not scope evaluation tools', { error: patched.json?.error || null });
+    for (let turn = 0; turn < 2; turn++) {
+      const input = turn === 0 ? firstInput :
+        'The previous attempt did not create the required file. Recover by CALLING fs.write now. File: ' +
+        filename + '. Exact content: ' + marker + '. Reply only after a real write.';
+      let reply;
+      try {
+        reply = await api('POST', '/api/chat',
+          { input, session, stream: false }, { timeoutMs: 150000 });
+      } catch (err) {
+        attempts.push({ turn: turn + 1, transportError: String(err.message || err).slice(0, 180) });
+        continue;
+      }
+      const exists = fs.existsSync(target);
+      const content = exists ? fs.readFileSync(target, 'utf8') : null;
+      const match = content === marker || content === marker + '\n';
+      attempts.push({ turn: turn + 1, httpStatus: reply.status, agentOk: reply.json?.ok === true,
+        replyPreview: String(reply.json?.text || '').slice(0, 160), artifactExists: exists, exactContent: match });
+      if (match) return a(CL.CI, 'real OpenCode Go agent created verified artifact ' +
+        (turn ? 'after an explicit repair turn' : 'on first turn'), { filename, attempts, bytes: Buffer.byteLength(content) });
+    }
+    return a(CL.FAIL, 'real agent failed to produce the requested artifact after repair', { filename, attempts });
+  } finally {
+    // Restore original tool policy even on failure; do not weaken production guard.
+    await api('PATCH', '/api/config', { tools: { allow: previousAllow } }).catch(() => {});
+  }
+}
 async function s10(a) {
   const tok = CHAT_TOKEN_WORD('s10');
   const r = await chatExpectToken(a, tok, 3, { id: 's10' });
@@ -835,6 +883,7 @@ const PLAN = [
   ['d03', 'negative probe: tool-rejection on tiny model (F-T1 evidence)', 'gap-probe', CL.CI, d03],
   ['s08', 'provider test: REAL completion via installed app', 'real-model', CL.CI, s08],
   ['s09', 'live model discovery from Ollama', 'real-model', CL.CI, s09],
+  ['a01', 'real OpenCode Go autonomous file goal + one recovery turn', 'goal-e2e', CL.CI, a01],
   ['s10', 'REAL chat (non-stream): audit token reproduced', 'chat', CL.CI, s10],
   ['s11', 'REAL streaming chat (SSE deltas + done)', 'chat', CL.CI, s11],
   ['s12', 'REAL cancel mid-stream', 'chat', CL.CI, s12],
@@ -859,7 +908,7 @@ const PLAN = [
   ['b01', 'browser automation through installed tool belt', 'browser-automation', CL.CI, b01],
 ];
 
-const LLM_REQUIRED = new Set(['d01', 'd03', 's08', 's10', 's11', 's12', 's13', 's14', 's16', 's17', 's23']);
+const LLM_REQUIRED = new Set(['a01', 'd01', 'd03', 's08', 's10', 's11', 's12', 's13', 's14', 's16', 's17', 's23']);
 async function main() {
   console.log(`MAJIN QA REAL-WORLD engine — exe=${CFG.exe} home=${CFG.home} port=${CFG.port} evid=${CFG.evid} models=${CFG.models.join(',')}`);
   console.log(`classification ceiling: VERIFIED_CI (CI service session — GUI actuation lanes gate themselves)`);
@@ -872,7 +921,7 @@ async function main() {
   evidWrite('s00-boot', { bootMs, port: CFG.port, tokenFrom: 'config.json or stdout', exe: CFG.exe });
 
   for (const [id, name, lane, ceiling, fn] of PLAN) {
-    if (CFG.mechanicsOnly && LLM_REQUIRED.has(id) && !(process.env.QA_OPENCODE_GO === 'true' && id === 's08')) {
+    if (CFG.mechanicsOnly && LLM_REQUIRED.has(id) && !(process.env.QA_OPENCODE_GO === 'true' && (id === 's08' || id === 'a01'))) {
       await scenario(id, name, lane, ceiling, async (a) => a(CL.SKIP, 'no local model can serve on this hosted windows-latest CPU — measured 3 models × 3 attempts × 420 s timed out (documented external blocker, not a product verdict). Self-hosted lane (runner=interactive-desktop) is where model-dependent scenarios are verified.', { blocker: 'hosted-cpu-inference', measured: 'smollm2/qwen2.5/llama3.2 all unreachable in 90–420 s windows', remedy: 'scripts/qa/setup-majin-interactive-runner.ps1 + runner=self-hosted' }));
       continue;
     }
