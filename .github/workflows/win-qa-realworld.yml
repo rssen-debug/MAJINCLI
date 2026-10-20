@@ -175,7 +175,7 @@ jobs:
             $wait = Wait-Job $job -Timeout 90 -ErrorAction SilentlyContinue
             if (-not $wait) { "  $mm kunde inte servera 1 token inom 90 s (CPU-frost)"; Remove-Job $job -Force; continue }
             $out = Receive-Job $job; Remove-Job $job -Force
-            if ($out.ok) { $warmed += $mm; "  warm OK for $mm" } else { "  warm refused $mm: $($out.err)" }
+            if ($out.ok) { $warmed += $mm; "  warm OK for $mm" } else { "  warm refused ${mm}: $($out.err)" }
           }
           if ($warmed.Count -eq 0) {
             "MECHANICS-ONLY: no model served within the measured window"
