@@ -28,7 +28,7 @@ export function listBackends() {
   const ssh = spawnSync('ssh', ['-V'], { timeout: 4000, encoding: 'utf8' });
   return {
     local: { available: true, note: 'always available (host process spawn)' },
-    docker: { available: docker.status === 0, version: (docker.stdout || '').trim() || null, note: docker.status === 0 ? 'ready' : 'docker binary not on PATH — set up Docker or use backend=local explicitly' },
+    docker: { available: docker.status === 0, version: (docker.stdout || '').trim() || null, note: docker.status === 0 ? 'docker binary found; container daemon and image execution not yet verified' : 'docker binary not on PATH — set up Docker or use backend=local explicitly' },
     ssh: { available: ssh.status === 0 || ssh.status === 1, version: ((ssh.stderr || '').split('\n')[0] || '').trim() || null, note: 'system ssh; requires an explicit host + BatchMode-compatible key/agent auth' },
   };
 }
