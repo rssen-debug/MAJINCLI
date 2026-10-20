@@ -65,6 +65,11 @@ const POLARS = [
   [/\b(never|not|no|without|cannot|inte|aldrig|ej)\b/i, /\b(always|must|requires?|every|alltid|kräver)\b/i],
   [/\b(increas|grew?|risin|upp|högre)\w*/i, /\b(decreas|declin|fell|sänk|minsk|lower)\w*/i],
 ];
+function opposingPolarity(a, b) {
+  return POLARS.some(([neg, pos]) =>
+    (neg.test(a) && !pos.test(a) && pos.test(b) && !neg.test(b))
+    || (pos.test(a) && !neg.test(a) && neg.test(b) && !pos.test(b)));
+}
 export function crossCheck(claimsBySource) {
   const buckets = new Map();
   let claimsRaw = 0;
@@ -83,7 +88,7 @@ export function crossCheck(claimsBySource) {
     outer: for (const c of group) {
       for (const m of merged) {
         const overlap = sim(c.sentence, m.sentence);
-        if (overlap > 0.55) { m.sources.push(c.sourceId); m.support++; seen.add(c.sourceId); continue outer; }
+        if (overlap > 0.55 && !opposingPolarity(c.sentence, m.sentence)) { m.sources.push(c.sourceId); m.support++; seen.add(c.sourceId); continue outer; }
       }
       merged.push({ sentence: c.sentence, anchors: c.anchors, support: 1, sources: [c.sourceId], conflicts: false });
     }
