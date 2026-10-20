@@ -53,6 +53,29 @@ export function validateGraph(nodes) {
   return byId;
 }
 
+/* WAVE 2 (§8): per-node critical-tail rank — own estimate plus the longest
+   downstream tail. Missing estMs ranks 0, so unannotated grids keep stable
+   declaration order (pure tie-break). Deterministic, model-free (GENESIS ZERO). */
+export function criticalTailRanks(nodes, of = (n) => n.estMs ?? 0) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const ranks = new Map();
+  const visiting = new Set();
+  const rankOf = (id) => {
+    if (ranks.has(id)) return ranks.get(id);
+    if (visiting.has(id)) return 0; // cycles are rejected by validateGraph earlier
+    visiting.add(id);
+    const n = byId.get(id);
+    if (!n) return 0;
+    const tail = Math.max(0, ...nodes.filter((x) => (x.deps || []).includes(id)).map((x) => rankOf(x.id)));
+    visiting.delete(id);
+    const r = of(n) + tail;
+    ranks.set(id, r);
+    return r;
+  };
+  for (const n of nodes) rankOf(n.id);
+  return ranks;
+}
+
 /* kritiskt spår: längsta kedja av estMs */
 export function criticalPathMs(nodes, of = (n) => n.estMs ?? 0) {
   const memo = new Map();
@@ -191,7 +214,17 @@ export function isTransientFailure(msg) {
   return /fetch failed|econnreset|econnrefused|enotfound|etimedout|socket hang up|rate.?limit|\b429\b|\b5[0-9][0-9]\b|temporarily|broken pipe|reset by peer/i.test(String(msg || ''));
 }
 
-export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, onEvent = () => {}, maxAttempts = 1 }) {
+/**
+ * WAVE 2 (§5+§8): adaptive topology dispatch.
+ *  - §8 launch order is critical-path-first via criticalTailRanks (ties keep
+ *    declaration order — unannotated grids behave exactly as before).
+ *  - §5 contraction: once measured actuals materially overrun the estMs the
+ *    parallelism plan was built on, the scheduler STOPS widening — adding
+ *    lanes on a broken model multiplies spawn overhead. cap freezes at the
+ *    width active when the overrun was proven. Deterministic, evented, and
+ *    reported in the result; `adaptive:false` restores the legacy fixed cap.
+ */
+export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, onEvent = () => {}, maxAttempts = 1, adaptive = true, overrunFactor = 2 }) {
   validateGraph(nodes);
   const attempts = new Map(nodes.map((n) => [n.id, 0]));
   const maxAttemptsN = Math.max(1, Math.min(4, Number(maxAttempts) || 1));
@@ -225,7 +258,30 @@ export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, o
   const inFlight = new Set();
   const started = new Set(); /* started men INTE klar: aldrig en dublettkörning */
 
+  /* WAVE 2 plumbing: rank map (computed once — a node's tail cannot change),
+     stable declaration-order tie-break, launch audit trail, adaptive state. */
+  const rankMap = criticalTailRanks(nodes);
+  const declIndex = new Map(nodes.map((n, i) => [n.id, i]));
+  const byIdLocal = new Map(nodes.map((n) => [n.id, n]));
+  const launchOrder = [];
+  const adaptations = [];
+  const adaptiveOn = adaptive !== false;
+  const factorN = Math.max(1, Number(overrunFactor) || 2);
+  let frozenCap = null; // null = full capN; frozen to the width at proof-time
+
+  const measuredRatio = () => {
+    let est = 0, act = 0;
+    for (const [id, r] of results) {
+      if (r && r.ok === true && Number.isFinite(r.ms)) {
+        const e = byIdLocal.get(id) && byIdLocal.get(id).estMs;
+        if (Number.isFinite(e) && e > 0) { est += e; act += r.ms; }
+      }
+    }
+    return est > 0 ? act / est : 1; // unannotated grids never adapt — legacy behavior
+  };
+
   const launchOne = (n) => {
+    launchOrder.push(n.id);
     started.add(n.id);
     const attempt = (attempts.get(n.id) || 0) + 1;
     attempts.set(n.id, attempt);
@@ -281,7 +337,21 @@ export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, o
 
     /* ledig kapacitet rullar genast ut pa korbar ett arbete */
     const launchable = pending.filter((n) => readyFor(n));
-    while (launchable.length && inFlight.size < capN) {
+    /* §8: longest critical tail first; ties keep declaration order. */
+    launchable.sort((a, b) => (rankMap.get(b.id) - rankMap.get(a.id)) || (declIndex.get(a.id) - declIndex.get(b.id)));
+    /* §5: contraction on proven overrun — measured before each launch tick. */
+    let capNow = capN;
+    if (adaptiveOn && launchable.length) {
+      const ratio = measuredRatio();
+      if (frozenCap === null && ratio >= factorN) {
+        frozenCap = Math.max(1, inFlight.size);
+        const ev = { type: 'topology_adapt', reason: 'overrun', measuredRatio: Math.round(ratio * 100) / 100, capBefore: capN, capNow: frozenCap };
+        adaptations.push(ev);
+        onEvent(ev);
+      }
+      if (frozenCap !== null) capNow = Math.min(capN, frozenCap);
+    }
+    while (launchable.length && inFlight.size < capNow) {
       launchOne(launchable.shift());
     }
     if (inFlight.size === 0 && pending.filter((n) => readyFor(n)).length === 0) {
@@ -312,6 +382,8 @@ export async function runSwarm({ nodes, cap = 4, timeoutMs = 0, signal = null, o
     okCount: [...results.values()].filter((r) => r && r.ok === true).length,
     failCount: [...results.values()].filter((r) => r && r.ok === false).length,
     blockedCount: [...results.values()].filter((r) => r && r.blocked).length,
+    launchOrder,
+    adaptive: { enabled: adaptiveOn, overrunFactor: factorN, adaptations },
   };
 }
 

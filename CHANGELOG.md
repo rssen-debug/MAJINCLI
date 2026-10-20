@@ -5,6 +5,19 @@ broken), **Verifierat** (the exact command and its result). Verified means the L
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click
 without saying so explicitly. Version tags map 1:1 to git tags.
 
+
+## 2026-10-20 — WAVE 2: adaptive topology dispatch + critical-path-first scheduling (§5+§8) — v0.9.10
+
+### Added
+- **`criticalTailRanks(nodes)` (src/core/swarm.js)** — exported pure ranker: own estMs plus the longest downstream tail. Missing estMs ranks 0 → stable declaration-order ties (GENESIS ZERO: deterministic code decides topology, never a model).
+- **§8 runtime critical-path-first dispatch**: `runSwarm` *simulated* CP-first (list-scheduler used rank ordering) but *launched* in declaration order — the model agreed, the runtime did not. Launch ticks now sort the ready set by tail rank; unannotated grids keep identical behavior (pinned by test).
+- **§5 adaptive contraction**: measured actuals are compared against the estMs the parallelism plan was built on, at every launch tick. If the ratio reaches `overrunFactor` (default 2×), the scheduler STOPS widening — cap freezes at the width active at proof-time, exactly one `topology_adapt` typed event fires (`reason`, `measuredRatio`, `capBefore`, `capNow`), and the result carries `adaptive: { enabled, overrunFactor, adaptations }` plus a `launchOrder` audit trail. Honest rationale: spawning more lanes on a broken model multiplies the overhead the model already underpriced. `adaptive:false` restores the legacy fixed cap.
+
+### Verified
+- 6 new deterministic tests (`test/w2-adaptive.test.js`): CP-first order; stable unannotated ties; contraction + typed event + serialization under frozen cap (real sleeps, timestamp-asserted, not wall-clock hand-waving); `adaptive:false` legacy pin; run-to-run determinism of `launchOrder`; exported ranker math purity.
+- Full local suite: **476 tests, 459 pass, 0 fail, 17 skip** (every skip carries a machine-readable gate).
+
+
 ## 2026-10-19 — Windows-control PoC scaffold (handover #4, PoC-before-bind; evidence pending) — v0.9.9
 
 ### Added
