@@ -1,0 +1,20 @@
+name: W3 Windows execution acceptance
+on:
+  push:
+    branches: [qa/w3-windows-acceptance-20261020]
+permissions:
+  contents: read
+jobs:
+  w3-windows:
+    runs-on: [self-hosted, windows, interactive-desktop, majin-qa]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: W3 Windows real backend smoke
+        shell: powershell
+        run: |
+          node --test test/w3-windows-acceptance.test.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
