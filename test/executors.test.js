@@ -18,7 +18,7 @@ test('W3 backends inventory: measured, never promised', () => {
 
 test('W3 local backend: real run with exit code + duration + persisted logs', async () => {
   const dir = ws();
-  const out = await runSync({ command: 'echo exec-test && printf "abc"', backend: 'local', timeoutSec: 30 }, { workspace: dir });
+  const out = await runSync({ command: process.platform === 'win32' ? "Write-Output 'exec-test'; Write-Output 'abc'" : 'echo exec-test && printf "abc"', backend: 'local', timeoutSec: 30 }, { workspace: dir });
   assert.equal(out.ok, true, JSON.stringify(out));
   assert.equal(out.exitCode, 0);
   assert.match(out.io.stdout, /exec-test/);
@@ -69,7 +69,7 @@ test('W3 ssh backend: no host configured → honest error code (not host-exec)',
 
 test('W3 output caps: output exceeding max bytes is truncated, never crashes', async () => {
   const dir = ws();
-  const out = await runSync({ command: 'yes A | head -c 200000', backend: 'local', timeoutSec: 30, maxOutputBytes: 4096 }, { workspace: dir });
+  const out = await runSync({ command: process.platform === 'win32' ? "'A' * 200000" : 'yes A | head -c 200000', backend: 'local', timeoutSec: 30, maxOutputBytes: 4096 }, { workspace: dir });
   const size = fs.readFileSync(out.paths.stdout).length;
   assert.ok(size <= 4096, `capped (${size}B)`);
   assert.ok(out.exitCode === 0 || out.exitCode === null || out.exitCode !== undefined);
