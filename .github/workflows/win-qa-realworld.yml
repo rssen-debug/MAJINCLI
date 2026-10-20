@@ -73,6 +73,14 @@ jobs:
           Invoke-WebRequest "$rel/MAJIN-Setup.exe.sha256" -OutFile qa-stage\MAJIN-Setup.exe.sha256
           (Get-Item qa-stage\MAJIN-Setup.exe).Length
 
+      - name: Share the branch-built installer with the UI lane
+        if: ${{ github.event.inputs.source == 'branch-build' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: branch-installer
+          path: dist/installer/MAJIN-Setup.exe
+          retention-days: 7
+
       - name: SHA-256 of installer must equal its manifest (no drift)
         shell: pwsh
         run: |
@@ -217,6 +225,7 @@ jobs:
   qa-ui-browser:
     runs-on: windows-latest
     timeout-minutes: 60
+    needs: qa-realworld
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -224,6 +233,7 @@ jobs:
           node-version: 22
 
       - name: Download + verify + silent-install the PUBLISHED v1.0.0
+        if: ${{ github.event.inputs.source != 'branch-build' }}
         shell: pwsh
         run: |
           $rel = 'https://github.com/rssen-debug/MAJINCLI/releases/download/v1.0.0'
@@ -233,7 +243,15 @@ jobs:
           $want = ((Get-Content qa-stage\MAJIN-Setup.exe.sha256 -Raw).Trim() -split '\s+')[0].ToLower()
           $have = (Get-FileHash qa-stage\MAJIN-Setup.exe -Algorithm SHA256).Hash.ToLower()
           if ($want -ne $have) { throw "SHA-256 mismatch" }
-          & qa-stage\MAJIN-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART | Out-Null
+          $proc = Start-Process .\qa-stage\MAJIN-Setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          "installer exit=$($proc.ExitCode)"
+
+      - name: Fetch the installer built from THIS ref (branch-build lane)
+        if: ${{ github.event.inputs.source == 'branch-build' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: branch-installer
+          path: qa-stage
 
       - name: Ollama + one capable model
         shell: pwsh
