@@ -58,6 +58,17 @@ export function validateGraph(nodes) {
    declaration order (pure tie-break). Deterministic, model-free (GENESIS ZERO). */
 export function criticalTailRanks(nodes, of = (n) => n.estMs ?? 0) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
+  /* O(n) children index once — the first perf-lab version scanned the whole
+     node array per node (O(n²): ~69ms at 2 000 nodes). With the index the
+     2 000-node guard drops to single-digit ms; production grids (tens of
+     nodes) are free either way, but the lab exists to catch exactly this. */
+  const children = new Map();
+  for (const x of nodes) {
+    for (const d of x.deps || []) {
+      if (!children.has(d)) children.set(d, []);
+      children.get(d).push(x.id);
+    }
+  }
   const ranks = new Map();
   const visiting = new Set();
   const rankOf = (id) => {
@@ -66,7 +77,9 @@ export function criticalTailRanks(nodes, of = (n) => n.estMs ?? 0) {
     visiting.add(id);
     const n = byId.get(id);
     if (!n) return 0;
-    const tail = Math.max(0, ...nodes.filter((x) => (x.deps || []).includes(id)).map((x) => rankOf(x.id)));
+    const kids = children.get(id) || [];
+    let tail = 0;
+    for (const k of kids) tail = Math.max(tail, rankOf(k));
     visiting.delete(id);
     const r = of(n) + tail;
     ranks.set(id, r);
