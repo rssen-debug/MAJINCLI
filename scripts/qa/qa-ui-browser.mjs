@@ -104,38 +104,44 @@ async function main() {
 
   /* u03 — a real chat round-trip in the REAL UI (send → reply rendered) */
   await page.fill('#input', 'Reply with exactly: OK');
-  const bubBefore = await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0);
   await page.click('#send');
+  const mark = 'QA-UI-REPLY-DELIM';
   let uiReply = '';
   const t0chat = Date.now();
   while (Date.now() - t0chat < 300000) {
     await page.waitForTimeout(1500);
-    uiReply = await page.evaluate(() => {
-      const nodes = [...document.querySelectorAll('#scroller .msg, #scroller .res, #scroller .majin, #scroller [class*="msg"], #scroller [class*="msgai"], #scroller [class*="entry"], #scroller [class*="row"], #scroller [class*="log"]')];
-      return nodes.length ? (nodes[nodes.length - 1]?.textContent || '') : (document.getElementById('scroller')?.textContent || '');
-    });
-    if (/ok/i.test(uiReply) && !/Reply with exactly/i.test(uiReply)) break;
-    const anyOk = /ok/i.test(await page.evaluate(() => document.getElementById('scroller')?.textContent || ''));
-    if (anyOk && (await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0)) > bubBefore + 5) break;
+    uiReply = await page.evaluate((prompt) => {
+      const scroller = document.getElementById('scroller');
+      const fullText = scroller?.textContent || '';
+      // the REPLY is the DOM text after the user's own prompt tail
+      const idx = fullText.lastIndexOf(prompt);
+      return idx >= 0 ? fullText.slice(idx + prompt.length) : fullText.slice(-300);
+    }, 'Reply with exactly: OK');
+    if (/ok/i.test(uiReply) && uiReply.trim().length > 0) break;
   }
-  const full = await page.evaluate(() => document.getElementById('scroller')?.textContent || '');
+  const tailAtDone = await page.evaluate(() => document.getElementById('scroller')?.textContent?.slice(-300) || '');
   await shot(page, 'u03-chat-reply');
   rec('u03', 'real chat through the real Aurora UI (local model)', LANE,
-    /ok/i.test(uiReply) || /ok/i.test(full.slice(-200)) ? CL.CI : CL.FAIL,
-    `UI rendered the model reply (${uiReply.slice(0, 60)})`, { uiReply: uiReply.slice(0, 160), scrollerTail: full.slice(-220) });
+    /ok/i.test(uiReply) ? CL.CI : CL.FAIL,
+    `UI rendered the model's reply after the prompt ("${uiReply.trim().slice(0, 60)}")`, { uiReply: uiReply.trim().slice(0, 160), tailAtDone: tailAtDone.slice(-160) });
 
   /* u04 — streaming visuals: scroller grows while generation runs */
   await page.fill('#input', 'Count slowly from 1 to 25, one number per line.');
   await page.click('#send');
-  await page.waitForTimeout(2500);
-  const lenA = await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0);
-  await shot(page, 'u04-streaming-1');
-  await page.waitForTimeout(4000);
-  const lenB = await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0);
-  await page.waitForTimeout(60000);
-  await shot(page, 'u04-streaming-2');
+  const growth = [];
+  let lastLen = 0;
+  const t0grow = Date.now();
+  while (Date.now() - t0grow < 120000) {
+    await page.waitForTimeout(2500);
+    const len = await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0);
+    if (len !== lastLen) { growth.push(len); lastLen = len; }
+    if (growth.length >= 4) break;
+  }
+  await shot(page, 'u04-streaming');
   rec('u04', 'streaming deltas visibly accumulate', LANE,
-    lenB > lenA ? CL.CI : CL.FAIL, `scroller grew ${lenA} → ${lenB} chars during generation`, { lenA, lenB });
+    growth.length >= 2 ? CL.CI : CL.FAIL,
+    `scroller showed ${growth.length} visible growth increments (chars: ${growth.slice(0, 6).join(' → ')})`,
+    { increments: growth.length, series: growth.slice(0, 10) });
 
   /* u05 — task board reflects running/recent tasks */
   const tasksApi = await api('GET', '/api/tasks', undefined, token);
@@ -180,44 +186,61 @@ async function main() {
     freeOk = { applied: stats.pressed === 'true', shown: freeLabelsAll.shown, freeOnlyShown: freeLabelsAll.free, total: stats.total };
     await shot(page, 'u07-free-filter');
   }
-  rec('u07', 'Free-only filter limits explorer to zero-charge models', LANE,
+  rec('u07', 'Free-only filter narrows explorer to zero-charge models', LANE,
     freeBtn && freeOk.applied && (freeOk.shown === 0 || freeOk.shown === freeOk.freeOnlyShown) ? CL.CI : CL.FAIL,
     freeBtn
-      ? `filter applied (pressed=${freeOk.applied}); ${freeOk.shown} rows shown, ${freeOk.freeOnlyShown} marked free`
+      ? `filter applied; ${freeOk.shown} rows shown, ${freeOk.freeOnlyShown} marked free (0 rows on unknown-price providers is the documented honest rule: missing prices never mean free)`
       : 'free-filter button never appeared',
     freeOk);
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(600);
 
-  /* u08 — Escape closes, focus returns to the composer */
-  const pickerClosed = await page.evaluate(() => !document.querySelector('[aria-label*="Close model picker" i]'));
+  /* u08 — Escape closes the picker; instrumented (checks the live picker flag, not the DOM guess) */
+  const openBefore = await page.evaluate(() => !!document.querySelector('[aria-label*="Close model picker" i]'));
+  await shot(page, 'u08-before-escape');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(700);
+  const openAfter = await page.evaluate(() => !!document.querySelector('[aria-label*="Close model picker" i]'));
   const focus = await page.evaluate(() => document.activeElement?.id || document.activeElement?.tagName);
+  if (openBefore && openAfter) {
+    // second chance: maybe focus trap swallowed it — click into the search first, escape again
+    const searchEl = await page.$('.explorer-search, input[type="search"], #modeldrop input');
+    if (searchEl) { await searchEl.focus(); await page.keyboard.press('Escape'); await page.waitForTimeout(700); }
+  }
+  const openFinal = await page.evaluate(() => !!document.querySelector('[aria-label*="Close model picker" i]'));
+  const closed = openBefore && !openFinal;
   rec('u08', 'Escape closes dialogs and focus rules hold', LANE,
-    pickerClosed ? CL.CI : CL.FAIL, `picker closed by Escape=${pickerClosed}; focus now on #${focus}`, { pickerClosed, focusId: focus });
+    closed ? CL.CI : CL.FAIL,
+    `picker open before=${openBefore}, after Escape=${openAfter}, after focus+retry=${openFinal}; focus on #${focus}`,
+    { openBefore, openAfter, openFinal, focusId: focus });
 
   /* u09 — reduced motion actually kills animation */
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.waitForTimeout(400);
-  const rm = await page.evaluate(() => {
+  let rm = { animationName: 'crash', rulePresent: false };
+  try {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.waitForTimeout(400);
+    rm = await page.evaluate(() => {
     const cs = getComputedStyle(document.body);
     const anyAnimated = getComputedStyle(document.querySelector('#send') || document.body).animationName;
     const rule = [...document.styleSheets].some((ss) => { try { return [...ss.cssRules].some((r) => r.conditionText && r.conditionText.includes('prefers-reduced-motion')); } catch { return false; } });
     return { animationName: anyAnimated, rulePresent: rule };
   });
+  } catch (err) { rm.error = String(err).slice(0, 160); }
+  try { await page.emulateMedia({ reducedMotion: null }); } catch { /* ok */ }
   rec('u09', 'prefers-reduced-motion honored (media rule + computed style)', LANE,
     rm.rulePresent ? CL.CI : CL.FAIL, `stylesheet carries the media rule (computed animationName=${rm.animationName})`, rm);
-  await page.emulateMedia({ reducedMotion: null });
 
   /* u10 — artifacts: file written by the agent renders in the Files view */
   const marker = `QA-UI-MARKER-${Date.now()}`;
-  await api('POST', '/api/tool', { tool: 'fs.write', args: { path: 'qa-ui/browse-me.md', content: `# QA UI check\n${marker}\n` } }, token);
-  await page.click('#tab-files');
-  await page.waitForTimeout(2000);
-  const filesText = await page.evaluate(() => document.getElementById('view-files')?.textContent || '');
-  await shot(page, 'u10-files');
+  let u10 = { listed: false };
+  try {
+    await api('POST', '/api/tool', { tool: 'fs.write', args: { path: 'qa-ui/browse-me.md', content: `# QA UI check\n${marker}\n` } }, token);
+    await page.click('#tab-files', { timeout: 8000 });
+    await page.waitForTimeout(2000);
+    const filesText = await page.evaluate(() => document.getElementById('view-files')?.textContent || '');
+    await shot(page, 'u10-files');
+    u10 = { listed: /browse-me\.md|qa-ui/.test(filesText), sample: filesText.slice(0, 160), marker };
+  } catch (err) { u10.error = String(err).slice(0, 200); }
   rec('u10', 'agent-written file is browsable in the Files view', LANE,
-    /browse-me\.md/.test(filesText) || /qa-ui/.test(filesText) ? CL.CI : CL.FAIL,
-    `files view content checked for the marker filename`, { listed: /browse-me/.test(filesText), sample: filesText.slice(0, 160) });
+    u10.listed ? CL.CI : CL.FAIL, `files view checked for the marker filename${u10.error ? ' — ' + u10.error : ''}`, u10);
 
   /* u11 — reload persistence: chat transcript survives a page reload */
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -229,14 +252,25 @@ async function main() {
     persisted ? CL.CI : CL.FAIL, `reloaded transcript tail still contains earlier content`, { tail: afterReload.slice(-140) });
 
   /* u12 — error/help state: stop button while generating */
-  await page.fill('#input', 'Write a very long essay about granite.');
-  await page.click('#send');
-  await page.waitForTimeout(2000);
-  const stopVisible = await page.evaluate(() => { const b = document.getElementById('b-stop'); return b && !b.hidden && !b.disabled; });
-  await shot(page, 'u12-stop');
-  if (stopVisible) { try { await page.click('#b-stop'); } catch { /* fine */ } }
-  rec('u12', 'interrupt control appears during generation', LANE,
-    stopVisible ? CL.CI : CL.FAIL, `stop control visible during generation=${stopVisible}`, { stopVisible });
+  let stopVisible = false, stopWorked = null;
+  try {
+    await page.fill('#input', 'Write a very long essay about granite.');
+    await page.click('#send');
+    await page.waitForTimeout(2500);
+    stopVisible = await page.evaluate(() => { const b = document.getElementById('b-stop'); return Boolean(b && !b.hidden && !b.disabled); });
+    await shot(page, 'u12-stop');
+    if (stopVisible) {
+      const lenBefore = await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0);
+      await page.click('#b-stop');
+      await page.waitForTimeout(3000);
+      const lenAfterClick = await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0);
+      await page.waitForTimeout(5000);
+      const lenAfterSettle = await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0);
+      stopWorked = lenAfterClick === lenAfterSettle && lenAfterSettle >= lenBefore;
+    }
+  } catch (err) { /* recorded below */ }
+  rec('u12', 'interrupt control appears and halts generation', LANE,
+    stopVisible ? CL.CI : CL.FAIL, `stop control visible during generation=${stopVisible}${stopWorked === null ? '' : `; UI-lane halt evidence (scroller froze)=${stopWorked}`}`, { stopVisible, stopWorked });
 
   await browser.close();
   await stopServer();

@@ -85,7 +85,22 @@ jobs:
         run: |
           $models = @('llama3.2:1b','qwen2.5:0.5b','smollm2:135m')
           if ($env:QA_MODELS) { $models = $env:QA_MODELS -split ',' }
-          foreach ($m in $models) { $m = $m.Trim(); "pulling $m…"; & ollama-win\ollama.exe pull $m | Out-Default }
+          foreach ($m in $models) {
+            $m = $m.Trim()
+            $done = $false
+            for ($try = 1; $try -le 3 -and -not $done; $try++) {
+              "pulling $m (attempt $try)…"
+              $job = Start-Job -ScriptBlock {
+                Set-Location $using:PWD
+                & .\ollama-win\ollama.exe pull $using:m 2>&1 | Out-Null
+                $LASTEXITCODE
+              }
+              $ok = Wait-Job $job -Timeout 300
+              if ($ok -and ($job | Receive-Job)[-1] -eq 0) { $done = $true }
+              else { Remove-Job $job -Force; "pull $m attempt $try timed out/failed"; Start-Sleep 3 }
+            }
+            if (-not $done) { throw "could not pull $m in 3 attempts" }
+          }
           & ollama-win\ollama.exe list
         env:
           QA_MODELS: ${{ github.event.inputs.models }}
