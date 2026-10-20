@@ -94,3 +94,10 @@ test('W2 run: zero reachable sources = honest error, no fabricated report', asyn
   assert.equal(out.ok, false);
   assert.equal(out.error.code, 'no_sources');
 });
+
+test('W2 contradiction: single timeline sentence with both polarities is not a conflict', () => {
+  const cc = crossCheck({
+    S1: [{ sentence: 'Historically odd releases never entered LTS, but from 2027 every release enters LTS.', anchors: ['lts'], score: 2 }],
+  });
+  assert.equal(cc.clusters.filter(c => c.conflicts).length, 0);
+});
