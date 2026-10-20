@@ -1,0 +1,67 @@
+name: MAJIN UI UX cross-platform acceptance QA
+on:
+  push:
+    branches: [qa/full-release-gate-20261020]
+    paths:
+      - .github/workflows/ui-ux-crossplatform-qa.yml
+      - scripts/phoenix-browser.mjs
+      - test/a11y-static.test.js
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ui-browser-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Real Chromium UI interaction and accessibility checks
+        run: |
+          node scripts/phoenix-browser.mjs
+          node --test test/a11y-static.test.js
+        env:
+          MAJIN_UI_OUTPUT: work/ui-evidence/linux
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-ux-linux-evidence
+          path: work/ui-evidence/linux/
+          retention-days: 14
+  ui-browser-windows:
+    runs-on: [self-hosted, windows, interactive-desktop, majin-qa]
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install project dependencies
+        shell: powershell
+        run: |
+          npm ci --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install Chromium
+        shell: powershell
+        run: |
+          npx playwright install chromium
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Real Windows Chromium UI interaction
+        shell: powershell
+        env:
+          MAJIN_UI_OUTPUT: work/ui-evidence/windows
+        run: |
+          node scripts/phoenix-browser.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test test/a11y-static.test.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-ux-windows-evidence
+          path: work/ui-evidence/windows/
+          retention-days: 14
