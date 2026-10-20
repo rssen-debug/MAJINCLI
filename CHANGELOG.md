@@ -7,6 +7,31 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 
 
 
+
+## 2026-10-20 — WAVE 4: speculative execution lab (§6 — experimental, disabled by default) — v0.9.12
+
+### Added
+- **`src/core/speculate.js` — SpecLab + `speculate()`**: races N pure, side-effect-free speculative
+  lanes against the authoritative confirm path. Losers get a real AbortSignal; a per-lane timeout
+  caps runaways; deaf lanes that ignore the signal cannot hang the result (grace-window accounting
+  flags them `pendingAfterAbort` and bills elapsed-at-abort). Every run emits an audit trail:
+  `from`, `winnerMs`, `savedMsEstimate`, `discarded[]`, `wastedMs`, `wallMs`.
+- **Honest savings rule**: `savedMsEstimate > 0` only when the confirm path actually SETTLED and
+  its real duration is known — the lab understates rather than invents phantom time.
+- **Self-limiting waste budget** (`speculation.wasteMsMax`, default 60s lifetime): cumulative
+  discarded-lane burn over budget CLOSES the gate; later calls run confirm-only with `gated:true`.
+  Speculation never pretends compute is free, and it pays for its own experiment.
+- **Default state**: `speculation.enabled` falsy → zero speculation, zero accounting noise.
+  No model calls anywhere in the module; production adoption is a separate evidence-gated decision.
+
+### Verified
+- 6 deterministic tests (real timers, asserted margins): measured-win savings vs confirm; loser abort
+  observed + waste accounted; timeout caps a 5s runaway under 2s wall; deaf-loser grace accounting;
+  budget arithmetic closing the gate exactly after the second burn (runs stays 2); disabled-by-default
+  zero-effect + empty-speculation pass-through.
+- Full local suite: **488 tests, 471 pass, 0 fail, 17 skip** (skips machine-gated).
+
+
 ## 2026-10-20 — WAVE 3: delta memory protocol (§9) — v0.9.11
 
 ### Added

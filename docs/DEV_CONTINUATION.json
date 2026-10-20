@@ -17,7 +17,6 @@
     "8A-8D: UI owned by another agent — needs their branch merged"
   ],
   "remainingTasks": [
-    "WAVE 4: speculative execution lab (§6, disabled by default)",
     "Perf lab A/B/C/D (§19) once topology variants exist",
     "OWNER GATE: win-uia-probe text-I/O acceptance on real interactive Windows session; old->new upgrade verification on real Windows"
   ],
@@ -27,15 +26,16 @@
     "uia-probe-run2": "subtree dump: Edit(statusbar) children enumerate as Pane w/ ZERO patterns; SendKeys unverifiable in-tree (no TextPattern reader)",
     "uia-probe-run3": "session measured: userInteractive=true, sessionId=2 (Session-0 hypothesis REFUTED)",
     "w2-adaptive": "CP-first dispatch live; 2x measured-overrun contraction freezes width; adaptive:false legacy pin; 6/6 deterministic tests",
-    "w3-delta-memory": "rev+delta log+ledger shipped; no-op writes eliminated (measured by file-size/rev unchanged); compactEvents conservation proven; 6/6 tests"
+    "w3-delta-memory": "rev+delta log+ledger shipped; no-op writes eliminated (measured by file-size/rev unchanged); compactEvents conservation proven; 6/6 tests",
+    "w4-speculate": "lab shipped off-by-default; measured-win only when confirm settles; waste budget self-closes (runs stays 2 in arithmetic test); 6/6"
   },
   "implementationScore": 81,
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
-  "nextAction": "WAVE 4: speculative execution lab (§6, disabled by default + isolated), then perf lab A/B/C/D (§19)",
-  "version": "0.9.11",
-  "milestone": "WAVE 3: delta memory protocol — revs, delta log, no-op writes, event compaction, injection ledger (local 465p/482t/0f/17s)",
-  "branch": "main (post-merge)",
+  "nextAction": "Perf lab A/B/C/D (§19): A/B single-agent vs topology-variant benchmarks using the shipped WAVE 2/4 primitives",
+  "version": "0.9.12",
+  "milestone": "WAVE 4: speculative execution lab §6 (off by default, waste-budgeted, audited) — local 471p/488t/0f/17s",
+  "branch": "feature/w4-speculate (in PR)",
   "decisions": {
     "windows-control-adapter": {
       "decision": "ADOPT raw UIA (System.Windows.Automation, zero deps) as control API; two-tier text I/O (patterns first, SendInput fallback + read-back); DEFER FlaUI (same bridge, .NET dep, fixes nothing measured); DEFER UFO/OmniParser vision lane (cost + OmniParser license caution stands)",
