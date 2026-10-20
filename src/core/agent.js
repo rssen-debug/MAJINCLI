@@ -512,7 +512,7 @@ export class Agent {
         const facts = res.toolLog.filter((t) => t.ok).length >= 4 ? await this.harvestFacts(input, res, messages) : [];
         for (const f of facts) this.memory?.remember?.(f, [decision.job]);
       }
-      if (cfg.get('skills.auto') && res.steps >= 5 && !res.error) {
+      if (cfg.get('skills.auto') && res.steps >= 5 && !res.error && !res.incomplete && !res.blocked && !res.stopReason && !res.aborted && res.toolLog?.some((t) => t.ok)) {
         const skill = suggestSkill(input, res);
         if (skill) {
           const saved = this.skills.save(skill);
