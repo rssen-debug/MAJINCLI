@@ -1,0 +1,38 @@
+name: W2 real Windows research acceptance
+on:
+  push:
+    branches: [qa/w2-live-windows-20261020]
+permissions:
+  contents: read
+jobs:
+  w2-live-windows:
+    runs-on: [self-hosted, windows, interactive-desktop, majin-qa]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: W2 fixture regression
+        shell: pwsh
+        run: |
+          node --test test/research.test.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: W2 live CLI research and evidence
+        shell: pwsh
+        env:
+          MAJIN_HOME: ${{ runner.temp }}\\majin-w2-live-${{ github.run_id }}
+        run: |
+          New-Item -ItemType Directory -Force w2-evidence | Out-Null
+          node src/cli/majin.js research "What is the official Node.js LTS release schedule?" --json *> w2-evidence/live-research.log
+          $code = $LASTEXITCODE
+          "exit_code=$code" | Out-File w2-evidence/verdict.txt
+          Get-Content w2-evidence/live-research.log -Tail 35
+          if ($code -ne 0) { throw "W2 live CLI failed exit=$code; see uploaded evidence" }
+      - name: Upload W2 Windows evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: w2-live-windows-evidence
+          path: w2-evidence/
+          retention-days: 14
