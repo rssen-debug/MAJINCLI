@@ -5,7 +5,7 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 99 / 100** (verified against main release-train, v1.0.0, 2026-10-20; row-sum == header == phase-sum == TOTAL == DEL-sum, CI-locked by w6-matrix-integrity).
+**Score so far: 100 / 100** (verified against main release-train, v1.0.0, 2026-10-20; row-sum == header == phase-sum == TOTAL == DEL-sum, CI-locked by w6-matrix-integrity).
 
 | Phase | Max | Earned |
 |---|---:|---:|
@@ -20,8 +20,8 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 9. Real-World Workflows | 5 | 5 |
 | 10. Security & Privacy | 5 | 5 |
 | 11. Windows & Updates | 4 | 4 |
-| 12. Final Acceptance | 3 | 2 |
-| **TOTAL** | **100** | **99** |
+| 12. Final Acceptance | 3 | 3 |
+| **TOTAL** | **100** | **100** |
 
 ---
 
@@ -128,25 +128,24 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 11C | 1 | Data preservation + failure recovery across updates | CI run 39380846215: config.json + session.marker seeded pre-upgrade, intact after install-over-install (data_preserved=true). Same verdict artifact. | OK | win-acceptance | PASS | 2026-10-20 |
 | 11D | 1 | Verified release artifacts (checksum + integrity) + no asset/tag overwrite | v0.5.6/0.5.7/0.5.8: 4 assets each (EXE + installer + 2×.sha256), HEAD-200 downloads, `release-safety.test.js` guards | GitHub API | `2c5f308` | PASS | 2026-10-18 |
 
-## DEL 12 — Final Real-World Acceptance (2/3)
+## DEL 12 — Final Real-World Acceptance (3/3)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
 | 12A | 1 | Independent real-model end-to-end acceptance suite | `test/acceptance-live.test.js` 3/3 with MAJIN_LIVE=1: A1 live create json VERIFIED (43 379 tokens), A2 live append via fs.patch preserved-original (281 891 tokens), A3 engine-only lie-detector (missing-file + exit 7 named honestly) — verdicts by code, never by a model | opencode live | main `868085b` | PASS | 2026-10-19 |
 | 12B | 1 | Real Windows user-journey + recovery suite | CI run 39380846215 kill_recovery (mid-task _serve alive → hard-kill → restart prints version) + local E2E SIGKILL probe (`docs/evidence/e2e-crash-recovery-…`, `e2e-sigkill-…`: checkpoint resume idempotent, 0 torn journal lines). | OK | win-acceptance | PASS | 2026-10-20 |
-| 12C | 1 | Release candidate passes all mandatory integration gates | — | — | — | UNVERIFIED | 2026-10-18 |
+| 12C | 1 | Release candidate passes all mandatory integration gates | Release-gate walkthrough on v1.0.0 2026-10-20: local checks GREEN (version-literals ×7, five-way matrix 100, checkpoint ancestor-verified, secret hygiene) + online checks GREEN (v1.0.0 release published with MAJIN-Setup.exe 17,403,368 B + majin-win-x64.exe 60,830,679 B + sha256 verified) + CI build-exe check/exe green (run 39395866901) + ui-acceptance-browser green ×2 + win-acceptance-install v1.0.0 verdict all-green (sha256, silent install, first-run version, update-preservation, kill-recovery) + npm test 535/0 | OK | release-gate --online | PASS | 2026-10-20 |
 
 ---
 
-## Current frontier (remaining 1 unearned point, by row)
+## Current frontier (ALL 100 ACCEPTANCE POINTS EARNED)
 
-**Audit 2026-10-20 — closing recount after all evidence waves: exactly 1, not 19.**
-One UNVERIFIED assertion row: 12C(1) = 1 = 100 − 99.
+**Audit 2026-10-20 — CLOSED: 100/100.** Every assertion row is PASS with reproducible evidence.
+Zero UNVERIFIED rows. 100 = 100 − 0.
 This list is documentation, NOT assertion rows — plaintext on purpose so no
 automated scan can double-count it.
 
-- **12C (1)** — release candidate passes ALL mandatory integration gates — the final row;
-  closed only when the candidate has re-passed every gate as one coherent release.
+- ~~**12C (1)**~~ — CLOSED 2026-10-20: v1.0.0 release-candidate passed every mandatory gate; see row + docs/RELEASE_CANDIDATE_V1.md.
 
 Everything else was EARNED on 2026-10-20 with live evidence (all artifacts in docs/evidence/):
 - 1E(2) live handoff opencode→ollama journaled + real completion through complete() on local Ollama.
@@ -160,7 +159,7 @@ Everything else was EARNED on 2026-10-20 with live evidence (all artifacts in do
   kill-recovery) — CI run 39380846215.
 - Local E2E: SIGKILL mid-generation → 0 torn journal records; handoff checkpoint crash-recovery idempotent.
 
-Executive summary: exactly one owner-level gate remains — the release-candidate walkthrough itself.
+Executive summary: COMPLETE. The 100-point contract is earned with reproducible evidence on 2026-10-20; v1.0.0 is the release.
 
 Frontier (historical, completed items preserved for audit):
 1. ~~Del 1D~~ ✅ PASS (PR #39).
