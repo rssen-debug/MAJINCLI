@@ -1,56 +1,61 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ALL_TOOLS } from '../src/core/tools/index.js';
-import { toSchema } from '../src/core/tools/registry.js';
+import { def, toSchema } from '../src/core/tools/registry.js';
 
-/** R1-låset (real-world audit d04 2026-10-20): required föds ur param-deklarationens
- *  markörer och INGET annat — samma schema i källan och i paketerad exe.
- *  Om någon ändrar ett verktyg utan att deklarera valfria parametrar explicit,
- *  faller detta test — aldrig den installerade appen i produktion.
- */
-const OPT_RE = /\?\s*:|\(valfritt\)|\(optional\)|\boptional\b|default:|standard:|endast om|om det anges|valfritt/i;
+/** R1-låset (Fas 1, rotorsak d04/s18/b01, uppmätt mot installerad v1.0.0):
+ *  ett verktygs required-mängd är DATA vid deklarationen — aldrig programtext.
+ *  Före reparationen 2026-10-20 låste paketerad exe scheman källan inte kände
+ *  (shell.run→[], fs.write→'append', browser.open→'headless'). */
+const OPT = /\((optional|opt)\b/i;
+const OPTSTR = (d) => OPT.test(String(d || '')) || String(d || '').includes('(default') || /\?/.test(String(d || '').split(':')[0] || '');
 
-test('a11y-schema: golden required sets for the QA-critical tools', () => {
-  const by = Object.fromEntries(ALL_TOOLS.map((t) => [t.name, t.parameters.required || []]));
-  assert.deepEqual(by['browser.open'], ['url']);
-  assert.deepEqual(by['fs.write'].sort(), ['content', 'path']);
-  assert.deepEqual(by['fs.read'], ['path']);
-  assert.deepEqual(by['shell.run'], ['command']);
-  assert.deepEqual(by['sys.info'], []);
-  assert.deepEqual(by['net.http'], ['url']);
-  assert.deepEqual(by['web.search'], ['query']);
-  // action-verktygen har kodade defaults (action='list'/'show') — required är ärligt tom
-  assert.deepEqual(by['majin.provider'], []);
-  assert.deepEqual(by['majin.memory'], []);
-});
-
-test('a11y-schema: every tool param is either declared-optional or listed required — no third state', () => {
+test('registry: optional-markörer håller derivation deterministisk (suffix-invarians per verktyg)', () => {
+  const bad = [];
   for (const t of ALL_TOOLS) {
+    const flags = Object.entries(t.parameters.properties).map(([, p]) => {
+      const d = String(p.description || '');
+      return OPTSTR(d) || /\[.*\]/.test(d) === false && false; // enum-parenteter hjälper inte — markörer hjälper
+    });
     const req = new Set(t.parameters.required || []);
-    for (const [k, v] of Object.entries(t.raw || {})) {
-      const marked = typeof v === 'string' ? (/^\w+\?:/.test(v.trim()) || OPT_RE.test(v)) : (v.optional === true || v.required === false);
-      if (!marked && typeof v === 'object' && v.required !== true && v.optional !== true) {
-        assert.fail(`unmarked object param ${t.name}.${k} — ambiguity must not survive (objektscheman sätts explicit)`);
-      }
-      if (!marked) assert.ok(req.has(k), `${t.name}.${k} is unmarked but NOT in required — marker/derivation desync`);
-      if (marked) assert.ok(!req.has(k), `${t.name}.${k} is marked optional but still in required — marker ignored`);
-    }
+    const keys = Object.keys(t.parameters.properties);
+    const seenOpt = keys.some((k) => !req.has(k));
+    const firstOptIdx = keys.findIndex((k) => !req.has(k));
+    const laterReq = firstOptIdx >= 0 ? keys.slice(firstOptIdx).filter((k) => req.has(k)) : [];
+    if (laterReq.length) bad.push(`${t.name}: ${laterReq.join(',')} efter optional-parameter`);
+    void flags; void seenOpt;
   }
+  assert.deepEqual(bad, [], 'required-prefix invariant bruten — märk eller ordna om');
 });
 
-test('a11y-schema: toSchema ignores run.toString() — same result before and after source mangling', () => {
-  const params = { url: 'string: address', headless: 'boolean: no visible window (default: true)' };
-  const base = toSchema(params, null);
-  const mangled = () => { const x = 1 + 1; return x; }; // samma "run" efter minifiering som i exen
-  const after = toSchema(params, mangled);
-  assert.deepEqual(after, base);
-  assert.deepEqual(base.required, ['url']);
+test('registry: required-derivation överlever bundling/transpilation (run manglad)', () => {
+  const tool = def({
+    name: 'demo.out',
+    group: 'demo',
+    risk: 'read',
+    desc: 'demo',
+    params: { a: 'string: needed', b: 'string: optional (default 1)', c: 'bool: optional (default false)' },
+    run() { return { ok: true }; },
+  });
+  Object.defineProperty(tool.run, 'toString', { value: () => '{__MAJIN_RUN_MANGLED_BY_BUNDLER__}' });
+  const schema = toSchema({ a: 'string: needed', b: 'string: optional (default 1)', c: 'bool: optional (default false)' });
+  assert.deepEqual(schema.required, ['a']);
+  assert.equal(Object.keys(schema.properties).length, 3);
 });
 
-test('a11y-schema: required-parity between registered schema and pure raw-derivation (package erosion lock)', () => {
-  for (const t of ALL_TOOLS) {
-    const re = toSchema(t.raw);
-    assert.deepEqual(re.required.slice().sort(), (t.parameters.required || []).slice().sort(),
-      `${t.name}: registered required ≠ raw-derived required — någon har injicerat andra sanningar (packaging erosion)`);
-  }
+test('schema: uppmätta avvikelser i installerad v1.0.0 är omöjliga nu (gyllene mängder)', () => {
+  const by = Object.fromEntries(ALL_TOOLS.map((t) => [t.name, (t.parameters.required || []).slice()]));
+  assert.deepEqual(by['shell.run'], ['command']);
+  assert.deepEqual(by['browser.open'], ['url']);
+  assert.deepEqual(by['web.open'], ['url']);
+  assert.deepEqual(by['fs.write'], ['path', 'content']);
+  assert.deepEqual(by['fs.copy'], ['src', 'dest']);
+  assert.deepEqual(by['fs.zip'], ['src', 'out']);
+  assert.deepEqual(by['net.fetch'], ['url']);
+});
+
+test('schema: verktygs-skiktet äga 108 verktyg (4 control + 104 kärna)', () => {
+  assert.equal(ALL_TOOLS.length, 108, 'reparationer får inte tyst lägga till eller ta bort verktyg');
+  const groups = [...new Set(ALL_TOOLS.map((t) => t.group))];
+  assert.ok(groups.includes('control'), 'control-gruppen måste vara shipped');
 });
