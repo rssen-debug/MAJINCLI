@@ -86,7 +86,7 @@ export function shortcutAction(o = {}) {
   if (process.platform !== 'win32') {
     return { ...out, ok: false, ran: false, code: 'not_windows', error: 'a .lnk only exists on Windows — this is the command that would run', };
   }
-  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { encoding: 'utf8', timeout: 20000 });
+  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { encoding: 'utf8', timeout: 60000 });
   if (r.status !== 0) {
     return { ...out, ok: false, ran: true, code: 'powershell_failed', error: String(r.stderr || r.stdout || `exit ${r.status}`).trim().slice(0, 300) };
   }
