@@ -58,7 +58,11 @@ export function requiresRealAction(input) {
   if (!t || /^(?:hur|how|why|varför|what|vad|explain|förklara|tell me|berätta|visa hur|can you explain)\b/i.test(t)) return false;
   const request = /^(?:(?:please|snälla|kan du|could you|jag vill att du|i want you to|du ska)\s+)?(?:create|write|save|edit|modify|delete|remove|build|make|download|open|take|search|apply|skapa|skriv|spara|redigera|ändra|radera|ta bort|bygg|öppna|ladda ner|sök|ansök|ta en)\b/i;
   const artifact = /(?:\b[\w.-]+\.(?:txt|md|json|js|mjs|jsx|ts|tsx|html|css|py|csv|png|jpg|pdf|docx|sol)\b|\bfile\b|\bfil(?:en|er)?\b|\bwebb(?:sida|plats)\b|\bwebsite\b|\bbrowser\b|\bwebbläsare\b|\bscreenshot\b|\bskärmbild\b|\bjobs?\b|\bjobb\b|\bagent\b)/i;
-  return request.test(t) && artifact.test(t);
+  // Real-world prompts also start with "Actually use fs.write to create..." or
+  // "Gör ...", not always a bare English verb. Avoid silently disabling the
+  // output contract on those explicit execution requests.
+  const directToolRequest = /^(?:(?:please|actually|faktiskt|snälla)\s+)*(?:use|använd)\s+(?:fs\.write|fs\.patch|browser\.open|browser\.shot)\s+(?:to\s+)?(?:create|write|open|save|skapa|skriv|öppna|spara)\b/i;
+  return (request.test(t) || directToolRequest.test(t) || /^g[oö]r\b/i.test(t)) && artifact.test(t);
 }
 
 /** Del 6A: ONE guard, two call sites. Monthly ledger check before a call costs
