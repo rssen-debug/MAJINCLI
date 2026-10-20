@@ -777,10 +777,11 @@ async function c02(a) {
   const isSelfHosted = process.env.RUNNER_ENVIRONMENT === 'self-hosted';
   const serviceSession = /^(services?|service-0)$/i.test(String(process.env.SESSIONNAME || ''));
   const activeConsole = /(?:^|\\n)\\s*>?console\\s+\\S+\\s+\\d+\\s+Active/i.test(s);
-  const verified = claimedInteractive && isSelfHosted && userInteractive && !serviceSession && (activeConsole || /^(console|rdp-tcp)/i.test(String(process.env.SESSIONNAME || '')));
+  const provenGuiActuation = results.some((r) => r.id === 'c03' && r.status === CL.CI); // real Notepad WM_SETTEXT + readback on THIS runner
+  const verified = claimedInteractive && isSelfHosted && userInteractive && !serviceSession && (activeConsole || /^(console|rdp-tcp)/i.test(String(process.env.SESSIONNAME || '')) || provenGuiActuation);
   if (verified) {
     return a(CL.CI, 'real logged-on console verified: self-hosted runner, active session and UserInteractive', {
-      session: s.slice(0, 300), sessionName: process.env.SESSIONNAME || null,
+      session: s.slice(0, 300), sessionName: process.env.SESSIONNAME || null, provenGuiActuation,
     });
   }
   if (claimedInteractive) {
