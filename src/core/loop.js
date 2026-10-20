@@ -26,6 +26,27 @@ function pickSchemas(registry, ctx) {
   return all.filter((t) => wanted.has(t.name));
 }
 
+/**
+ * Promote real, allowlisted tool schemas after tools.search.
+ * Previously tools.search listed fs.write/browser.shot but the next model call
+ * still received only the original tiny subset, so weak models guessed and
+ * failed with unknown_tool. Never bypass tools.allow or readOnly.
+ */
+export function expandDiscoveredTools(current, toolResult, registry, { readOnly = false, cap = 32 } = {}) {
+  if (!Array.isArray(current) || !current.includes('tools.search') || toolResult?.ok === false) return current;
+  let body;
+  try { body = typeof toolResult?.result === 'string' ? JSON.parse(toolResult.result) : toolResult?.result; }
+  catch { return current; }
+  if (!Array.isArray(body?.matches)) return current;
+  const visible = new Set(registry.schemas({ readOnly: Boolean(readOnly) }).map((tool) => tool.name));
+  const names = new Set(current.filter((name) => visible.has(name)));
+  for (const hit of body.matches) {
+    if (names.size >= cap) break;
+    if (typeof hit?.name === 'string' && visible.has(hit.name)) names.add(hit.name);
+  }
+  return [...names];
+}
+
 /** Del 6A: ONE guard, two call sites. Monthly ledger check before a call costs
    anything; per-task check after each measured step. Returns null to proceed,
    or a result object hard-stopping the loop HONESTLY (errorKind 'budget'). */
@@ -191,6 +212,14 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     const results = allowTools && cfg.get('agent.parallel') !== false ? await Promise.all(calls.map(runOne)) : await sequential(calls, runOne);
 
     for (const r of results) {
+      if (r.name === 'tools.search' && r.out?.ok !== false && Array.isArray(ctx?.toolSubsetNames)) {
+        const previous = ctx.toolSubsetNames;
+        const expanded = expandDiscoveredTools(previous, r.out, registry, { readOnly: ctx?.readOnly });
+        if (expanded.length > previous.length) {
+          ctx.toolSubsetNames = expanded;
+          onEvent({ type: 'tool_subset_expand', added: expanded.filter((name) => !previous.includes(name)), count: expanded.length });
+        }
+      }
       const ok = r.out.ok !== false;
       if (!ok) errors += 1;
       else errors = Math.max(0, errors - 1);
