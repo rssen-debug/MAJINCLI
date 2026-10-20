@@ -745,7 +745,7 @@ async function c04(a) { // BM_CLICK via fragmentet — Run-dialog min OK lyssnar
   // Windows' Run dialog is localized ("Kör" on Swedish Windows).
   const windows = await api('POST', '/api/tool', { tool: 'control.list_windows', args: {} });
   const titles = (windows.json?.meta?.windows || []).map((w) => String(w.title || ''));
-  const runTitle = titles.find((t) => /^Run$/i.test(t)) || titles.find((t) => /^Kör$/i.test(t)) || 'Run';
+  const runTitle = titles.some((t) => /^K.r$/i.test(t)) ? 'Kör' : (titles.find((t) => /^Run$/i.test(t)) || 'Run'); // PS5.1 may decode "Kör" as "K�r" in metadata
   const type = await qaApprovedTool('control.type', { window: runTitle, text: 'notepad.exe' });
   const click = await qaApprovedTool('control.click_button', { window: runTitle, caption: 'OK' });
   await sleep(1800);
@@ -809,11 +809,9 @@ async function b01(a) {
   const open = await qaApprovedTool('browser.open', { url: 'https://example.com', headless: true }, { timeoutMs: 120000 });
   if (open.json.ok !== true) return a(CL.FAIL, `browser.open refused: ${open.json.error?.message || ''}`.slice(0, 140), open.json);
   await sleep(1500);
-  let read = await api('POST', '/api/tool', { tool: 'browser.read', args: { selector: '' } }, { timeoutMs: 60000 });
-  for (let retry = 0; retry < 6 && !(read.json?.ok === true && /Example Domain/i.test(String(read.json.result || ''))); retry++) {
-    await sleep(1000);
-    read = await api('POST', '/api/tool', { tool: 'browser.read', args: { selector: '' } }, { timeoutMs: 60000 });
-  }
+  // Read once with explicit selector. Repeated identical browser.read requests
+  // trigger the production loop guard; that is intended behaviour.
+  const read = await api('POST', '/api/tool', { tool: 'browser.read', args: { selector: 'body' } }, { timeoutMs: 60000 });
   const shot = await api('POST', '/api/tool', { tool: 'browser.shot', args: { path: 'qa-audit/example.png' } }, { timeoutMs: 60000 });
   const body = String(read.json.result || '');
   console.log('[QA b01 evidence]', JSON.stringify({open:open.json, read:read.json, shot:shot.json}).slice(0,1800));
