@@ -9,7 +9,8 @@
     "v0.7.3: sessionRoutes pin = models.sessionRoutes{session:{job:ref}}; routeFor(cfg,job,{session}); turn-pinned routes in loop.js (stepJob cache); patch() now persisted/ok:false on failed save; load() heals corrupt main from .bak, never autosaves over corrupt; historyErrors ring in context.js",
     "v0.9.5: use origin-name for -u pushes, never a PAT-URL — PAT leaked into .git/config via 'git push -u <url>' and had to be scrubbed (snapshot keeps .git/config out anyway, but local rule: push via inline URL WITHOUT -u, or set upstream separately)",
     "RECONCILED 2026-10-19 (v0.9.7): Linux(460) vs Windows(441) test counts — EXACT match: their 441 total @de3ad45 + 19 tests from waves P0(+7)/P1(+6)/P2(+6) = 460. Skips: our Linux 17 (6 MAJIN_LIVE-gated, 1 jobs-live, 5 browser-live, 4 installer-dep, 1 Windows-updater — all carry machine-readable gate reasons); on Windows, S1/S6/R5 (P0/P1 permission tests) skip instead — no unexplained delta remains.",
-    "v0.9.7: docs/RELEASE_MASTER_DIRECTIVE.md RECONSTRUCTED from owner V5 message (file was missing; per §1.4 no unseen specs claimed preserved; COMPLETION_MATRIX.md remains acceptance matrix of record)."
+    "v0.9.7: docs/RELEASE_MASTER_DIRECTIVE.md RECONSTRUCTED from owner V5 message (file was missing; per §1.4 no unseen specs claimed preserved; COMPLETION_MATRIX.md remains acceptance matrix of record).",
+    "2026-10-20 doc-drift lesson: derived summaries (header/phase table/TOTAL/DEL headers) drifted from ROW data in COMPLETION_MATRIX twice now (59 vs 81 stale TOTAL; phase12 0 vs row-12A PASS). Rule hardened: after ANY wave touching the matrix, script-verify phase-earned-sum == header == row-sum; the reconciliation commit is the audit trail."
   ],
   "blockers": [
     "1E/6C: need second-vendor + priced-model keys (owner)",
@@ -28,7 +29,8 @@
     "w2-adaptive": "CP-first dispatch live; 2x measured-overrun contraction freezes width; adaptive:false legacy pin; 6/6 deterministic tests",
     "w3-delta-memory": "rev+delta log+ledger shipped; no-op writes eliminated (measured by file-size/rev unchanged); compactEvents conservation proven; 6/6 tests",
     "w4-speculate": "lab shipped off-by-default; measured-win only when confirm settles; waste budget self-closes (runs stays 2 in arithmetic test); 6/6",
-    "w5-perf-lab": "A×1.002 B×1.003 (parity, honest); C trade 199ms adaptive vs 133ms legacy; D ranker 68.57->6.01ms @2000 nodes after O(n²)->O(n) fix found BY the lab; 5/5 tests"
+    "w5-perf-lab": "A×1.002 B×1.003 (parity, honest); C trade 199ms adaptive vs 133ms legacy; D ranker 68.57->6.01ms @2000 nodes after O(n²)->O(n) fix found BY the lab; 5/5 tests",
+    "12A-live-reverify": "2026-10-20 main 24fcd5d: MAJIN_LIVE=1 acceptance-live 3/3 (create+VERIFIED, edit preserving original, lie-detector) — row point now counted in all totals; score stays 81/100 (no manufacture)"
   },
   "implementationScore": 81,
   "realWorldReadiness": 68,

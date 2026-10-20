@@ -5,7 +5,7 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 81 / 100** (verified against main `d63e014` (squash), v0.9.13, 2026-10-20).
+**Score so far: 81 / 100** (verified against main `24fcd5d`, v0.9.13, 2026-10-20; row-sum == header; row 12A re-verified LIVE 3/3 the same day).
 
 | Phase | Max | Earned |
 |---|---:|---:|
@@ -20,12 +20,12 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 9. Real-World Workflows | 5 | 5 |
 | 10. Security & Privacy | 5 | 5 |
 | 11. Windows & Updates | 4 | 2 |
-| 12. Final Acceptance | 3 | 0 |
-| **TOTAL** | **100** | **59** |
+| 12. Final Acceptance | 3 | 1 |
+| **TOTAL** | **100** | **81** |
 
 ---
 
-## DEL 1 — Persistent Sessions & Agent Handoff (6/10)
+## DEL 1 — Persistent Sessions & Agent Handoff (8/10)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
@@ -54,7 +54,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 3D | 2 | Parallel work cannot corrupt shared resources (locks, worktrees, ownership) | Adversarial harness in `test/swarm.test.js` t14–t15: ownership timing proven deterministically (workerB queues ≥60 ms behind holder, FIFO order, owner re-entry without deadlock, heldBy empty after release); 2 hostile workers × 5 rounds of interleaved `fs.patch` read-modify-writes on ONE file → every update of BOTH workers present, every line regex-intact (no torn bytes). The lock is the explanation, not luck: bypassing `locked()` turns t15 red (lost update). | mock | PR #43 | PASS | 2026-10-19 |
 | 3E | 2 | REAL parallel-vs-sequential benchmark (live model) | LIVE MEASURED: scripts/live-bench.mjs through runSwarm, opencode longcat-2.5-preview-free, N=4 briefs, R=3 interleaved — seq median 47 499 ms (overlap 0/0/0) vs par median 11 065 ms (overlap 6/6/6) = **4.29× speedup**; 24/24 ok; 6 290 tokens MEASURED. Test-level live corroboration N=3: 24 522 vs 6 991 ms, tokens 660=660. Table committed in docs/BENCHMARKS.md. | `node scripts/live-bench.mjs` (key required) · `MAJIN_LIVE=1 node --test test/live-bench.test.js` · offline CI path same harness w/o key (370/0/7+1) | mock + live | 2-way discrimination: D1 (cap forced 1 → RED in mock AND live: par behaved seq-equal 30 553 ms/overlap 0), D2 (result timestamps zeroed → overlap evidence breaks, RED), both restored green | **PASS** | 2026-10-19 |
 
-## DEL 4 — Reality Engine (12/16)
+## DEL 4 — Reality Engine (16/16) ✅ COMPLETE
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
@@ -63,7 +63,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 4C | 4 | Retry/budget/timeout/approval limits respected | One policy object `missionLimits(cfg)` (defaults in config.js: repairRounds 1 / timeoutMs 0 / tokenBudget 0, hard clamps 0..3 / 3600000 / 1e9) enforced in CODE in `runMission`: budgetedWorker charges real measured usage per worker and aborts the swarm past the cap (verify→repair included), AbortController+deadline reach runSwarm, repair loop is `rounds < repairRounds` and fails HONESTLY with markers — `[LIMIT:RETRY]` / `[LIMIT:BUDGET]` / `[LIMIT:TIMEOUT]` named in the mission summary, return object carries `limits`/`limitsHit`/`usedTokens`. `test/mission.test.js` t13–t15 (15/15): permanently-lying worker runs EXACTLY 1+1+2 worker-calls (counted via mock `calls`, not asserted from prose), token cap 40 stops worker #2 from ever starting, 120 ms wall budget cuts a ~1.7 s mock stream. Discrimination: budget gate off → t14 red; rounds +96 → t13 red; deadline/signal pass-through removed → t15 red (bench proof the caps are free when idle: identical 24399 tokens / 22 calls 7/7). Side-effect approvals remain governed by guard/exec policy (tests in test/guard*). | mock | PR #41 | PASS | 2026-10-19 |
 | 4D | 4 | Real cross-domain tasks with independently checked results | `test/domains.test.js` 5/5 (command/json_topkeys/url_contains + E2E repair-on-lies); `test/domains-live.test.js` 2/2 with MAJIN_LIVE=1 (real https google fetch + real `node --version` exit + LIVE longcat session wrote mission-live.json {answer:42, task:…}, VERIFIED sha, tokens measured live) | bench + opencode live | main `497cde3` | PASS | 2026-10-19 |
 
-## DEL 5 — Browser & Computer Use (2/10)
+## DEL 5 — Browser & Computer Use (8/10)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
@@ -109,7 +109,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 9D | 1 | Creative/productivity workflow evidence | Dedicated E2E acceptance: 3-chapter story composed step-by-step by the agent (4 scripted fs.write calls through the live registry) — every artifact byte-verified ON DISK (not from transcript), index.json cross-references all chapters, final answer names the work; second pipeline: notes.md → structured brief.json with decision extraction and untouched source | `node --test test/creative.test.js` (2 tests: 9D.1 creative story+index, 9D.2 productivity pipeline) | 2-way discrimination: C1 (fs.write no-op stores nothing → both red), C2 (registry wipes tool args → both red), both restored green | **PASS** | 2026-10-19 |
 | 9E | 1 | Financial research / paper trading with costs + no profit promises | `test/trading.test.js` 7/7 | mock | main line | PASS | 2026-10-18 |
 
-## DEL 10 — Security & Privacy (4/5)
+## DEL 10 — Security & Privacy (5/5) ✅ COMPLETE
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
@@ -128,7 +128,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 11C | 1 | Data preservation + failure recovery across updates | No test runs an old config/session set through an upgrade | — | — | UNVERIFIED | 2026-10-18 |
 | 11D | 1 | Verified release artifacts (checksum + integrity) + no asset/tag overwrite | v0.5.6/0.5.7/0.5.8: 4 assets each (EXE + installer + 2×.sha256), HEAD-200 downloads, `release-safety.test.js` guards | GitHub API | `2c5f308` | PASS | 2026-10-18 |
 
-## DEL 12 — Final Real-World Acceptance (0/3)
+## DEL 12 — Final Real-World Acceptance (1/3)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
@@ -138,12 +138,30 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 
 ---
 
-## Current frontier (what the next runs attack, in order)
+## Current frontier (remaining 19 unearned points, by row)
 
-1. ~~Del 1D~~ ✅ PASS (PR #39). Next: 4A/4C verification contract types + hard limits.
-2. **Del 4A+4C (8 pts)** — verification contract types beyond files (number/text/content claims), retry/budget/timeout caps as enforced acceptance behavior.
-3. **Del 3C/3D/3E (6 pts)** — transient-recovery + corruption-adversarial tests + parallel-vs-sequential measured benefit.
-4. **Del 2C (3 pts)** — ambiguity clarifying questions + failure-driven replanning.
-5. **Del 1E (2 pts)** — live two-provider handoff (opencode + ollama local).
+| ID | Pts | What blocks it |
+|---|---:|---|
+| 1E | 2 | live two-provider handoff — needs a SECOND free provider credential (only opencode exists) |
+| 5D | 2 | real Windows computer-use scenarios (owner machine / suitable runner) — see v0.9.9 UIA evidence + raw-UIA decision |
+| 6C | 3 | comparable verified quality at lower measured cost — needs a priced/free comparison matrix |
+| 8A–8D | 8 | UI & Imagination rows — UI owned by OTHER agent (do not touch); needs their branch merged |
+| 11A | 1 | clean Windows install + first run (owner/disposable Windows) |
+| 11C | 1 | data preservation across a real old→new upgrade (owner/disposable Windows) |
+| 12B | 1 | real Windows user-journey + recovery suite (owner/disposable Windows) |
+| 12C | 1 | release candidate passes ALL mandatory integration gates — last, after the Windows rows |
+
+Executive summary of who can earn what without new credentials: nothing — every open row needs
+either the owner's Windows session (5D, 11A, 11C, 12B → 12C), the other agent's UI merge (8A–8D),
+or additional free provider keys (1E, 6C). This is the honest 81/100 ceiling today.
+
+Frontier (historical, completed items preserved for audit):
+1. ~~Del 1D~~ ✅ PASS (PR #39).
+2. ~~Del 4A+4C~~ ✅ PASS (PRs #40/#41).
+3. ~~Del 3C/3D/3E~~ ✅ PASS (PR #43 + live bench).
+4. ~~Del 2C~~ ✅ PASS (PR #44).
+5. ~~Del 12A~~ ✅ PASS — re-verified LIVE on main `24fcd5d`, 2026-10-20 (3/3, opencode free tier);
+   the point was earned 10-19 but never counted into the phase/TOTAL rows — summaries reconciled
+   to the row-sum on 2026-10-20.
 
 A regression in any PASS row revokes the points until re-proven on `main`.

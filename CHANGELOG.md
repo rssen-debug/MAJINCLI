@@ -9,6 +9,28 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 
 
 
+
+## 2026-10-20 — Acceptance-matrix reconciliation + 12A live re-verification (documentation wave, no version change)
+
+### Fixed (honesty of record-keeping, found by the §12 walk-through)
+- **COMPLETION_MATRIX summaries had drifted from their own rows** (rule in the file: phase-totals =
+  row-sum): TOTAL row still said 59 (pre-v0.9.x), phase 12 said 0 while row 12A has been PASS since
+  2026-10-19, and five section headers lagged their rows (DEL 1/4/5/10/12). No row contents were
+  touched; only the derived numbers were reconciled. **Score stays 81/100** — this wave manufactures
+  zero points.
+- **Row 12A point now counted**: it was earned 10-19 but never totaled. Re-verified TODAY against
+  current main (`24fcd5d`): `MAJIN_LIVE=1 node --test test/acceptance-live.test.js` → **3/3 pass**
+  (live create + VERIFIED marker, live edit preserving original, lie-detector naming missing files —
+  opencode free tier, 2026-10-20).
+- Frontier section rewritten as an honest remaining-points table: all 19 unearned rows need either
+  the owner's Windows session (5D, 11A, 11C, 12B → 12C), the other agent's UI merge (8A–8D), or
+  additional free provider keys (1E, 6C). 81/100 is today's credential-bounded ceiling.
+
+### Verified
+- Phase table earned-sum recomputed by script: exactly 81; header/phase/row-sum all agree.
+- Live suite: 3/3 (acceptance-live, MAJIN_LIVE=1). Full offline suite unchanged: 493t / 476p / 0f / 17s.
+
+
 ## 2026-10-20 — WAVE 5: perf lab A/B/C/D (§19) + ranker O(n²)→O(n) — v0.9.13
 
 ### Added
