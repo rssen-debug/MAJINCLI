@@ -5,7 +5,7 @@
 in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earned points.
 **Honesty rule:** no percentages by feeling. Every row carries evidence + a reproduction command.
 
-**Score so far: 99 / 100** (verified against main post-Aurora-wave, v1.0.0-rc, 2026-10-20; row-sum == header == phase-sum == TOTAL == DEL-sum, CI-locked by w6-matrix-integrity).
+**Score so far: 99 / 100** (verified against main release-train, v1.0.0, 2026-10-20; row-sum == header == phase-sum == TOTAL == DEL-sum, CI-locked by w6-matrix-integrity).
 
 | Phase | Max | Earned |
 |---|---:|---:|

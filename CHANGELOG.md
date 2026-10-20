@@ -17,6 +17,23 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 
 
 
+## 2026-10-20 — v1.0.0 — RELEASE CANDIDATE: 99/100 matrix, full evidence wave
+
+**First release-candidate.** Same-day evidence wave closed every machine-earnable row of the
+acceptance matrix (99/100, five-way gate consistent):
+
+- **1E** live two-provider handoff opencode→ollama journaled + real completion via complete() on local Ollama.
+- **5D** real Windows computer-use: probe v2.6 Run-dialog WM_SETTEXT→WM_GETTEXT round-trip on windows-latest CI.
+- **6C** same-task two-model quality/cost matrix (smollm2:135m / qwen3:0.6b) — both correct, $0 measured.
+- **8A–8D** real-browser Aurora acceptance (Playwright chromium): model explorer 1200-catalog + exact route-save,
+  task cards bound to /api/tasks, sandboxed preview with byte-exact download, reduced-motion, Escape focus-return,
+  300-message render 126 ms; static a11y suite test/a11y-static.test.js 9/9; CI-locked by ui-acceptance-browser.yml.
+- **11A/11C/12B** Windows acceptance all-green on CI (sha256, silent install, first-run version, update-over-install
+  data preservation, mid-task hard-kill + restart recovery).
+- **Local E2E**: SIGKILL mid-generation → 0 torn journal lines; handoff checkpoint crash-recovery idempotent.
+
+Only 12C (release walkthrough itself) remains, closed after the tagged build re-passes every gate.
+
 ## 2026-10-20 — WAVE 12 (§3): bench usage arms — per-scenario requests/tokens/cost — v0.9.20
 
 ### Added

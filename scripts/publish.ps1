@@ -9,7 +9,7 @@
     ... -CheckOnly        # just report what is on GitHub right now
 #>
 param(
-  [string]$Version = '0.9.20',
+  [string]$Version = '1.0.0',
   [string]$Branch = 'main',
   [string]$Repo = 'rssen-debug/MAJINCLI',
   [switch]$CheckOnly,

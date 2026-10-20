@@ -1,7 +1,7 @@
 name: win-acceptance-install
 
 # 11A/11C/12B automation per owner directive (2026-10-22): what is automatable
-# on a disposable Windows runner MUST be automated. Downloads the real v0.9.20
+# on a disposable Windows runner MUST be automated. Downloads the real v1.0.0
 # release assets (public, no secrets), then on windows-latest:
 #  sha256: published hash vs installer hash (update-chain integrity)
 #  11A:    silent Inno install + first run (`majin --version` prints 0.9.x)
@@ -23,7 +23,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           $out = [ordered]@{ schema='majin.win-acceptance.v1'; ts=(Get-Date).ToUniversalTime().ToString('o'); checks=[ordered]@{}; notes=@() }
-          $rel = 'https://github.com/rssen-debug/MAJINCLI/releases/download/v0.9.20'
+          $rel = 'https://github.com/rssen-debug/MAJINCLI/releases/download/v1.0.0'
           $setup = "$env:TEMP\majin-setup.exe"
           Invoke-WebRequest "$rel/MAJIN-Setup.exe" -OutFile $setup
           $raw = (Invoke-WebRequest "$rel/MAJIN-Setup.exe.sha256").Content
