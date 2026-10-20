@@ -351,11 +351,12 @@ jobs:
           while (((Get-Date) - $t0).TotalSeconds -lt 120) { try { $r = Invoke-WebRequest 'http://127.0.0.1:11434/api/tags' -TimeoutSec 3 -UseBasicParsing; if ($r.StatusCode -eq 200) { $ok = $true; break } } catch { Start-Sleep 2 } }
           if (-not $ok) { throw 'ollama serve down' }
           & ollama-win\ollama.exe pull smollm2:135m | Out-Default
+          & ollama-win\ollama.exe pull qwen2.5:0.5b | Out-Default
       - name: Run interactive scenarios (c02-ready subset + control ops on real desktop)
         shell: pwsh
         env:
           QA_INTERACTIVE: 'true'
-          QA_MODELS_IN: 'smollm2:135m'
+          QA_MODELS: 'qwen2.5:0.5b,smollm2:135m'
           QA_ARTIFACT: ${{ format('interactive-selfhost @{0}', github.sha) }}
         run: |
           $exe = "$env:LOCALAPPDATA\Programs\MAJIN\majin-win-x64.exe"
