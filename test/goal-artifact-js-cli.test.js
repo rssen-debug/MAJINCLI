@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { inspectRequestedArtifact } from '../src/core/goal-artifact.js';
+import { inspectRequestedArtifact, explicitTarget } from '../src/core/goal-artifact.js';
 const workspace=fs.mkdtempSync(path.join(os.tmpdir(),'majin-js-artifact-'));
 const name='cli-agent-fixture.mjs';
 const prompt='Actually create and save a working Node.js CLI agent module in '+name+
@@ -29,4 +29,9 @@ test('CLI argument handling is checked independently of printed output',()=>{
   const out=inspectRequestedArtifact(prompt,workspace);
   assert.equal(out.ok,false);
   assert.ok(out.missing.some(m=>/argument handling/.test(m)));
+});
+
+test('Node.js runtime name must not become a second output target',()=>{
+  assert.equal(explicitTarget(prompt,workspace)?.name,'cli-agent-fixture.mjs');
+  assert.equal(explicitTarget('Create a file named node.js',workspace)?.name,'node.js');
 });
