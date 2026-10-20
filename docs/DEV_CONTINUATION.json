@@ -1,5 +1,5 @@
 {
-  "lastVerifiedMain": "0ec4b40",
+  "lastVerifiedMain": "6353e1f",
   "lastCompletedMilestone": "GODLIKE V4 §7 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
   "currentWorkstream": "GODLIKE V4 WAVE 2 — §5 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
@@ -41,7 +41,7 @@
   "nextAction": "Waves 2-7 shipped (v0.9.10..v0.9.15). Remaining: owner Windows gates (5D/11A/11C/12B/12C), UI-agent merge (8A-8D), second free-provider key (1E/6C). v1.0.0 readiness review per §12 once Windows gates land.",
   "version": "0.9.17",
   "milestone": "WAVE 9: bump-version isMain fixed (final URL.pathname trap) + w9 xplatform guard test; suite green",
-  "branch": "feature/w9-xplatform-hygiene (in PR)",
+  "branch": "main (post-merge)",
   "decisions": {
     "windows-control-adapter": {
       "decision": "ADOPT raw UIA (System.Windows.Automation, zero deps) as control API; two-tier text I/O (patterns first, SendInput fallback + read-back); DEFER FlaUI (same bridge, .NET dep, fixes nothing measured); DEFER UFO/OmniParser vision lane (cost + OmniParser license caution stands)",
