@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 30
     env:
       OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-      MAJIN_LLM_TIMEOUT: '45000'
+      MAJIN_LLM_TIMEOUT: '120000'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
