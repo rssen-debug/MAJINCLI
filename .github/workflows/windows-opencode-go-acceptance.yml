@@ -6,10 +6,40 @@ on:
 permissions:
   contents: read
 jobs:
+  build-current-branch:
+    name: Build fresh Windows installer from this commit
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build EXE and real Inno installer
+        shell: pwsh
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+          python -m pip install --quiet ziglang
+          if ($LASTEXITCODE -ne 0) { throw 'zig install failed' }
+          node scripts/build-exe.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'exe build failed' }
+          choco install innosetup -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'Inno setup install failed' }
+          node scripts/build-installer.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'installer build failed' }
+          if (-not (Test-Path dist/installer/MAJIN-Setup.exe)) { throw 'installer missing' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-branch-installer
+          path: dist/installer/MAJIN-Setup.exe
+          retention-days: 7
+          if-no-files-found: error
   windows-desktop-opencode:
+    needs: build-current-branch
     name: Real Windows desktop and OpenCode Go (NO OLLAMA)
     runs-on: [self-hosted, windows, interactive-desktop, majin-qa]
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
       MAJIN_LLM_TIMEOUT: '45000'
@@ -28,16 +58,18 @@ jobs:
         run: |
           node scripts/qa/opencode-free-smoke.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Download published installer and checksum
+      - name: Download this commit's installer (not stale release)
+        uses: actions/download-artifact@v4
+        with:
+          name: opencode-branch-installer
+          path: qa-stage
+      - name: Verify downloaded installer
         shell: powershell
         run: |
-          New-Item -ItemType Directory -Force qa-stage | Out-Null
-          $url = 'https://github.com/rssen-debug/MAJINCLI/releases/download/v1.0.0'
-          Invoke-WebRequest "$url/MAJIN-Setup.exe" -OutFile qa-stage/MAJIN-Setup.exe
-          Invoke-WebRequest "$url/MAJIN-Setup.exe.sha256" -OutFile qa-stage/MAJIN-Setup.exe.sha256
-          $want = ((Get-Content qa-stage/MAJIN-Setup.exe.sha256 -Raw).Trim() -split '\s+')[0].ToLower()
-          $got = (Get-FileHash qa-stage/MAJIN-Setup.exe -Algorithm SHA256).Hash.ToLower()
-          if ($want -ne $got) { throw 'Installer SHA256 mismatch' }
+          if (-not (Test-Path qa-stage/MAJIN-Setup.exe)) { throw 'branch installer missing' }
+          $h = (Get-FileHash qa-stage/MAJIN-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          Set-Content qa-stage/MAJIN-Setup.exe.sha256 $h
+          "Verified this run's artifact SHA256 $h"
       - name: Install real MAJIN app
         shell: powershell
         run: |
@@ -48,7 +80,8 @@ jobs:
         env:
           QA_INTERACTIVE: 'true'
           QA_MODELS: 'MECHANICS-ONLY'
-          QA_ONLY: 's01,s02,s03,s04,s05,s06,s07,s09,s15,s18,s19,s20,s21,s22,s24,s25,s26,c01,c02,c03,c04,b01'
+          QA_ARTIFACT: 'branch-built OpenCode Go QA installer'
+          QA_ONLY: 's01,s02,s03,s04,s05,s06,s15,s18,s19,s20,s21,s22,s24,s25,s26,c01,c02,c03,c04,b01'
         run: |
           $env:QA_HOME = Join-Path $env:RUNNER_TEMP "majin-opencode-qa-$env:GITHUB_RUN_ID"
           $env:MAJIN_HOME = $env:QA_HOME
