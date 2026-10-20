@@ -42,7 +42,7 @@ trap {
 Mark 'probe-start'
 
 $result = [ordered]@{
-  schema    = 'majin.win-uia-probe.v2.2'
+  schema    = 'majin.win-uia-probe.v2.3'
   timestamp = (Get-Date).ToUniversalTime().ToString('o')
   env = [ordered]@{
     osVersion    = [System.Environment]::OSVersion.VersionString
@@ -283,89 +283,72 @@ if ($np -and -not $script:result.p3_notepad.readBackMatches) {
   }
 }
 
-Mark 'P6-begin'
-# P6: WinForms controlled fixture — a real desktop app with zero external dependencies.
-# Drives a classic TextBox via UIA ValuePattern: the core capability question answered on real
-# Windows even though modern UWP-style Notepad exposes no text patterns (P3/P5 gap evidence).
-$p6 = [ordered]@{
-  ran = $true; formShown = $false; windowFound = $false; editFound = $false
-  editControlType = $null; valuePatternOk = $false; setValueOk = $false
-  readBackOk = $false; readBackMatches = $false; clearedOk = $false; note = $null
+Mark 'P7-begin'
+# P7: Windows shell "Run" dialog fixture — a REAL classic desktop window (class #32770
+# with a native Edit control), zero self-hosted message loop. If UIA can SetValue +
+# read-back + clear here, text-I/O capability on real Windows is exercised end-to-end,
+# and the P3/P5 Notepad gap is factually attributed to modern Notepad's UWP surface.
+$p7 = [ordered]@{
+  ran = $true; dialogFound = $false; editFound = $false; editClass = $null
+  valuePatternOk = $false; setValueOk = $false; readBackOk = $false
+  readBackMatches = $false; clearedOk = $false; cancelInvokeOk = $false; note = $null
 }
 try {
-  Add-Type -AssemblyName System.Windows.Forms
-  $p6marker = "MAJIN-P6-" + ([guid]::NewGuid().ToString("N").Substring(0,8))
-  $p6win = "MAJIN-P6-FIXTURE-" + (Get-Random)
-  $s6 = [Hashtable]::Synchronized(@{ close = $false; shown = $false })
-  $p6ts = [System.Threading.ParameterizedThreadStart]{
-      param($argv)
-      $w=$argv[0]; $m=$argv[1]; $s=$argv[2]
-      Add-Type -AssemblyName System.Windows.Forms
-      $form = New-Object System.Windows.Forms.Form
-      $form.Text = $w; $form.Name = $m
-      $form.TopMost = $true
-      $form.Width = 480; $form.Height = 200
-      $tb = New-Object System.Windows.Forms.TextBox
-      $tb.Name = "MAJINProbeEdit"
-      $tb.Multiline = $true
-      $tb.Dock = [System.Windows.Forms.DockStyle]::Fill
-      $form.Controls.Add($tb)
-      $form.Add_Shown({ $s.shown = $true; $tb.Focus() })
-      $timer = New-Object System.Windows.Forms.Timer
-      $timer.Interval = 250
-      $timer.Add_Tick({ if ($s.close) { $timer.Stop(); $form.Close() } })
-      $timer.Start()
-      [System.Windows.Forms.Application]::Run($form)
+  Mark 'P7-spawn-run-dialog'
+  $p7marker = "MAJIN-RUNDLG-" + ([guid]::NewGuid().ToString("N").Substring(0,8))
+  $dlgProc = Start-Process -FilePath "explorer.exe" -ArgumentList 'shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}' -PassThru
+  $w7 = $null
+  for ($i=0; $i -lt 60 -and -not $w7; $i++) {
+    $cond7 = New-Object System.Windows.Automation.AndCondition(
+      (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ClassNameProperty, '#32770')),
+      (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'Run')))
+    $w7 = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children, $cond7)
+    if (-not $w7) { Start-Sleep -Milliseconds 250 }
+  }
+  if ($w7) {
+    $p7.dialogFound = $true
+    Mark 'P7-dialog-found'
+    $condE = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
+    $e7 = $null
+    for ($i=0; $i -lt 20 -and -not $e7; $i++) {
+      $e7 = $w7.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condE)
+      if (-not $e7) { Start-Sleep -Milliseconds 200 }
     }
-  $th = [System.Threading.Thread]::new($p6ts)
-  $th.SetApartmentState([System.Threading.ApartmentState]::STA)
-  $th.Start(@($p6win, $p6marker, $s6))
-  for ($i=0; $i -lt 40 -and -not $s6.shown; $i++) { Start-Sleep -Milliseconds 250 }
-  $p6.formShown = [bool]$s6.shown
-  if ($s6.shown) {
-    $w6 = $null
-    for ($i=0; $i -lt 40 -and -not $w6; $i++) {
-      $w6 = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst(
-        [System.Windows.Automation.TreeScope]::Children,
-        (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $p6win)))
-      if (-not $w6) { Start-Sleep -Milliseconds 250 }
-    }
-    if ($w6) {
-      $p6.windowFound = $true
-      $e6 = $null
-      $condEdit = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
-      for ($i=0; $i -lt 20 -and -not $e6; $i++) {
-        $e6 = $w6.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condEdit)
-        if (-not $e6) { Start-Sleep -Milliseconds 200 }
-      }
-      if ($e6) {
-        $p6.editFound = $true
-        $p6.editControlType = $e6.Current.ControlType.ProgrammaticName
+    if ($e7) {
+      $p7.editFound = $true
+      $p7.editClass = $e7.Current.ClassName
+      $v7 = $null
+      try { $v7 = $e7.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern) } catch {}
+      if ($v7) {
+        $p7.valuePatternOk = $true
         try {
-          $s6p = [System.Windows.Automation.ValuePattern]::Pattern
-          $v6 = $e6.GetCurrentPattern($s6p)
-        } catch { $v6 = $null }
-        if ($v6) {
-          $p6.valuePatternOk = $true
-          try {
-            $e6.SetFocus() | Out-Null
-            $v6.SetValue($p6marker)
-            $p6.setValueOk = $true
-            $p6.readBackOk = $true
-            $p6.readBackMatches = ($v6.Current.Value -eq $p6marker)
-            if ($p6.readBackMatches) {
-              $v6.SetValue("")
-              $p6.clearedOk = ($v6.Current.Value -eq "")
-            }
-          } catch { $p6.note = "value lane: $($_.Exception.Message)" }
-        } else { $p6.note = "Edit found but no ValuePattern" }
-      } else { $p6.note = "no Edit descendant under fixture window" }
-    } else { $p6.note = "fixture window not found in UIA root" }
-    $s6.close = $true
-    Start-Sleep -Milliseconds 600
-  } else { $p6.note = "fixture form never reached Shown state" }
-} catch { $p6.note = "P6 lane exception: $($_.Exception.Message)" }
-$script:result.p6_winformsFixture = $p6
+          $v7.SetValue($p7marker)
+          $p7.setValueOk = $true
+          $rb = $v7.Current.Value
+          $p7.readBackOk = $true
+          $p7.readBackMatches = ($rb -eq $p7marker)
+          if ($p7.readBackMatches) {
+            $v7.SetValue("")
+            $p7.clearedOk = ($v7.Current.Value -eq "")
+          }
+        } catch { $p7.note = "value lane: $($_.Exception.Message)" }
+      } else { $p7.note = "Edit control found but no ValuePattern" }
+    } else { $p7.note = "no Edit descendant under Run dialog" }
+    # close the dialog cleanly: invoke its Cancel button via UIA (no SendKeys needed)
+    try {
+      $condCancel = New-Object System.Windows.Automation.AndCondition(
+        (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)),
+        (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'Cancel')))
+      $btnCancel = $w7.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condCancel)
+      if ($btnCancel) {
+        $ip7 = $btnCancel.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+        if ($ip7) { $ip7.Invoke(); $p7.cancelInvokeOk = $true }
+      }
+    } catch {}
+  } else { $p7.note = "Run dialog (#32770 'Run') never appeared in UIA root" }
+  Mark 'P7-done'
+} catch { $p7.note = "P7 lane exception: $($_.Exception.Message)" }
+$script:result.p7_runDialogFixture = $p7
 
 Mark 'cleanup-notepad'
 # cleanup notepad
@@ -374,8 +357,8 @@ if ($proc -and -not $proc.HasExited) {
 } elseif ($proc) { $script:result.p3_notepad.closedOk = $true }
 
 $script:result.capabilities.locateControls = $script:result.capabilities.locateControls -or ($script:result.p5_subtreeAndFallback.nodeCount -gt 0)
-$script:result.capabilities.textInput = $script:result.p3_notepad.setValueOk -or $script:result.p5_subtreeAndFallback.fallbackValueWriteOk -or $script:result.p5_subtreeAndFallback.sendKeysOk -or $script:result.p6_winformsFixture.setValueOk
-$script:result.capabilities.readBack  = $script:result.p3_notepad.readBackMatches -or $script:result.p5_subtreeAndFallback.fallbackReadBackMatches -or $script:result.p5_subtreeAndFallback.sendKeysOk -or $script:result.p6_winformsFixture.readBackMatches
+$script:result.capabilities.textInput = $script:result.p3_notepad.setValueOk -or $script:result.p5_subtreeAndFallback.fallbackValueWriteOk -or $script:result.p5_subtreeAndFallback.sendKeysOk -or $script:result.p7_runDialogFixture.setValueOk
+$script:result.capabilities.readBack  = $script:result.p3_notepad.readBackMatches -or $script:result.p5_subtreeAndFallback.fallbackReadBackMatches -or $script:result.p5_subtreeAndFallback.sendKeysOk -or $script:result.p7_runDialogFixture.readBackMatches
 
 Mark 'emit'
 $result | ConvertTo-Json -Depth 10 | Set-Content -Path $OutFile -Encoding utf8
