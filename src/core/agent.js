@@ -258,7 +258,9 @@ export class Agent {
       aware ? `SIBLING TASKS ON THIS MACHINE (shared resources — do not touch the files another task holds; report yours so they can plan too):\n${aware}` : '',
       '',
       this.skills.prompt(),
-      this.memory?.digest?.() || '',
+      /* WAVE 3 (§9): every memory injection is ledger-stamped per session,
+         making staleness (injected rev vs current rev) observable evidence. */
+      (() => { const d = this.memory?.digest?.() || ''; if (d) this.memory?.noteInjected?.(session); return d; })(),
       attachments?.length ? `ATTACHMENTS (already saved to disk):\n${attachments.map((a) => `- ${a.name} · ${a.kind} · ${a.size} byte${a.path ? ` · ${a.path}` : ''}${a.note ? ` · ${a.note}` : ''}`).join('\n')}` : '',
       this.loadPlan(session)?.length ? `ACTIVE PLAN:\n${this.loadPlan(session).map((p) => `[${p.status === 'done' ? 'x' : p.status === 'doing' ? '~' : p.status === 'blocked' ? '!' : ' '}] ${p.text}`).join('\n')}` : '',
       '',
