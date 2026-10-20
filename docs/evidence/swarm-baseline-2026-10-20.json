@@ -45,7 +45,7 @@
     {
       "kind": "parallel",
       "rep": 0,
-      "wallMs": 71,
+      "wallMs": 70,
       "okCount": 8,
       "failCount": 0,
       "overlap": 28,
@@ -65,7 +65,7 @@
     {
       "kind": "parallel",
       "rep": 1,
-      "wallMs": 75,
+      "wallMs": 74,
       "okCount": 8,
       "failCount": 0,
       "overlap": 28,
@@ -75,7 +75,7 @@
     {
       "kind": "serial",
       "rep": 2,
-      "wallMs": 452,
+      "wallMs": 453,
       "okCount": 8,
       "failCount": 0,
       "overlap": 0,

@@ -17,9 +17,10 @@ import { tradingTools } from './trading.js';
 import { metaTools } from './meta.js';
 import { winControlTools } from './wincontrol.js';
 import { researchTools } from './research.js';
+import { execTools } from './exec.js';
 import { approvals } from '../guard.js';
 
-export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...reTools, ...majinTools, ...agentTools, ...jobTools, ...marketingTools, ...githubTools, ...tradingTools, ...metaTools, ...winControlTools, ...researchTools];
+export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...reTools, ...majinTools, ...agentTools, ...jobTools, ...marketingTools, ...githubTools, ...tradingTools, ...metaTools, ...winControlTools, ...researchTools, ...execTools];
 
 export function buildRegistry(ctx) {
   if (!ctx.approvals) ctx.approvals = approvals;

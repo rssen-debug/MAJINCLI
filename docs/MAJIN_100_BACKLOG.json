@@ -32,7 +32,7 @@
       "id": "W3-execution-backends",
       "wave": "W3",
       "desc": "Gemensamt execution-interface: local host + docker + ssh + isolated; resource limits, cancellation, logs, artifacts; ärliga fel (aldrig silent-host-fallback).",
-      "status": "MISSING"
+      "status": "IMPLEMENTERAD + basverifierad: gemensamt interface (exec.start/wait/cancel/logs/backends), local-backend REAL (powershell/bash plattform-aware), docker/ssh med ärliga FORBIDDEN-fel (aldrig tyst host-fallback), timeout/cancel/output-caps/persisted logs 7/7 ✓; konfig-drivna backend-val (remote-kerna saknar host konfigurélat — registering pending W3-gateway)"
     },
     {
       "rank": 5,
@@ -136,6 +136,13 @@
       "done": "W2 RESEARCH: src/core/research.js (pipelinen + contradiction-flags + reliability + ledger + verify) + tools register research.run (109 verktyg, contract-golden uppdaterat medvetet) + 'majin research <question>' CLI + 8 test fixtures gröna + hela sviten 573/555/0/18 ✓ + real-CLI-bevisad honest no_sources-path",
       "percent": 34,
       "next": "W3 execution-backends (local/docker/ssh via gemeinsamt interface + ärliga missing-cred-fel) eller W7 mission-contract acceptance"
+    },
+    {
+      "round": 4,
+      "date": "2026-10-20",
+      "done": "W3 EXECUTION BACKENDS: executors.js (enhetlig jobb-interface: startJob/handle/settled/cancelled) + tools exec.backends(-inventory, measured) exec.start exec.wait exec.cancel exec.logs (5 verktyg; guard-risk exec via framework) + test/executors.test.js 7/7 ✓ + verifierad lokal körning + real timeout/cancellation/output-caps + honest docker/ssh-unavailable error pathways (FORBIDDEN-tyngt) + golden guards uppdaterade medvetet 109→114 + full svit 580/562/0/18 ✓",
+      "percent": 37,
+      "next": "W7 mission-contract acceptance (GOAL→PLAN→EXECUTE→VERIFY→REPAIR→COMPLETE med beviskontrakt) — misson.js finns delvis; contract-laget med bevisartifakter"
     }
   ]
 }

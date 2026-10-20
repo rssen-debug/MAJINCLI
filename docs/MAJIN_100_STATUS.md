@@ -4,7 +4,7 @@
 
 > Ärlighetsregel: ingen % utan reproducerbart bevis. Gamla COMPLETION_MATRIX.md (100/100 på papper) motsägs av uppmätta artefakter och ersätts av DENNA fil som sanning.
 
-## Total ekvivalent status: **34/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
+## Total ekvivalent status: **37/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
 
 ## Per-våg (VERIFIED kräver artefakt, INTE bara att koden finns)
 
@@ -12,7 +12,7 @@
 |---|---|---|
 | W1 Absorb | **VERIFIED-CORE** |  implementerad + bevisad: fixtures 5/5 ✓ + riktigt scan microsoft/UFO (851 fil, MIT, modulvärme); gap-analys vs 108-verktyg ✓ (se docs/evidence / absorb-artefakter) |
 | W2 Research-motor | **VERIFIED-CORE + ENV-BLOCK-ANT*** | research.run implementerad (pipeline, ledger, konfliktflaggor); 8/8 fixtures ✓ + hela suiten 573/555/0/18 ✓; real-net-integration begränsad av sandbox-egress (DuckDuckGo/Bing 0/0) — verifieras i acceptance-lane |
-| W3 Execution-backends | **MISSING** | docker/ssh: inga moduler; ärliga fel-spår är policy men ej kod |
+| W3 Execution-backends | **VERIFIED-CORE (lokal) + HONEST GATE (docker/ssh)** | exec.* ×5 implementerade, plattform-säkra (powershell|bash); docker:valuektra validerad på CI häringen valuektra: ärliga docker_unavailable/ssh_host_required med FORBIDDEN-policy uppmätta; 7/7 tester ✓ + hela sviten 580/562/0/18 |
 | W4 Standing agent teams | **INCOMPLETE** | src/core/swarm.js finns (HYPERSWARM-papper); persistent identity/shared memory/budgets/checkpoint/recovery obevit |
 | W5 Event flows | **MISSING** | schedule.js finns (✅ CRUD-verifierad i QA), men inga trigger-typer utanför cron, ingen webhook/file-event/event-history |
 | W6 Power Transfer | **MISSING** | är beroende av W1 |
