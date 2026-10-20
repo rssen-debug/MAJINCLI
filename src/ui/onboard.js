@@ -277,7 +277,12 @@
     const chat = (st.routes || []).find((r) => r.job === 'chat');
     PICKER.current = chat ? chat.ref : '';
     const configured = (st.providers || []).find(p => p.name === chat?.provider)?.ready;
-    chip.textContent = (PICKER.current && configured ? shortModel(PICKER.current) : 'Choose a model') + ' ▾';
+    const prov = (st.providers || []).find((p) => p.name === chat?.provider);
+    /* spec B: the chip states provider · model — never an ambiguous model name
+       alone (OpenCode Go must not read as plain glm-x.x, never silently Zen). */
+    const provName = prov?.displayName || prov?.preset || chat?.provider || '';
+    chip.textContent = (PICKER.current && configured ? `${provName} · ${shortModel(PICKER.current)}` : 'Choose a model') + ' ▾';
+    chip.title = `${provName || 'provider'} — ${PICKER.current || 'no model set'}`;
     chip.title = PICKER.current || 'no model set';
     chip.hidden = false;
     chip.setAttribute('aria-haspopup', 'dialog');

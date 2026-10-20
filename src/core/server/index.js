@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bus } from '../log.js';
 import { dirs, safeJoin } from '../paths.js';
+import { listChats, activity as chatActivity, rename as chatRename, setArchived as chatSetArchived, deleteChat, ensureChat as chatEnsure, sanitizeId as chatSanitizeId } from '../chats.js';
 import { readHistory } from '../context.js';
 import { tasks, fileLocks, eta } from '../tasks.js';
 import { parseTaskCommand, statusText } from '../intent-tasks.js';
@@ -323,6 +324,29 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     if (p === '/api/schedule' && req.method === 'GET') return json(res, 200, { ok: true, jobs: scheduler ? scheduler.list() : [], enabled: Boolean(scheduler) });
     if (p === '/api/channels') return json(res, 200, { ok: true, ...(channels ? channels.status() : { telegram: { online: false, state: 'off' }, whatsapp: { online: false, state: 'off' } }) });
     if (p === '/api/approvals') return json(res, 200, { ok: true, pending: approvals.list(), recent: approvals.recent(12) });
+    /* --- MAJIN chats: canonical durable index (owner spec A, P0) --- */
+    if (p === '/api/chats' && req.method === 'GET') {
+      const view = url.searchParams.get('view') || 'active';
+      const search = url.searchParams.get('search') || '';
+      return json(res, 200, { ok: true, chats: listChats(dirs, { view, search }), view });
+    }
+    if (p === '/api/chats/rename' && req.method === 'POST') {
+      const body = await readJson(req);
+      try { const c = chatRename(dirs, body.id, body.title); return json(res, 200, { ok: true, chat: c }); }
+      catch (e) { return json(res, 422, { ok: false, error: e.message }); }
+    }
+    if (p === '/api/chats/archive' && req.method === 'POST') {
+      const body = await readJson(req);
+      try { const c = chatSetArchived(dirs, body.id, body.archived !== false); return json(res, 200, { ok: true, chat: c }); }
+      catch (e) { return json(res, 422, { ok: false, error: e.message }); }
+    }
+    if (p === '/api/chats/delete' && req.method === 'POST') {
+      const body = await readJson(req);
+      try {
+        const r = deleteChat(dirs, body.id, body.title);
+        return json(res, 200, { ok: true, deleted: r });
+      } catch (e) { return json(res, 422, { ok: false, error: e.message }); }
+    }
     if (p === '/api/sessions') {
       let files = [];
       try {
@@ -403,6 +427,19 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const input = String(body.input || body.text || body.prompt || body.content || (last && last.content) || '').trim();
       if (!input) return json(res, 400, { ok: false, error: 'empty input', hint: 'send {input:"…"} (or messages:[{role:"user",content:"…"}])' });
       let session = String(body.session || 'desktop');
+      /* P0: every real send is recorded in the durable chat index. Materialize
+         the chat entry + bump lastActivityAt; the auto title policy takes the
+         first user text exactly once (manual renames always win). uiActivity
+         flag == false for internal listeners that must not reorder the list. */
+      const sessionIdSafe = chatSanitizeId(session);
+      const sendIsUserInitiated = body.uiActivity !== false && body.internal !== true;
+      if (sendIsUserInitiated) {
+        try {
+          const prior = listChats(dirs, { view: 'all' }).find((c) => c.id === sessionIdSafe);
+          chatActivity(dirs, sessionIdSafe, { firstUserText: prior && prior.titlePolicy === 'manual' ? null : input });
+        } catch { /* a durable-index failure never blocks a chat turn */ }
+        session = sessionIdSafe;
+      }
       const attachments = Array.isArray(body.attachments) ? body.attachments : [];
       // First-use connection, solely for explicit ad-management requests.
       // Asking for credentials is deterministic and costs ZERO model tokens.

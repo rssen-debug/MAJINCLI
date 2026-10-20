@@ -297,6 +297,9 @@ async function send(text) {
   S.taskId = null; S.deferredStopEvent = null;
   S.failed = false; S.lastInput = input; S.completed = false; S.readingHistory = false;
   addMsg('user', 'You', input);
+  /* P0 repair: this chat moves to the top IMMEDIATELY (optimistic), reconciles
+     with the server's durable index at completion/error without flicker. */
+  if (window.MAJIN_CHATS) window.MAJIN_CHATS.bumpActive(S.session, input);
   $('input').value = '';
   autoGrow();
   S.busy = true;
@@ -336,6 +339,7 @@ async function send(text) {
         if (ev.type === 'done') {
           S.completed = true;
           if (ev.ok === false && !S.failed) onEvent({ type: 'error', message: 'The provider could not complete this request.' });
+          if (window.MAJIN_CHATS) window.MAJIN_CHATS.refresh(); /* server truth: durable index updated by the accepted send */
           continue;
         }
         onEvent(ev);
@@ -1077,13 +1081,16 @@ function closeMobileRail() {
     $('b-rail').setAttribute('aria-expanded', 'false');
   }
 }
-$('new-chat').onclick = async () => {
+async function newChat() {
   if (S.busy || S.stopRequested) { toast('Stop the current task before starting a new chat.'); return; }
   closeMobileRail();
   S.session = 'chat-' + Date.now().toString(36);
   $('input').value = ''; autoGrow();
+  if (window.MAJIN_CHATS) window.MAJIN_CHATS.bumpActive(S.session, null); /* pending empty chat visible while active, durable only once materialized by a real send */
   await loadHistory(); $('input').focus();
-};
+}
+$('new-chat').onclick = newChat;
+/* Ctrl+N lives in studio.js (bubbles through to this handler). */
 $('browse-models').onclick = () => { closeMobileRail(); window.MAJIN_ONBOARD.togglePicker(); };
 $('manage-providers').onclick = () => { closeMobileRail(); window.MAJIN_ONBOARD.reopen(); };
 $('input').addEventListener('keydown', (e) => {

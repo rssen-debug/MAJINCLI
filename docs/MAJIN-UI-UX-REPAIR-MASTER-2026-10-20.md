@@ -87,3 +87,25 @@ Use real Chromium Playwright against a disposable MAJIN server, plus real Window
 **P2**: polished microinteractions, accessibility, responsive layouts, performance.
 
 **Definition of done:** A user can create, revisit, rename, archive, restore, delete, search, and reorder chats without data loss, through a coherent single desktop app interface, verified by Windows+Linux UI automation and real-window visual evidence.
+
+## Implementation evidence (2026-10-20, fix/realworld-repairs)
+
+- **P0 chat conversations (archive/delete/rename/sort/search)**: FIXED + VERIFIED —
+  `src/core/chats.js` durable server-side index (`chats-index.json`), routes
+  `/api/chats`, `/api/chats/rename|archive|delete` (422 truthful errors, exact-title
+  delete confirmation, "General" protected), activity hook on `/api/chat`,
+  `src/ui/chats.js` (ellipsmenu, dialogs with Escape/focus-return, optimistic
+  send-bump with server reconcile, mobile-friendly), CSS states.
+  Delete removes `*.jsonl` + `.bak` siblings + `<id>.route.json` sidecar (bug
+  found by browser testing: header textContent obliterating the toggle button —
+  fixed by patching the text node only; sidecar leak fixed the same round).
+- **P1 chrome/model clarity**: FIXED + VERIFIED — unified single header verified
+  (exactly 1 `header` element), model chip renders `provider · model` (never
+  ambiguous model alone, never silently Zen), no stray URL in content.
+- **Acceptance suite delivered**: `scripts/ui-repair-test.mjs` — **26/26 gates
+  green** against real Chromium incl. reload AND process-restart durability;
+  **620/602/0/18** existing suite green, i18n curtain clean.
+- **NOT TESTED here (environment)**: Windows-native window chrome visuals,
+  drag-region aesthetics on Windows, OpenCode-Go live provider lane (separate
+  audited gate), installer/update smoke on Windows. Syne my-kördtandard the
+  available gates; those stay in the Windows runner scope.
