@@ -25,6 +25,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import http from 'node:http';
 const PKG_VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url))).version;
 
 const DEFAULT_HOME = process.platform === 'win32'
@@ -105,10 +106,10 @@ function tokenFromConfig() {
   return '';
 }
 let TOKEN = '';
-async function api(method, p, body, { token = true, timeoutMs = 60000, raw = false, hostHeader = null } = {}) {
+async function api(method, p, body, { token = true, timeoutMs = 60000, raw = false } = {}) {
   const r = await fetch(`${CFG.base}${p}`, {
     method,
-    headers: { ...(token && TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}), ...(body != null ? { 'content-type': 'application/json' } : {}), ...(hostHeader ? { host: hostHeader } : {}) },
+    headers: { ...(token && TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}), ...(body != null ? { 'content-type': 'application/json' } : {}) },
     body: body != null ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -118,6 +119,30 @@ async function api(method, p, body, { token = true, timeoutMs = 60000, raw = fal
   try { json = JSON.parse(text); } catch { json = { ok: false, parse_error: true, body: text.slice(0, 400) }; }
   return { status: r.status, json, headers: Object.fromEntries(r.headers.entries()) };
 }
+/** Make a RAW HTTP request for security tests that must override Host.
+ * Node's fetch silently substitutes the URL authority for a caller-supplied
+ * Host header, making a Host-spoof test against fetch a false negative.
+ * http.request transmits exactly the Host header requested, without credentials.
+ */
+async function apiSpoofHost(p, host) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(CFG.base + p, { method: 'GET', headers: { Host: host }, timeout: 15000 }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        let json = null;
+        try { json = JSON.parse(body); } catch { /* malformed response is evidence */ }
+        resolve({ status: res.statusCode, json, host });
+      });
+      res.on('error', reject);
+    });
+    req.on('timeout', () => req.destroy(new Error('Host-spoof probe timed out')));
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 /** POST /api/chat as SSE; resolves {events, text, doneEvent, taskId, msToFirstDelta, msTotal} */
 function sseChat(input, { session, timeoutMs = 240000, onDelta, extra = {} } = {}) {
   return new Promise(async (resolve, reject) => {
@@ -226,12 +251,12 @@ async function s03(a) {
 async function s04(a) { // äkta gränsmätning: opålitlig HOST-rubrik måste vägras även från loopback
   const trusted = await api('GET', '/api/state', undefined, { token: false });
   const health = await api('GET', '/healthz', undefined, { token: false });
-  const spoofHello = await api('GET', '/api/hello', undefined, { token: false, hostHeader: 'evil.example.com' });
-  const spoofState = await api('GET', '/api/state', undefined, { token: false, hostHeader: 'evil.example.com' });
+  const spoofHello = await apiSpoofHost('/api/hello', 'evil.example.com');
+  const spoofState = await apiSpoofHost('/api/state', 'evil.example.com');
   const checks = {
     loopbackTrustedByDesign: trusted.status === 200,
     healthzPublic: health.status === 200,
-    spoofedHostNeedToken: spoofHello.json.needToken === true,
+    spoofedHostNeedToken: spoofHello.json?.needToken === true,
     spoofedHostRejected: spoofState.status === 401,
   };
   const ok = Object.values(checks).every(Boolean);
@@ -326,8 +351,8 @@ async function d03(a) { // deliberate NEGATIVE probe: a model without tool capab
     : `tools-tolerance probe: with-tools=${r.status}, plain=${plain.status} (expected a 400 on tools for ${noToolModel})`, { noToolModel, withTools: { status: r.status, body: String(r.body || '').slice(0, 400), ms: r.ms }, plain: { status: plain.status, ms: plain.ms } });
 }
 async function d04(a) { // schema introspection: the INSTALLED product reports its own tool contracts
-  const r = await api('GET', '/api/state?tools=1');
-  const toolsList = r.json.tools || r.json.items || r.json.state?.tools || [];
+  const r = await api('GET', '/api/tools');
+  const toolsList = r.json?.tools || [];
   const find = (name) => toolsList.find((t) => t.name === name);
   const compare = {};
   const expected = { 'shell.run': ['command'], 'browser.open': ['url'], 'sys.ps': [], 'fs.write': ['path'] };
