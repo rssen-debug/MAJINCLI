@@ -120,7 +120,7 @@ test('a model cannot pretend it created a file without performing any tool call'
   const result=await loop({
     cfg:rt.cfg,registry:rt.registry,job:'tasks',maxSteps:4,
     messages:[{role:'system',content:'Test agent'},{role:'user',content:'Create a file named fake-claim.txt with QA'}],
-    ctx:{cfg:rt.cfg,session:'qa-false-claim',toolSubsetNames:['tools.search'],readOnly:false},
+    ctx:{cfg:rt.cfg,session:'qa-false-claim',toolSubsetNames:['tools.search'],readOnly:false,enforceActionEvidence:true},
     onEvent:e=>events.push(e),
     modelCall:async()=>{calls++;return {text:'Done, I created fake-claim.txt',toolCalls:[],usage:{input:1,output:1}};},
   });
