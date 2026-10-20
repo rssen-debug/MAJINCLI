@@ -28,7 +28,7 @@ try {
     assert.equal(chosen, 'glm-5.3-flash');
     report.model = chosen;
     record('passed', 'catalog lists allowlisted low-cost model ' + chosen);
-    const route = { apiKey: key, baseUrl: root, endpoint: root + '/chat/completions', model: chosen };
+    const route = { apiKey: key, baseUrl: root, endpoint: root + '/chat/completions', model: chosen, extraHeaders: { 'x-opencode-session': 'majin-qa-' + process.env.GITHUB_RUN_ID, 'user-agent': 'majin-coding-agent/1.0', 'x-opencode-client': 'majin' } };
     const result = await openaiOnce({ route, messages: [{ role: 'user', content: 'Reply exactly MAJIN_OK' }], maxTokens: 40, temperature: 0 });
     assert.ok(result.text && result.text.trim().length > 0, 'empty model response');
     record('passed', 'MAJIN openaiOnce produced real low-cost-model completion');
