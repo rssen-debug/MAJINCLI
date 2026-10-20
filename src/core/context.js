@@ -68,9 +68,17 @@ export async function compact({ cfg, messages, brief }) {
   const now = messagesTokens(messages);
   if (now < cap * 0.72) return { messages, brief, compacted: false, tokens: now };
   const keepFrom = Math.max(0, messages.length - keep);
-  const head = messages.slice(0, keepFrom).filter((m) => m.role !== 'tool' || true);
+  const head = messages.slice(0, keepFrom);
   const tail = messages.slice(keepFrom);
   if (!head.length) return { messages, brief, compacted: false, tokens: now };
+  // The full tool/safety instructions and original user goal cannot disappear
+  // just because a weak model has used many steps. Preserve them as an anchor.
+  const originalSystem = messages.find((m) => m.role === 'system' &&
+    !/^(?:WORKING MEMORY BRIEF|ARBETSMINNESBRIEF|ACTIVE GOAL)/.test(String(m.content || '')));
+  const originalGoal = messages.find((m) => m.role === 'system' &&
+    String(m.content || '').startsWith('ACTIVE GOAL:'));
+  const anchors = [originalSystem, originalGoal].filter(Boolean);
+  const anchoredTail = tail.filter((m) => !anchors.includes(m));
   const route = cfg.resolveModel(cfg.get('models.routes.summarize'), 'summarize');
   const dialog = head
     .map((m) => `${m.role}: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '').slice(0, 900)}`)
@@ -91,14 +99,14 @@ export async function compact({ cfg, messages, brief }) {
     const nextBrief = (res.text || '').trim();
     bus.info('context.compacted', { before: now, headDropped: head.length, briefChars: nextBrief.length });
     return {
-      messages: [{ role: 'system', content: `WORKING MEMORY BRIEF (from MAJIN, compressed history):\n${nextBrief}` }, ...tail],
+      messages: [...anchors, { role: 'system', content: `WORKING MEMORY BRIEF (from MAJIN, compressed history):\n${nextBrief}` }, ...anchoredTail],
       brief: nextBrief,
       compacted: true,
-      tokens: messagesTokens(tail) + estimateTokens(nextBrief),
+      tokens: messagesTokens(anchors) + messagesTokens(anchoredTail) + estimateTokens(nextBrief),
     };
   } catch (err) {
     bus.warn('context.compact.failed', { error: err.message });
-    return { messages: tail, brief, compacted: true, tokens: messagesTokens(tail) };
+    return { messages: [...anchors, ...anchoredTail], brief, compacted: true, tokens: messagesTokens(anchors) + messagesTokens(anchoredTail) };
   }
 }
 
