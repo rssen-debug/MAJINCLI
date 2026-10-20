@@ -8,6 +8,8 @@ import { journal } from '../browser.js';
 
 let HUB = null;
 function hubDir(ctx) { return ctx.cfg.get('workspace') || process.cwd(); }
+/* tests must be able to release the persistent watcher or the process never drains */
+export function testStopHub() { const h = HUB; HUB = null; return h ? h.stopAll() : Promise.resolve(); }
 
 export const flowsTools = [
   def({

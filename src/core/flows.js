@@ -146,13 +146,46 @@ export class TriggerHub {
     const chokidar = await import('chokidar').catch(() => null);
     if (!chokidar?.watch) throw new Error('Chokidar unavailable — chokidar@4 runtime dependency missing (chosen over custom fs.watch for cross-platform correctness, see DECISIONS.md)');
     const w = chokidar.watch(spec.path, { ignoreInitial: spec.fireForExisting !== true, persistent: true, depth: spec.depth ?? 6, awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 } });
+    /* W5 VERIFIED-delta found REAL bug: chokidar swallows events that arise
+       during the initial scan (before 'ready') when ignoreInitial is true —
+       flows.add() returned "registered" but drops in that window vanished
+       silently. Buffer pre-ready events and flush them once ready. */
+    /* W5 VERIFIED-delta found the REAL bug: with ignoreInitial:true, files
+       added DURING the initial scan are swallowed ENTIRELY — the user
+       listener never gets called, so no buffering trick can save them
+       (proven by e2e: immediate post-flows.add drop → no event, no record).
+       Fix: on 'ready', file any entry whose mtime lands AFTER watch start
+       (that window never existed on disk before the scan, so it cannot be
+       a pre-existing file — no false positive possible). */
+    const startedAt = Date.now();
+    let ready = false;
+    w.on('ready', async () => {
+      ready = true;
+      if (spec.event === 'unlink') return;
+      const candidates = new Set();
+      for (const [dir, files] of Object.entries(w.getWatched() || {})) {
+        for (const f of files) if (f !== '.') candidates.add(path.join(dir, f));
+      }
+      for (const cand of candidates) {
+        try {
+          const st = fs.statSync(cand);
+          if (st.mtimeMs >= startedAt - 250) await handle(cand);
+        } catch { /* vanished again — ignore, unlink-watch covers removals */ }
+      }
+    });
     const cwd = process.cwd();
     w.on(spec.event === 'unlink' ? 'unlink' : spec.event === 'change' ? 'change' : 'add', async (p) => {
+      /* pre-ready events do not exist with ignoreInitial:true (proven above);
+         the mtime-window on 'ready' owns the warm-up case */
+      if (!ready) return;
+      await handle(p);
+    });
+    const handle = async (p) => {
       const event = { path: p.startsWith('/') ? p : path.join(cwd, p), eventHash: eventHash(p + ':' + (await fileStamp(p))), meta: { trigger: spec.event || 'add' } };
       const current = loadFlow(this.ws, flow.id) || flow;
       if (isDuplicate(current, event.eventHash)) { recordRun(this.ws, current, { kind: 'duplicate-suppressed', eventHash: event.eventHash, status: 'suppressed' }); return; }
       await this.onEvent(current, event);
-    });
+    };
     this.watchers.set(flow.id, w);
     return true;
   }
