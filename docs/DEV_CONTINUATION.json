@@ -1,5 +1,5 @@
 {
-  "lastVerifiedMain": "63135d2",
+  "lastVerifiedMain": "d63e014",
   "lastCompletedMilestone": "GODLIKE V4 §7 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
   "currentWorkstream": "GODLIKE V4 WAVE 2 — §5 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
@@ -36,7 +36,7 @@
   "nextAction": "Waves 2-5 complete. Perf lab located a real O(n²) and fixed it (68.57->6.01ms @2000). Next: evaluate remaining radar items or await owner Windows gates; keep release discipline for v1.0.0 readiness review",
   "version": "0.9.13",
   "milestone": "WAVE 5: perf lab A/B/C/D (§19) + ranker O(n²)→O(n) ×11.4 measured (local 476p/493t/0f/17s)",
-  "branch": "feature/w5-perf-lab (in PR)",
+  "branch": "main (post-merge)",
   "decisions": {
     "windows-control-adapter": {
       "decision": "ADOPT raw UIA (System.Windows.Automation, zero deps) as control API; two-tier text I/O (patterns first, SendInput fallback + read-back); DEFER FlaUI (same bridge, .NET dep, fixes nothing measured); DEFER UFO/OmniParser vision lane (cost + OmniParser license caution stands)",
