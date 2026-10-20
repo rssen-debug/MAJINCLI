@@ -684,6 +684,13 @@ async function c02(a) {
   const interactive = /console\s+\d+\s+Active/i.test(s) && !/Services/i.test(String(process.env.SESSIONNAME || '')) && String(process.env.GITHUB_ACTIONS) !== 'true' ? true : /Active.*(RDP|console)/i.test(s);
   const saneRun = spawnSync('powershell.exe', ['-NoProfile', '-Command', '"SESSIONNAME=" + $env:SESSIONNAME + "; CONSOLE=" + ([Environment]::UserInteractive)'], { encoding: 'utf8', timeout: 15000 });
   const userInteractive = /CONSOLE=True/i.test(String(saneRun.stdout || ''));
+  const claimedInteractive = process.env.QA_INTERACTIVE === 'true';
+  if (claimedInteractive && userInteractive) {
+    return a(CL.CI, 'interactive desktop VERIFIED (session measured UserInteractive=true + operator flag set) — c02-ready UI lanes unlocked on a real interactive runner', { session: s.slice(0, 300) });
+  }
+  if (claimedInteractive && !userInteractive) {
+    return a(CL.BLOCKED, 'operator claimed qa_interactive=true but the session measured NON-interactive (UserInteractive=false) — refuse to lie about the surface; the runner was registered as a service, not a console session', { userInteractive, claimedInteractive });
+  }
   if (process.env.GITHUB_ACTIONS === 'true' && !userInteractive) {
     return a(CL.BLOCKED, 'no interactive desktop in GitHub-hosted CI session (Session 0). Win32 GUI automation of the installed desktop GUI requires a self-hosted interactive runner.', {
       why: 'GitHub-hosted runners execute as a Windows service; [Environment]::UserInteractive=False, keyboard focus and UIA Actuation are unavailable to the agent process.',
