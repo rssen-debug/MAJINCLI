@@ -24,7 +24,7 @@ on:
       models:
         description: 'Ollama models to pull (csv)'
         required: false
-        default: 'smollm2:135m,llama3.2:1b'
+        default: 'llama3.2:1b,qwen2.5:0.5b,smollm2:135m'
         type: string
 permissions:
   contents: read
@@ -80,10 +80,10 @@ jobs:
           if (-not $ok) { throw 'ollama serve never answered /api/tags' }
           "ollama pid $($server.Id) up"
 
-      - name: Pull small REAL models (135M + 1B — honest hardware floor, still real)
+      - name: Pull small REAL models (1B + 0.5B capable + 135M negative probe)
         shell: pwsh
         run: |
-          $models = @('smollm2:135m','llama3.2:1b')
+          $models = @('llama3.2:1b','qwen2.5:0.5b','smollm2:135m')
           if ($env:QA_MODELS) { $models = $env:QA_MODELS -split ',' }
           foreach ($m in $models) { $m = $m.Trim(); "pulling $m…"; & ollama-win\ollama.exe pull $m | Out-Default }
           & ollama-win\ollama.exe list
@@ -100,7 +100,7 @@ jobs:
           $env:QA_SETUP = "$PWD\qa-stage\MAJIN-Setup.exe"
           $env:QA_SETUP_SHA = "$PWD\qa-stage\MAJIN-Setup.exe.sha256"
           $env:QA_EVID = "$PWD\qa-evidence"
-          $env:QA_MODELS = if ($env:QA_MODELS_IN) { $env:QA_MODELS_IN } else { 'smollm2:135m,llama3.2:1b' }
+          $env:QA_MODELS = if ($env:QA_MODELS_IN) { $env:QA_MODELS_IN } else { 'llama3.2:1b,qwen2.5:0.5b,smollm2:135m' }
           $env:QA_INTERACTIVE = '${{ github.event.inputs.qa_interactive }}'
           node --version
           node scripts/qa/qa-scenarios.mjs 2>&1 | Tee-Object -Variable out
