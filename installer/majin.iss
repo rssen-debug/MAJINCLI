@@ -19,7 +19,7 @@
 #define MyAppName "MAJIN"
 ; the build passes /DMyAppVersion=<package.json version>; keep a fallback for hand runs
 #ifndef MyAppVersion
-  #define MyAppVersion "0.9.12"
+  #define MyAppVersion "0.9.13"
 #endif
 #define MyAppPublisher "rssen-debug"
 #define MyAppURL "https://github.com/rssen-debug/MAJINCLI"

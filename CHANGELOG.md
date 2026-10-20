@@ -8,6 +8,34 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 
 
 
+
+## 2026-10-20 — WAVE 5: perf lab A/B/C/D (§19) + ranker O(n²)→O(n) — v0.9.13
+
+### Added
+- **`scripts/perf-topology-bench.mjs`** — importable harness + CLI: runs the REAL `runSwarm` on synthetic
+  DAGs with declared durations (median-of-N, no model calls) across four labs:
+  A wide fan-out CP-first vs legacy, B deep-chain CP-first vs declaration-order, C 11× est-overrun
+  contraction (reported as a **trade, never a speedup**), D ranker-cost + 200-node pass-through guard.
+  CLI writes `docs/evidence/perf-topology-<date>.json` and refreshes the marked PERFLAB section of
+  `docs/SWARM_PERFORMANCE.md`.
+
+### Fixed (found BY the lab, this wave — §19 working as intended)
+- **`criticalTailRanks` O(n²)→O(n)**: children index built once instead of full-array scan per node.
+  D-lab measured 68.57 ms → **6.01 ms on 2 000 nodes (×11.4 measured)**. Production grids (tens of
+  nodes) were already fine; the lab exists to catch the scaling edge before it bites.
+
+### Measured results (scale 0.6, median of 5 — evidence JSON in repo)
+- A fan-out: **×1.002** (parity — work-conserving dispatch fills lanes regardless of order)
+- B deep chain: **×1.003** (parity — no regression; CP-first's value is insurance on steeper graphs)
+- C overrun: adaptive 199 ms with 1 contraction vs legacy 133 ms — the honest price of spawn-frugality
+  on a broken estimation model, labeled a trade
+- D: rank-2000 6.01 ms, grid-200 11 ms
+
+### Verified
+- 5 lab tests (structure, direction with wide CI-noise margins, contraction-under-overrun, CLI evidence
+  + scorecard refresh). Full local suite: **493 tests, 476 pass, 0 fail, 17 skip**.
+
+
 ## 2026-10-20 — WAVE 4: speculative execution lab (§6 — experimental, disabled by default) — v0.9.12
 
 ### Added
