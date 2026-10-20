@@ -238,20 +238,18 @@ async function main() {
   const marker = `QA-UI-MARKER-${Date.now()}`;
   let u10 = { listed: false };
   try {
-    await api('POST', '/api/tool', { tool: 'fs.write', args: { path: 'qa-ui/browse-me.md', content: `# QA UI check\n${marker}\n` } }, token);
+    const writeResult = await api('POST', '/api/tool', { tool: 'fs.write', args: { path: 'qa-ui/browse-me.md', content: `# QA UI check\n${marker}\n` } }, token);
+    if (writeResult.status >= 400 || writeResult.json?.error) throw new Error(`fs.write failed: HTTP ${writeResult.status} ${JSON.stringify(writeResult.json || {}).slice(0, 160)}`);
     await page.click('#tab-files', { timeout: 20000 });
     // vy-lista kan polla långsamt på CI — vänta TILLS markören eller tom lista svarnaor
-    await page.waitForFunction(
-      (mrk) => {
-        const t = document.getElementById('view-files')?.textContent || '';
-        return new RegExp(mrk + '|browse-me').test(t) || document.querySelector('#view-files .fx-row');
-      },
-      marker.replace(/-/g, '\-'), { timeout: 20000 },
-    ).catch(() => {});
-    await page.waitForTimeout(1200);
+    // Assert the actual filename appears, not an unrelated Files row or generic folder.
+    await page.waitForFunction(() => {
+      const view = document.getElementById('view-files');
+      return Boolean(view && /browse-me\\.md/.test(view.textContent || ''));
+    }, null, { timeout: 20000 });
     const filesText = await page.evaluate(() => document.getElementById('view-files')?.textContent || '');
     await shot(page, 'u10-files');
-    u10 = { listed: /browse-me\.md|qa-ui/.test(filesText), sample: filesText.slice(0, 160), marker };
+    u10 = { listed: /browse-me\.md/.test(filesText), sample: filesText.slice(0, 160), marker, writeStatus: writeResult.status };
   } catch (err) { u10.error = String(err).slice(0, 200); }
   rec('u10', 'agent-written file is browsable in the Files view', LANE,
     u10.listed ? CL.CI : CL.FAIL, `files view checked for the marker filename${u10.error ? ' — ' + u10.error : ''}`, u10);
