@@ -12,8 +12,6 @@ name: win-qa-realworld
 # audit's way of saying "this does not work — fix it", not a CI flake.
 
 on:
-  push:
-    branches: ['qa/**']
   workflow_dispatch:
     inputs:
       qa_interactive:

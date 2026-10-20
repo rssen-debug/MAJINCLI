@@ -582,7 +582,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const route = cfg.resolveModel(ref, 'router');
       const t0 = Date.now();
       try {
-        const r = await complete({ route, job: 'test', messages: [{ role: 'user', content: 'Answer with exactly: OK' }], maxTokens: 16, temperature: 0, retries: 0 });
+        const r = await complete({ route, job: 'test', messages: [{ role: 'user', content: 'Answer with exactly: OK' }], maxTokens: String(ref).startsWith('opencode/') ? 600 : 64, temperature: 0, retries: 0 });
         return json(res, 200, { ok: true, ms: Date.now() - t0, text: String(r.text).slice(0, 60), usage: r.usage });
       } catch (err) {
         const info = err.majin || (await import('../provider/chat.js')).explainError(err, route);
