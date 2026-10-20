@@ -277,8 +277,9 @@ try {
   $p6marker = "MAJIN-P6-" + ([guid]::NewGuid().ToString("N").Substring(0,8))
   $p6win = "MAJIN-P6-FIXTURE-" + (Get-Random)
   $s6 = [Hashtable]::Synchronized(@{ close = $false; shown = $false })
-  $th = New-Object System.Threading.Thread ({
-      param($w,$m,$s)
+  $p6ts = [System.Threading.ParameterizedThreadStart]{
+      param($argv)
+      $w=$argv[0]; $m=$argv[1]; $s=$argv[2]
       Add-Type -AssemblyName System.Windows.Forms
       $form = New-Object System.Windows.Forms.Form
       $form.Text = $w; $form.Name = $m
@@ -295,7 +296,8 @@ try {
       $timer.Add_Tick({ if ($s.close) { $timer.Stop(); $form.Close() } })
       $timer.Start()
       [System.Windows.Forms.Application]::Run($form)
-    })
+    }
+  $th = [System.Threading.Thread]::new($p6ts)
   $th.SetApartmentState([System.Threading.ApartmentState]::STA)
   $th.Start(@($p6win, $p6marker, $s6))
   for ($i=0; $i -lt 40 -and -not $s6.shown; $i++) { Start-Sleep -Milliseconds 250 }
