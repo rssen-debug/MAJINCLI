@@ -1,0 +1,22 @@
+name: Empty-message regression QA
+on:
+  push:
+    branches: [fix/empty-messages-400-20261020]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  provider-regression:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate syntax and regression
+        run: |
+          npm run check
+          node --test test/empty-messages-guard.test.js
