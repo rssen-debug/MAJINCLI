@@ -235,7 +235,7 @@ async function s04(a) { // äkta gränsmätning: opålitlig HOST-rubrik måste v
   };
   const ok = Object.values(checks).every(Boolean);
   return a(ok ? CL.CI : CL.FAIL, ok
-    ? 'äkta gränsen: loopback betrodd ÄR designet (dokumenterat), men en Host-rubrik som säger evil.example vägras utan token — även från samma peer (authOk TRUSTED-check)'
+    ? 'real boundary: loopback trust IS the documented design, but a Host header claiming evil.example is refused without a token — even from the same peer (authOk TRUSTED check)'
     : 'auth boundary surprising', checks);
 }
 async function s05(a) {
