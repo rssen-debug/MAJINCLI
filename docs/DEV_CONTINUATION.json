@@ -31,15 +31,16 @@
     "w4-speculate": "lab shipped off-by-default; measured-win only when confirm settles; waste budget self-closes (runs stays 2 in arithmetic test); 6/6",
     "w5-perf-lab": "A×1.002 B×1.003 (parity, honest); C trade 199ms adaptive vs 133ms legacy; D ranker 68.57->6.01ms @2000 nodes after O(n²)->O(n) fix found BY the lab; 5/5 tests",
     "12A-live-reverify": "2026-10-20 main 24fcd5d: MAJIN_LIVE=1 acceptance-live 3/3 (create+VERIFIED, edit preserving original, lie-detector) — row point now counted in all totals; score stays 81/100 (no manufacture)",
-    "w7-skill-telemetry": "ADOPT: outcome boost (streak>=3 +2, fails>=1 -1) on top of 10x token relevance; pruned-event on maxInPrompt overflow. 7/7 fixture tests."
+    "w7-skill-telemetry": "ADOPT: outcome boost (streak>=3 +2, fails>=1 -1) on top of 10x token relevance; pruned-event on maxInPrompt overflow. 7/7 fixture tests.",
+    "w8-swarm-baseline": "offline A/B: serial cap=1 472ms vs parallel cap=8 72ms = 6.56x median; overlap 0 vs 28(C8,2); parity OK; chain 193ms vs crit 192ms, deps respected. CI-reproducible twin of live 3E (4.29x)."
   },
   "implementationScore": 81,
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
   "nextAction": "Waves 2-7 shipped (v0.9.10..v0.9.15). Remaining: owner Windows gates (5D/11A/11C/12B/12C), UI-agent merge (8A-8D), second free-provider key (1E/6C). v1.0.0 readiness review per §12 once Windows gates land.",
-  "version": "0.9.15",
-  "milestone": "v0.9.15 SHIPPED (release-gate verified online: 4 assets, exe sha256 match) — 493p/510t/0f/17s; radar items #3/#5 ADOPTED, #2 DEFERRED",
-  "branch": "main (post-merge)",
+  "version": "0.9.16",
+  "milestone": "WAVE 8: offline swarm-vs-baseline bench (6.56x median, parity OK, chain deps respected); 500p/517t/0f/17s",
+  "branch": "feature/w8-swarm-baseline (in PR)",
   "decisions": {
     "windows-control-adapter": {
       "decision": "ADOPT raw UIA (System.Windows.Automation, zero deps) as control API; two-tier text I/O (patterns first, SendInput fallback + read-back); DEFER FlaUI (same bridge, .NET dep, fixes nothing measured); DEFER UFO/OmniParser vision lane (cost + OmniParser license caution stands)",

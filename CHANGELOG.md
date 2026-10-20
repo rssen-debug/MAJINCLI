@@ -12,6 +12,35 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 
 
 
+
+## 2026-10-20 — WAVE 8 (§3): swarm-vs-baseline benchmark, offline + CI-reproducible — v0.9.16
+
+### Added
+- **`scripts/offline-swarm-bench.mjs`** — the deterministic twin of the live 3E bench: both arms
+  run through the SAME `runSwarm` executor, serial (cap=1) = the equivalent single-agent
+  baseline, parallel (cap=N) = MAJIN's parallel path, with seeded artificial latency
+  (mulberry32) so jitter is part of the evidence, not an alibi. Interleaved S/P replicates
+  cancel order effects. Reports median speedup, per-rep overlap-pair counts, logical result
+  parity, failures, and a dependency-chain integrity scenario (3 deep, cap=3) where beating
+  the critical path would prove dependency violation.
+- **`test/w8-swarm-baseline.test.js`** — 7 tests: ≥2.5× parallel speedup floor (measured
+  ~6.5×), overlap 0-vs-maximal, payload parity, chain deps respected + makespan ≥ 85% of
+  critical path, seed reproducibility, CLI evidence + BENCHMARKS.md marker refresh,
+  render/refresh round-trip with no marker loss.
+- **`docs/evidence/swarm-baseline-2026-10-20.json`** + `SWARM-BASELINE:BEGIN/END` section in
+  `BENCHMARKS.md` — auto-refreshed by the CLI, hand-edit guarded.
+
+### Measured (offline, executor-level)
+- fan=8, reps=3, taskMs=60±15: serial 472 ms vs parallel 72 ms → **6.56× median speedup**
+  (theoretical max 6.25× at perfect packing), overlap 0/0/0 vs 28/28/28 (= C(8,2) full),
+  parity OK, 0 failures; chain 193 ms vs critical path 192 ms, deps respected.
+- Scope honesty: this measures executor parallelism. Model quality/cost evidence remains in
+  `scripts/live-bench.mjs` (live 3E: 4.29× median).
+
+### Verified
+Full local suite: **517 tests, 500 pass, 0 fail, 17 skip**.
+
+
 ## 2026-10-20 — WAVE 7: radar closure — skill outcome telemetry routes, truncation tells the truth — v0.9.15
 
 ### Changed
