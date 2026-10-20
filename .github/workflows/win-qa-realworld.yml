@@ -102,6 +102,29 @@ jobs:
             if (-not $done) { throw "could not pull $m in 3 attempts" }
           }
           & ollama-win\ollama.exe list
+
+          # R2 (real-world audit): on a hosted 4-vCPU/CPU-only runner the FIRST
+          # completion per model can take minutes — load every model ONCE with a
+          # 1-token warm-up and a generous timeout, holding it warm in memory.
+          # Without this every chat-scenario hits cold-load and times out.
+          foreach ($m in @('llama3.2:1b','qwen2.5:0.5b','smollm2:135m')) {
+            $mm = $m.Trim()
+            if (-not $mm) { continue }
+            "warming $mm (num_predict=1, keep_alive=10m)…"
+            $body = @{ model = $mm; messages = @(@{ role = 'user'; content = 'ok' }); stream = $false; keep_alive = '10m'; options = @{ num_predict = 1 } } | ConvertTo-Json -Depth 5
+            $w0 = [DateTime]::UtcNow
+            for ($try = 1; $try -le 3; $try++) {
+              try {
+                $null = Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/chat' -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 420
+                "  warm OK after $([int](([DateTime]::UtcNow) - $w0).TotalSeconds)s"
+                break
+              } catch {
+                "  warm attempt $try failed: $($_.Exception.Message)"
+                if ($try -eq 3) { throw "warm-up failed for $mm after 3 attempts" }
+                Start-Sleep 5
+              }
+            }
+          }
         env:
           QA_MODELS: ${{ github.event.inputs.models }}
 

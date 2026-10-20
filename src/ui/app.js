@@ -342,7 +342,13 @@ async function send(text) {
       }
     }
     if (!S.completed && !S.failed && !S.stopRequested) err('The response stream ended before completion.');
-    if (S.cur && !S.failed && !S.stopRequested) closeAnswer({ text: S.curBody, meta: {} });
+    /* u03 (real-world audit 2026-10-20): a completed stream with an EMPTY body
+       must never silently remove the spinner — say the truth instead. */
+    if (S.cur && !S.failed && !S.stopRequested) {
+      if (!String(S.curBody || '').trim()) {
+        err('The model finished without saying anything (empty reply). Test the provider in the Providers card, then try again.');
+      } else closeAnswer({ text: S.curBody, meta: {} });
+    }
   } catch (e) {
     if (e.name !== 'AbortError') err('connection lost: ' + e.message);
     else {

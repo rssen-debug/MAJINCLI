@@ -317,6 +317,10 @@ export class Agent {
         if (disk.length) history = disk.map((m) => ({ role: m.role, content: m.content }));
       }
       if (!Array.isArray(history)) history = [];
+      /* R4 (s16/s23 real-world audit 2026-10-20): the user line lands on disk
+         IMMEDIATELY — not after a successful turn. An aborted/timed-out turn
+         used to leave ZERO history, so a graceful restart looked like data loss. */
+      appendHistory(session, { role: 'user', content: input, source });
       /* handoff/checkpoint injiceras en gång: ny modell får mål+plan+framsteg */
       const handoffData = handoff && handoff.plan ? { goal: handoff.goal || null, plan: handoff.plan, from: handoff.from || null, to: handoff.to || null } : this.consumeHandoff(session);
       const topBlock = this.handoffBlock(handoffData);
@@ -347,7 +351,7 @@ export class Agent {
             ]
               .filter(Boolean)
               .join('\n');
-            appendHistory(session, { role: 'user', content: input, source });
+            /* user line already journaled at turn start (R4) */
             appendHistory(session, { role: 'assistant', content: text, fastPath: true });
             this.memory?.event?.('config', { summary: intent.notes.join(', ') });
             emit({ type: 'answer', text, fastPath: true });
@@ -415,7 +419,7 @@ export class Agent {
                 '',
                 ...m.textSummary,
               ].join('\n');
-              appendHistory(session, { role: 'user', content: input, source });
+              /* user line already journaled at turn start (R4) */
               appendHistory(session, { role: 'assistant', content: text, mission: true });
               this.memory?.event?.('mission', { summary: `${m.okCount}/${m.nodes}: ${String(input).slice(0, 140)}` });
               emit({ type: 'answer', text, mission: true });
@@ -501,7 +505,7 @@ export class Agent {
       }
 
       /* 5) historik, minne, färdighet */
-      appendHistory(session, { role: 'user', content: input, source, job: decision.job });
+      /* user line already journaled at turn start (R4) */
       appendHistory(session, { role: 'assistant', content: finalText, steps: res.steps, tools: res.toolLog.length });
       if (cfg.get('memory.auto') && toolsUsed) {
         this.memory?.event?.('turn', { summary: firstLine(input), tools: [...new Set(res.toolLog.map((t) => t.tool))].slice(0, 8).join(','), ok: !res.error });

@@ -108,7 +108,14 @@ function topIndex(s, ch) {
 export function toSchema(params, run = null) {
   const properties = {};
   const required = [];
-  const trulyRequired = run ? requiredFromRun(run) : null;
+  /* BUNDLE-PROOF (R1, real-world audit 2026-10-20): required-ness is derived
+     ONLY from the declaration markers (? / (optional) / default: / valfritt…).
+     run.toString() survives neither bundling nor native code — the installed
+     exe reported nonsense required-lists (shell.run → [], fs.write → append).
+     requiredFromRun stays exported for diagnostics/tests of the SOURCE shape
+     but is never consulted here. `run` remains an accepted (ignored) argument
+     so existing def() calls compile unchanged. */
+  void run;
   for (const [k, v] of Object.entries(params)) {
     if (typeof v === 'string') {
       const m = /^(\w+)(\?)?:\s*(.+?)(?:\s+\[(.+)\])?$/s.exec(v.trim());
@@ -116,10 +123,10 @@ export function toSchema(params, run = null) {
       properties[k] = { type, description: (m?.[3] || v).trim() };
       if (m?.[4]) properties[k].enum = m[4].split('|').map((x) => x.trim());
       const optional = m?.[2] === '?' || /\?\s*:|\(valfritt\)|\(optional\)|\boptional\b|default:|standard:|endast om|om det anges|valfritt/i.test(v);
-      if (!optional && (!trulyRequired || trulyRequired.includes(k))) required.push(k);
+      if (!optional) required.push(k);
     } else {
       properties[k] = v;
-      if (!v.optional && (!trulyRequired || trulyRequired.includes(k))) required.push(k);
+      if (v.required === true || (v.optional !== true && v.required !== false)) required.push(k);
     }
   }
   return { type: 'object', properties, required: required.filter(Boolean), additionalProperties: false };

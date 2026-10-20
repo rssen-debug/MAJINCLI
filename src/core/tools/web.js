@@ -109,7 +109,7 @@ export const webTools = [
     group: 'web',
     risk: 'read',
     desc: 'Search the web. No API key needed (duckduckgo/bing fallback). Returns title, url and snippet.',
-    params: { query: 'string: what to look for', count: 'number: results to return (default 8)', engine: 'string: auto | duckduckgo | bing | searxng | brave [auto|duckduckgo|bing|searxng|brave]' },
+    params: { query: 'string: what to look for', count: 'number: results to return (default: 8)', engine: 'string: auto | duckduckgo | bing | searxng | brave. optional (default: auto) [auto|duckduckgo|bing|searxng|brave]' },
     examples: ['web.search({query:"pe file format data directories"})'],
     async run({ query, count = 8, engine = 'auto' }, ctx) {
       const key = `search:${engine}:${query}`;
@@ -145,11 +145,11 @@ export const webTools = [
     desc: 'Fetch a URL as clean text (or json/raw). Use for docs, APIs and pages. Follows redirects, size-capped.',
     params: {
       url: 'string: http(s) address',
-      extract: 'string: text | html | json | raw [text|html|json|raw]',
-      maxChars: 'number: max characters in the response (default 24000)',
-      method: 'string: GET | POST | PUT | DELETE [GET|POST|PUT|DELETE]',
-      headers: 'object: extra headers',
-      body: 'string: request body for POST/PUT',
+      extract: 'string: text | html | json | raw. optional (default: text) [text|html|json|raw]',
+      maxChars: 'number: max characters in the response (default: 24000)',
+      method: 'string: GET | POST | PUT | DELETE. optional (default: GET) [GET|POST|PUT|DELETE]',
+      headers: 'object: extra headers (optional)',
+      body: 'string: request body for POST/PUT (optional)',
     },
     examples: ['web.fetch({url:"https://api.deepseek.com/models"})'],
         required: ['url'],
@@ -188,7 +188,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     group: 'web',
     risk: 'write',
     desc: 'Download a file into the workspace (samples, archives, documents). Executables require an approval — an agent should not run something by accident.',
-    params: { url: 'string: address', path: 'string: target file (default under uploads/)', sha256: 'string: expected hash, verified when given' },
+    params: { url: 'string: address', path: 'string: target file (default: under uploads/)', sha256: 'string: expected hash, verified when given (optional)' },
     async run({ url, path: p, sha256 }, ctx) {
       if (!/^https?:\/\//i.test(url)) throw new Error('url must be http(s)');
       const name = p || path.join('downloads', path.basename(new URL(url).pathname) || 'file.bin');
@@ -221,7 +221,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     group: 'web',
     risk: 'exec',
     desc: 'Open a URL in a browser window MAJIN drives (Chrome or Edge on this machine). One window per task; capped fleet. Use browser.read/click/fill/shot next.',
-    params: { url: 'string: http(s) address', headless: 'boolean: no visible window (default true)' },
+    params: { url: 'string: http(s) address', headless: 'boolean: no visible window (default: true)' },
     examples: ['browser.open({url:"https://example.com"})'],
     async run({ url, headless = true }, ctx) {
       const session = ctx.session || 'default';

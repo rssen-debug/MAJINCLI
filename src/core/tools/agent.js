@@ -12,9 +12,9 @@ export const agentTools = [
     risk: 'read',
     desc: 'Write and update the visible work list for the session. Use it for more than 3 steps; the UI shows it live.',
     params: {
-      items: 'array: [{"text":"do this","status":"todo|doing|done|blocked"}]',
-      mode: 'string: replace | merge [replace|merge]',
-      note: 'string: briefly why the plan looks like this',
+      items: 'array: [{"text":"do this","status":"todo|doing|done|blocked"}] (optional)',
+      mode: 'string: replace | merge [replace|merge] (optional)',
+      note: 'string: briefly why the plan looks like this (optional)',
     },
     async run({ items = [], mode = 'replace', note }, ctx) {
       const prev = mode === 'merge' ? ctx.plan || ctx.getPlan?.() || [] : [];
@@ -39,8 +39,8 @@ export const agentTools = [
     risk: 'read',
     desc: 'Send a sub-problem to a subagent with its own step budget (it sees your tools but not your history). Use it for parallel digging — e.g. "analyse these 3 files".',
     params: {
-      tasks: 'array: [{"task":"beskriv uppgiften","job":"code|re|tasks|research","maxSteps":12}]',
-      parallel: 'boolean: run them all at once (default true)',
+      tasks: 'array: [{"task":"beskriv uppgiften","job":"code|re|tasks|research","maxSteps":12}] (optional)',
+      parallel: 'boolean: run them all at once (default true) (optional)',
     },
     examples: ['agent.delegate({tasks:[{task:"triage a.exe",job:"re"},{task:"triage b.exe",job:"re"}]})'],
     async run({ tasks = [], parallel = true }, ctx) {
@@ -68,7 +68,7 @@ export const agentTools = [
     group: 'agent',
     risk: 'read',
     desc: 'Run an extra Mixture-of-Agents round on a sub-problem (several models in parallel + an aggregator). Use for hard decisions, not for everything.',
-    params: { question: 'string: the sub-question', context: 'string: the background it needs', width: 'number: how many references (default: config)' },
+    params: { question: 'string: the sub-question', context: 'string: the background it needs (optional)', width: 'number: how many references (default: config)' },
     async run({ question, context, width }, ctx) {
       const { run: moaRun } = await import('../moa.js');
       const res = await moaRun({ cfg: ctx.cfg, question: String(question), context: context ? [{ role: 'system', content: String(context).slice(0, 6000) }] : [], job: ctx.cfg.get('routing.auto') === false ? 'analysis' : 'analysis', forceWidth: width ? Number(width) : undefined, emit: ctx.emit });
@@ -85,7 +85,7 @@ export const agentTools = [
     group: 'agent',
     risk: 'read',
     desc: 'Answer a pending confirmation in the UI (approve/deny). Only when the user explicitly told you to.',
-    params: { id: 'string: approval id', approved: 'boolean: approve?', note: 'string: why' },
+    params: { id: 'string: approval id', approved: 'boolean: approve?', note: 'string: why (optional)' },
     async run({ id, approved, note }, ctx) {
       const { approvals } = await import('../guard.js');
       const ok = approvals.respond(String(id), Boolean(approved), note);

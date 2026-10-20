@@ -71,8 +71,8 @@ export const jobTools = [
     risk: 'read',
     params: {
       query: 'string: search words, e.g. "webbutvecklare stockholm" or "python"',
-      limit: 'number: max results (default 8, max 25, optional)',
-      includeSeen: 'boolean: also list jobs already in the pipeline (default false, optional)',
+      limit: 'number: max results (default: 8, max 25, optional)',
+      includeSeen: 'boolean: also list jobs already in the pipeline (default: false, optional)',
     },
     required: ['query'],
     run: async ({ query, limit = 8, includeSeen = false }) => {
@@ -108,7 +108,7 @@ export const jobTools = [
     desc: 'Score every pipeline application with status "found" against the saved CV; those at/above minScore move to "matched" with the match report attached as evidence. Needs a CV (jobs.cv.set first).',
     risk: 'read',
     params: {
-      minScore: 'number: 0..1 where at/above counts as matched (default 0.4, optional)',
+      minScore: 'number: 0..1 where at/above counts as matched (default: 0.4, optional)',
     },
     run: async ({ minScore = 0.4 }) => {
       const cv = await loadCv();
@@ -217,7 +217,7 @@ export const jobTools = [
     group: 'jobs',
     desc: 'Show the saved CV summary: length, recognized skills, when it was saved. (The full text is yours — ask and it answers with the whole thing.)',
     risk: 'read',
-    params: { full: 'boolean: return the entire CV text (default false, optional)' },
+    params: { full: 'boolean: return the entire CV text (default: false, optional)' },
     run: async ({ full = false }) => {
       const cv = await loadCv();
       if (!cv) return { ok: false, error: { code: 'no_cv', message: 'there is no CV saved yet', hint: 'jobs.cv.set with your CV text or {file: "cv.txt"}' } };
@@ -246,7 +246,7 @@ export const jobTools = [
       github: 'string: your github/portfolio url (optional)',
       website: 'string: your website (optional)',
       coverLetter: 'string: cover letter text for the message field (optional)',
-      headless: 'boolean: run the browser headless (default true, optional)',
+      headless: 'boolean: run the browser headless (default: true, optional)',
     },
     required: ['fp'],
     run: async ({ fp, headless = true, coverLetter = '', ...answers }, ctx) => {

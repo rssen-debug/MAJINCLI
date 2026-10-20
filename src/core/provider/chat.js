@@ -68,6 +68,16 @@ export function explainError(err, route = {}) {
   if (status === 429 || /rate ?limit|too many requests|quota/i.test(msg)) {
     return out('rate', `${who} is rate limiting us right now. MAJIN waits and retries on its own; if it never clears, lower the Model Chain width in the Providers card.`, { retryable: true });
   }
+  /* s08 (real-world audit 2026-10-20): lokal + timeout ≠ onåbar. Den installerade
+     appen rapporterade "check that this machine has internet" för en lokal
+     ollama som svarat 6 ms tidigare — bara för att första svaret var långsamt. */
+  const localLane = (() => {
+    const u = String(route.endpoint || route.baseUrl || '');
+    return /(\/\/)(localhost|127(\.\d{1,3}){3}|\[?::1\]?|0\.0\.0\.0)[:/]/i.test(u) || /^(ollama|lmstudio)/i.test(raw);
+  })();
+  if (localLane && /timeout|timed? ?out|aborted|abort/i.test(msg + ' ' + cause + ' ' + code)) {
+    return out('slow', `${who} is answering but the reply took too long. The model is probably still loading — a first reply on CPU can take several minutes. This is NOT an internet problem. Try again in a moment; MAJIN keeps your settings.`, { retryable: true });
+  }
   if (NET_RE.test(msg) || NET_RE.test(cause)) {
     return out('unreachable', `I cannot reach ${who}. Check that this machine has internet - or fix the address in the Providers card if you run your own server.`, { retryable: true });
   }

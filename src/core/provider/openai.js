@@ -7,6 +7,17 @@ import { ProviderError } from './chat.js';
 import { bus } from '../log.js';
 
 const TIMEOUT_MS = Number(process.env.MAJIN_LLM_TIMEOUT || 180000);
+/* s08 (real-world audit 2026-10-20): a LOCAL model's first completion can take
+   minutes while it loads on CPU. 180 s is right for gateways, wrong for
+   ollama/lmstudio on the same machine — and a local timeout must never be
+   reported as "check your internet". Local endpoints get a generous default. */
+const TIMEOUT_LOCAL_MS = Number(process.env.MAJIN_LLM_LOCAL_TIMEOUT || 600000);
+export function isLocalRoute(route = {}) {
+  try {
+    const u = new URL(route.endpoint || route.baseUrl || 'http://x.invalid');
+    return /^(localhost|127(\.\d{1,3}){3}|\[?::1\]?|0\.0\.0\.0)$/.test(u.hostname);
+  } catch { return false; }
+}
 
 function headersFor(route) {
   return {
@@ -81,7 +92,7 @@ function body(route, { messages, tools, maxTokens, temperature, stream, toolChoi
 
 async function send(route, payload, { signal } = {}) {
   const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(new Error('timeout')), TIMEOUT_MS);
+  const to = setTimeout(() => ctrl.abort(new Error(isLocalRoute(route) ? 'local model timeout' : 'timeout')), isLocalRoute(route) ? TIMEOUT_LOCAL_MS : TIMEOUT_MS);
   to.unref?.();
   const onAbort = () => ctrl.abort(new Error('aborted'));
   signal?.addEventListener?.('abort', onAbort, { once: true });

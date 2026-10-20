@@ -19,11 +19,13 @@
  *         QA_MODELS   csv models pulled in Ollama (default smollm2:135m)
  *         QA_ONLY     csv of scenario ids to run (default all)
  */
+import { readFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+const PKG_VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url))).version;
 
 const DEFAULT_HOME = process.platform === 'win32'
   ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'MAJIN')
@@ -280,7 +282,7 @@ async function s07(a) {
 }
 /* d01–d03: MAJIN-INDEPENDENT probes straight at Ollama, isolating product-vs-environment. */
 const OLLAMA = 'http://127.0.0.1:11434';
-async function directOllama(payload, timeoutMs = 120000) {
+async function directOllama(payload, timeoutMs = 360000) {
   const t0 = Date.now();
   try {
     const r = await fetch(`${OLLAMA}/v1/chat/completions`, {
@@ -294,7 +296,7 @@ async function directOllama(payload, timeoutMs = 120000) {
   }
 }
 async function d01(a) { // plain completion, no tools — proves the environment works at all
-  const r = await directOllama({ model: CFG.models[0], messages: [{ role: 'user', content: 'Reply with exactly: OK' }], stream: false, max_tokens: 8, temperature: 0 }, 120000);
+  const r = await directOllama({ model: CFG.models[0], messages: [{ role: 'user', content: 'Reply with exactly: OK' }], stream: false, max_tokens: 8, temperature: 0 }, 360000);
   const content = r.json?.choices?.[0]?.message?.content || '';
   const ok = r.status === 200 && content.length > 0;
   return a(ok ? CL.CI : CL.FAIL, ok
@@ -313,8 +315,8 @@ async function d02(a) { // models list via openai-compat
 async function d03(a) { // deliberate NEGATIVE probe: a model without tool capability + tools field
   const noToolModel = (CFG.models.find((m) => /smollm2/i.test(m))) || CFG.models[CFG.models.length - 1];
   const tools = [{ type: 'function', function: { name: 'sys.info', description: 'machine info', parameters: { type: 'object', properties: {} } } }];
-  const r = await directOllama({ model: noToolModel, messages: [{ role: 'user', content: 'Say OK.' }], stream: false, max_tokens: 8, temperature: 0, tools, tool_choice: 'auto' }, 90000);
-  const plain = await directOllama({ model: noToolModel, messages: [{ role: 'user', content: 'Reply with exactly: OK' }], stream: false, max_tokens: 8, temperature: 0 }, 90000);
+  const r = await directOllama({ model: noToolModel, messages: [{ role: 'user', content: 'Say OK.' }], stream: false, max_tokens: 8, temperature: 0, tools, tool_choice: 'auto' }, 360000);
+  const plain = await directOllama({ model: noToolModel, messages: [{ role: 'user', content: 'Reply with exactly: OK' }], stream: false, max_tokens: 8, temperature: 0 }, 360000);
   // classification semantics: model-supports-tools=false is the UNDAMENTAL constraint;
   // if tools are REJECTED by Ollama, any agent that always sends tools unusable with this model — documented product gap (F-T1).
   const toolsRejected = r.status === 400 && /tools/i.test(String(r.body || ''));
@@ -730,7 +732,7 @@ async function main() {
   for (const r of results) counts[r.status] = (counts[r.status] || 0) + 1;
   const report = {
     schema: 'majin.qa-realworld.v1',
-    product: { name: 'MAJIN', version: '1.0.0', artifact: 'published GitHub release v1.0.0', install: 'silent Inno Setup → %LOCALAPPDATA%\\Programs\\MAJIN' },
+    product: { name: 'MAJIN', version: PKG_VERSION, artifact: 'published GitHub release v1.0.0', install: 'silent Inno Setup → %LOCALAPPDATA%\\Programs\\MAJIN' },
     env: {
       runner: process.env.GITHUB_ACTIONS ? 'github-hosted windows-latest (Session 0 service)' : os.type() + ' ' + os.release(),
       os: `${os.type()} ${os.release()}`,

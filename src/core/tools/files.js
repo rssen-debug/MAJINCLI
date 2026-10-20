@@ -71,7 +71,7 @@ export const fileTools = [
     group: 'files',
     risk: 'read',
     desc: 'List a directory: names, sizes, dates. Use `kind` to get only executables or only folders.',
-    params: { path: 'string: folder to list (workspace-relative or absolute)' },
+    params: { path: 'string: folder to list (workspace-relative or absolute) (optional)' },
     examples: ['fs.list({path:"downloads"})'],
     async run({ path: p = '.' }, ctx) {
       const { abs } = resolveIn(ctx, p, { allowEmpty: true });
@@ -98,7 +98,7 @@ export const fileTools = [
     group: 'files',
     risk: 'read',
     desc: 'Read a file. Returns numbered lines (or a hex dump for binary files) plus entropy and a file hash when it is binary.',
-    params: { path: 'string: file to read', maxBytes: 'number: how much to read (default 200000)', mode: 'string: auto | text | hex | strings [auto|text|hex|strings]' },
+    params: { path: 'string: file to read', maxBytes: 'number: how much to read (default: 200000)', mode: 'string: auto | text | hex | strings, optional (default: auto) [auto|text|hex|strings]' },
     async run({ path: p, maxBytes = 200000, mode = 'auto' }, ctx) {
       const { abs } = resolveIn(ctx, p);
       const cap = ctx.cfg.get('tools.files.maxReadBytes') || 4000000;
@@ -137,7 +137,7 @@ export const fileTools = [
     group: 'files',
     risk: 'write',
     desc: 'Write a file (missing folders are created). Overwrites — for small edits use fs.patch.',
-    params: { path: 'string: target file', content: 'string: the full file content', append: 'boolean: append instead of overwriting' },
+    params: { path: 'string: target file', content: 'string: the full file content', append: 'boolean: append instead of overwriting (optional)' },
     async run({ path: p, content = '', append = false }, ctx) {
       const { abs } = resolveIn(ctx, p);
       return locked(abs, ctx.session, async () => {
@@ -159,7 +159,7 @@ export const fileTools = [
     params: {
       path: 'string: file',
       edits: 'array: [{"find":"old text","replace":"new text"}] — exact match, line boundaries respected',
-      dry: 'boolean: show what would happen without writing',
+      dry: 'boolean: show what would happen without writing (optional)',
     },
     async run({ path: p, edits = [], dry = false }, ctx) {
       const { abs } = resolveIn(ctx, p);
@@ -198,10 +198,10 @@ export const fileTools = [
     params: {
       path: 'string: root to search in (default: workspace)',
       pattern: 'string: regex (javascript), or a plain word when regex:false',
-      glob: 'string: filter file names, e.g. *.ts, *.py, *.dll',
-      ignoreCase: 'boolean: case sensitive? default true = insensitive',
-      maxFiles: 'number: maximum files with hits (default 60)',
-      regex: 'boolean: treat the pattern as regex (default true)',
+      glob: 'string: filter file names, e.g. *.ts, *.py, *.dll (optional)',
+      ignoreCase: 'boolean: case sensitive? optional (default: true = insensitive)',
+      maxFiles: 'number: maximum files with hits (default: 60)',
+      regex: 'boolean: treat the pattern as regex (default true) (optional)',
     },
     async run({ path: root = '.', pattern = '', glob = '', ignoreCase = true, maxFiles = 60, regex = true }, ctx) {
       const { abs } = resolveIn(ctx, root);
@@ -247,7 +247,7 @@ export const fileTools = [
     group: 'files',
     risk: 'read',
     desc: 'Fast content search in ONE file (or every file under a folder) with context. Good for following flow in logs or source.',
-    params: { path: 'string: file or folder', pattern: 'string: regex or word', context: 'number: lines around each hit (default 2)', limit: 'number: max hits (default 30)' },
+    params: { path: 'string: file or folder', pattern: 'string: regex or word', context: 'number: lines around each hit (default: 2)', limit: 'number: max hits (default: 30)' },
     async run({ path: p, pattern = '', context = 2, limit = 30 }, ctx) {
       const { abs } = resolveIn(ctx, p);
       if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) {
@@ -312,7 +312,7 @@ export const fileTools = [
     group: 'files',
     risk: 'write',
     desc: 'Copy a file or folder (recursive).',
-    params: { from: 'string: source', to: 'string: destination', overwrite: 'boolean: overwrite what exists' },
+    params: { from: 'string: source', to: 'string: destination', overwrite: 'boolean: overwrite what exists (optional)' },
     async run({ from, to, overwrite = false }, ctx) {
       const a = resolveIn(ctx, from);
       const b = resolveIn(ctx, to);
@@ -328,7 +328,7 @@ export const fileTools = [
     group: 'files',
     risk: 'destructive',
     desc: 'Delete a file or folder. Moves to the recycle bin where possible (Win/mac), otherwise permanent. Always goes through the guard.',
-    params: { path: 'string: path', permanent: 'boolean: true = erase now, no recycle bin' },
+    params: { path: 'string: path', permanent: 'boolean: true = erase now, no recycle bin (optional)' },
     async run({ path: p, permanent = false }, ctx) {
       const { abs } = resolveIn(ctx, p, { never: [ctx.cfg.get('workspace'), dirs.root, dirs.memory, dirs.sessions] });
       const st = await fsp.stat(abs);
@@ -384,7 +384,7 @@ export const fileTools = [
     group: 'files',
     risk: 'write',
     desc: 'Pack or unpack with the system tar (built into Windows 10+). Use it to move a folder around or extract an archive.',
-    params: { op: 'string: create | extract [create|extract]', archive: 'string: archive file .tar.gz/.zip', path: 'string: folder or file to work on', cwd: 'string: working directory' },
+    params: { op: 'string: create | extract [create|extract]', archive: 'string: archive file .tar.gz/.zip', path: 'string: folder or file to work on (optional)', cwd: 'string: working directory (optional)' },
     async run({ op, archive, path: p = '.', cwd }, ctx) {
       const { spawnSync } = await import('node:child_process');
       const a = resolveIn(ctx, archive);

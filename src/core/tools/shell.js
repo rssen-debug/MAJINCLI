@@ -114,8 +114,8 @@ export const shellTools = [
     params: {
       command: 'string: command run in the system shell (PowerShell on Windows)',
       cwd: 'string: working directory (optional)',
-      timeoutSec: 'number: seconds before it is killed (default 150)',
-      env: 'object: extra environment variables',
+      timeoutSec: 'number: seconds before it is killed (default: 150)',
+      env: 'object: extra environment variables (optional)',
     },
     examples: ['shell.run({command:"git -C . status -s"})', 'shell.run({command:"Get-Process | sort CPU | select -last 5"})'],
     async run({ command, cwd, timeoutSec = 150, env }, ctx) {
@@ -140,7 +140,7 @@ export const shellTools = [
     group: 'shell',
     risk: 'exec',
     desc: 'Start a long-running job in the background and get an id. Use for servers, watchers, ghidra-headless, captures.',
-    params: { command: 'string: command', name: 'string: label (optional)', cwd: 'string: directory' },
+    params: { command: 'string: command', name: 'string: label (optional)', cwd: 'string: directory (optional)' },
     async run({ command, name, cwd }, ctx) {
       const id = name || `bg-${Date.now().toString(36)}`;
       const dir = cwd ? path.resolve(String(cwd)) : ctx.cfg.get('workspace') || process.cwd();
@@ -169,7 +169,7 @@ export const shellTools = [
     group: 'shell',
     risk: 'read',
     desc: 'List background jobs and their latest output. Use to follow servers and captures.',
-    params: { id: 'string: filter on one job id', tail: 'number: output lines per job (default 30)' },
+    params: { id: 'string: filter on one job id (optional)', tail: 'number: output lines per job (default 30) (optional)' },
     async run({ id = '', tail = 30 }) {
       const list = [...jobs.values()].filter((j) => !id || j.id === id);
       if (!list.length) return { result: 'no background jobs', summary: '0 jobb' };
