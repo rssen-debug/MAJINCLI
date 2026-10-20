@@ -1,5 +1,5 @@
 {
-  "lastVerifiedMain": "e3ac40e",
+  "lastVerifiedMain": "d5c03b8",
   "lastCompletedMilestone": "GODLIKE V4 §7 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
   "currentWorkstream": "GODLIKE V4 WAVE 2 — §5 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
@@ -35,7 +35,7 @@
   "nextAction": "WAVE 4: speculative execution lab (§6, disabled by default + isolated), then perf lab A/B/C/D (§19)",
   "version": "0.9.11",
   "milestone": "WAVE 3: delta memory protocol — revs, delta log, no-op writes, event compaction, injection ledger (local 465p/482t/0f/17s)",
-  "branch": "feature/w3-delta-memory (in PR)",
+  "branch": "main (post-merge)",
   "decisions": {
     "windows-control-adapter": {
       "decision": "ADOPT raw UIA (System.Windows.Automation, zero deps) as control API; two-tier text I/O (patterns first, SendInput fallback + read-back); DEFER FlaUI (same bridge, .NET dep, fixes nothing measured); DEFER UFO/OmniParser vision lane (cost + OmniParser license caution stands)",
