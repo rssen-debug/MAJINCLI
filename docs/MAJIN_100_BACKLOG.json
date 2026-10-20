@@ -178,6 +178,13 @@
       "done": "W9 HEARTBEAT: src/core/heartbeat.js (Heartbeat-klass realtimers/digest/rate/dedupe/cap) + majin.heartbeat-verktyg (1 ny tool, golden 121 till 122 medvetet). V2: bus.sub-wildcards istallet for dead exact-listeners, epoch-cold-dedupe-fix, kanal-leverering via channels/send med arliga 429-felvarden. 7/7 heartbeat + full 613/595/0/18",
       "percent": 52,
       "next": "W11 RESET toolkit eller W4 (browser/search/computer-control-slinga starkare Dar vilket passar Windows-program produktdefinisjonen)"
+    },
+    {
+      "round": 10,
+      "date": "2026-10-20",
+      "done": "PINK CURSOR / COMPUTER USE (host-milio: IMPLEMENTED + OFFLINE-VERIFIERAT, WINDOWS-LANE: NOT TESTED har): computer-use.js OBSERVE-PLAN-ACT-VERIFY-RECOVER-loop ovan pa BEFINTLIGA control.* SendMessage-survivor-lane (inga parallella system) + screen.capture; modelCall-seam = samma family som mission/workerOverride; done-claim refused utan verify-proof; W13 RepeatDetector own the strategy-wall (identiska plan = vägring, forced change); bounded maxSteps + explicit blocked-state med errorCategory (budget|model|stuck...); evidence steps.jsonl per session; ALLOWED_ACTIONS allowlist (inga godtyckliga modell-forstag). pink-cursor.js: verklig WinForms transparent topmost overlay (rosa glod citackel + label) via state.json-file 60ms-poll (inga sockets/deps) + quota/quit/hide/show/move; isWindowsDesktop-honest FORBIDDEN pa icke-Win. cursor.overlay + computer.use verktyg (exec-risk) inkopplade i befintligt registry. Golden 122 till 124 medvetet. 7/7 offline CU-tester + i18n-fix + schema-derivation-fix (default: kolon) + full svit 620/602/0/18",
+      "percent": 55,
+      "next": "Win-runner acceptance for CU-lane (interaktiv session, before/after screenshots, dedupe av CLAUDE-mandat Hal mandatkrav: actual interactive desktop tests) + UI-lager visualisering (Astra ager src/ui, frozen) + W11 RESET"
     }
   ]
 }
