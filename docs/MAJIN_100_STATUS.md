@@ -4,7 +4,9 @@
 
 > Ärlighetsregel: ingen % utan reproducerbart bevis. Gamla COMPLETION_MATRIX.md (100/100 på papper) motsägs av uppmätta artefakter och ersätts av DENNA fil som sanning.
 
-## Total ekvivalent status: **31/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
+## Total ekvivalent status: **31/100 — preliminär, ej reproducerbart härledd**
+
+Siffran är devens uppskattning, **inte ett verifierat poängresultat**: kriterievikter, poäng per acceptanskrav och beräkningsformel saknas. Till dess att dessa finns ska totalpoängen visas som **NOT SCORED (uppskattning 31/100)**. W1:s statiska scanner får inte räknas som W6:s integrationsförmåga.
 
 ## Per-våg (VERIFIED kräver artefakt, INTE bara att koden finns)
 
@@ -34,11 +36,19 @@
 - MAJIN-INTERACTIVE-01 self-hosted runner ONLINE (Windows-PC med desktop) — acceptance-exekvering.
 
 ## Största gap till 100
-1. Multiple hela vågor saknar modul (W1, W2, W3, W5, W6, W9, W10, W12).
+1. Flera hela vågor saknar verifierad implementation (W2, W3, W5, W6, W9, W10, W12). **W1 är implementerad och har fem fixture-tester, men fullständig DoD behöver särskild verifiering.**
 2. Desktop vision (W11) har primitiver men inte task-e2e-loppet.
 3. Modellberoende real-world-svit (11 scenarier) väntar på GLM/OpenCode-lane (utvalt av ägaren, levereras av annan agent — vi krockar inte).
 
 ## Nästa konkreta action
-1. (Pågår) Windows-GLM-acceptance kör av parallell agent pollad till slut + sluttabel 33+12.
-2. Implementera **W1 Absorb** (cli-kommando + capability-map-generator + fixture-distrikt + motoren-verifiering) — eras första hepetsteg som inte kräver Windows-resurses.
+1. Sammanställ 33-scenariomatrisen från faktiska jobbartefakter. Den refererade `qa-artifacts/QA-MATRIX-v4-2026-10-20.md` hittades **inte** på denna branch vid oberoende granskning. Redovisa varje scenarios utfall, denominator och körnings-ID; 20/33 och 25/33 får inte sammanblandas. Run 39474266667 är avslutad med failure, inte pågående. Separat Windows/OpenCode Go-jobb 39479956362 hade tidigare grön acceptance på annat testurval.
+2. **Bygg inte W1 igen.** Verifiera återstående W1-DoD (ursprungligt krav på tre oberoende offline-fixtures och ≥95 % egen verktygskatalog); fortsätt därefter med W2 Research Engine.
 3. Lite totillasd spår keep-on-file: `docs/MAJIN_100_BACKLOG.json` priority-orderad.
+
+## Oberoende evidensgranskning — 2026-10-20
+
+- `src/core/absorb.js` finns och utför statisk analys utan att exekvera främmande repo-kod.
+- `test/absorb.test.js` har fem tester, men använder **en** fixture-generator (`mkFixture`), inte tre oberoende fixture-repositories enligt ursprunglig W1-DoD. Ett riktigt UFO-scan uppges i status, men måste kopplas till en reproducerbar artefakt.
+- `docs/MAJIN_100_BACKLOG.json` innehöll W1 som både genomförd och prioriterad implementation; detta är ett dokumentationsfel, inte bevis för saknad kod.
+- De olika Windows-siffrorna kan avse olika urval; utan en per-scenario-matris går det inte att jämföra dem.
+- Ändringen är en dokumentations- och evidenskorrigering, **inte** ett nytt genomfört Windows-test eller ett ändrat produktbetyg.
