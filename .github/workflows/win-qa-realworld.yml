@@ -53,9 +53,12 @@ jobs:
           # rmSync:ar allt utom bundle-step.cjs/node-sea i dist/ — ett setup.exe
           # byggt FÖRE dör där. Därför: exe först, setup sist.
           node scripts/build-exe.mjs *>&1 | Tee-Object -FilePath build.log
-          node scripts/build-setup.mjs *>&1 | Tee-Object -FilePath setup.log
-          if (-not (Test-Path dist/setup/majin-setup.exe)) { throw "branch build produced no installer — see setup.log/build.log" }
-          Copy-Item dist/setup/majin-setup.exe qa-stage\MAJIN-Setup.exe
+          # MÄTT (run 39422866759): dist/setup/majin-setup.exe är ZIG-laddaren, inte Inno,
+          # och avvisar Inno-flaggor. Konsumentartefakten = build-installer.mjs (Inno).
+          choco install innosetup -y --no-progress | Select-Object -Last 2
+          node scripts/build-installer.mjs *>&1 | Tee-Object -FilePath installer.log
+          if (-not (Test-Path dist/installer/MAJIN-Setup.exe)) { Get-Content installer.log -Tail 20 -ErrorAction SilentlyContinue; throw "branch build produced no Inno installer" }
+          Copy-Item dist/installer/MAJIN-Setup.exe qa-stage\MAJIN-Setup.exe
           $h = (Get-FileHash qa-stage\MAJIN-Setup.exe -Algorithm SHA256).Hash.ToLower()
           Set-Content qa-stage\MAJIN-Setup.exe.sha256 $h
           "branch-built installer sha256=$h ($((Get-Item qa-stage\MAJIN-Setup.exe).Length) bytes) @ $env:GITHUB_SHA"
@@ -83,7 +86,9 @@ jobs:
       - name: Silent Inno install (the consumer path)
         shell: pwsh
         run: |
-          & qa-stage\MAJIN-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART | Out-Null
+          # MÄTT (run 39422866759): Inno startar asynkront — utan -Wait mäts 'missing' direkt.
+          $proc = Start-Process .\qa-stage\MAJIN-Setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LOG=install-silent.log' -Wait -PassThru
+          "installer exit=$($proc.ExitCode)" 
           $exe = "$env:LOCALAPPDATA\Programs\MAJIN\majin-win-x64.exe"
           if (-not (Test-Path $exe)) { $exe = "$env:ProgramFiles\MAJIN\majin-win-x64.exe" }
           if (-not (Test-Path $exe)) { throw "installed exe missing after silent install" }
