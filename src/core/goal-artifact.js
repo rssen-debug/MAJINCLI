@@ -45,6 +45,13 @@ export function inspectRequestedArtifact(input, workspace) {
       if (/\b(?:cta button|button|knapp)\b/i.test(input) && !/<button(?:\s|>)/i.test(data)) missing.push('requested HTML button');
       if (/\b(?:responsive|viewport)\b/i.test(input) && !/<meta\b[^>]*name\s*=\s*["']?viewport/i.test(data)) missing.push('requested viewport meta element');
       if (/\b(?:style element|style tag|<style>)\b/i.test(lower) && !/<style(?:\s|>)/i.test(data)) missing.push('requested embedded <style> element');
+      // A <style> tag that only styles the BODY does not fulfil "styled CTA
+      // button". Require a rule for the button or an inline button style.
+      if (/\bstyled\b.{0,30}\b(?:cta|button)\b/i.test(input) &&
+          !/<button\b[^>]*\bstyle\s*=/i.test(data) &&
+          !/(?:\bbutton(?:\.[\w-]+)?|\.cta|\.btn)\s*(?::[\w-]+)?\s*\{/i.test(data)) {
+        missing.push('requested styled CTA button (missing button CSS rule or inline style)');
+      }
     }
     const exact = /\bEXACTLY\s+(?:"([^"]{1,150})"|'([^']{1,150})'|([A-Za-z0-9_-]{3,150}))/i.exec(input);
     const wanted = exact?.[1] || exact?.[2] || exact?.[3];
