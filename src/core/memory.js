@@ -284,7 +284,7 @@ export class Skills {
               if (i > 0) meta[line.slice(0, i).trim()] = line.slice(i + 1).trim();
             }
           }
-          return { file: f, name: meta.name || f.replace(/\.md$/, ''), when: meta.when || '', tools: meta.tools || '', disabled: Boolean(meta.disabled && !/^false/.test(meta.disabled)), fails: Number(meta.fails) || 0, steps: raw.replace(FRONT, '').trim(), meta };
+          return { file: f, name: meta.name || f.replace(/\.md$/, ''), when: meta.when || '', tools: meta.tools || '', disabled: Boolean(meta.disabled && !/^false/.test(meta.disabled)), fails: Number(meta.fails) || 0, uses: Number(meta.uses) || 0, steps: raw.replace(FRONT, '').trim(), meta };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
     } catch {
@@ -460,7 +460,7 @@ export class Skills {
       `version: ${version}`,
       `updated: ${new Date().toISOString()}`,
     ];
-    for (const k of ['fails', 'streak', 'lastOk', 'lastFail', 'lastFailWhy', 'disabled']) {
+    for (const k of ['fails', 'streak', 'lastOk', 'lastFail', 'lastFailWhy', 'disabled', 'uses', 'lastUsed']) { /* uses/lastUsed: K2-consistent — an edit never erases the visit ledger either */
       if (prevMeta[k] !== undefined) metaLines.push(`${k}: ${prevMeta[k]}`);
       else if (k === 'fails' && version > 1) metaLines.push('fails: 0');
     }
@@ -484,6 +484,27 @@ export class Skills {
     const streak = Number(meta?.streak) || 0;
     const fails = Number(meta?.fails) || 0;
     return (streak >= 3 ? 2 : 0) + (fails >= 1 ? -1 : 0);
+  }
+
+  /* WAVE 10 — skill visit telemetry (user directive). A "visit" is recorded
+     HONESTLY at the moment a skill is actually presented to the agent:
+     (a) injected into the system prompt (ambient), or (b) returned by a
+     deliberate majin.skill action=match lookup. Never incremented speculatively
+     — a visit means the skill was put in front of the model, nothing more,
+     nothing claimed. Stored on DISK (`uses`, `lastUsed`) so two agent
+     processes count the same truth and a crash cannot inflate it. */
+  hit(slugs) {
+    const out = { ok: true, counted: [] };
+    for (const slug of [...new Set(slugs)]) {
+      try {
+        const { meta, steps } = this._readRaw(slug);
+        meta.uses = String((Number(meta.uses) || 0) + 1);
+        meta.lastUsed = new Date().toISOString();
+        this._writeRaw(slug, meta, steps);
+        out.counted.push({ slug, uses: Number(meta.uses) });
+      } catch { /* a missing skill file must never break the turn */ }
+    }
+    return out;
   }
 
   match(text, k = 4) {
@@ -515,7 +536,14 @@ export class Skills {
     if (eligible.length > max) {
       bus.info('skill.pruned', { shown: list.length, eligible: eligible.length, max, hidden: eligible.length - max });
     }
-    return `Learned skills (follow them when they fit):\n${list.map((s) => `- ${s.name} — ${s.when}\n${s.steps.split('\n').slice(0, 12).map((l) => `    ${l}`).join('\n')}`).join('\n')}` + (eligible.length > max ? `\n(${eligible.length - max} more learned skills not shown — see the skills list)` : '');
+    /* WAVE 10: count a visiting exactly for the skills actually shown — the
+       pruned ones were NOT in front of the model and must not inflate. */
+    this.hit(list.map((s) => s.file.replace(/\.md$/, '')));
+    const line = (s) => {
+      const visits = (Number(s.meta?.uses) || 0) + 1; /* +1 = this visit, counted above */
+      return `- ${s.name} — ${s.when} [visited ×${visits}${Number(s.meta?.streak) >= 1 ? ` · streak ${s.meta.streak}` : ''}]\n${s.steps.split('\n').slice(0, 12).map((l) => `    ${l}`).join('\n')}`;
+    };
+    return `Learned skills (follow them when they fit):\n${list.map(line).join('\n')}` + (eligible.length > max ? `\n(${eligible.length - max} more learned skills not shown — see the skills list)` : '');
   }
 }
 

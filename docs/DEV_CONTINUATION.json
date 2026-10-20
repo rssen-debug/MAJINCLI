@@ -39,9 +39,9 @@
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
   "nextAction": "Waves 2-7 shipped (v0.9.10..v0.9.15). Remaining: owner Windows gates (5D/11A/11C/12B/12C), UI-agent merge (8A-8D), second free-provider key (1E/6C). v1.0.0 readiness review per §12 once Windows gates land.",
-  "version": "0.9.17",
-  "milestone": "v0.9.17 SHIPPED (gate-verified: 4 assets, exe sha256 match). URL/path trap class closed tree-wide + w9 guard — 505p/522t/0f/17s",
-  "branch": "main (post-merge)",
+  "version": "0.9.18",
+  "milestone": "WAVE 10: per-skill visit counter (prompt + match surfaces, disk-backed, edit-preserved, agent-visible [visited xN]) — 512p/529t/0f/17s",
+  "branch": "feature/w10-skill-visits (in PR)",
   "decisions": {
     "windows-control-adapter": {
       "decision": "ADOPT raw UIA (System.Windows.Automation, zero deps) as control API; two-tier text I/O (patterns first, SendInput fallback + read-back); DEFER FlaUI (same bridge, .NET dep, fixes nothing measured); DEFER UFO/OmniParser vision lane (cost + OmniParser license caution stands)",

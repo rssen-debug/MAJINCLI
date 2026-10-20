@@ -364,6 +364,9 @@ export const majinTools = [
       }
       if (action === 'match') {
         const hits = s.match(query || '', 5);
+        /* WAVE 10: a deliberate lookup is a visit — count it on disk (by file
+           slug, the same identity prompt() uses). */
+        if (hits.length) s.hit(hits.map((h) => String(h.file).replace(/\.md$/, '')));
         return { result: hits.length ? hits.map((h) => `${h.name} (${h.score}) — ${h.when}`).join('\n') : 'no matching skills', meta: { hits: hits.length }, summary: `${hits.length} match` };
       }
       const list = s.list();
