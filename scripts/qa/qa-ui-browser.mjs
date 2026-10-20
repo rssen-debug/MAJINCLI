@@ -128,13 +128,19 @@ async function main() {
   /* u04 — streaming visuals: scroller grows while generation runs */
   await page.fill('#input', 'Count slowly from 1 to 25, one number per line.');
   await page.click('#send');
-  const growth = [];
-  let lastLen = 0;
+  // Vänta på första icke-invändningspunkt ("varp: invändationer brända sitter"). Mät endast mot den första verkliga längden som är korsbart.
+  let growth = [], lastLen = -1, busyPren = 0;
   const t0grow = Date.now();
-  while (Date.now() - t0grow < 120000) {
-    await page.waitForTimeout(2500);
-    const len = await page.evaluate(() => document.getElementById('scroller')?.textContent?.length || 0);
-    if (len !== lastLen) { growth.push(len); lastLen = len; }
+  while (Date.now() - t0grow < 180000) {
+    await page.waitForTimeout(2200);
+    const m = await page.evaluate(() => ({
+      len: document.getElementById('scroller')?.textContent?.length || 0,
+      busy: Boolean(document.getElementById('send')?.classList?.contains('busy') || document.getElementById('input')?.disabled),
+      lastMsg: (document.querySelector('.msg:last-of-type')?.textContent || '').length,
+    }));
+    if (m.len <= 100) { busyPren += 1; }
+    if (m.len !== lastLen) { growth.push(m.len); lastLen = m.len; }
+    if (growth.length >= 3 && !m.busy) break;
     if (growth.length >= 4) break;
   }
   await shot(page, 'u04-streaming');
