@@ -164,9 +164,9 @@ await caseRun('04', 'build-website',
   'Build a single-file HTML landing page in ' + siteName +
   ' with a heading, a styled CTA button, a responsive viewport meta tag and a CSS style element. Actually save the file.',
   ['fs.write','fs.read'], () => { const s = read(siteName);
-    const checks = [['html',/<html/i],['button',/<button/i],['style',/<style/i],['viewport',/viewport/i]];
+    const checks = [['html',/<html/i],['heading',/<h[1-6]/i],['button',/<button/i],['style',/<style/i],['viewport',/viewport/i],
+      ['button CSS rule or inline style',/(?:\bbutton(?:\.[\w-]+)?|\.cta|\.btn)\s*(?::[\w-]+)?\s*\{|<button\b[^>]*\bstyle\s*=/i]];
     const missing = checks.filter(([,re]) => !re.test(s)).map(([name]) => name);
-    if (s.length <= 300) missing.push('length <= 300');
     return { ok: missing.length === 0, reason: 'target_exists=' + has(siteName) +
       ', bytes=' + Buffer.byteLength(s) + ', missing=[' + missing.join(',') + ']' }; });
 const agentName = 'my-agent-' + stamp + '.mjs';
