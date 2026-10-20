@@ -22,10 +22,10 @@ import { flowsTools } from './flows.js';
 import { channelTools } from './channels.js';
 import { heartbeatTools } from './heartbeat.js';
 import { computerTools } from './computer.js';
-import { resetTools } from './reset.js';import { auditTools } from './audit.js';import { memorySyncTools } from './memory-sync.js';
+import { resetTools } from './reset.js';import { auditTools } from './audit.js';import { memorySyncTools } from './memory-sync.js';import { learnTools } from './learn.js';
 import { approvals } from '../guard.js';
 
-export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...reTools, ...majinTools, ...agentTools, ...jobTools, ...marketingTools, ...githubTools, ...tradingTools, ...metaTools, ...winControlTools, ...researchTools, ...execTools, ...flowsTools, ...channelTools, ...heartbeatTools, ...computerTools, ...resetTools, ...auditTools, ...memorySyncTools];
+export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...reTools, ...majinTools, ...agentTools, ...jobTools, ...marketingTools, ...githubTools, ...tradingTools, ...metaTools, ...winControlTools, ...researchTools, ...execTools, ...flowsTools, ...channelTools, ...heartbeatTools, ...computerTools, ...resetTools, ...auditTools, ...memorySyncTools, ...learnTools];
 
 export function buildRegistry(ctx) {
   if (!ctx.approvals) ctx.approvals = approvals;

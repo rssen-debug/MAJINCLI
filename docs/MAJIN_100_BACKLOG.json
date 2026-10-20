@@ -105,7 +105,7 @@
       "id": "W10-learning-loop",
       "wave": "W10",
       "desc": "Failure-pattern detection, reusable skill extraction+versioning, quality measurement, regression protection; aldrig själv-rewrites utan approval.",
-      "status": "MISSING"
+      "status": "VERIFIED-CORE: src/core/learn.js (majin-learn/1) ma.learn/ma.verify_lesson/ma.lessons — lessons fods UNVERIFIED, verify krev PROOF (>=20 tecken), re-occurrence efter verify = auto-DEMOTE + proof arkiverat + demotions-honest-metric; 7/7 unit + full svit 672/654/0/18; golden 133"
     },
     {
       "rank": 15,
@@ -220,6 +220,13 @@
       "done": "W9 MEMORY SYNC: src/core/memory-sync.js + memory.sync verktyg; forsta korning bevisade ECHO-TOMBSTONE-buggen (peer re-added en glomd faktum) — resurrect-guard med tidsstampeln løste det och testen hails nu att skip CETECHT raknas, inte tyst; 6/6 unit + golden 130 + full svit",
       "percent": 69,
       "next": "W10-learning-loop eller W8-channels kvarvarande eller win-runner acceptance"
+    },
+    {
+      "round": 16,
+      "date": "2026-10-20",
+      "done": "W10 LEARNING-LOOP: learn.js + 3 verity — auto-demotions vid ater-upprepning av verified-triggert (proof KAN inte sigas halla), verify krev mätnhi, listing sorterar demoted-first (aldrig gom das daliga); 7/7 unit + golden 133 + full svit; en server-golden 130→133 missed fangades av sviten oven fixat",
+      "percent": 71,
+      "next": "W8-channels rest eller win-runner acceptance-pack eller integration: agenten anvander learn.js vid each detected mistake (stake-harder-loop)"
     }
   ]
 }
