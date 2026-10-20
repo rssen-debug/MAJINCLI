@@ -25,9 +25,12 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+const DEFAULT_HOME = process.platform === 'win32'
+  ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'MAJIN')
+  : path.join(os.homedir(), '.majin');
 const CFG = {
   exe: process.env.QA_EXE || '',
-  home: process.env.QA_HOME || path.join(os.homedir(), '.majin'),
+  home: process.env.QA_HOME || DEFAULT_HOME,
   port: Number(process.env.QA_PORT || 8787),
   base: `http://127.0.0.1:${Number(process.env.QA_PORT || 8787)}`,
   evid: path.resolve(process.env.QA_EVID || 'qa-evidence'),
@@ -87,7 +90,10 @@ async function stopServer(hard = false) {
   serverProc = null;
 }
 function tokenFromConfig() {
-  for (const cand of [path.join(CFG.home, 'config.json')]) {
+  const cands = [path.join(CFG.home, 'config.json')];
+  if (process.platform !== 'win32') cands.push(path.join(process.env.LOCALAPPDATA || '', 'MAJIN', 'config.json'));
+  else cands.push(path.join(os.homedir(), '.majin', 'config.json'));
+  for (const cand of cands) {
     try { const j = JSON.parse(fs.readFileSync(cand, 'utf8')); const t = j?.server?.token; if (t && String(t).length >= 8) return String(t); } catch { /* next */ }
   }
   const out = serverLog.stdout.join('');
