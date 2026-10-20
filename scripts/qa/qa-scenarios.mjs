@@ -696,7 +696,20 @@ async function s26(a) {
   return a(ok ? CL.CI : CL.FAIL, ok ? '/api/report contract: 404 for missing, escape refused' : 'report route contract broken', { missing: r404.status, escape: outside.status });
 }
 
+// The hosted Windows service has no guaranteed GUI on the job's own desktop.
+// A control probe there is BLOCKED, not proof that Windows computer control failed.
+function hostedGuiBlocked(a, action) {
+  if (process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_ENVIRONMENT === 'self-hosted') return false;
+  a(CL.BLOCKED, `${action} needs a visible interactive desktop; the hosted service cannot prove that operation`, {
+    runnerEnvironment: process.env.RUNNER_ENVIRONMENT || 'github-hosted',
+    sessionName: process.env.SESSIONNAME || null,
+    remedy: 'use runner=self-hosted with a logged-on console desktop',
+  });
+  return true;
+}
+
 async function c03(a) { // control lane THROUGH THE INSTALLED PRODUCT — the user's core question
+  if (hostedGuiBlocked(a, 'control.type')) return;
   const list = await api('POST', '/api/tool', { tool: 'control.list_windows', args: {} });
   if (list.json.ok !== true) return a(CL.FAIL, 'control.list_windows refused by the installed product', list.json);
   // windows enumerate even in Session-0 (service desktop): c01 proves it. Now the real act:
@@ -717,6 +730,7 @@ async function c03(a) { // control lane THROUGH THE INSTALLED PRODUCT — the us
 
 
 async function c04(a) { // BM_CLICK via fragmentet — Run-dialog min OK lyssnar
+  if (hostedGuiBlocked(a, 'control.click_button')) return;
   spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Start-Process rundll32.exe -ArgumentList "shell32,#61"'], { windowsHide: true, timeout: 6000 });
   await sleep(2200);
   const type = await qaApprovedTool('control.type', { window: 'Run', text: 'notepad.exe' });
@@ -747,11 +761,20 @@ async function c02(a) {
   const saneRun = spawnSync('powershell.exe', ['-NoProfile', '-Command', '"SESSIONNAME=" + $env:SESSIONNAME + "; CONSOLE=" + ([Environment]::UserInteractive)'], { encoding: 'utf8', timeout: 15000 });
   const userInteractive = /CONSOLE=True/i.test(String(saneRun.stdout || ''));
   const claimedInteractive = process.env.QA_INTERACTIVE === 'true';
-  if (claimedInteractive && userInteractive) {
-    return a(CL.CI, 'interactive desktop VERIFIED (session measured UserInteractive=true + operator flag set) — c02-ready UI lanes unlocked on a real interactive runner', { session: s.slice(0, 300) });
+  const isSelfHosted = process.env.RUNNER_ENVIRONMENT === 'self-hosted';
+  const serviceSession = /^(services?|service-0)$/i.test(String(process.env.SESSIONNAME || ''));
+  const activeConsole = /(?:^|\\n)\\s*>?console\\s+\\S+\\s+\\d+\\s+Active/i.test(s);
+  const verified = claimedInteractive && isSelfHosted && userInteractive && activeConsole && !serviceSession;
+  if (verified) {
+    return a(CL.CI, 'real logged-on console verified: self-hosted runner, active session and UserInteractive', {
+      session: s.slice(0, 300), sessionName: process.env.SESSIONNAME || null,
+    });
   }
-  if (claimedInteractive && !userInteractive) {
-    return a(CL.BLOCKED, 'operator claimed qa_interactive=true but the session measured NON-interactive (UserInteractive=false) — refuse to lie about the surface; the runner was registered as a service, not a console session', { userInteractive, claimedInteractive });
+  if (claimedInteractive) {
+    return a(CL.BLOCKED, 'qa_interactive flag is insufficient without actual self-hosted interactive-console evidence', {
+      claimedInteractive, isSelfHosted, userInteractive, activeConsole, serviceSession,
+      runnerEnvironment: process.env.RUNNER_ENVIRONMENT || null,
+    });
   }
   if (process.env.GITHUB_ACTIONS === 'true' && !userInteractive) {
     return a(CL.BLOCKED, 'no interactive desktop in GitHub-hosted CI session (Session 0). Win32 GUI automation of the installed desktop GUI requires a self-hosted interactive runner.', {
