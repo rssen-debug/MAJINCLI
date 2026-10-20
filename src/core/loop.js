@@ -1,3 +1,4 @@
+import { withTimeout, RepeatDetector, TurnClock } from './watchdog.js';
 /**
  * MAJIN — verktygsslingan.
  * Samma loop för huvudagenten och subagenter. Stegvisa beslut:
@@ -45,7 +46,7 @@ export function budgetGate({ cfg, usageCtx = null, route, tally = null }) {
   return null;
 }
 
-export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = () => {}, signal, maxSteps, usage, ctx, allowTools = true, label = 'agent', providerErrorCap = 4, providerRetries = null }) {
+export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = () => {}, signal, maxSteps, usage, ctx, allowTools = true, label = 'agent', providerErrorCap = 4, providerRetries = null, modelCall = null }) {
   const agent = cfg.get('agent') || {};
   const limit = Number(maxSteps) || agent.maxSteps || 40;
   const toolLog = [];
@@ -57,8 +58,24 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
   let brief = messages.find((m) => m.role === 'system' && String(m.content).startsWith('ARBETSMINNESBRIEF'))?.content || '';
   const tally = { input: 0, output: 0, costUsd: 0 };
   const turnRoutes = new Map(); // stepJob -> route pinned for this turn
+  /* W13 never-stuck machinery: per-tool hard timeout + repeat-loop detector + turn time-box. */
+  const wdToolTimeoutMs = Math.max(1000, Number(cfg.get('agent.toolTimeoutSec') || 300) * 1000);
+  const wdTurnMaxMs = Math.max(250, Number(cfg.get('agent.maxTurnSec') || 1800) * 1000);
+  const wdDetect = new RepeatDetector(Math.max(2, Number(cfg.get('agent.maxRepeatCalls') || 3)));
+  const wdClock = new TurnClock();
+  let wdRepeatBlocked = false;
 
   while (steps < limit) {
+    const wdBox = wdClock.over(wdTurnMaxMs);
+    if (wdBox.over) {
+      bus.warn('loop.turn_timeout', { label, steps, elapsedMs: wdBox.elapsedMs, wdTurnMaxMs });
+      onEvent({ type: 'turn_timeout', label, steps, elapsedMs: wdBox.elapsedMs, limitMs: wdTurnMaxMs });
+      return { text: answer || '(time-boxed turn)', steps, toolLog, usage: tally, escalated, stopReason: 'turn_timeout', blocked: 'the turn exceeded its time box — split the work or raise agent.maxTurnSec deliberately' };
+    }
+    if (wdRepeatBlocked) {
+      bus.warn('loop.repeat_block', { label, steps });
+      return { text: answer || '(blocked: repeated identical tool call — see toolLog)', steps, toolLog, usage: tally, escalated, stopReason: 'repeat_block', blocked: 'no progress: identical tool call repeated >= maxRepeatCalls' };
+    }
     if (signal?.aborted) {
       bus.warn('loop.aborted', { label, steps });
       return { text: answer || '(avbruten)', steps, toolLog, usage: tally, aborted: true, escalated };
@@ -88,7 +105,11 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     onEvent({ type: 'step', label, step: steps, of: limit, job: stepJob, model: route.ref, escalated, toolsSent: sentTools.length, toolChars: sentTools.reduce((a, t) => a + t.description.length + JSON.stringify(t.parameters).length, 0) });
 
     let res;
-    try {
+    if (typeof modelCall === 'function') {
+      /* test/offline seam (same spirit as mission workerOverride): the fake
+         model is caller-injected; live paths always go through complete(). */
+      res = await modelCall({ messages, stepJob, step: steps, tools: sentTools });
+    } else try {
       res = await complete({
         route,
         job: `${label}:${stepJob}`,
@@ -151,7 +172,18 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     const runOne = async (c) => {
       const args = safeParse(c.argsJson);
       onEvent({ type: 'tool_begin', label, step: steps, callId: c.id, name: c.name });
-      const out = await registry.exec(c.name, args, { ...ctx, session: ctx?.session ?? 'desktop', step: steps, readOnly: Boolean(ctx?.readOnly) });
+      const rep = wdDetect.hit(c.name, args);
+      let out;
+      if (rep.repeat) {
+        out = { ok: false, ms: 0, error: { code: 'repeat_loop', message: `same call "${c.name}" repeated ${rep.count}x with identical args — stopped, never silently retried (change approach)`, key: rep.key } };
+        wdRepeatBlocked = true;
+      } else {
+        try {
+          out = await withTimeout(registry.exec(c.name, args, { ...ctx, session: ctx?.session ?? 'desktop', step: steps, readOnly: Boolean(ctx?.readOnly) }), { ms: wdToolTimeoutMs, label: `tool ${c.name}` });
+        } catch (werr) {
+          out = { ok: false, ms: wdToolTimeoutMs, error: { code: werr.code === 'tool_timeout' ? 'tool_timeout' : werr.code || 'tool_error', message: werr.message } };
+        }
+      }
       // args följer med i loggen: utan dem är en spårning värdelös som träningsdata
       // (och trådhistoriken kan inte återskapa *varför* verktyget kördes).
       return { id: c.id, name: c.name, args, out };

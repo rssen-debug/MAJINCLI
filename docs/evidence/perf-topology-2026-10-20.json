@@ -1,38 +1,38 @@
 {
-  "stamp": "2026-10-20T20:53:03.406Z",
+  "stamp": "2026-10-20T21:03:42.981Z",
   "scale": 0.4,
   "runs": 3,
   "scenarios": {
     "A": {
       "name": "wide fan-out (8 indep, cap 2)",
       "cpMedianMs": 140,
-      "legacyMedianMs": 141,
-      "ratio": 0.994
+      "legacyMedianMs": 140,
+      "ratio": 1.001
     },
     "B": {
       "name": "deep chain + 6 shorts (cap 2)",
-      "cpMedianMs": 218,
+      "cpMedianMs": 217,
       "legacyMedianMs": 217,
-      "ratio": 1.004
+      "ratio": 1.002
     },
     "C": {
       "name": "11× est-overrun (est 10, actual ~110, cap 3)",
       "adaptive": {
-        "wallMs": 178,
+        "wallMs": 177,
         "contractionEvents": 2,
         "capReduced": true
       },
       "legacy": {
-        "wallMs": 88,
+        "wallMs": 89,
         "contractionEvents": 0
       },
       "tradeNote": "adaptive buys spawn-frugality ON A BROKEN MODEL at wall-clock cost — reported as a trade, never a speedup"
     },
     "D": {
       "name": "ranker on 2 000 nodes + 200-node pass-through grid",
-      "rank2000Ms": 4,
+      "rank2000Ms": 3.37,
       "ranksComputed": 2000,
-      "grid200WallMs": 10
+      "grid200WallMs": 14
     }
   }
 }

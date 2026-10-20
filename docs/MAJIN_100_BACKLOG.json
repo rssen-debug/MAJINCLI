@@ -164,6 +164,13 @@
       "done": "W8 CHANNEL EXPANSION (outbound-delen): channels/send.js (5 kanaler, shared post-helper med abort-timeout) + channel.send-verktyg med dryRun-preview-lage + https-only + HMAC for webhooks + i18n fix-uppgard (utrutade svenska litteraler ur mina nya files) + 8/8 tester + golden uppdatering 120→121 (medvetet) + full svit 599/583/0/16",
       "percent": 46,
       "next": "W13 NEVER-STUCK (watchdogs + bounded loops + cancellation + stalled-aP) eller W9 (heartbeat/cron/turn-continuation dar W13 är baken)"
+    },
+    {
+      "round": 8,
+      "date": "2026-10-20",
+      "done": "W13 NEVER-STUCK: watchdog.js (withTimeout hard racetimed kill; RepeatDetector name+args-key N>=maxRepeatCalls gate; StallTracker bump-organized; TurnClock; ApprovalWatch stadieovergangarna active-stalled-timed_out akeylard map-purge) + loop.js-integration: per-verktyg 300s-default hart-timeout + repeat_block-stopReason + turn_time-us (maxTurnSec 1800 default via TurnClock i huvudloopen) + modelCall==exec-seam (parality med mission workerOverride). EN unref-bugg -ofuddad: unref'd tool-timeout-timer lurade node:test-runner 'cancelledByParent' - ref'd morality (self-clearing pa bada grenar). 7/7 watchdog-tester (hanging-promise <1s bounded, repeat_block att verkligen bara 3 korningar sedan berglätang, turn_timeout elapsed<3000ms pa 250ms box, okallning kan modellen fortfortuoro en final). Full svit 606/588/0/18; golden 121 unchanged",
+      "percent": 49,
+      "next": "W9 HEARTBEAT (agent.alert heartbeat cron pa TurnClock-stall-detekten + notify for warnings) eller W11 Reset (dry-run-reset/sekvenser + Win-integration)"
     }
   ]
 }
