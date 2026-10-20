@@ -74,7 +74,7 @@
       "id": "W11-desktop-vision-delta",
       "wave": "W11",
       "desc": "Desktop screenshot-intake + a11y-tree + active window id + full uppgifts-e2e på MAJIN-INTERACTIVE-01 (open-app→inspect→act→state-change→task done→evidence).",
-      "status": "PARTIAL-VERIFIED-DEL"
+      "status": "VERIFIED-CORE: Heartbeat via bus.sub (wildcard-matching egen logik - bus.on matchar bara exakt-strings) + ingest-dedupe (epoch-cold-bug vid start fixad) + queue-cap 50 + rate-limit min-gap med explicit held + desktop-only honest (aldrig latsas-sand nar kanaler saknas) + kanal-fel ytsas i delivery.results + log/state pa disk + majin.heartbeat-verktyg. 7/7 heartbeat-tester + full svit 613/595/0/18. KVARSTAR: desktop-binding via event-bridgen krock-verifieras via server-routen vid UI-expansion"
     },
     {
       "rank": 11,
@@ -171,6 +171,13 @@
       "done": "W13 NEVER-STUCK: watchdog.js (withTimeout hard racetimed kill; RepeatDetector name+args-key N>=maxRepeatCalls gate; StallTracker bump-organized; TurnClock; ApprovalWatch stadieovergangarna active-stalled-timed_out akeylard map-purge) + loop.js-integration: per-verktyg 300s-default hart-timeout + repeat_block-stopReason + turn_time-us (maxTurnSec 1800 default via TurnClock i huvudloopen) + modelCall==exec-seam (parality med mission workerOverride). EN unref-bugg -ofuddad: unref'd tool-timeout-timer lurade node:test-runner 'cancelledByParent' - ref'd morality (self-clearing pa bada grenar). 7/7 watchdog-tester (hanging-promise <1s bounded, repeat_block att verkligen bara 3 korningar sedan berglätang, turn_timeout elapsed<3000ms pa 250ms box, okallning kan modellen fortfortuoro en final). Full svit 606/588/0/18; golden 121 unchanged",
       "percent": 49,
       "next": "W9 HEARTBEAT (agent.alert heartbeat cron pa TurnClock-stall-detekten + notify for warnings) eller W11 Reset (dry-run-reset/sekvenser + Win-integration)"
+    },
+    {
+      "round": 9,
+      "date": "2026-10-20",
+      "done": "W9 HEARTBEAT: src/core/heartbeat.js (Heartbeat-klass realtimers/digest/rate/dedupe/cap) + majin.heartbeat-verktyg (1 ny tool, golden 121 till 122 medvetet). V2: bus.sub-wildcards istallet for dead exact-listeners, epoch-cold-dedupe-fix, kanal-leverering via channels/send med arliga 429-felvarden. 7/7 heartbeat + full 613/595/0/18",
+      "percent": 52,
+      "next": "W11 RESET toolkit eller W4 (browser/search/computer-control-slinga starkare Dar vilket passar Windows-program produktdefinisjonen)"
     }
   ]
 }

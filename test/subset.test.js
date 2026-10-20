@@ -29,7 +29,7 @@ async function mkrt(subsetOn, limit = 12) {
 test('standard är oförändrad: alla scheman skickas när flaggan är av', async () => {
   const rt = await mkrt(false);
   const sys = rt.agent.systemPrompt({ session: 's1', decision: { job: 'tasks', confidence: 1 }, turnPlan: {}, readOnly: false });
-  assert.match(sys, /TOOLS: all 121 are always on/, 'prompten ska fortfarande deklarera alla verktyg');
+  assert.match(sys, /TOOLS: all 122 are always on/, 'prompten ska fortfarande deklarera alla verktyg');
   // loop-sidans kontrakt: utan subset-names i ctx kan hämtaren ge hela synliga ytan
   assert.equal(rt.registry.schemas().length, rt.registry.list().length);
   await rt.shutdown();

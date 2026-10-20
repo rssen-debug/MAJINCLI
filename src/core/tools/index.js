@@ -20,9 +20,10 @@ import { researchTools } from './research.js';
 import { execTools } from './exec.js';
 import { flowsTools } from './flows.js';
 import { channelTools } from './channels.js';
+import { heartbeatTools } from './heartbeat.js';
 import { approvals } from '../guard.js';
 
-export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...reTools, ...majinTools, ...agentTools, ...jobTools, ...marketingTools, ...githubTools, ...tradingTools, ...metaTools, ...winControlTools, ...researchTools, ...execTools, ...flowsTools, ...channelTools];
+export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...reTools, ...majinTools, ...agentTools, ...jobTools, ...marketingTools, ...githubTools, ...tradingTools, ...metaTools, ...winControlTools, ...researchTools, ...execTools, ...flowsTools, ...channelTools, ...heartbeatTools];
 
 export function buildRegistry(ctx) {
   if (!ctx.approvals) ctx.approvals = approvals;
