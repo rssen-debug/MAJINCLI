@@ -1,0 +1,134 @@
+{
+  "asOf": "2026-10-20",
+  "branch": "fix/realworld-repairs",
+  "principle": "verifiera före implementereser; aldrig papper-rör som färdig",
+  "priority": [
+    {
+      "rank": 1,
+      "id": "qa-glm-acceptance-closeout",
+      "wave": "metaspår",
+      "desc": "Hämta slutresultaten från den interaktiva/GLM-lane som det (Astra) driver; härma 33/12-tabellen in i status-matrisen.",
+      "blocker": "väntar på run 39474266667",
+      "evidence": "qa-artifacts/ + docs/evidence/"
+    },
+    {
+      "rank": 2,
+      "id": "W1-absorb",
+      "wave": "W1",
+      "desc": "'majin absorb <repo>': machine-readable capability map + integration report; verifikation mot MAJIN:s egt verktygskatalog; inga fullföljde-absorptions-påståenden.",
+      "test": "npm test test/absorb.test.js + fixture-repo",
+      "status": "IMPLEMENTERAD + basverifierad (5 tester ✓, riktigt repo-scan microsoft/UFO ✓: 851 filer, MIT, modulvärme uppmätt)"
+    },
+    {
+      "rank": 3,
+      "id": "W2-research-engine",
+      "wave": "W2",
+      "desc": "PLAN→SEARCH→FETCH→EXTRACT→CROSS-CHECK→SYNTHESIZE→VERIFY + citation ledger, contradiction detection, reliability märkning.",
+      "test": "test/research.test.js + real-topic fixture (offline-mocks for unit, real-net for integration)",
+      "status": "MISSING"
+    },
+    {
+      "rank": 4,
+      "id": "W3-execution-backends",
+      "wave": "W3",
+      "desc": "Gemensamt execution-interface: local host + docker + ssh + isolated; resource limits, cancellation, logs, artifacts; ärliga fel (aldrig silent-host-fallback).",
+      "status": "MISSING"
+    },
+    {
+      "rank": 5,
+      "id": "W7-mission-contract-acceptance",
+      "wave": "W7",
+      "desc": "Mission engine GOAL→PLAN→EXECUTE→VERIFY→REPAIR→COMPLETE med artifact/outcome-contract per mission + independent verification; bounded retries; blocked-state.",
+      "status": "INCOMPLETE"
+    },
+    {
+      "rank": 6,
+      "id": "W5-event-flows",
+      "wave": "W5",
+      "desc": "Trigger-typer: schedule, file change, webhook, email, github-event; durable queue, dedupe, retry limits, history, authorization före extern kommunikation.",
+      "status": "MISSING"
+    },
+    {
+      "rank": 7,
+      "id": "W4-teams-upgrade",
+      "wave": "W4",
+      "desc": "Persistent roles, shared task-scoped memory, delegated work, budgets, checkpoints, restart-recovery on swarm.js basen.",
+      "status": "INCOMPLETE"
+    },
+    {
+      "rank": 8,
+      "id": "W8-channels-discord-slack-matrix-email",
+      "wave": "W8",
+      "desc": "Lägg till saknade adappters (reuse-existing), verify send/receive per kanal före production-ready-märkning.",
+      "status": "PARTIAL"
+    },
+    {
+      "rank": 9,
+      "id": "W13-never-stuck-metasvit",
+      "wave": "W13",
+      "desc": "Injected-failure-suite (knappar som försvinner, layouts ändrast, crash, timeout) + recovery metrics (success rate, time, interventions).",
+      "status": "PARTIAL"
+    },
+    {
+      "rank": 10,
+      "id": "W11-desktop-vision-delta",
+      "wave": "W11",
+      "desc": "Desktop screenshot-intake + a11y-tree + active window id + full uppgifts-e2e på MAJIN-INTERACTIVE-01 (open-app→inspect→act→state-change→task done→evidence).",
+      "status": "PARTIAL-VERIFIED-DEL"
+    },
+    {
+      "rank": 11,
+      "id": "W12-pink-cursor",
+      "wave": "W12",
+      "desc": "Native Windows overlay (utan src/ui-röring), click-through, smooth movement, click-highlight, pause/resume/stop, human-takeover-yield, crash-recovery.",
+      "status": "MISSING"
+    },
+    {
+      "rank": 12,
+      "id": "W6-power-transfer",
+      "wave": "W6",
+      "desc": "DISCOVER→ANALYZE→DESIGN→IMPLEMENT→TEST→REVIEW→APPROVE→INSTALL; license check; sandboxed test-execution; owner approval before install.",
+      "depends": [
+        "W1-absorb"
+      ],
+      "status": "MISSING"
+    },
+    {
+      "rank": 13,
+      "id": "W9-memory-sync",
+      "wave": "W9",
+      "desc": "Opt-in device sync: separation user/project/agent, kryptering, conflict detection, recovery history, export/delete.",
+      "status": "MISSING"
+    },
+    {
+      "rank": 14,
+      "id": "W10-learning-loop",
+      "wave": "W10",
+      "desc": "Failure-pattern detection, reusable skill extraction+versioning, quality measurement, regression protection; aldrig själv-rewrites utan approval.",
+      "status": "MISSING"
+    },
+    {
+      "rank": 15,
+      "id": "W14-benchmark",
+      "wave": "W14",
+      "desc": "Rollback-verifiering, reproducible-builds-gate, competitive benchmark (goalbaserad, mätbar, aldrig ojämförad).",
+      "status": "PARTIAL"
+    }
+  ],
+  "roundLog": [
+    {
+      "round": 1,
+      "date": "2026-10-20",
+      "done": "Gap-audit + STATUS.md + BACKLOG.json etablerade; regression på Astra-sammankoppling 542/0; v4-matris (20✓/5✗/11 modell-SKIP) dokumenterad",
+      "percent": 28,
+      "next": "W1-absorb implementation eller GLM-acceptance-closeout beroende på vilken som bekräftar först"
+    },
+    {
+      "round": 2,
+      "date": "2026-10-20",
+      "done": "W1 absorb implementerad: src/core/absorb.js (statisk radar, licens-detektion, dep-parse, modul-signatur-scan, gap-analys mot ALL_TOOLS) + CLI 'majin absorb <repo>' + test/absorb.test.js (5 gröna) + i18n-fix (English-only policy) + full regression 565/547/0/18 ✓ + riktigt bevis: UFO-scannad",
+      "percent": 31,
+      "next": "W2 research-engine (PLAN→SEARCH→FETCH→EXTRACT→CROSS-CHECK→SYNTHESIZE→VERIFY) eller GLM-acceptance-closeout om run 39474266667 landat"
+    }
+  ]
+}
