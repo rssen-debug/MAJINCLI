@@ -295,6 +295,8 @@
     pane.textContent = '';
     pane.tabIndex = -1;
     pane.setAttribute('aria-modal', 'true');
+    // u08 (measured twice, windows-latest Aurora lane): an open dialog MUST honor Escape.
+    pane.onkeydown = (e) => { if (e.key === 'Escape') { e.preventDefault(); closePicker(); } };
     pane.focus();
     fillPicker(pane, ticket);
   }
