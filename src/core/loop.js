@@ -56,7 +56,7 @@ export function expandDiscoveredTools(current, toolResult, registry, { readOnly 
 export function requiresRealAction(input) {
   const t = String(input || '').trim();
   if (!t || /^(?:hur|how|why|varför|what|vad|explain|förklara|tell me|berätta|visa hur|can you explain)\b/i.test(t)) return false;
-  const request = /^(?:(?:please|snälla|kan du|could you|jag vill att du|i want you to|du ska)\s+)?(?:create|write|save|edit|modify|delete|remove|build|make|download|open|take|search|apply|skapa|skriv|spara|redigera|ändra|radera|ta bort|bygg|öppna|ladda ner|sök|ansök|ta en)\b/i;
+  const request = /^(?:(?:please|actually|faktiskt|snälla|kan du|could you|jag vill att du|i want you to|du ska)\s+)*(?:create|write|save|edit|modify|delete|remove|build|make|download|open|take|search|apply|skapa|skriv|spara|redigera|ändra|radera|ta bort|bygg|öppna|ladda ner|sök|ansök|ta en)\b/i;
   const artifact = /(?:\b[\w.-]+\.(?:txt|md|json|js|mjs|jsx|ts|tsx|html|css|py|csv|png|jpg|pdf|docx|sol)\b|\bfile\b|\bfil(?:en|er)?\b|\bwebb(?:sida|plats)\b|\bwebsite\b|\bbrowser\b|\bwebbläsare\b|\bscreenshot\b|\bskärmbild\b|\bjobs?\b|\bjobb\b|\bagent\b)/i;
   // Real-world prompts also start with "Actually use fs.write to create..." or
   // "Gör ...", not always a bare English verb. Avoid silently disabling the
