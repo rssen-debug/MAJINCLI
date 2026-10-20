@@ -1,0 +1,26 @@
+name: OpenCode Go GLM live Windows acceptance
+on:
+  push:
+    branches: [qa/full-release-gate-20261020]
+    paths:
+      - scripts/qa-opencode-go-glm.mjs
+      - .github/workflows/opencode-go-glm-live-qa.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  glm-live-windows:
+    runs-on: [self-hosted, windows, interactive-desktop, majin-qa]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Real OpenCode Go GLM request (no credentials or response logged)
+        shell: powershell
+        env:
+          MAJIN_QA_OPENCODE_GO_KEY: ${{ secrets.MAJIN_QA_OPENCODE_GO_KEY }}
+        run: |
+          node scripts/qa-opencode-go-glm.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
