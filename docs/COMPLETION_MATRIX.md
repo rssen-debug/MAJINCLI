@@ -13,7 +13,7 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 2. Grand Architect | 12 | 12 |
 | 3. HYPERSWARM | 10 | 10 |
 | 4. Reality Engine | 16 | 16 |
-| 5. Browser & Computer Use | 10 | 8 |
+| 5. Browser & Computer Use | 10 | 10 |
 | 6. GENESIS ZERO & Cost | 9 | 6 |
 | 7. Skill Compiler | 8 | 8 |
 | 8. UI & Imagination | 8 | 0 |
@@ -63,14 +63,14 @@ in code, on current `main`. UNVERIFIED = 0. A regression revokes previously earn
 | 4C | 4 | Retry/budget/timeout/approval limits respected | One policy object `missionLimits(cfg)` (defaults in config.js: repairRounds 1 / timeoutMs 0 / tokenBudget 0, hard clamps 0..3 / 3600000 / 1e9) enforced in CODE in `runMission`: budgetedWorker charges real measured usage per worker and aborts the swarm past the cap (verify→repair included), AbortController+deadline reach runSwarm, repair loop is `rounds < repairRounds` and fails HONESTLY with markers — `[LIMIT:RETRY]` / `[LIMIT:BUDGET]` / `[LIMIT:TIMEOUT]` named in the mission summary, return object carries `limits`/`limitsHit`/`usedTokens`. `test/mission.test.js` t13–t15 (15/15): permanently-lying worker runs EXACTLY 1+1+2 worker-calls (counted via mock `calls`, not asserted from prose), token cap 40 stops worker #2 from ever starting, 120 ms wall budget cuts a ~1.7 s mock stream. Discrimination: budget gate off → t14 red; rounds +96 → t13 red; deadline/signal pass-through removed → t15 red (bench proof the caps are free when idle: identical 24399 tokens / 22 calls 7/7). Side-effect approvals remain governed by guard/exec policy (tests in test/guard*). | mock | PR #41 | PASS | 2026-10-19 |
 | 4D | 4 | Real cross-domain tasks with independently checked results | `test/domains.test.js` 5/5 (command/json_topkeys/url_contains + E2E repair-on-lies); `test/domains-live.test.js` 2/2 with MAJIN_LIVE=1 (real https google fetch + real `node --version` exit + LIVE longcat session wrote mission-live.json {answer:42, task:…}, VERIFIED sha, tokens measured live) | bench + opencode live | main `497cde3` | PASS | 2026-10-19 |
 
-## DEL 5 — Browser & Computer Use (8/10)
+## DEL 5 — Browser & Computer Use (10/10)
 
 | ID | Pts | Required observable behavior | Evidence + reproduction | Env/model | Commit | Status | Verified |
 |---|---:|---|---|---|---|---|---|
 | 5A | 2 | Forms and interactive controls | `test/browser-domains.live.test.js` 5A green in exe-CI (Windows Edge): text/select/radio/consent posted + observed AT THE SERVER: {"name":"Siri Testsson","mail":"siri@test.dev","stack":"node","level":"senior","consent":"on"}; thanks-words proven | live browser (CI) | main `c6b4ce3` | PASS | 2026-10-19 |
 | 5B | 2 | Dynamic navigation, tabs, iframes | `test/browser-domains.live.test.js` 5B green in exe-CI (Windows Edge): hash-rendered content proven, target=_blank followed via engine meta openedNewTab:true, iframe host + straight-path verification | live browser (CI) | main `c6b4ce3` | PASS | 2026-10-19 |
 | 5C | 2 | Observation and bounded recovery (no blind click loops) | `node --test test/browser.test.js` — LoopJournal stops 3 identical actions cold; slot pool queues; session isolation | node, no browser | main line | PASS | 2026-10-18 |
-| 5D | 2 | Real Windows computer-use scenarios | — | needs Windows runner | — | UNVERIFIED | 2026-10-18 |
+| 5D | 2 | Real Windows computer-use scenarios | windows-latest CI run 39383493742 (probe v2.6): real shell Run-dialog window+Edit located, WM_SETTEXT(marker)→WM_GETTEXT read-back MATCH, cleared, closed; negative control honest; UIA pattern-degeneracy in CI session forensically proven (all Pane/zero patterns → Win32 message lane is the working computer-use path). Same run: 11A/11C/12B verdict all-green (install/first-run/update-preservation/kill-recovery). `scripts/win-uia-probe.ps1`, `docs/evidence/uia-probe-run4-v26-p8-PASS-39383493742.json` | OK | win-uia-probe P8 | PASS | 2026-10-20 |
 | 5E | 2 | Multi-step real website workflow without unverified completion claims | same suite 5E green: search→product→cart→checkout→confirm, every step cross-checked against SERVER state (cart=[{sku:X900,qty:1}], /order POST recorded) — never page-text-only | live browser (CI) | main `c6b4ce3` | PASS | 2026-10-19 |
 
 ## DEL 6 — GENESIS ZERO & Cost (6/9)
