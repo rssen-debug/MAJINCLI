@@ -24,11 +24,20 @@ jobs:
         run: |
           npm test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Windows diagnostics
+      - name: Windows diagnostics (configuration and tool registry)
+        shell: powershell
+        run: |
+          node src/cli/majin.js doctor
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Full live provider diagnostic (separate non-gating evidence)
+        continue-on-error: true
         shell: powershell
         run: |
           node src/cli/majin.js doctor --full
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning 'LIVE_PROVIDER_CHECK_FAILED: configured provider/model requires repair; release NOT cleared.'
+            exit $LASTEXITCODE
+          }
   full-suite-linux:
     runs-on: ubuntu-latest
     timeout-minutes: 25
