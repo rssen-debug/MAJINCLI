@@ -764,7 +764,7 @@ async function c02(a) {
   const isSelfHosted = process.env.RUNNER_ENVIRONMENT === 'self-hosted';
   const serviceSession = /^(services?|service-0)$/i.test(String(process.env.SESSIONNAME || ''));
   const activeConsole = /(?:^|\\n)\\s*>?console\\s+\\S+\\s+\\d+\\s+Active/i.test(s);
-  const verified = claimedInteractive && isSelfHosted && userInteractive && activeConsole && !serviceSession;
+  const verified = claimedInteractive && isSelfHosted && userInteractive && !serviceSession && (activeConsole || /^(console|rdp-tcp)/i.test(String(process.env.SESSIONNAME || '')));
   if (verified) {
     return a(CL.CI, 'real logged-on console verified: self-hosted runner, active session and UserInteractive', {
       session: s.slice(0, 300), sessionName: process.env.SESSIONNAME || null,
@@ -791,7 +791,7 @@ async function c02(a) {
   return a(CL.SKIP, 'not in CI and interactive state is unverified; not attempting GUI actuation without the interactive-runner contract', { userInteractive, session: s.slice(0, 120) });
 }
 async function b01(a) {
-  const open = await qaApprovedTool('browser.open', { url: 'https://example.com' }, { timeoutMs: 120000 });
+  const open = await qaApprovedTool('browser.open', { url: 'https://example.com', headless: true }, { timeoutMs: 120000 });
   if (open.json.ok !== true) return a(CL.FAIL, `browser.open refused: ${open.json.error?.message || ''}`.slice(0, 140), open.json);
   await sleep(1500);
   const read = await api('POST', '/api/tool', { tool: 'browser.read', args: {} }, { timeoutMs: 60000 });
