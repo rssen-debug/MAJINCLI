@@ -326,7 +326,7 @@ jobs:
         uses: actions/download-artifact@v4
         with: { name: branch-installer, path: qa-stage }
       - name: Install silently ON THIS REAL DESKTOP (measured)
-        shell: pwsh
+        shell: powershell
         run: |
           $proc = Start-Process .\qa-stage\MAJIN-Setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
           $exe = "$env:LOCALAPPDATA\Programs\MAJIN\majin-win-x64.exe"
@@ -335,13 +335,13 @@ jobs:
           if (-not (Test-Path $exe)) { throw "installed exe missing (exit=$($proc.ExitCode))" }
           "installed at $exe"
       - name: Verify this session IS interactive (honesty gate — c02 ready)
-        shell: pwsh
+        shell: powershell
         run: |
           $b = [Environment]::UserInteractive
           "UserInteractive=$b"
           if (-not $b) { throw "claiming interactive but the session measured non-interactive — runner was started as a service, not via run.cmd in a logged-on desktop" }
       - name: Ollama + models (smallest-first on this real machine)
-        shell: pwsh
+        shell: powershell
         run: |
           $ProgressPreference = 'SilentlyContinue'
           Invoke-WebRequest 'https://github.com/ollama/ollama/releases/download/v0.12.6/ollama-windows-amd64.zip' -OutFile ollama.zip
@@ -353,7 +353,7 @@ jobs:
           & ollama-win\ollama.exe pull smollm2:135m | Out-Default
           & ollama-win\ollama.exe pull qwen2.5:0.5b | Out-Default
       - name: Run interactive scenarios (c02-ready subset + control ops on real desktop)
-        shell: pwsh
+        shell: powershell
         env:
           QA_INTERACTIVE: 'true'
           QA_MODELS: 'qwen2.5:0.5b,smollm2:135m'
