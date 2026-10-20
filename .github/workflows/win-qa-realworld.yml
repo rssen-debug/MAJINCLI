@@ -41,6 +41,10 @@ on:
 permissions:
   contents: read
 
+# Scoped to the one QA branch. A normal PR cannot enqueue an interactive job.
+env:
+  QA_IS_BRANCH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/qa/majin-release-validation-20261020' }}
+
 jobs:
   qa-realworld:
     runs-on: windows-latest
@@ -49,7 +53,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build the installer from THIS ref (branch-build lane)
-        if: github.event.inputs.source == 'branch-build' || (github.event_name == 'push' && 'false' == 'true')
+        if: ${{ github.event.inputs.source == 'branch-build' || env.QA_IS_BRANCH == 'true' }}
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force qa-stage | Out-Null
@@ -70,7 +74,7 @@ jobs:
           "branch-built installer sha256=$h ($((Get-Item qa-stage\MAJIN-Setup.exe).Length) bytes) @ $env:GITHUB_SHA"
 
       - name: Download PUBLISHED v1.0.0 release artifacts (we test what users get)
-        if: github.event.inputs.source != 'branch-build'
+        if: ${{ github.event.inputs.source != 'branch-build' && env.QA_IS_BRANCH != 'true' }}
         shell: pwsh
         run: |
           $rel = 'https://github.com/rssen-debug/MAJINCLI/releases/download/v1.0.0'
@@ -80,7 +84,7 @@ jobs:
           (Get-Item qa-stage\MAJIN-Setup.exe).Length
 
       - name: Share the branch-built installer with the UI lane
-        if: ${{ github.event.inputs.source == 'branch-build' }}
+        if: ${{ github.event.inputs.source == 'branch-build' || env.QA_IS_BRANCH == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: branch-installer
@@ -109,6 +113,7 @@ jobs:
           "installed at $exe ($((Get-Item $exe).Length) bytes)"
 
       - name: Install Ollama for Windows (real local LLM backend)
+        if: env.QA_IS_BRANCH != 'true'
         shell: pwsh
         run: |
           $ProgressPreference = 'SilentlyContinue'
@@ -125,6 +130,7 @@ jobs:
           "ollama pid $($server.Id) up"
 
       - name: Pull small REAL models (1B + 0.5B capable + 135M negative probe)
+        if: env.QA_IS_BRANCH != 'true'
         shell: pwsh
         run: |
           $models = @('llama3.2:1b','qwen2.5:0.5b','smollm2:135m')
@@ -186,6 +192,13 @@ jobs:
         env:
           QA_MODELS: ${{ github.event.inputs.models }}
 
+      - name: Mark hosted audit mechanics-only (models tested on real self-hosted Windows)
+        if: env.QA_IS_BRANCH == 'true'
+        shell: pwsh
+        run: |
+          Set-Content qa-stage\QA_WARM_MODELS 'MECHANICS-ONLY'
+          'Hosted model inference intentionally skipped; real-model acceptance runs on the interactive self-hosted Windows job.'
+
       - name: Run the 29-scenario REAL-WORLD audit against the installed product
         id: engine
         shell: pwsh
@@ -203,7 +216,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         env:
           QA_MODELS_IN: ${{ github.event.inputs.models }}
-          QA_ARTIFACT: ${{ github.event.inputs.source == 'branch-build' && format('branch-build @{0}', github.sha) || format('published GitHub release v1.0.0 ({0})', github.sha) }}
+          QA_ARTIFACT: ${{ (github.event.inputs.source == 'branch-build' || env.QA_IS_BRANCH == 'true') && format('branch-build @{0}', github.sha) || format('published GitHub release v1.0.0 ({0})', github.sha) }}
 
       - name: Step summary (status table into the run page)
         if: always()
@@ -243,6 +256,8 @@ jobs:
           "no FAILED scenarios — lane green"
 
   qa-ui-browser:
+    # Dedicated interactive lane tests the branch with a real desktop and real models.
+    if: ${{ github.event_name != 'push' || github.ref != 'refs/heads/qa/majin-release-validation-20261020' }}
     runs-on: windows-latest
     timeout-minutes: 60
     needs: qa-realworld
@@ -253,7 +268,7 @@ jobs:
           node-version: 22
 
       - name: Download + verify + silent-install the PUBLISHED v1.0.0
-        if: ${{ github.event.inputs.source != 'branch-build' }}
+        if: ${{ github.event.inputs.source != 'branch-build' && env.QA_IS_BRANCH != 'true' }}
         shell: pwsh
         run: |
           $rel = 'https://github.com/rssen-debug/MAJINCLI/releases/download/v1.0.0'
@@ -267,7 +282,7 @@ jobs:
           "installer exit=$($proc.ExitCode)"
 
       - name: Fetch the installer built from THIS ref (branch-build lane)
-        if: ${{ github.event.inputs.source == 'branch-build' }}
+        if: ${{ github.event.inputs.source == 'branch-build' || env.QA_IS_BRANCH == 'true' }}
         uses: actions/download-artifact@v4
         with:
           name: branch-installer
@@ -315,7 +330,7 @@ jobs:
   qa-interactive:
     name: interactive desktop lane (self-hosted runner with real screen)
     needs: qa-realworld
-    if: ${{ always() && github.event.inputs.runner == 'self-hosted' }}
+    if: ${{ always() && (github.event.inputs.runner == 'self-hosted' || env.QA_IS_BRANCH == 'true') }}
     runs-on: [self-hosted, windows, interactive-desktop, majin-qa]
     timeout-minutes: 45
     steps:
