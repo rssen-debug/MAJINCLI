@@ -14,12 +14,12 @@ jobs:
         with:
           node-version: '22'
       - name: W2 fixture regression
-        shell: pwsh
+        shell: powershell
         run: |
           node --test test/research.test.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: W2 live CLI research and evidence
-        shell: pwsh
+        shell: powershell
         env:
           MAJIN_HOME: ${{ runner.temp }}\\majin-w2-live-${{ github.run_id }}
         run: |
