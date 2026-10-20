@@ -318,8 +318,13 @@ async function s06(a) {
   if (String(JSON.stringify(tail.json)).includes('secret-AUDIT-marker-123')) {
     return a(CL.SIM, 'marker already present from previous attempt — audit redaction with other value', {});
   }
-  // 1. configure real Ollama provider (placeholder key per preset)
-  const add = await api('POST', '/api/provider', { preset: 'ollama', models: CFG.models });
+  // OpenCode-Go QA uses the subscription secret only in the isolated QA_HOME.
+  // Never log or write the secret into evidence artifacts.
+  const useGo = process.env.QA_OPENCODE_GO === 'true';
+  if (useGo && !process.env.OPENCODE_API_KEY) return a(CL.FAIL, 'OPENCODE_API_KEY is missing', {});
+  const add = await api('POST', '/api/provider', useGo
+    ? { preset: 'opencode', apiKey: process.env.OPENCODE_API_KEY, models: ['glm-5.3-flash'] }
+    : { preset: 'ollama', models: CFG.models });
   if (!add.json.ok) return a(CL.FAIL, 'provider preset save refused', { resp: add.json });
   // 2. redaction: set a marker key on a scratch provider, then read config back
   await api('POST', '/api/provider', { name: 'auditsecret', kind: 'openai', baseUrl: 'https://audit.invalid', apiKey: 'secret-AUDIT-marker-123', models: ['x'] });
@@ -329,17 +334,19 @@ async function s06(a) {
   return a(!leaked ? CL.CI : CL.FAIL, !leaked ? 'apiProvider key never returns via /api/config (redaction holds)' : 'KEY LEAK in redacted config', { providerSaved: add.json.ok, redactionSample: body.slice(0, 0) });
 }
 async function s07(a) {
+  const useGo = process.env.QA_OPENCODE_GO === 'true';
   const cfg = (await api('GET', '/api/config')).json;
   const routes = cfg?.config?.models?.routes || {};
   const patch = { models: { routes: {} }, moa: { enabled: false, policy: 'off' }, routing: { auto: true } };
   for (const job of Object.keys(routes).length ? Object.keys(routes) : ['chat', 'tools', 'research', 'code', 'analysis', 'aggregator']) {
-    patch.models.routes[job] = `ollama/${CFG.models[0]}`;
+    patch.models.routes[job] = useGo ? 'opencode/glm-5.3-flash' : `ollama/${CFG.models[0]}`;
   }
   const r = await api('PATCH', '/api/config', patch);
   if (!r.json.ok) return a(CL.FAIL, 'route patch rejected', r.json);
   const st = (await api('GET', '/api/state?tools=0')).json;
   const chat = (st?.state?.models?.routes || st?.models?.routes || {})['chat'] || patch.models.routes.chat;
-  return a(CL.CI, `all routes now point at ollama/${CFG.models[0]}`, { routes: patch.models.routes, stateSeen: !!st, chatAfter: chat });
+  const ok = !!r.json.ok && Object.values(patch.models.routes).every((x) => x === (useGo ? 'opencode/glm-5.3-flash' : `ollama/${CFG.models[0]}`));
+  return a(ok ? CL.CI : CL.FAIL, `all requested routes point at ${useGo ? 'OpenCode Go' : 'Ollama'}; observed chat=${chat}`, { routes: patch.models.routes, stateSeen: !!st, chatAfter: chat });
 }
 /* d01–d03: MAJIN-INDEPENDENT probes straight at Ollama, isolating product-vs-environment. */
 const OLLAMA = 'http://127.0.0.1:11434';
@@ -407,18 +414,20 @@ async function d05(a) {
   return a(v === '1.0.0' ? CL.CI : CL.FAIL, `healthz version=${v} (must equal the released 1.0.0)`, { health: h.json });
 }
 async function s08(a) {
-  const r = await api('POST', '/api/provider/test', { ref: `ollama/${CFG.models[0]}` }, { timeoutMs: 240000 });
+  const ref = process.env.QA_OPENCODE_GO === 'true' ? 'opencode/glm-5.3-flash' : `ollama/${CFG.models[0]}`;
+  const r = await api('POST', '/api/provider/test', { ref }, { timeoutMs: 240000 });
   const ok = r.json.ok === true && typeof r.json.text === 'string' && r.json.text.length > 0;
   return a(ok ? CL.CI : CL.FAIL, ok
     ? `provider test got a REAL completion (${r.json.ms}ms): "${String(r.json.text).slice(0, 40)}"`
     : `provider test failed: ${String(r.json.error || '').slice(0, 160)}`, { full: JSON.stringify(r.json).slice(0, 600) });
 }
 async function s09(a) {
-  const r = await api('GET', '/api/models?provider=ollama', undefined, { timeoutMs: 60000 });
+  const useGo = process.env.QA_OPENCODE_GO === 'true';
+  const r = await api('GET', `/api/models?provider=${useGo ? 'opencode' : 'ollama'}`, undefined, { timeoutMs: 60000 });
   const list = r.json.models || r.json.list || [];
   const names = list.map((m) => (typeof m === 'string' ? m : m.id || m.name)).filter(Boolean);
-  const have = CFG.models.every((want) => names.some((n) => String(n).includes(want.split(':')[0])));
-  return a(have ? CL.CI : CL.FAIL, have ? `Ollama discovery returned the pulled models: ${names.slice(0, 6).join(', ')}` : 'model discovery incomplete', { count: names.length, first: names.slice(0, 8) });
+  const have = useGo ? names.includes('glm-5.3-flash') : CFG.models.every((want) => names.some((n) => String(n).includes(want.split(':')[0])));
+  return a(have ? CL.CI : CL.FAIL, have ? `${useGo ? 'OpenCode Go' : 'Ollama'} discovery returned: ${names.slice(0, 6).join(', ')}` : 'model discovery incomplete', { count: names.length, first: names.slice(0, 8) });
 }
 const CHAT_TOKEN_WORD = (id) => `PROMPT-${id.toUpperCase().replace(/[^A-Z0-9]/g, '')}-TOKEN`;
 async function chatExpectToken(a, tokenWord, retries = 2, extra = {}) {
