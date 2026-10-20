@@ -1,5 +1,5 @@
 {
-  "lastVerifiedMain": "f456e74",
+  "lastVerifiedMain": "31979be",
   "lastCompletedMilestone": "GODLIKE V4 §7 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
   "currentWorkstream": "GODLIKE V4 WAVE 2 — §5 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
@@ -23,13 +23,14 @@
     "Perf lab A/B/C/D (§19) once topology variants exist"
   ],
   "experimentResults": {
-    "ratelimit-sim": "8/8 (S1 naive-violation vs S2 zero-violation throughput; sabotage discrimination all three dims)"
+    "ratelimit-sim": "8/8 (S1 naive-violation vs S2 zero-violation throughput; sabotage discrimination all three dims)",
+    "uia-probe-run1": "identifyWindows=PASS, negativeControl=PASS, notepad window-located, text-surface GAP on modern Win11 Notepad (no Edit/Document control). Artifact run 39344950257."
   },
   "implementationScore": 81,
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
-  "nextAction": "Dispatch win-control-poc workflow on main (workflow now on default branch); poll run; fetch uia-probe-result artifact; record ADOPT/DEFER for Windows-control adapter (raw-UIA-first vs FlaUI vs UFO) backed by probe-result.json; then tag v0.9.9 and verify release assets.",
+  "nextAction": "Merge probe-v2 PR (subtree dump + ValuePattern/SendKeys fallback lanes), dispatch run 2 on main, then record FINAL ADOPT/DEFER for the Windows-control adapter backed by both probe artifacts.",
   "version": "0.9.9",
-  "milestone": "Windows-control PoC scaffold (raw UIA probe, dispatch-gated; evidence pending)",
+  "milestone": "Windows-control PoC scaffold shipped + release v0.9.9 SHA-verified; run-1 evidence in docs/evidence/",
   "branch": "main (post-merge)"
 }
