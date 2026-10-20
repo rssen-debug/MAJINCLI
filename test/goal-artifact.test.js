@@ -7,7 +7,7 @@ const home = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-artifact-contract-'));
 process.env.MAJIN_HOME = home;
 const { inspectRequestedArtifact, explicitTarget } = await import('../src/core/goal-artifact.js');
 const { createRuntime } = await import('../src/core/runtime.js');
-const { loop } = await import('../src/core/loop.js');
+const { loop, requiresRealAction } = await import('../src/core/loop.js');
 const workspace = path.join(home, 'workspace');
 fs.mkdirSync(workspace, {recursive:true});
 
@@ -75,4 +75,10 @@ test('a model lying after bounded retries returns INCOMPLETE (never "done")',asy
   assert.equal(res.stopReason,'artifact_contract_failed');
   assert.ok(res.steps<=5);
   await rt.shutdown();
+});
+
+test('explicit tool usage in real model prompts still activates artifact verification',()=>{
+  assert.equal(requiresRealAction('Actually use fs.write to create note-abc.txt containing EXACTLY QA_VALUE.'),true);
+  assert.equal(requiresRealAction('Create site-demo.html with heading and CSS'),true);
+  assert.equal(requiresRealAction('How do I create a file named example.txt?'),false);
 });
