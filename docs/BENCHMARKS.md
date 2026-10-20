@@ -179,9 +179,9 @@ parallelism only** — model quality/latency live in `scripts/live-bench.mjs`.
 
 | scenario | median wall | overlap pairs |
 |---|---:|---:|
-| single-agent baseline (cap=1), 8 tasks | 474 ms | 0/0/0 |
+| single-agent baseline (cap=1), 8 tasks | 476 ms | 0/0/0 |
 | MAJIN parallel (cap=8) | 72 ms | 28/28/28 |
-| **speedup (median)** | **6.58×** | parity OK |
+| **speedup (median)** | **6.61×** | parity OK |
 | dependency chain (3 deep, cap=3) | 193 ms (critical path 192 ms) | deps respected: YES |
 
 Config: fan=8, reps=3, taskMs=60, jitter=15, seed=0x3e. Failures: 0.

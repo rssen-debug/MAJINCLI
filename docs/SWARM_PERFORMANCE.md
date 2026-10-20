@@ -40,7 +40,7 @@ Edge policy flake class (browser launch): 2 events, fixed (bounded retry).
 Provider 429s in this session's work: 0 observed; opencode free quotas held.
 
 <!-- PERFLAB:BEGIN -->
-## WAVE 5 (§19) perf lab A/B/C/D — topology variants (2026-10-20T03:16:06.875Z, scale 0.4, median of 3)
+## WAVE 5 (§19) perf lab A/B/C/D — topology variants (2026-10-20T03:23:36.130Z, scale 0.4, median of 3)
 
 Measured by running the REAL scheduler (`runSwarm`) on synthetic DAGs with declared
 durations (real sleeps). No model calls. Raw JSON: `docs/evidence/perf-topology-2026-10-20.json`.
@@ -48,9 +48,9 @@ durations (real sleeps). No model calls. Raw JSON: `docs/evidence/perf-topology-
 | lab | scenario | variant A | variant B | ratio/finding |
 |---|---|---|---|---|
 | A | wide fan-out (8 indep, cap 2) | CP-first 140 ms | legacy 140 ms | **×1.003** |
-| B | deep chain + 6 shorts (cap 2) | CP-first 218 ms | declaration-order 218 ms | **×1** |
-| C | 11× est-overrun (est 10, actual ~110, cap 3) | adaptive 134 ms (contractions: 1) | legacy 89 ms (always 0) | trade, not speedup: frugality on broken model |
-| D | ranker on 2 000 nodes + 200-node pass-through grid | rank-2000: 3.61 ms | grid-200: 20 ms | overhead guard; ranks computed: 2000 |
+| B | deep chain + 6 shorts (cap 2) | CP-first 217 ms | declaration-order 217 ms | **×1** |
+| C | 11× est-overrun (est 10, actual ~110, cap 3) | adaptive 133 ms (contractions: 1) | legacy 89 ms (always 0) | trade, not speedup: frugality on broken model |
+| D | ranker on 2 000 nodes + 200-node pass-through grid | rank-2000: 3.86 ms | grid-200: 12 ms | overhead guard; ranks computed: 2000 |
 
 Honesty notes: CI timing noise is real — A/B are direction-asserted with wide margins in
 `test/w5-perf-lab.test.js`; C reports a deliberate trade (wall-clock for spawn-frugality);

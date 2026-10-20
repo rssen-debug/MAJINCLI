@@ -40,6 +40,14 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 ### Verified
 Full local suite: **517 tests, 500 pass, 0 fail, 17 skip**.
 
+### Fixed during PR review (CI evidence)
+- **Windows `isCli` trap, self-caught:** `import.meta.url === 'file://'+argv[1]` is false on
+  Windows (`file:///D:/…`) — the bench CLI silently ran nothing and B6 failed on the exe job
+  while Ubuntu stayed green. Fixed with the `fileURLToPath` compare (set-icon.mjs pattern);
+  the same latent trap in `scripts/i18n-check.mjs` (pre-existing) fixed identically. Lesson:
+  a CLI's self-test MUST assert non-empty output — the regex on empty stdout caught what a
+  bare exit-0 check never would.
+
 
 ## 2026-10-20 — WAVE 7: radar closure — skill outcome telemetry routes, truncation tells the truth — v0.9.15
 

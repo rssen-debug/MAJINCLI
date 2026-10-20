@@ -19,6 +19,7 @@
 
    Importable: runOfflineBench({fan, reps, taskMs, jitterMs, seed}) → report. */
 import { performance } from 'node:perf_hooks';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
 import { runSwarm } from '../src/core/swarm.js';
@@ -165,7 +166,11 @@ export function refreshBenchmarks(rep, docPath = path.resolve(import.meta.dirnam
   return md;
 }
 
-const isCli = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+/* isCli the set-icon.mjs way: fileURLToPath comparison — the naive
+   `import.meta.url === 'file://'+argv[1]` is FALSE on Windows (file:///D:/…)
+   and silently runs nothing. Windows CI caught this in WAVE 8 (B6), exactly
+   the class of failure a green-Linux-only badge hides. */
+const isCli = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 if (isCli) {
   const flag = (n, d) => { const a = process.argv.find((x) => x.startsWith(`--${n}=`)); return a ? Number(a.split('=')[1]) : d; };
   const rep = await runOfflineBench({ fan: flag('fan', 8), reps: flag('reps', 3), taskMs: flag('task-ms', 60), jitterMs: flag('jitter', 15), seed: flag('seed', 0x3e) });

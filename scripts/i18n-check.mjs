@@ -123,4 +123,7 @@ export function scan({ quiet = false } = {}) {
   return hits;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) scan();
+/* same cross-platform trap as offline-swarm-bench (WAVE 8): on Windows the
+   naive URL compare is false and the scan silently never runs. */
+import { fileURLToPath } from 'node:url';
+if (process.argv[1] && (await import('node:path')).resolve(process.argv[1]) === (await import('node:path')).resolve(fileURLToPath(import.meta.url))) scan();

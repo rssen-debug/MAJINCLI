@@ -1,5 +1,5 @@
 {
-  "stamp": "2026-10-20T03:16:06.875Z",
+  "stamp": "2026-10-20T03:23:36.130Z",
   "scale": 0.4,
   "runs": 3,
   "scenarios": {
@@ -11,14 +11,14 @@
     },
     "B": {
       "name": "deep chain + 6 shorts (cap 2)",
-      "cpMedianMs": 218,
-      "legacyMedianMs": 218,
+      "cpMedianMs": 217,
+      "legacyMedianMs": 217,
       "ratio": 1
     },
     "C": {
       "name": "11× est-overrun (est 10, actual ~110, cap 3)",
       "adaptive": {
-        "wallMs": 134,
+        "wallMs": 133,
         "contractionEvents": 1,
         "capReduced": true
       },
@@ -30,9 +30,9 @@
     },
     "D": {
       "name": "ranker on 2 000 nodes + 200-node pass-through grid",
-      "rank2000Ms": 3.61,
+      "rank2000Ms": 3.86,
       "ranksComputed": 2000,
-      "grid200WallMs": 20
+      "grid200WallMs": 12
     }
   }
 }
