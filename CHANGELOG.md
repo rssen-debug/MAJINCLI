@@ -13,6 +13,25 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 
 
 
+
+## 2026-10-20 — WAVE 9: cross-platform path hygiene closed + guard test — v0.9.17
+
+### Fixed
+- **`scripts/bump-version.mjs` self-run gate** — last remaining `new URL(import.meta.url).pathname`
+  compare (false on Windows drive letters AND quietly %-encoded) replaced with the canonical
+  `path.resolve(fileURLToPath(import.meta.url))` pattern. Tree-wide audit: this was the final
+  offender after WAVE 8 fixed `offline-swarm-bench.mjs` + `i18n-check.mjs`.
+
+### Added
+- **`test/w9-xplatform-path.test.js`** (5 tests) — the trap class is now a permanent CI failure:
+  banned-pattern scans across `scripts/` + `src/core/` + `src/tools/`, canary that all six
+  self-run CLIs carry a Windows-safe gate, bump-version import-safety, and a guard-sanity check
+  (the scan corpus must stay non-trivial — an empty tree cannot fake green).
+
+### Verified
+WAVE-9 5/5; full suite below in PR evidence; release-gate local checks GREEN.
+
+
 ## 2026-10-20 — WAVE 8 (§3): swarm-vs-baseline benchmark, offline + CI-reproducible — v0.9.16
 
 ### Added
