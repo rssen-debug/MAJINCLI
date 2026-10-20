@@ -1,0 +1,146 @@
+name: win-qa-realworld
+
+# REAL-WORLD AUTONOMOUS QA AUDIT (owner directive 2026-10-20):
+# an independent QA lane that audits the ACTUAL PUBLISHED v1.0.0 product —
+# never the repo code — on real windows-latest runners:
+#   published release → sha256 → silent Inno install → real installed exe →
+#   real local LLM (Ollama smollm2:135m / llama3.2:1b) → 29 honest scenarios →
+#   per-scenario evidence JSON + transcripts → aggregated qa-report.json.
+# Classification contract: everything here is at most VERIFIED_CI (a GitHub
+# hosted runner is a Session-0 service without an interactive desktop).
+# Any FAILED scenario turns the run RED on purpose: red with evidence is the
+# audit's way of saying "this does not work — fix it", not a CI flake.
+
+on:
+  push:
+    branches: ['qa/**']
+  workflow_dispatch:
+    inputs:
+      qa_interactive:
+        description: 'runner has an interactive desktop session (self-hosted)'
+        required: false
+        default: 'false'
+        type: string
+      models:
+        description: 'Ollama models to pull (csv)'
+        required: false
+        default: 'smollm2:135m,llama3.2:1b'
+        type: string
+permissions:
+  contents: read
+
+jobs:
+  qa-realworld:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download PUBLISHED v1.0.0 release artifacts (we test what users get)
+        shell: pwsh
+        run: |
+          $rel = 'https://github.com/rssen-debug/MAJINCLI/releases/download/v1.0.0'
+          New-Item -ItemType Directory -Force qa-stage | Out-Null
+          Invoke-WebRequest "$rel/MAJIN-Setup.exe"        -OutFile qa-stage\MAJIN-Setup.exe
+          Invoke-WebRequest "$rel/MAJIN-Setup.exe.sha256" -OutFile qa-stage\MAJIN-Setup.exe.sha256
+          (Get-Item qa-stage\MAJIN-Setup.exe).Length
+
+      - name: SHA-256 of installer must equal the PUBLISHED hash (no drift)
+        shell: pwsh
+        run: |
+          $raw = (Get-Content qa-stage\MAJIN-Setup.exe.sha256 -Raw).Trim()
+          if ($raw -is [byte[]]) { $raw = [System.Text.Encoding]::UTF8.GetString($raw) }
+          $want = ($raw -split '\s+')[0].ToLower()
+          $have = (Get-FileHash qa-stage\MAJIN-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          "published=$want computed=$have"
+          if ($want -ne $have) { throw "SHA-256 mismatch for the published installer" }
+
+      - name: Silent Inno install (the consumer path)
+        shell: pwsh
+        run: |
+          & qa-stage\MAJIN-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART | Out-Null
+          $exe = "$env:LOCALAPPDATA\Programs\MAJIN\majin-win-x64.exe"
+          if (-not (Test-Path $exe)) { $exe = "$env:ProgramFiles\MAJIN\majin-win-x64.exe" }
+          if (-not (Test-Path $exe)) { throw "installed exe missing after silent install" }
+          "installed at $exe ($((Get-Item $exe).Length) bytes)"
+
+      - name: Install Ollama for Windows (real local LLM backend)
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest 'https://github.com/ollama/ollama/releases/download/v0.12.6/ollama-windows-amd64.zip' -OutFile ollama.zip
+          Expand-Archive -Path ollama.zip -DestinationPath ollama-win -Force
+          echo "$((Get-Location).Path)\ollama-win" | Out-File -FilePath $env:GITHUB_PATH -Append
+          $server = Start-Process -FilePath "$((Get-Location).Path)\ollama-win\ollama.exe" -ArgumentList 'serve' -PassThru -WindowStyle Hidden
+          $t0 = Get-Date
+          $ok = $false
+          while (((Get-Date) - $t0).TotalSeconds -lt 120) {
+            try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 3 -UseBasicParsing; if ($r.StatusCode -eq 200) { $ok = $true; break } } catch { Start-Sleep -Seconds 2 }
+          }
+          if (-not $ok) { throw 'ollama serve never answered /api/tags' }
+          "ollama pid $($server.Id) up"
+
+      - name: Pull small REAL models (135M + 1B — honest hardware floor, still real)
+        shell: pwsh
+        run: |
+          $models = @('smollm2:135m','llama3.2:1b')
+          if ($env:QA_MODELS) { $models = $env:QA_MODELS -split ',' }
+          foreach ($m in $models) { $m = $m.Trim(); "pulling $m…"; & ollama-win\ollama.exe pull $m | Out-Default }
+          & ollama-win\ollama.exe list
+        env:
+          QA_MODELS: ${{ github.event.inputs.models }}
+
+      - name: Run the 29-scenario REAL-WORLD audit against the installed product
+        id: engine
+        shell: pwsh
+        run: |
+          $exe = "$env:LOCALAPPDATA\Programs\MAJIN\majin-win-x64.exe"
+          if (-not (Test-Path $exe)) { $exe = "$env:ProgramFiles\MAJIN\majin-win-x64.exe" }
+          $env:QA_EXE = $exe
+          $env:QA_SETUP = "$PWD\qa-stage\MAJIN-Setup.exe"
+          $env:QA_SETUP_SHA = "$PWD\qa-stage\MAJIN-Setup.exe.sha256"
+          $env:QA_EVID = "$PWD\qa-evidence"
+          $env:QA_MODELS = if ($env:QA_MODELS_IN) { $env:QA_MODELS_IN } else { 'smollm2:135m,llama3.2:1b' }
+          $env:QA_INTERACTIVE = '${{ github.event.inputs.qa_interactive }}'
+          node --version
+          node scripts/qa/qa-scenarios.mjs 2>&1 | Tee-Object -Variable out
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        env:
+          QA_MODELS_IN: ${{ github.event.inputs.models }}
+
+      - name: Step summary (status table into the run page)
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path qa-evidence\qa-report.json) {
+            $rep = Get-Content qa-evidence\qa-report.json -Raw | ConvertFrom-Json
+            "## MAJIN v1.0.0 REAL-WORLD QA (env: GitHub windows-latest, no interactive desktop)" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+            "" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+            "| Status | Count |" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+            "|---|---|" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+            $rep.counts.PSObject.Properties | ForEach-Object { "| $($_.Name) | $($_.Value) |" | Out-File $env:GITHUB_STEP_SUMMARY -Append }
+            "" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+            "| # | Scenario | Lane | Status | Note |" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+            "|---|---|---|---|---|" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+            foreach ($s in $rep.scenarios) { "| $($s.id) | $($s.name) | $($s.lane) | $($s.status) | $(($s.note -replace '\|','\|').Substring(0,[Math]::Min(120,$s.note.Length))) |" | Out-File $env:GITHUB_STEP_SUMMARY -Append }
+          } else { "qa-report.json missing — engine crashed before aggregate" | Out-File $env:GITHUB_STEP_SUMMARY -Append }
+
+      - name: Upload per-scenario evidence + transcripts + server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-realworld-evidence
+          path: qa-evidence/
+          retention-days: 90
+
+      - name: Audit verdict — FAILED scenarios turn the lane RED (by design)
+        shell: pwsh
+        run: |
+          $rep = Get-Content qa-evidence\qa-report.json -Raw | ConvertFrom-Json
+          $bad = @($rep.scenarios | Where-Object { $_.status -eq 'FAILED' })
+          "counts: $($rep.counts | ConvertTo-Json -Compress)"
+          if ($bad.Count -gt 0) {
+            "FAILED: $($bad.id -join ', ')"
+            exit 1
+          }
+          "no FAILED scenarios — lane green"
