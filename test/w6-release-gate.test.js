@@ -35,7 +35,7 @@ test('w6: json mode emits machine-parseable results', () => {
 test('w6: a deliberately broken matrix makes the gate fail (sabotage-proven)', () => {
   const matrix = path.join(ROOT, 'docs', 'COMPLETION_MATRIX.md');
   const original = fs.readFileSync(matrix, 'utf8');
-  const sabotaged = original.replace('| **TOTAL** | **100** | **81** |', '| **TOTAL** | **100** | **1** |');
+  const sabotaged = original.replace(/\| \*\*TOTAL\*\* \| \*\*100\*\* \| \*\*\d+\*\* \|/, '| **TOTAL** | **100** | **1** |');
   assert.notEqual(sabotaged, original, 'sabotage must actually change bytes');
   try {
     fs.writeFileSync(matrix, sabotaged);
