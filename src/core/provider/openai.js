@@ -75,9 +75,21 @@ function contentToText(content) {
 }
 
 function body(route, { messages, tools, maxTokens, temperature, stream, toolChoice, extra }) {
+  const normalizedMessages = buildMessages(route, messages || []);
+  // Never issue a doomed upstream request with an empty messages array.
+  // The UI receives a precise local error instead of a cryptic gateway 400.
+  if (!normalizedMessages.length || !normalizedMessages.some((m) =>
+    (m.role === 'user' || m.role === 'system' || m.role === 'developer') &&
+    (typeof m.content === 'string' ? m.content.trim() : Array.isArray(m.content) && m.content.length)
+  )) {
+    throw new ProviderError('No user or system message reached the model. Your message is saved; retry the turn or start a new chat.', {
+      status: 0, code: 'empty_messages', retryable: false,
+      hint: 'The model request was blocked locally before contacting the provider.',
+    });
+  }
   const b = {
     model: route.model,
-    messages: buildMessages(route, messages),
+    messages: normalizedMessages,
     stream: Boolean(stream),
     max_tokens: maxTokens,
     temperature,
