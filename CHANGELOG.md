@@ -39,7 +39,30 @@ Artifact `uia-probe-result` (run 39344950257, evid: docs/evidence/uia-probe-run1
 - Probe v2.1 measures session identity (userInteractive, sessionId, userName) to close
   the Session-0 hypothesis with data instead of inference; final decision recorded after run 3.
 
-### Status — run 3 pending (session-identity confirmation); final ADOPT/DEFER after evidence
+### Evidence — run 3 collected (probe v2.1, run 39347315232, evid: docs/evidence/uia-probe-run3-v21-2026-10-20.json)
+- Session-0 hypothesis MEASURED and REFUTED: userInteractive=true, sessionId=2, user runneradmin.
+  The zero-pattern tree is NOT session isolation. What remains certain across 3 runs:
+  P1 window enumeration + P2 negative control PASS every time; Notepad tree reachable;
+  no Value-/TextPattern channel materializes on the hosted-runner image, so runner-CI
+  text-I/O stays honestly UNPROVEN (not failed-in-principle — unverifiable there).
+
+### FINAL DECISION (bound to 3 artifacts — evidence, not optimism)
+- **ADOPT raw UIA as the Windows-control adapter API** (zero installs, free-only, proven:
+  window identification + control discovery). No external bind today.
+- **Two-tier text I/O**: ValuePattern/TextPattern wherever exposed; SendInput-family
+  injection as fallback lane, with read-back verification required per action.
+- **DEFER FlaUI** — a C# wrapper over the identical UIA/MSAA bridge; it adds a .NET
+  dependency and cannot repair anything we measured (same tree, same zero patterns).
+- **DEFER UFO/OmniParser (vision lane)** — different modality (pixels + injection +
+  model calls), real cost; OmniParser license caution from the handover STANDS.
+  Revisit only if a free vision model passes an injection-verification demo on a real
+  interactive desktop.
+- **Owner acceptance gate**: final text-I/O proof must run on a real interactive
+  Windows session (owner machine) — the probe is deliberately reusable for exactly
+  that (workflow_dispatch + artifact). CI runners cannot bind this claim; three runs
+  say so honestly.
+
+### Status — DECIDED. Handover #4 closed at PoC-decision level; owner-run acceptance open.
 The probe has NOT yet run on a Windows runner at merge time. The FlaUI-vs-Microsoft-UFO binding decision follows only after the runner JSON exists (recorded as a separate evidence commit into `docs/DEV_CONTINUATION.json` decisions). Zero installs anywhere; no UI files touched.
 
 ### Verified

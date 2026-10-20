@@ -1,5 +1,5 @@
 {
-  "lastVerifiedMain": "31979be",
+  "lastVerifiedMain": "971da8b",
   "lastCompletedMilestone": "GODLIKE V4 §7 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
   "currentWorkstream": "GODLIKE V4 WAVE 2 — §5 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
@@ -24,13 +24,31 @@
   ],
   "experimentResults": {
     "ratelimit-sim": "8/8 (S1 naive-violation vs S2 zero-violation throughput; sabotage discrimination all three dims)",
-    "uia-probe-run1": "identifyWindows=PASS, negativeControl=PASS, notepad window-located, text-surface GAP on modern Win11 Notepad (no Edit/Document control). Artifact run 39344950257."
+    "uia-probe-run1": "identifyWindows=PASS, negativeControl=PASS, notepad window-located, text-surface GAP on modern Win11 Notepad (no Edit/Document control). Artifact run 39344950257.",
+    "uia-probe-run2": "subtree dump: Edit(statusbar) children enumerate as Pane w/ ZERO patterns; SendKeys unverifiable in-tree (no TextPattern reader)",
+    "uia-probe-run3": "session measured: userInteractive=true, sessionId=2 (Session-0 hypothesis REFUTED)"
   },
   "implementationScore": 81,
   "realWorldReadiness": 68,
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
-  "nextAction": "Merge probe-v2 PR (subtree dump + ValuePattern/SendKeys fallback lanes), dispatch run 2 on main, then record FINAL ADOPT/DEFER for the Windows-control adapter backed by both probe artifacts.",
+  "nextAction": "Release-party prep (~2026-10-20): owner runs win-uia-probe on real interactive Windows session for text-I/O acceptance; then old->new upgrade verification on real Windows.",
   "version": "0.9.9",
-  "milestone": "Windows-control PoC scaffold shipped + release v0.9.9 SHA-verified; run-1 evidence in docs/evidence/",
-  "branch": "main (post-merge)"
+  "milestone": "Windows-control PoC DECIDED on 3 measured runs (raw UIA adopted; FlaUI/UFO deferred; owner-run text-I/O acceptance open)",
+  "branch": "main (post-merge)",
+  "decisions": {
+    "windows-control-adapter": {
+      "decision": "ADOPT raw UIA (System.Windows.Automation, zero deps) as control API; two-tier text I/O (patterns first, SendInput fallback + read-back); DEFER FlaUI (same bridge, .NET dep, fixes nothing measured); DEFER UFO/OmniParser vision lane (cost + OmniParser license caution stands)",
+      "evidence": [
+        "docs/evidence/uia-probe-run1-v1-2026-10-20.json",
+        "docs/evidence/uia-probe-run2-v2-2026-10-20.json",
+        "docs/evidence/uia-probe-run3-v21-2026-10-20.json"
+      ],
+      "runnerFacts": {
+        "identifyWindows": true,
+        "negativeControl": true,
+        "runnerTextIO": "UNPROVEN-on-runner (no pattern channel materialized; session interactive, sessionId=2 — NOT Session 0)"
+      },
+      "ownerGate": "text-I/O acceptance on real interactive Windows session (owner), probe reusable via workflow_dispatch"
+    }
+  }
 }
