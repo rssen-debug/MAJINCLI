@@ -1,5 +1,5 @@
 {
-  "lastVerifiedMain": "90b95e5",
+  "lastVerifiedMain": "57e9840",
   "lastCompletedMilestone": "GODLIKE V4 §7 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
   "currentWorkstream": "GODLIKE V4 WAVE 2 — §5 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
@@ -38,7 +38,7 @@
   "performanceScorecard": "docs/SWARM_PERFORMANCE.md",
   "nextAction": "Waves 2-7 shipped (v0.9.10..v0.9.15). Remaining: owner Windows gates (5D/11A/11C/12B/12C), UI-agent merge (8A-8D), second free-provider key (1E/6C). v1.0.0 readiness review per §12 once Windows gates land.",
   "version": "0.9.15",
-  "milestone": "WAVE 7: skill outcome telemetry in routing + honest prompt truncation (radar #3/#5 ADOPT, #2 DEFER); 493p/510t/0f/17s",
+  "milestone": "v0.9.15 SHIPPED (release-gate verified online: 4 assets, exe sha256 match) — 493p/510t/0f/17s; radar items #3/#5 ADOPTED, #2 DEFERRED",
   "branch": "main (post-merge)",
   "decisions": {
     "windows-control-adapter": {
