@@ -1,7 +1,7 @@
 name: MAJIN Windows OpenCode Go acceptance
 on:
   push:
-    branches: [qa/real-goal-playwright-20261020]
+    branches: [qa/failure-recovery-go-20261020]
   workflow_dispatch:
 concurrency:
   group: windows-opencode-go-${{ github.ref }}
@@ -85,7 +85,7 @@ jobs:
           QA_OPENCODE_GO: 'true'
           QA_MODELS: 'MECHANICS-ONLY'
           QA_ARTIFACT: 'branch-built OpenCode Go QA installer'
-          QA_ONLY: 's01,s02,s03,s04,s05,s06,s07,s08,s09,a01,s15,s18,s19,s20,s21,s22,s24,s25,s26,c01,c02,c03,c04,b01'
+          QA_ONLY: 's01,s02,s03,s04,s05,s06,s07,s08,s09,a01,a02,s15,s18,s19,s20,s21,s22,s24,s25,s26,c01,c02,c03,c04,b01'
         run: |
           $env:QA_HOME = Join-Path $env:RUNNER_TEMP "majin-opencode-qa-$env:GITHUB_RUN_ID"
           $env:MAJIN_HOME = $env:QA_HOME
