@@ -7,6 +7,7 @@
    tar vid taggen och bygger+publicerar release med SHA-256 automatiskt. */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 function parseSemver(v) {
   const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(v || '').trim());
@@ -88,7 +89,10 @@ async function latestReleasedTags({ repo = 'rssen-debug/MAJINCLI', fetchImpl = g
   } catch { return []; }
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
+/* fileURLToPath + resolve — never 'file://'+argv[1] or URL.pathname compares:
+   both lie on Windows (file:///D:/… vs D:\…) and the failure mode is a SILENT
+   no-op (WAVE 8 lesson, CI-caught). This is the repo-canonical pattern. */
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 if (isMain) {
   const target = process.argv[2];
   const root = process.cwd();
