@@ -42,7 +42,7 @@ trap {
 Mark 'probe-start'
 
 $result = [ordered]@{
-  schema    = 'majin.win-uia-probe.v2.3'
+  schema    = 'majin.win-uia-probe.v2.4'
   timestamp = (Get-Date).ToUniversalTime().ToString('o')
   env = [ordered]@{
     osVersion    = [System.Environment]::OSVersion.VersionString
@@ -333,7 +333,44 @@ try {
           }
         } catch { $p7.note = "value lane: $($_.Exception.Message)" }
       } else { $p7.note = "Edit control found but no ValuePattern" }
-    } else { $p7.note = "no Edit descendant under Run dialog" }
+    } else {
+      # Windows 11 Run dialog text area sits inside a ComboBox — probe descendants
+      # of ANY type for a working ValuePattern before giving up (dump subtree).
+      $p7sub = @()
+      $allE = $w7.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+      $cand = 0
+      for ($ci=0; $ci -lt $allE.Count; $ci++) {
+        $elx = $allE.Item($ci)
+        $pls = @()
+        foreach ($pp in @([System.Windows.Automation.ValuePattern]::Pattern, [System.Windows.Automation.TextPattern]::Pattern)) {
+          try { $null = $elx.GetCurrentPattern($pp); $pls += $pp.ProgrammaticName } catch {}
+        }
+        if ($ci -lt 14) { $p7sub += [ordered]@{ idx=$ci; cls=$elx.Current.ClassName; ct=$elx.Current.ControlType.ProgrammaticName; patterns=$pls } }
+        if (-not $p7.valuePatternOk) {
+          try {
+            $vp2 = $elx.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+            if ($vp2) {
+              $cand++
+              try {
+                $vp2.SetValue($p7marker)
+                if ($vp2.Current.Value -eq $p7marker) {
+                  $p7.valuePatternOk = $true
+                  $p7.setValueOk = $true
+                  $p7.readBackOk = $true
+                  $p7.readBackMatches = $true
+                  $p7.editClass = "$($elx.Current.ControlType.ProgrammaticName)/$($elx.Current.ClassName)"
+                  $vp2.SetValue("")
+                  $p7.clearedOk = ($vp2.Current.Value -eq "")
+                }
+              } catch { $p7.note = "setValue attempt: $($_.Exception.Message)" }
+            }
+          } catch {}
+        }
+      }
+      $p7.valuePatternCandidates = $cand
+      $p7.subtree = $p7sub
+      if (-not $p7.valuePatternOk) { $p7.note = "no ValuePattern-bearing descendant (incl. ComboBox probe)" }
+    }
     # close the dialog cleanly: invoke its Cancel button via UIA (no SendKeys needed)
     try {
       $condCancel = New-Object System.Windows.Automation.AndCondition(
