@@ -47,3 +47,13 @@ test('wincontrol: untrusted window strings are payload, never executable PowerSh
     { action: 'type', window: hostile, text: hostile, caption: hostile });
   assert.throws(() => encodeControlRequest('type', { text: 'x'.repeat(20000) }), RangeError);
 });
+
+test('wincontrol: Windows executes the actual PowerShell bridge without an interactive desktop', {
+  skip: !IS_WIN && 'requires Windows PowerShell',
+  timeout: 45000,
+}, async () => {
+  const list = ALL_TOOLS.find((t) => t.name === 'control.list_windows');
+  const result = await list.run({});
+  assert.equal(result.ok, true, JSON.stringify(result.error || result).slice(0, 500));
+  assert.match(result.result, /top-level window\\(s\\)/);
+});
