@@ -29,6 +29,49 @@ export function withTimeout(promise, { ms, code = 'tool_timeout', label = 'tool'
   });
 }
 
+/**
+ * Enforces an absolute remaining TURN budget around one model call, including
+ * implementations which ignore AbortSignal. A real request also receives the
+ * cancellation signal, so the transport closes instead of burning CPU.
+ *
+ * This is a deadline on an individual awaited step, NOT a new per-step budget:
+ * callers pass the time remaining from the original turn clock.
+ */
+export async function withAbortDeadline(work, { ms, parentSignal, label = 'model' } = {}) {
+  if (typeof work !== 'function') throw new TypeError('work must be a function');
+  const limit = Math.max(25, Number(ms) || 1800000);
+  const ctrl = new AbortController();
+  if (parentSignal?.aborted) {
+    const err = new Error(label + ' cancelled by user');
+    err.code = 'aborted';
+    throw err;
+  }
+  let timer;
+  let cancelParent = null;
+  const deadline = new Promise((_, reject) => {
+    cancelParent = () => {
+      const err = new Error(label + ' cancelled by user');
+      err.code = 'aborted';
+      ctrl.abort(parentSignal?.reason || err);
+      reject(err);
+    };
+    parentSignal?.addEventListener?.('abort', cancelParent, { once: true });
+    timer = setTimeout(() => {
+      const err = new Error(label + ' exceeded the remaining turn deadline of ' + limit + 'ms');
+      err.code = 'turn_timeout';
+      err.timeoutMs = limit;
+      ctrl.abort(err);
+      reject(err);
+    }, limit);
+  });
+  try {
+    return await Promise.race([Promise.resolve().then(() => work(ctrl.signal)), deadline]);
+  } finally {
+    clearTimeout(timer);
+    parentSignal?.removeEventListener?.('abort', cancelParent);
+  }
+}
+
 /* No-progress detector: identical calls (name + args) more than `limit` times
    within one turn = never silently retrying that wall again. */
 export class RepeatDetector {
