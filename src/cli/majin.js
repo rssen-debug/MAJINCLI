@@ -275,7 +275,7 @@ async function doctor() {
   const ready = st.providers.filter((p) => p.ready);
   put(ready.length > 0, 'providers', ready.length ? ready.map((p) => `${p.name}(${p.models.length})`).join(' ') : 'no key — demo mode');
   put(st.routes.filter((r) => r.ready).length > 0 || rt.cfg.needsSetup, 'routes', `ready ${st.routes.filter((r) => r.ready).length}/${st.routes.length}${rt.cfg.needsSetup ? ' (no key yet)' : ''}`);
-  put(st.moa.policy !== 'off', 'MOA', `${st.moa.policy} · width ${st.moa.width} → ${String(st.moa.aggregator).split('/').pop()}`);
+  put(true, 'MOA (optional)', `${st.moa.policy} · width ${st.moa.width} → ${String(st.moa.aggregator).split('/').pop()}`);
   put(rt.registry.list().length > 60, 'tools', `${rt.registry.list().length} registered, none disabled`);
   put(st.guard.mode !== undefined, 'guard', `${st.guard.mode} · ${st.guard.pending} waiting`);
   const { detect } = await import('../core/binary/external.js');
