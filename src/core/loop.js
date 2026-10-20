@@ -211,15 +211,15 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     if (!calls.length) {
       // A model cannot mark an executable goal completed without making a
       // SINGLE real tool call. One bounded retry can recover a missed tool.
-      if (actionGoal && toolLog.length === 0) {
+      if (actionGoal && !toolLog.some((t) => t.ok)) {
         if (actionRetries < 1 && steps < limit) {
           actionRetries += 1;
-          onEvent({ type: 'missing_action_retry', label, step: steps, reason: 'no tool call for executable goal' });
+          onEvent({ type: 'missing_action_retry', label, step: steps, reason: 'no successful tool call for executable goal' });
           messages.push({ role: 'assistant', content: res.text || '(no action taken)' });
           messages.push({ role: 'user', content: 'Your previous response executed ZERO tools. The user asked for an actual action, not a description. Call the real tool now (or tools.search to discover it); never claim done unless a verifiable tool has run.' });
           continue;
         }
-        return { text: 'I could not verify the requested action: no tool was executed. The task is NOT complete. ' +
+        return { text: 'I could not verify the requested action: no tool completed successfully. The task is NOT complete. ' +
           (res.text ? ('Model reply: ' + res.text.slice(0, 250)) : ''),
           steps, toolLog, usage: tally, escalated, incomplete: true, stopReason: 'missing_tool_evidence' };
       }
