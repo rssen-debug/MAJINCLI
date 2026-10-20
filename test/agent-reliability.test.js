@@ -110,3 +110,24 @@ test('an exhausted delegated worker is FAILED, never counted as a success', asyn
   assert.match(String(output.result),/FEL:/);
   await rt.shutdown();
 });
+
+
+test('a model cannot pretend it created a file without performing any tool call', async () => {
+  const rt = await createRuntime({channels:false,scheduler:false});
+  const routes = Object.fromEntries(['chat','tasks','tools','analysis','code','research','final','summarize','router','aggregator'].map(x=>[x,'demo/demo-fast']));
+  rt.cfg.patch({models:{provider:'demo',routes},moa:{policy:'off'},guard:{mode:'off'}});
+  const events=[]; let calls=0;
+  const result=await loop({
+    cfg:rt.cfg,registry:rt.registry,job:'tasks',maxSteps:4,
+    messages:[{role:'system',content:'Test agent'},{role:'user',content:'Create a file named fake-claim.txt with QA'}],
+    ctx:{cfg:rt.cfg,session:'qa-false-claim',toolSubsetNames:['tools.search'],readOnly:false},
+    onEvent:e=>events.push(e),
+    modelCall:async()=>{calls++;return {text:'Done, I created fake-claim.txt',toolCalls:[],usage:{input:1,output:1}};},
+  });
+  assert.equal(calls,2,'must try exactly one bounded recovery');
+  assert.equal(result.incomplete,true);
+  assert.equal(result.stopReason,'missing_tool_evidence');
+  assert.ok(events.some(x=>x.type==='missing_action_retry'));
+  assert.equal(fs.existsSync(path.join(tmp,'workspace','fake-claim.txt')),false);
+  await rt.shutdown();
+});
