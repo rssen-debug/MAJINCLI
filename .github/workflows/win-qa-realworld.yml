@@ -144,3 +144,63 @@ jobs:
             exit 1
           }
           "no FAILED scenarios — lane green"
+
+  qa-ui-browser:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download + verify + silent-install the PUBLISHED v1.0.0
+        shell: pwsh
+        run: |
+          $rel = 'https://github.com/rssen-debug/MAJINCLI/releases/download/v1.0.0'
+          New-Item -ItemType Directory -Force qa-stage | Out-Null
+          Invoke-WebRequest "$rel/MAJIN-Setup.exe"        -OutFile qa-stage\MAJIN-Setup.exe
+          Invoke-WebRequest "$rel/MAJIN-Setup.exe.sha256" -OutFile qa-stage\MAJIN-Setup.exe.sha256
+          $want = ((Get-Content qa-stage\MAJIN-Setup.exe.sha256 -Raw).Trim() -split '\s+')[0].ToLower()
+          $have = (Get-FileHash qa-stage\MAJIN-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          if ($want -ne $have) { throw "SHA-256 mismatch" }
+          & qa-stage\MAJIN-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART | Out-Null
+
+      - name: Ollama + one capable model
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest 'https://github.com/ollama/ollama/releases/download/v0.12.6/ollama-windows-amd64.zip' -OutFile ollama.zip
+          Expand-Archive -Path ollama.zip -DestinationPath ollama-win -Force
+          Start-Process -FilePath "$((Get-Location).Path)\ollama-win\ollama.exe" -ArgumentList 'serve' -WindowStyle Hidden | Out-Null
+          $t0 = Get-Date; $ok = $false
+          while (((Get-Date) - $t0).TotalSeconds -lt 120) {
+            try { $r = Invoke-WebRequest 'http://127.0.0.1:11434/api/tags' -TimeoutSec 3 -UseBasicParsing; if ($r.StatusCode -eq 200) { $ok = $true; break } } catch { Start-Sleep 2 }
+          }
+          if (-not $ok) { throw 'ollama serve down' }
+          & ollama-win\ollama.exe pull llama3.2:1b | Out-Default
+          & ollama-win\ollama.exe pull qwen2.5:0.5b | Out-Default
+
+      - name: Playwright chromium
+        shell: pwsh
+        run: |
+          npm install --no-save --no-audit playwright@1.48.2
+          npx playwright install chromium
+
+      - name: Aurora UI real-world lane (installed exe + real browser + real model)
+        shell: pwsh
+        run: |
+          $exe = "$env:LOCALAPPDATA\Programs\MAJIN\majin-win-x64.exe"
+          if (-not (Test-Path $exe)) { $exe = "$env:ProgramFiles\MAJIN\majin-win-x64.exe" }
+          $env:QA_EXE = $exe
+          $env:QA_UI_EVID = "$PWD\qa-ui-evidence"
+          node scripts/qa/qa-ui-browser.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload UI evidence (screenshots + per-scenario JSON + server logs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-ui-evidence
+          path: qa-ui-evidence/
+          retention-days: 90
