@@ -496,6 +496,55 @@ async function a01(a) {
     await api('PATCH', '/api/config', { tools: { allow: previousAllow } }).catch(() => {});
   }
 }
+/**
+ * A02: a real tool failure is observed BEFORE the agent receives the error.
+ * The model must switch from failed read to successful write, and QA verifies
+ * bytes from the installed agent's isolated workspace.
+ * This measures *recovery after a reported failure*, not autonomous diagnosis.
+ */
+async function a02(a) {
+  if (process.env.QA_OPENCODE_GO !== 'true') return a(CL.SKIP, 'requires live OpenCode Go');
+  const filename = 'qa-recovered-' + crypto.randomBytes(5).toString('hex') + '.txt';
+  const marker = 'MAJIN_RECOVERY_' + crypto.randomBytes(10).toString('hex');
+  const target = path.join(CFG.home, 'workspace', filename);
+  const session = 'qa-recovery-' + crypto.randomBytes(4).toString('hex');
+  const config = (await api('GET', '/api/config')).json;
+  const previousAllow = config?.config?.tools?.allow ?? '*';
+  let restore = false;
+  try {
+    const patch = await api('PATCH', '/api/config', { tools: { allow: ['fs.read', 'fs.write'] } });
+    if (patch.json?.ok !== true) return a(CL.FAIL, 'could not restrict tool scope', {});
+    restore = true;
+    // Negative control: a REAL installed-tool call must fail on a missing file.
+    const miss = await api('POST', '/api/tool', { tool: 'fs.read', args: { path: filename } });
+    if (miss.json?.ok !== false || fs.existsSync(target)) {
+      return a(CL.FAIL, 'negative-control file read unexpectedly succeeded', {
+        status: miss.status, error: miss.json?.error || null,
+      });
+    }
+    const input = 'A prior fs.read attempt to inspect ' + filename + ' failed because the file is missing. ' +
+      'Recover from that observed failure by using the fs.write tool to CREATE ' + filename +
+      ' in the workspace, with exactly this content: ' + marker +
+      '. Do not just describe the solution; perform the write.';
+    let reply;
+    try {
+      reply = await api('POST', '/api/chat', { input, session, stream: false }, { timeoutMs: 150000 });
+    } catch (error) {
+      return a(CL.FAIL, 'recovery chat failed', { error: String(error.message || error).slice(0, 140) });
+    }
+    const exists = fs.existsSync(target);
+    const content = exists ? fs.readFileSync(target, 'utf8') : '';
+    const exact = content === marker || content === marker + '\n';
+    return a(exact ? CL.CI : CL.FAIL,
+      exact ? 'agent recovered from observed fs.read error using fs.write (artifact byte-exact)'
+        : 'agent did not recover missing-file error into a verified file',
+      { negativeControl: true, missingReadError: miss.json?.error?.code || 'error',
+        agentOk: reply.json?.ok === true, replyPreview: String(reply.json?.text || '').slice(0, 130),
+        artifactExists: exists, exactBytes: exact });
+  } finally {
+    if (restore) await api('PATCH', '/api/config', { tools: { allow: previousAllow } }).catch(() => {});
+  }
+}
 async function s10(a) {
   const tok = CHAT_TOKEN_WORD('s10');
   const r = await chatExpectToken(a, tok, 3, { id: 's10' });
@@ -884,6 +933,7 @@ const PLAN = [
   ['s08', 'provider test: REAL completion via installed app', 'real-model', CL.CI, s08],
   ['s09', 'live model discovery from Ollama', 'real-model', CL.CI, s09],
   ['a01', 'real OpenCode Go autonomous file goal + one recovery turn', 'goal-e2e', CL.CI, a01],
+  ['a02', 'recover observed missing-file tool failure using real agent', 'recovery-e2e', CL.CI, a02],
   ['s10', 'REAL chat (non-stream): audit token reproduced', 'chat', CL.CI, s10],
   ['s11', 'REAL streaming chat (SSE deltas + done)', 'chat', CL.CI, s11],
   ['s12', 'REAL cancel mid-stream', 'chat', CL.CI, s12],
@@ -908,7 +958,7 @@ const PLAN = [
   ['b01', 'browser automation through installed tool belt', 'browser-automation', CL.CI, b01],
 ];
 
-const LLM_REQUIRED = new Set(['a01', 'd01', 'd03', 's08', 's10', 's11', 's12', 's13', 's14', 's16', 's17', 's23']);
+const LLM_REQUIRED = new Set(['a01', 'a02', 'd01', 'd03', 's08', 's10', 's11', 's12', 's13', 's14', 's16', 's17', 's23']);
 async function main() {
   console.log(`MAJIN QA REAL-WORLD engine — exe=${CFG.exe} home=${CFG.home} port=${CFG.port} evid=${CFG.evid} models=${CFG.models.join(',')}`);
   console.log(`classification ceiling: VERIFIED_CI (CI service session — GUI actuation lanes gate themselves)`);
@@ -921,7 +971,7 @@ async function main() {
   evidWrite('s00-boot', { bootMs, port: CFG.port, tokenFrom: 'config.json or stdout', exe: CFG.exe });
 
   for (const [id, name, lane, ceiling, fn] of PLAN) {
-    if (CFG.mechanicsOnly && LLM_REQUIRED.has(id) && !(process.env.QA_OPENCODE_GO === 'true' && (id === 's08' || id === 'a01'))) {
+    if (CFG.mechanicsOnly && LLM_REQUIRED.has(id) && !(process.env.QA_OPENCODE_GO === 'true' && (id === 's08' || id === 'a01' || id === 'a02'))) {
       await scenario(id, name, lane, ceiling, async (a) => a(CL.SKIP, 'no local model can serve on this hosted windows-latest CPU — measured 3 models × 3 attempts × 420 s timed out (documented external blocker, not a product verdict). Self-hosted lane (runner=interactive-desktop) is where model-dependent scenarios are verified.', { blocker: 'hosted-cpu-inference', measured: 'smollm2/qwen2.5/llama3.2 all unreachable in 90–420 s windows', remedy: 'scripts/qa/setup-majin-interactive-runner.ps1 + runner=self-hosted' }));
       continue;
     }
