@@ -12,6 +12,11 @@
     P3  Notepad: launch -> locate window -> locate edit/document control ->
         ValuePattern.SetValue(marker) -> read back -> MUST round-trip -> clear.
     P4  Environment facts (OS, PS, .NET) reported, no installs performed.
+    P5  (v2) If P3 cannot find a text control: dump the Notepad subtree
+        (name/class/controlType/supported patterns per node, capped), then
+        retry text input through (a) ANY descendant exposing ValuePattern and
+        (b) a zero-dependency SendKeys focus fallback. This is the evidence
+        needed to decide raw-UIA vs external binding (FlaUI/UFO).
 
   Exit codes: 0 probe completed (gaps allowed, they are data) — 3 UIA unavailable.
 #>
@@ -20,7 +25,7 @@ param(
 )
 
 $result = [ordered]@{
-  schema    = 'majin.win-uia-probe.v1'
+  schema    = 'majin.win-uia-probe.v2'
   timestamp = (Get-Date).ToUniversalTime().ToString('o')
   env = [ordered]@{
     osVersion    = [System.Environment]::OSVersion.VersionString
@@ -37,6 +42,14 @@ $result = [ordered]@{
     setValueOk = $false; readBackOk = $false; readBackMatches = $false; clearedOk = $false
     closedOk = $false; gapReason = $null
   }
+  p5_subtreeAndFallback = [ordered]@{
+    ran = $false; nodeCount = 0; nodes = @()
+    valuePatternCandidates = 0; textPatternCandidates = 0
+    fallbackValueWriteOk = $false; fallbackReadBackMatches = $false
+    fallbackClearedOk = $false
+    sendKeysAttempted = $false; sendKeysOk = $false
+    winnerLane = $null; note = $null
+  }
   capabilities = [ordered]@{ identifyWindows = $false; locateControls = $false; textInput = $false; readBack = $false }
   notes = @()
 }
@@ -49,8 +62,8 @@ try {
   $script:result.p1_assemblyAndRoot.loaded = $true
 } catch {
   $script:result.notes += "UIA assemblies failed to load: $($_.Exception.Message)"
-  $result | ConvertTo-Json -Depth 8 | Set-Content -Path $OutFile -Encoding utf8
-  Write-Output ($result | ConvertTo-Json -Depth 8 -Compress)
+  $result | ConvertTo-Json -Depth 10 | Set-Content -Path $OutFile -Encoding utf8
+  Write-Output ($result | ConvertTo-Json -Depth 10 -Compress)
   exit 3
 }
 
@@ -80,13 +93,13 @@ $script:result.p2_negativeControl.nullAsExpected = ($null -eq $ghost)
 # ---------- P3: Notepad end-to-end (locate -> input -> readback) ----------
 $marker = "MAJIN-POC-" + (Get-Date).ToUniversalTime().ToString('HHmmss')
 $proc = $null
+$np = $null
 try {
   $proc = Start-Process -FilePath 'notepad.exe' -PassThru -ErrorAction Stop
   $script:result.p3_notepad.launched = $true
   Start-Sleep -Milliseconds 2500
 
   # locate the Notepad window — legacy (className=Notepad) or modern (name contains Notepad)
-  $np = $null
   $sw = [Diagnostics.Stopwatch]::StartNew()
   while ($sw.Elapsed.TotalSeconds -lt 12 -and -not $np) {
     $legacyCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ClassNameProperty, 'Notepad')
@@ -152,15 +165,108 @@ try {
   }
 } catch {
   $script:result.p3_notepad.gapReason = "notepad phase failed: $($_.Exception.Message)"
-} finally {
-  if ($proc -and -not $proc.HasExited) {
-    try { Stop-Process -Id $proc.Id -Force -ErrorAction Stop; $script:result.p3_notepad.closedOk = $true } catch { $script:result.p3_notepad.closedOk = $false }
-  } elseif ($proc) { $script:result.p3_notepad.closedOk = $true }
 }
 
-$script:result.capabilities.textInput = $script:result.p3_notepad.setValueOk
-$script:result.capabilities.readBack  = $script:result.p3_notepad.readBackMatches
+# ---------- P5 (v2): subtree dump + pattern-candidate retry + SendKeys fallback ----------
+if ($np -and -not $script:result.p3_notepad.readBackMatches) {
+  $p5 = $script:result.p5_subtreeAndFallback
+  $p5.ran = $true
+  try {
+    $all = $np.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+    $p5.nodeCount = $all.Count
+    $nodes = @()
+    $maxN = [Math]::Min($all.Count, 150)
+    for ($i = 0; $i -lt $maxN; $i++) {
+      $el = $all.Item($i)
+      $pnames = @()
+      try {
+        foreach ($pat in $el.GetSupportedPatterns()) {
+          $pnames += [System.Windows.Automation.Automation]::PatternName($pat)
+        }
+      } catch {}
+      if ($pnames -contains 'Value Pattern') { $p5.valuePatternCandidates++ }
+      if ($pnames -contains 'Text Pattern')  { $p5.textPatternCandidates++ }
+      $nm = $el.Current.Name
+      if ($nm.Length -gt 60) { $nm = $nm.Substring(0, 60) }
+      $nodes += [ordered]@{
+        idx         = $i
+        name        = $nm
+        className   = $el.Current.ClassName
+        controlType = $el.Current.ControlType.ProgrammaticName
+        patterns    = $pnames
+      }
+    }
+    $p5.nodes = $nodes
 
-$result | ConvertTo-Json -Depth 8 | Set-Content -Path $OutFile -Encoding utf8
-Write-Output ($result | ConvertTo-Json -Depth 8)
+    # Fallback lane A: any descendant with a usable ValuePattern
+    for ($i = 0; $i -lt $maxN -and -not $p5.fallbackValueWriteOk; $i++) {
+      $el = $all.Item($i)
+      $vpx = $null
+      try { $vpx = $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern) } catch {}
+      if ($vpx) {
+        try {
+          $vpx.SetValue($marker)
+          $back = $vpx.Current.Value
+          $p5.fallbackValueWriteOk = $true
+          $p5.fallbackReadBackMatches = ($back -eq $marker)
+          $vpx.SetValue('')
+          $p5.fallbackClearedOk = ($vpx.Current.Value -eq '')
+          $p5.winnerLane = "descendant[$i] $($el.Current.ControlType.ProgrammaticName) class=$($el.Current.ClassName) via ValuePattern"
+        } catch {
+          $p5.note = "candidate[$i] ValuePattern write failed: $($_.Exception.Message)"
+        }
+      }
+    }
+
+    # Fallback lane B: zero-dependency SendKeys (Focus + keystrokes) when no ValuePattern writer exists
+    if (-not $p5.fallbackValueWriteOk) {
+      $p5.sendKeysAttempted = $true
+      try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        try { $np.SetFocus() } catch {}
+        Start-Sleep -Milliseconds 400
+        [System.Windows.Forms.SendKeys]::SendWait($marker)
+        Start-Sleep -Milliseconds 500
+        # read back via any TextPattern-bearing descendant
+        $readok = $false
+        for ($i = 0; $i -lt $maxN -and -not $readok; $i++) {
+          $el = $all.Item($i)
+          $tpx = $null
+          try { $tpx = $el.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern) } catch {}
+          if ($tpx) {
+            try {
+              $txt = $tpx.DocumentRange.GetText(4096)
+              if ($txt -like "*$marker*") {
+                $readok = $true
+                $p5.sendKeysOk = $true
+                $p5.winnerLane = "SendKeys -> descendant[$i] $($el.Current.ControlType.ProgrammaticName) class=$($el.Current.ClassName) via TextPattern readback"
+                # clear what we typed
+                try { $np.SetFocus() } catch {}
+                [System.Windows.Forms.SendKeys]::SendWait('^a')
+                Start-Sleep -Milliseconds 150
+                [System.Windows.Forms.SendKeys]::SendWait('{DEL}')
+              }
+            } catch {}
+          }
+        }
+      } catch {
+        $p5.note = "SendKeys lane failed: $($_.Exception.Message)"
+      }
+    }
+  } catch {
+    $p5.note = "subtree dump failed: $($_.Exception.Message)"
+  }
+}
+
+# cleanup notepad
+if ($proc -and -not $proc.HasExited) {
+  try { Stop-Process -Id $proc.Id -Force -ErrorAction Stop; $script:result.p3_notepad.closedOk = $true } catch { $script:result.p3_notepad.closedOk = $false }
+} elseif ($proc) { $script:result.p3_notepad.closedOk = $true }
+
+$script:result.capabilities.locateControls = $script:result.capabilities.locateControls -or ($script:result.p5_subtreeAndFallback.nodeCount -gt 0)
+$script:result.capabilities.textInput = $script:result.p3_notepad.setValueOk -or $script:result.p5_subtreeAndFallback.fallbackValueWriteOk -or $script:result.p5_subtreeAndFallback.sendKeysOk
+$script:result.capabilities.readBack  = $script:result.p3_notepad.readBackMatches -or $script:result.p5_subtreeAndFallback.fallbackReadBackMatches -or $script:result.p5_subtreeAndFallback.sendKeysOk
+
+$result | ConvertTo-Json -Depth 10 | Set-Content -Path $OutFile -Encoding utf8
+Write-Output ($result | ConvertTo-Json -Depth 10)
 exit 0

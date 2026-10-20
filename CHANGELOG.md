@@ -14,7 +14,18 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 ### Fixed (this wave, found by CI on this branch)
 - **Version-fragile update test (pre-existing mine)**: `test/update.test.js` mocked the "new release" as hardcoded `v0.9.9` — any wave bumping the repo *to* 0.9.9 (theirs included) would make current==latest → empty notice → red suite. The mock now derives a strictly-newer version from `src/core/version.js` (`MOCK_LATEST`), so future bumps cannot trip it. Found by honest CI failure, repaired, suite 453/453 again locally.
 
-### Status — explicitly EVIDENCE-PENDING
+### Evidence — run 1 collected (workflow_dispatch on main, 2026-10-20)
+Artifact `uia-probe-result` (run 39344950257, evid: docs/evidence/uia-probe-run1-v1-2026-10-20.json):
+- P1 PASS — raw UIA loads on windows-latest (Server 2025 / NT 10.0.26100), 4 top-level windows enumerated
+- P2 PASS — negative control: nonexistent window correctly returns null (no fabricated matches)
+- P3 PARTIAL — Notepad window located (class `Notepad`, "Untitled - Notepad"), but modern Win11 Notepad
+  exposes NO Edit/Document control under the window → ValuePattern lane had nothing to write to.
+  Honest gap; this is exactly what the PoC was ordered to find before binding FlaUI/UFO.
+- Probe v2 (same script, schema v2): dumps the Notepad subtree with per-node supported patterns and
+  retries text input via (a) any descendant ValuePattern and (b) zero-dependency SendKeys fallback.
+  The raw-UIA vs external-binding decision is recorded once run 2 lands.
+
+### Status — run 2 pending; decision recorded in DEV_CONTINUATION after evidence
 The probe has NOT yet run on a Windows runner at merge time. The FlaUI-vs-Microsoft-UFO binding decision follows only after the runner JSON exists (recorded as a separate evidence commit into `docs/DEV_CONTINUATION.json` decisions). Zero installs anywhere; no UI files touched.
 
 ### Verified
