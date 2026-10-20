@@ -1,5 +1,5 @@
 /**
- * MAJIN provider acceptance against a single low-cost OpenCode Zen model.
+ * MAJIN provider acceptance against OpenCode Go subscription endpoint.
  * Maximum two tiny calls to one allowlisted model, no Ollama, no key output.
  */
 import assert from 'node:assert/strict';
@@ -7,9 +7,9 @@ import { openaiOnce } from '../../src/core/provider/openai.js';
 
 const key = process.env.OPENCODE_API_KEY;
 if (!key) throw new Error('OPENCODE_API_KEY secret not configured');
-const root = 'https://opencode.ai/zen/v1';
+const root = 'https://opencode.ai/zen/go/v1';
 const allowed = ['glm-5.3-flash']; // OpenCode listed: $0.15/M input, $0.50/M output
-const report = { provider: 'OpenCode Zen', billing: 'paid, low-cost model only; 2 tiny requests', passed: [], failed: [], blocked: [], model: null };
+const report = { provider: 'OpenCode Go', billing: 'Go subscription only; 2 tiny requests', passed: [], failed: [], blocked: [], model: null };
 function record(kind, step, reason) {
   report[kind].push({ step, ...(reason ? { reason: String(reason).replaceAll(key, '[REDACTED]').slice(0, 300) } : {}) });
   console.log(kind.toUpperCase() + ': ' + step + (reason ? ' (' + String(reason).replaceAll(key, '[REDACTED]').slice(0, 180) + ')' : ''));
@@ -40,7 +40,7 @@ try {
 } catch (e) {
   const msg = String(e?.message || e).replaceAll(key, '[REDACTED]');
   const isBlocked = /FreeTierError|free tier can only be used|HTTP 402|HTTP 403|HTTP 429|401:|403:|402:|429:/.test(msg);
-  record(isBlocked ? 'blocked' : 'failed', 'OpenCode low-cost inference', msg);
+  record(isBlocked ? 'blocked' : 'failed', 'OpenCode Go inference', msg);
   process.exitCode = isBlocked ? 2 : 1;
 }
 console.log('RESULT ' + JSON.stringify(report));
