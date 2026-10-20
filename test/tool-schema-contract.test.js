@@ -10,22 +10,20 @@ import { def, toSchema } from '../src/core/tools/registry.js';
 const OPT = /\((optional|opt)\b/i;
 const OPTSTR = (d) => OPT.test(String(d || '')) || String(d || '').includes('(default') || /\?/.test(String(d || '').split(':')[0] || '');
 
-test('registry: optional-markörer håller derivation deterministisk (suffix-invarians per verktyg)', () => {
+test('registry: required är data från markörer — aldrig position eller programtext', () => {
   const bad = [];
   for (const t of ALL_TOOLS) {
-    const flags = Object.entries(t.parameters.properties).map(([, p]) => {
-      const d = String(p.description || '');
-      return OPTSTR(d) || /\[.*\]/.test(d) === false && false; // enum-parenteter hjälper inte — markörer hjälper
-    });
     const req = new Set(t.parameters.required || []);
     const keys = Object.keys(t.parameters.properties);
-    const seenOpt = keys.some((k) => !req.has(k));
-    const firstOptIdx = keys.findIndex((k) => !req.has(k));
-    const laterReq = firstOptIdx >= 0 ? keys.slice(firstOptIdx).filter((k) => req.has(k)) : [];
-    if (laterReq.length) bad.push(`${t.name}: ${laterReq.join(',')} efter optional-parameter`);
-    void flags; void seenOpt;
+    for (const k of req) if (!keys.includes(k)) bad.push(`${t.name}: required '${k}' saknar deklaration`);
+    for (const [k, p] of Object.entries(t.parameters.properties)) {
+      const d = String(p.description || '');
+      const clearlyOptional = OPT.test(d) || /\boptional\b/i.test(d) || d.includes('(default') || /\bdefault\b/i.test(d);
+      if (clearlyOptional && req.has(k)) bad.push(`${t.name}: '${k}' både required och markerat optional`);
+      if (!clearlyOptional && !req.has(k)) bad.push(`${t.name}: '${k}' saknar både required-status och optional-markör (derivation risker) `);
+    }
   }
-  assert.deepEqual(bad, [], 'required-prefix invariant bruten — märk eller ordna om');
+  assert.deepEqual(bad, [], 'marker/derivation-desync — varje parameter ska vara entydigt klassad');
 });
 
 test('registry: required-derivation överlever bundling/transpilation (run manglad)', () => {
@@ -43,15 +41,29 @@ test('registry: required-derivation överlever bundling/transpilation (run mangl
   assert.equal(Object.keys(schema.properties).length, 3);
 });
 
-test('schema: uppmätta avvikelser i installerad v1.0.0 är omöjliga nu (gyllene mängder)', () => {
-  const by = Object.fromEntries(ALL_TOOLS.map((t) => [t.name, (t.parameters.required || []).slice()]));
-  assert.deepEqual(by['shell.run'], ['command']);
-  assert.deepEqual(by['browser.open'], ['url']);
-  assert.deepEqual(by['web.open'], ['url']);
-  assert.deepEqual(by['fs.write'], ['path', 'content']);
-  assert.deepEqual(by['fs.copy'], ['src', 'dest']);
-  assert.deepEqual(by['fs.zip'], ['src', 'out']);
-  assert.deepEqual(by['net.fetch'], ['url']);
+test('schema: gyllene mängder mot det verkliga bältet (d04-sanning nu ägd)', () => {
+  const by = Object.fromEntries(ALL_TOOLS.map((t) => [t.name, (t.parameters.required || []).slice().sort()]));
+  const pins = {
+    'shell.run': ['command'],
+    'browser.open': ['url'],
+    'fs.read': ['path'],
+    'fs.write': ['content', 'path'],
+    'fs.patch': ['edits', 'path'],
+    'fs.copy': ['from', 'to'],
+    'fs.move': ['from', 'to'],
+    'fs.grep': ['path', 'pattern'],
+    'net.tcp': ['host', 'port'],
+    'net.http': ['url'],
+    'web.fetch': ['url'],
+    'web.download': ['url'],
+    'web.search': ['query'],
+    'majin.provider': [],
+    'majin.memory': [],
+  };
+  for (const [name, want] of Object.entries(pins)) {
+    assert.ok(by[name], `${name} måste finnas i bältet`);
+    assert.deepEqual(by[name], want.sort(), `${name}: required avviker`);
+  }
 });
 
 test('schema: verktygs-skiktet äga 108 verktyg (4 control + 104 kärna)', () => {

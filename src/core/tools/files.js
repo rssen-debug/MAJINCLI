@@ -198,7 +198,7 @@ export const fileTools = [
     params: {
       path: 'string: root to search in (default: workspace)',
       pattern: 'string: regex (javascript), or a plain word when regex:false',
-      glob: 'string: filter file names, e.g. *.ts, *.py, *.dll (optional)',
+      glob: 'string: filter file names, e.g. *.ts, *.py, *.dll (optional, default * = all files)',
       ignoreCase: 'boolean: case sensitive? optional (default: true = insensitive)',
       maxFiles: 'number: maximum files with hits (default: 60)',
       regex: 'boolean: treat the pattern as regex (default true) (optional)',
