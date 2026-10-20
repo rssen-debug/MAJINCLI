@@ -46,7 +46,7 @@
       "id": "W5-event-flows",
       "wave": "W5",
       "desc": "Trigger-typer: schedule, file change, webhook, email, github-event; durable queue, dedupe, retry limits, history, authorization före extern kommunikation.",
-      "status": "IMPLEMENTERAD + basverifierad: flows.js engine (durable state.json+history capped 100, dedupe content-hash window, rate-limit fires/hour, bounded retries ingen retry-vaggmotiv-morkerlang, renderTemplate whitelist) + opener chokidar@4 file-trigger (OFFENl-rebjudformst sjs betw*sse: fil changed detekterad i live tmp-dir) + github-event-dedupe-logik + webhook-intake /api/flows/hook/<id> under samma token-gate + flows.* verktyg×6 + approval-gate respekterad (waiting_approval registrerad honest) + 8/8 tester + chokidar-jusfiering i DECISIONS.md"
+      "status": "VERIFIED - end-to-end genom verktygsytan (test/flows-e2e.test.js): flows.add file-trigger + RIKTIG fil-drop + dual measurable (state.json lastStatus=ok + fire-post med eventHash + fs.write-biverkar w5-fired.log); e2e FANGADE RIKTIG PRODUKTS-BUGG: chokidar@4+ignoreInitial swallower filer som droppas under initial-scan (forsta ~100ms efter flows.add) - fixat via mtime-window-catch vid ready (no-false-positive construction); testStopHub drain-hook tillagd"
     },
     {
       "rank": 7,
@@ -241,6 +241,13 @@
       "done": "W12 ACCEPTANCE-PACK: maskinevidens-lop fran Windows-runner till repots gate; ps1 menypliktig apos-ordning + verifier (PASS-for-cavaeten, Duplikat-ids, boolean-interactive) 6/6; DoD INTERACTIVE run kvar att gora pa Windows — INTE market klart, documented utestående explicitet",
       "percent": 75,
       "next": "VERIFIED-deltas for W1/W2/W3/W5, eller W6 absorb ressources: Microsoft Playwright-MCP adapter?"
+    },
+    {
+      "round": 19,
+      "date": "2026-10-21",
+      "done": "W5 VERIFIED via E2E + warmup-swallow-buggen fixad; sandbox-inlarst: node_modules fallest ut ur snapshots mellan sessioner (npm install kravdes innan e2e); hela korvagen forklarades phase-for-phase",
+      "percent": 77,
+      "next": "VERIFIED-delta W2/W3, eller W6 continue-absorb, eller win-runner acceptance-korning"
     }
   ]
 }
