@@ -88,6 +88,8 @@ async function main() {
       return re();
     case 'absorb':
       return absorb();
+    case 'research':
+      return research_();
     case 'dataset':
       return dataset();
     case 'update':
@@ -503,6 +505,19 @@ async function absorb() {
     `capability map: ${res.artifacts.capabilityJson}\n` +
     `report:         ${res.artifacts.reportMd}\n`
   );
+}
+
+/* --------------------------- research (W2) ------------------------------- */
+
+async function research_() {
+  const question = argv.filter((a) => a !== '--json').join(' ');
+  if (!question) return process.stderr.write('usage: majin research <question>\n');
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  const out = await rt.registry.exec('research.run', { question }, { ...rt.ctx, session: 'cli', step: 1 });
+  await rt.shutdown();
+  if (json()) return process.stdout.write(JSON.stringify(out.meta || out, null, 2) + '\n');
+  if (!out.ok) { process.stderr.write('research failed: ' + (out.error?.message || 'unknown') + '\n'); process.exitCode = 1; return; }
+  process.stdout.write(String(out.result) + '\n');
 }
 
 /* --------------------------- dataset (training data) ---------------------- */

@@ -40,7 +40,9 @@ test('readOnly-ytan exponerar bara sidoeffekts-fria capabilities', () => {
 test('search hittar rätt verktyg utan en enda modell', () => {
   const hit1 = reg.search('research a github repository for license safety', { limit: 3 });
   assert.equal(hit1[0].id, 'github.research', `github.research ska vara toppträff: fick [${hit1.map((h) => h.id)}]`);
-  assert.ok(hit1.some((h) => h.id === 'github.verify'), 'github.verify slogas ihop i topp-3: fick ' + hit1.map((h) => h.id));
+  // W2: research.run (new tool) now competes on the same query terms; make sure github.verify still resides within top-4
+  const hit1b = reg.search('research a github repository for license safety', { limit: 4 });
+  assert.ok(hit1b.some((h) => h.id === 'github.verify'), 'github.verify must remain within top-4 (research.run (W2) occupied a top-3 slot): got ' + hit1b.map((h) => h.id));
 
   const hit2 = reg.search('write a file to disk', { limit: 3 });
   assert.ok(hit2.some((h) => h.id === 'fs.write'), `fs.write inom topp-3: fick [${hit2.map((h) => h.id)}]`);

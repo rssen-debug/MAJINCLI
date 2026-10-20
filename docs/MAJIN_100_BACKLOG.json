@@ -25,7 +25,7 @@
       "wave": "W2",
       "desc": "PLAN→SEARCH→FETCH→EXTRACT→CROSS-CHECK→SYNTHESIZE→VERIFY + citation ledger, contradiction detection, reliability märkning.",
       "test": "test/research.test.js + real-topic fixture (offline-mocks for unit, real-net for integration)",
-      "status": "MISSING"
+      "status": "IMPLEMENTERAD + basverifierad (8/8 fixtures ✓, plan→search→fetch→extract→cross-check→synthesize→verify + ledgers; integration-honesty bevisad: zero-source => honest refusal); sandbox-search-egress blockerar real-net smoke här (DuckDuckGo/Bing 0 results) — verifikation mot live-webb flyttas till acceptance-lane"
     },
     {
       "rank": 4,
@@ -129,6 +129,13 @@
       "done": "W1 absorb implementerad: src/core/absorb.js (statisk radar, licens-detektion, dep-parse, modul-signatur-scan, gap-analys mot ALL_TOOLS) + CLI 'majin absorb <repo>' + test/absorb.test.js (5 gröna) + i18n-fix (English-only policy) + full regression 565/547/0/18 ✓ + riktigt bevis: UFO-scannad",
       "percent": 31,
       "next": "W2 research-engine (PLAN→SEARCH→FETCH→EXTRACT→CROSS-CHECK→SYNTHESIZE→VERIFY) eller GLM-acceptance-closeout om run 39474266667 landat"
+    },
+    {
+      "round": 3,
+      "date": "2026-10-20",
+      "done": "W2 RESEARCH: src/core/research.js (pipelinen + contradiction-flags + reliability + ledger + verify) + tools register research.run (109 verktyg, contract-golden uppdaterat medvetet) + 'majin research <question>' CLI + 8 test fixtures gröna + hela sviten 573/555/0/18 ✓ + real-CLI-bevisad honest no_sources-path",
+      "percent": 34,
+      "next": "W3 execution-backends (local/docker/ssh via gemeinsamt interface + ärliga missing-cred-fel) eller W7 mission-contract acceptance"
     }
   ]
 }

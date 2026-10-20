@@ -4,14 +4,14 @@
 
 > Ärlighetsregel: ingen % utan reproducerbart bevis. Gamla COMPLETION_MATRIX.md (100/100 på papper) motsägs av uppmätta artefakter och ersätts av DENNA fil som sanning.
 
-## Total ekvivalent status: **31/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
+## Total ekvivalent status: **34/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
 
 ## Per-våg (VERIFIED kräver artefakt, INTE bara att koden finns)
 
 | Våg | Klassificering | Bevis / saknas |
 |---|---|---|
 | W1 Absorb | **VERIFIED-CORE** |  implementerad + bevisad: fixtures 5/5 ✓ + riktigt scan microsoft/UFO (851 fil, MIT, modulvärme); gap-analys vs 108-verktyg ✓ (se docs/evidence / absorb-artefakter) |
-| W2 Research-motor | **MISSING** | inget research-pipeline-spår |
+| W2 Research-motor | **VERIFIED-CORE + ENV-BLOCK-ANT*** | research.run implementerad (pipeline, ledger, konfliktflaggor); 8/8 fixtures ✓ + hela suiten 573/555/0/18 ✓; real-net-integration begränsad av sandbox-egress (DuckDuckGo/Bing 0/0) — verifieras i acceptance-lane |
 | W3 Execution-backends | **MISSING** | docker/ssh: inga moduler; ärliga fel-spår är policy men ej kod |
 | W4 Standing agent teams | **INCOMPLETE** | src/core/swarm.js finns (HYPERSWARM-papper); persistent identity/shared memory/budgets/checkpoint/recovery obevit |
 | W5 Event flows | **MISSING** | schedule.js finns (✅ CRUD-verifierad i QA), men inga trigger-typer utanför cron, ingen webhook/file-event/event-history |
