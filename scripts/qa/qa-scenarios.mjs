@@ -742,8 +742,12 @@ async function c04(a) { // BM_CLICK via fragmentet — Run-dialog min OK lyssnar
   if (hostedGuiBlocked(a, 'control.click_button')) return;
   spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Start-Process rundll32.exe -ArgumentList "shell32,#61"'], { windowsHide: true, timeout: 6000 });
   await sleep(2200);
-  const type = await qaApprovedTool('control.type', { window: 'Run', text: 'notepad.exe' });
-  const click = await qaApprovedTool('control.click_button', { window: 'Run', caption: 'OK' });
+  // Windows' Run dialog is localized ("Kör" on Swedish Windows).
+  const windows = await api('POST', '/api/tool', { tool: 'control.list_windows', args: {} });
+  const titles = (windows.json?.meta?.windows || []).map((w) => String(w.title || ''));
+  const runTitle = titles.find((t) => /^Run$/i.test(t)) || titles.find((t) => /^Kör$/i.test(t)) || 'Run';
+  const type = await qaApprovedTool('control.type', { window: runTitle, text: 'notepad.exe' });
+  const click = await qaApprovedTool('control.click_button', { window: runTitle, caption: 'OK' });
   await sleep(1800);
   const list = await api('POST', '/api/tool', { tool: 'control.list_windows', args: {} });
   const notepadUp = /Notepad/i.test(JSON.stringify(list.json || {}));
@@ -751,7 +755,7 @@ async function c04(a) { // BM_CLICK via fragmentet — Run-dialog min OK lyssnar
   const ok = type.json.ok === true && click.json.ok === true && notepadUp;
   return a(ok ? CL.CI : CL.FAIL, ok
     ? 'control-click BM_CLICK sold a real button on the Run dialog and Notepad opened (negative control: text written, button clicked, window observed in list_windows)'
-    : `BM_CLICK lane failed (type=${type.json.ok}, click=${click.json.ok}, notepadUp=${notepadUp})`, { type: type.json, click: click.json });
+    : `BM_CLICK lane failed (type=${type.json.ok}, click=${click.json.ok}, notepadUp=${notepadUp})`, { runTitle, titles: titles.slice(0, 12), type: type.json, click: click.json });
 }
 
 async function c01(a) {
@@ -803,12 +807,16 @@ async function b01(a) {
   const open = await qaApprovedTool('browser.open', { url: 'https://example.com', headless: true }, { timeoutMs: 120000 });
   if (open.json.ok !== true) return a(CL.FAIL, `browser.open refused: ${open.json.error?.message || ''}`.slice(0, 140), open.json);
   await sleep(1500);
-  const read = await api('POST', '/api/tool', { tool: 'browser.read', args: {} }, { timeoutMs: 60000 });
+  let read = await api('POST', '/api/tool', { tool: 'browser.read', args: { selector: '' } }, { timeoutMs: 60000 });
+  for (let retry = 0; retry < 6 && !(read.json?.ok === true && /Example Domain/i.test(String(read.json.result || ''))); retry++) {
+    await sleep(1000);
+    read = await api('POST', '/api/tool', { tool: 'browser.read', args: { selector: '' } }, { timeoutMs: 60000 });
+  }
   const shot = await api('POST', '/api/tool', { tool: 'browser.shot', args: { path: 'qa-audit/example.png' } }, { timeoutMs: 60000 });
   const body = String(read.json.result || '');
   const ok = read.json.ok === true && /Example Domain/i.test(body);
   const shotRef = shot.json.ok === true ? 'saved' : String(shot.json.error?.message || 'failed');
-  return a(ok ? CL.CI : CL.FAIL, ok ? `real browser automation through the installed app: opened example.com, read text ("Example Domain" found), screenshot ${shotRef}` : 'browser read-back incomplete', { open: true, readPreview: body.slice(0, 100), shot: shotRef, shotMeta: shot.json.meta || null });
+  return a(ok ? CL.CI : CL.FAIL, ok ? `real browser automation through the installed app: opened example.com, read text ("Example Domain" found), screenshot ${shotRef}` : 'browser read-back incomplete', { open: true, readPreview: body.slice(0, 100), shot: shotRef, shotMeta: shot.json.meta || null, readError: read.json.error || null, readOk: read.json.ok || false });
 }
 
 const PLAN = [
