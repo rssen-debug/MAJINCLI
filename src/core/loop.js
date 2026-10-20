@@ -11,7 +11,7 @@ import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
-import { inspectRequestedArtifact } from './goal-artifact.js';
+import { inspectRequestedArtifact, pinSingleFileWrite } from './goal-artifact.js';
 
 /*
  * Väljer vilka scheman modellen får se detta steg. Standard: hela den synliga
@@ -261,7 +261,14 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     messages.push({ role: 'assistant', content: res.text || '', tool_calls: calls.map((c) => ({ id: c.id, name: c.name, args: safeParse(c.argsJson) })) });
 
     const runOne = async (c) => {
-      const args = safeParse(c.argsJson);
+      const suppliedArgs = safeParse(c.argsJson);
+      const pin = actionGoal && !ctx?.readOnly
+        ? pinSingleFileWrite(initialGoal, cfg.get('workspace'), c.name, suppliedArgs) : null;
+      const args = pin?.args || suppliedArgs;
+      if (pin?.corrected) {
+        onEvent({ type: 'artifact_path_corrected', label, step: steps, tool: c.name,
+          originalPath: pin.originalPath, requestedPath: pin.requestedPath });
+      }
       onEvent({ type: 'tool_begin', label, step: steps, callId: c.id, name: c.name });
       const rep = wdDetect.hit(c.name, args);
       let out;
