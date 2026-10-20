@@ -10,6 +10,31 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 
 
 
+
+## 2026-10-20 — WAVE 6: §12 machinery — matrix-integrity CI gate + executable release gate — v0.9.14
+
+### Added
+- **`scripts/matrix-check.mjs`** — shared parser: all FIVE representations of the earned total
+  (header, phase-table sum, TOTAL row, DEL-header sum, PASS-row point sum) must agree; PASS rows
+  need evidence cells; max-total drift checked separately. One parser, one verdict — imported by
+  BOTH the CI test and the release gate so the two can never fork the truth.
+- **`test/w6-matrix-integrity.test.js`** (6 tests) — the 2026-10-19/20 drift classes are now CI
+  failures: stale TOTAL row, never-totaled PASS row, header inflation, evidence-less PASS,
+  max-drift — each proven with a surgical fixture, not asserted in prose.
+- **`scripts/release-gate.mjs`** — the executable half of §12 RELEASE_READY: version-literal
+  containment across 6 files, matrix integrity, DEV_CONTINUATION checkpoint ancestor-of-HEAD,
+  secret hygiene (real key shapes only: `oc_sk_<8+hex>`, `ghp_<25+>`, documented dummys excluded);
+  `--online` adds live release-asset count + sha256 hash-match for the current tag; `--json` for
+  automation. Exits 1 on any failure — it verifies, never manufactures readiness.
+- **`test/w6-release-gate.test.js`** (4 tests) — gate green on the real repo; JSON parseable;
+  sabotage-proven: a deliberately drifted matrix and a planted opencode-shaped key each BLOCK,
+  restore recovers; the repo's own `oc_sk_dummy-not-real` fixture is NOT a false positive.
+
+### Verified
+- WAVE-6 suite 10/10; gate `--online` live: v0.9.13 4 assets, both exe sha256-match.
+- Full local suite: **503 tests, 486 pass, 0 fail, 17 skip**.
+
+
 ## 2026-10-20 — Acceptance-matrix reconciliation + 12A live re-verification (documentation wave, no version change)
 
 ### Fixed (honesty of record-keeping, found by the §12 walk-through)
