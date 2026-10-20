@@ -1,4 +1,4 @@
-import { withTimeout, RepeatDetector, TurnClock } from './watchdog.js';
+import { withTimeout, withAbortDeadline, RepeatDetector, TurnClock } from './watchdog.js';
 /**
  * MAJIN — verktygsslingan.
  * Samma loop för huvudagenten och subagenter. Stegvisa beslut:
@@ -165,29 +165,41 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     onEvent({ type: 'step', label, step: steps, of: limit, job: stepJob, model: route.ref, escalated, toolsSent: sentTools.length, toolChars: sentTools.reduce((a, t) => a + t.description.length + JSON.stringify(t.parameters).length, 0) });
 
     let res;
-    if (typeof modelCall === 'function') {
-      /* test/offline seam (same spirit as mission workerOverride): the fake
-         model is caller-injected; live paths always go through complete(). */
-      res = await modelCall({ messages, stepJob, step: steps, tools: sentTools });
-    } else try {
-      res = await complete({
-        route,
-        job: `${label}:${stepJob}`,
-        messages,
-        tools: sentTools,
-        toolChoice: allowTools ? undefined : 'none',
-        stream: true,
-        maxTokens: agent.maxTokens || 6000,
-        temperature: agent.temperature ?? 0.2,
-        retries: providerRetries ?? agent.retries ?? 2,
-        signal,
-        onEvent: (ev) => {
-          if (ev.type === 'delta') onEvent({ type: 'delta', label, text: ev.text });
-          else if (ev.type === 'thinking') onEvent({ type: 'thinking', label, text: ev.text });
-          else onEvent({ type: 'tool', label, name: ev.name });
-        },
-      });
+    try {
+      const timeLeftMs = Math.max(1, wdTurnMaxMs - wdClock.over(wdTurnMaxMs).elapsedMs);
+      res = await withAbortDeadline(async (stepSignal) => {
+        if (typeof modelCall === 'function') {
+          /* Injectable seam also obeys timebox, even if a fake model ignores the signal. */
+          return modelCall({ messages, stepJob, step: steps, tools: sentTools, signal: stepSignal });
+        }
+        return complete({
+          route,
+          job: `${label}:${stepJob}`,
+          messages,
+          tools: sentTools,
+          toolChoice: allowTools ? undefined : 'none',
+          stream: true,
+          maxTokens: agent.maxTokens || 6000,
+          temperature: agent.temperature ?? 0.2,
+          retries: providerRetries ?? agent.retries ?? 2,
+          signal: stepSignal,
+          onEvent: (ev) => {
+            if (ev.type === 'delta') onEvent({ type: 'delta', label, text: ev.text });
+            else if (ev.type === 'thinking') onEvent({ type: 'thinking', label, text: ev.text });
+            else onEvent({ type: 'tool', label, name: ev.name });
+          },
+        });
+      }, { ms: timeLeftMs, parentSignal: signal, label: 'MAJIN model turn' });
     } catch (err) {
+      if (err?.code === 'turn_timeout') {
+        onEvent({ type: 'turn_timeout', label, steps, elapsedMs: wdClock.over(wdTurnMaxMs).elapsedMs, limitMs: wdTurnMaxMs });
+        return { text: answer || 'MAJIN stopped this model call at the configured turn deadline; the task is not complete.',
+          steps, toolLog, usage: tally, escalated, incomplete: true,
+          stopReason: 'turn_timeout', blocked: 'model call did not finish before agent.maxTurnSec' };
+      }
+      if (err?.code === 'aborted' || signal?.aborted) {
+        return { text: answer || '(avbruten)', steps, toolLog, usage: tally, aborted: true, escalated };
+      }
       errors += 1;
       const info = err.majin || explainError(err, route);
       bus.error('loop.provider', { label, step: steps, error: err.message, code: err.code, kind: info.kind });
