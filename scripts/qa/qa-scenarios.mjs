@@ -653,6 +653,22 @@ async function c03(a) { // control lane THROUGH THE INSTALLED PRODUCT — the us
     : `control lane via installed product broken (write=${wrote}, read=${read})`, { wrote, read, detail: sum });
 }
 
+
+async function c04(a) { // BM_CLICK via fragmentet — Run-dialog min OK lyssnar
+  spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Start-Process rundll32.exe -ArgumentList "shell32,#61"'], { windowsHide: true, timeout: 6000 });
+  await sleep(2200);
+  const type = await api('POST', '/api/tool', { tool: 'control.type', args: { window: 'Run', text: 'notepad.exe' } });
+  const click = await api('POST', '/api/tool', { tool: 'control.click_button', args: { window: 'Run', caption: 'OK' } });
+  await sleep(1800);
+  const list = await api('POST', '/api/tool', { tool: 'control.list_windows', args: {} });
+  const notepadUp = /Notepad/i.test(JSON.stringify(list.json || {}));
+  spawnSync('powershell.exe', ['-NoProfile', '-Command', "Get-Process notepad -ErrorAction SilentlyContinue | Stop-Process -Force; Get-Process rundll32 -ErrorAction SilentlyContinue | Stop-Process -Force"], { timeout: 8000 });
+  const ok = type.json.ok === true && click.json.ok === true && notepadUp;
+  return a(ok ? CL.CI : CL.FAIL, ok
+    ? 'control-click BM_CLICK sold a real button on the Run dialog and Notepad opened (negative control: text written, button clicked, window observed in list_windows)'
+    : `BM_CLICK lane failed (type=${type.json.ok}, click=${click.json.ok}, notepadUp=${notepadUp})`, { type: type.json, click: click.json });
+}
+
 async function c01(a) {
   const r = spawnSync('powershell.exe', ['-NoProfile', '-Command', "(Get-Process | Where-Object { $_.MainWindowTitle -ne '' } | Select-Object -First 8 Name, MainWindowTitle | ConvertTo-Json -Compress"], { encoding: 'utf8', timeout: 30000 });
   let items = [];
@@ -728,6 +744,7 @@ const PLAN = [
   ['s26', '/api/report route contract + escape refused', 'api-contract', CL.CI, s26],
   ['c01', 'windows enumeration (in-session capability)', 'control', CL.CI, c01],
   ['c03', 'computer control via installed tool belt (Notepad WM_SETTEXT→WM_GETTEXT)', 'control', CL.CI, c03],
+  ['c04', 'control-click BM_CLICK (Run dialog OK — negative control via edit cleared)', 'control', CL.CI, c04],
   ['c02', 'interactive desktop actuation (honesty gate)', 'control', CL.REAL, c02],
   ['b01', 'browser automation through installed tool belt', 'browser-automation', CL.CI, b01],
 ];
