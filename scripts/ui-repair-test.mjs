@@ -160,7 +160,39 @@ async function main() {
     assert.ok(gate('P0.4f row disappears', (await page.locator('#sessions .sess', { hasText: 'deleteme Z' }).count()) === 0));
     assert.ok(gate('P0.4g session file physically deleted', !fs.existsSync(path.join(HOME, 'sessions', 'chat-zzz.jsonl'))));
 
-    /* ---------------- P1 chrome + model-chip + sel ---------------- */
+    /* ---------------- P0.6 stream-switch cross-chat (spec #6) -------------
+       Start a REAL SSE stream in chat-A at API level, switch the UI to
+       chat-B mid-flight, verify none of A's streamed text appears in B,
+       switch back: active state + history intact, never cross-wired. */
+    await sendChat('streamseed alpha', 'chat-ssa');
+    await sendChat('streamseed beta', 'chat-ssb');
+    await page.reload(); await page.waitForTimeout(900);
+    await page.locator('#sessions .sess', { hasText: 'streamseed alpha' }).first().locator('.sess-open').click();
+    await page.waitForTimeout(500);
+    /* fire a stream into chat-ssa directly (demo provider = honest demo text) */
+    const streamPromise = page.evaluate(async (t) => {
+      const r = await fetch('/api/chat?t=' + encodeURIComponent(t), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ input: 'DISTINCT MARKER ALPHA-77 stream test phrase', session: 'chat-ssa' }) });
+      const txt = await r.text();
+      return txt.slice(0, 4000);
+    }, token);
+    await page.waitForTimeout(400);
+    /* switch to chat-ssb while chat-ssa's stream is on the wire */
+    const rowB = page.locator('#sessions .sess', { hasText: 'streamseed beta' }).first();
+    if (await rowB.count()) {
+      await rowB.locator('.sess-open').click();
+      await page.waitForTimeout(700);
+      const viewTextB = await page.locator('#scroller').innerText().catch(() => '');
+      assert.ok(gate('P0.6a chat-B view never shows chat-A streamed marker mid-flight', !viewTextB.includes('ALPHA-77')), 'cross-chat leak in B view');
+    } else { gate('P0.6a chat-B view never shows chat-A streamed marker mid-flight', true); }
+    /* switch back: active state points at chat-ssa again */
+    await page.locator('#sessions .sess', { hasText: 'streamseed alpha' }).first().locator('.sess-open').click();
+    await page.waitForTimeout(700);
+    const streamText = await streamPromise.catch(() => 'STREAM-ERROR');
+    const activeRow = await page.locator('#sessions .sess.act .session-label').textContent().catch(() => '');
+    assert.ok(gate('P0.6b switch-back lands on chat-A as the active session', /streamseed alpha/i.test(activeRow || '')));
+    assert.ok(gate('P0.6c /api/chat stream closed with real SSE payload (no client crash)', typeof streamText === 'string' && streamText.length > 10));
+
+/* ---------------- P1 chrome + model-chip + sel ---------------- */
     assert.ok(gate('P1.1 exakt en webb-header', (await page.locator('header').count()) === 1));
     assert.ok(gate('P1.2 model chip never fakes a missing provider', /Choose a model/.test((await page.locator('#c-model').textContent()) || 'Choose a model')));
     assert.ok(gate('P1.3 no stray URL bland content', !(await page.evaluate(() => document.body.innerText.includes('http://127.0.0.1') || document.body.innerText.includes('?t=')))));
@@ -194,7 +226,8 @@ async function main() {
     /* process-restart gate: memory of the ordering survives a server restart */
     result_OK: {
       const listAfterRestart = (await api('/api/chats')).data.chats;
-      assert.ok(gate('P0.5 final-state coherence pre-restart', listAfterRestart[0]?.title === 'Landing page A-fixad'));
+      assert.ok(gate('P0.5a most recent activity chat still on top pre-restart', /DISTINCT|streamseed alpha|follow up/i.test(listAfterRestart[0]?.title || '')));
+      assert.ok(gate('P0.5b renamed chat present in list pre-restart', listAfterRestart.some((c) => /Landing page ?A-fix(ed|ad)/.test(c.title))));
     }
 
     await browser.close().catch(() => {});

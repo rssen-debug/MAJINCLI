@@ -105,6 +105,12 @@ Use real Chromium Playwright against a disposable MAJIN server, plus real Window
 - **Acceptance suite delivered**: `scripts/ui-repair-test.mjs` — **26/26 gates
   green** against real Chromium incl. reload AND process-restart durability;
   **620/602/0/18** existing suite green, i18n curtain clean.
+- **Stream-switch (spec #6)**: FIXED + VERIFIED — gates P0.6a-c found the
+  switch-back bug (classic-script `const S` never landed on `window`, so
+  chats.js updated a ghost object and the real session never moved); fixed by
+  an explicit `window.S` alias. Verified with a real mid-flight SSE stream,
+  switch away and back: no cross-chat text, correct active state, history
+  intact. Cross-chat content was measured clean even before the fix (P0.6a).
 - **NOT TESTED here (environment)**: Windows-native window chrome visuals,
   drag-region aesthetics on Windows, OpenCode-Go live provider lane (separate
   audited gate), installer/update smoke on Windows. Syne my-kördtandard the

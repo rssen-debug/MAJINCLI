@@ -26,7 +26,7 @@
   "parity": true,
   "failures": 0,
   "chain": {
-    "wallMs": 194,
+    "wallMs": 193,
     "criticalPathMs": 192,
     "depsRespected": true,
     "okCount": 3
@@ -55,7 +55,7 @@
     {
       "kind": "serial",
       "rep": 1,
-      "wallMs": 490,
+      "wallMs": 488,
       "okCount": 8,
       "failCount": 0,
       "overlap": 0,
@@ -65,7 +65,7 @@
     {
       "kind": "parallel",
       "rep": 1,
-      "wallMs": 75,
+      "wallMs": 74,
       "okCount": 8,
       "failCount": 0,
       "overlap": 28,

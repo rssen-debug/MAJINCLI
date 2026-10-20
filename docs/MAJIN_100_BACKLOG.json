@@ -192,6 +192,13 @@
       "done": "W11 RESET-toolkit implementerad pa samma sakerhets-mekanismer som resten av systemet (dry-run measure only / token-bound apply / scope guard / blocked-claims): reset.js + 2 verktyg + recovery-runbook-doc. 6/6 reset-tester + full 626/608/0/18",
       "percent": 58,
       "next": "W4 browser/computer-control-loop-strangthening eller W5/W6-outkrafter (telelistar klar) eller win-runner-acceptancen for CU-lane + UI-repair stream-switch gapet (numeriserat OPEN i UI-specen)"
+    },
+    {
+      "round": 12,
+      "date": "2026-10-20",
+      "done": "UI-specens gap #6 (stream-switch cross-chat, sjalv-rapporterad OPEN i forra push) NU STANGD: acceptance-gates P0.6a-c added to scripts/ui-repair-test.mjs (real SSE-stream into chat-A via API mid-flight, switch to chat-B, verify no leak, switch back). Test FIRST: P0.6b was RED -> real bug: window.S was undefined in classic-script global scope (const top-level scripts don't attach); chats.js wrote to a ghost object — clicks never moved the actual session. Fix: explicit window.S = S alias in app.js. Also P0.5a/b robustness-gates. 30/30 gates + full suite 633/615/0/18",
+      "percent": 60,
+      "next": "W14 self-audit eller W6 power-transfer eller win-runner acceptance for CU + headline-chrome pa Windows (env-gate)"
     }
   ]
 }

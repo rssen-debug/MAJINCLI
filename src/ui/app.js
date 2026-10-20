@@ -1,6 +1,11 @@
 /* MAJIN — UI. No framework, no CDN. One document, two scripts. */
 const TOKEN = (window.__MAJIN_TOKEN__ || 'demo');
 const S = { session: 'desktop', busy: false, st: null, voice: false, cur: null, curBody: '', tools: null, gauge: null, t0: 0 };
+/* labels "const" in classic scripts do NOT get sticky on window — the chat
+   list module (chats.js) reads window.S, so expose the ONE source-of-truth
+   state explicitly. Without this, clicks update a ghost object while the
+   real session never moves (caught by gate P0.6b). */
+window.S = S;
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, html) => {
   const n = document.createElement(tag);

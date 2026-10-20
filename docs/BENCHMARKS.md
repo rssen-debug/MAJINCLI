@@ -182,7 +182,7 @@ parallelism only** — model quality/latency live in `scripts/live-bench.mjs`.
 | single-agent baseline (cap=1), 8 tasks | 474 ms | 0/0/0 |
 | MAJIN parallel (cap=8) | 71 ms | 28/28/28 |
 | **speedup (median)** | **6.68×** | parity OK |
-| dependency chain (3 deep, cap=3) | 194 ms (critical path 192 ms) | deps respected: YES |
+| dependency chain (3 deep, cap=3) | 193 ms (critical path 192 ms) | deps respected: YES |
 
 Config: fan=8, reps=3, taskMs=60, jitter=15, seed=0x3e. Failures: 0.
 <!-- SWARM-BASELINE:END -->
