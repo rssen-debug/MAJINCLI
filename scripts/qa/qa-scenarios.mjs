@@ -751,6 +751,7 @@ async function c04(a) { // BM_CLICK via fragmentet — Run-dialog min OK lyssnar
   await sleep(1800);
   const list = await api('POST', '/api/tool', { tool: 'control.list_windows', args: {} });
   const notepadUp = /Notepad/i.test(JSON.stringify(list.json || {}));
+  console.log('[QA c04 evidence]', JSON.stringify({runTitle, titles:titles.slice(0,15), type:type.json, click:click.json, notepadUp}).slice(0,1500));
   spawnSync('powershell.exe', ['-NoProfile', '-Command', "Get-Process notepad -ErrorAction SilentlyContinue | Stop-Process -Force; Get-Process rundll32 -ErrorAction SilentlyContinue | Stop-Process -Force"], { timeout: 8000 });
   const ok = type.json.ok === true && click.json.ok === true && notepadUp;
   return a(ok ? CL.CI : CL.FAIL, ok
@@ -815,6 +816,7 @@ async function b01(a) {
   }
   const shot = await api('POST', '/api/tool', { tool: 'browser.shot', args: { path: 'qa-audit/example.png' } }, { timeoutMs: 60000 });
   const body = String(read.json.result || '');
+  console.log('[QA b01 evidence]', JSON.stringify({open:open.json, read:read.json, shot:shot.json}).slice(0,1800));
   const ok = read.json.ok === true && /Example Domain/i.test(body);
   const shotRef = shot.json.ok === true ? 'saved' : String(shot.json.error?.message || 'failed');
   return a(ok ? CL.CI : CL.FAIL, ok ? `real browser automation through the installed app: opened example.com, read text ("Example Domain" found), screenshot ${shotRef}` : 'browser read-back incomplete', { open: true, readPreview: body.slice(0, 100), shot: shotRef, shotMeta: shot.json.meta || null, readError: read.json.error || null, readOk: read.json.ok || false });
@@ -872,7 +874,7 @@ async function main() {
   evidWrite('s00-boot', { bootMs, port: CFG.port, tokenFrom: 'config.json or stdout', exe: CFG.exe });
 
   for (const [id, name, lane, ceiling, fn] of PLAN) {
-    if (CFG.mechanicsOnly && LLM_REQUIRED.has(id)) {
+    if (CFG.mechanicsOnly && LLM_REQUIRED.has(id) && !(process.env.QA_OPENCODE_GO === 'true' && id === 's08')) {
       await scenario(id, name, lane, ceiling, async (a) => a(CL.SKIP, 'no local model can serve on this hosted windows-latest CPU — measured 3 models × 3 attempts × 420 s timed out (documented external blocker, not a product verdict). Self-hosted lane (runner=interactive-desktop) is where model-dependent scenarios are verified.', { blocker: 'hosted-cpu-inference', measured: 'smollm2/qwen2.5/llama3.2 all unreachable in 90–420 s windows', remedy: 'scripts/qa/setup-majin-interactive-runner.ps1 + runner=self-hosted' }));
       continue;
     }
