@@ -91,7 +91,7 @@
       "depends": [
         "W1-absorb"
       ],
-      "status": "MISSING"
+      "status": "VERIFIED-CORE: reset.js (planRecovery = dry-run-only measured marge counter; confirmToken binder det uppnatta fileset → anti-drift; applyRecovery removed files, collapse empty dirs, scope guard on every path; blocked-kind-list med arlig reason; sessions/memory/config never included in any recovery kind) + reset.plan (read) + reset.apply (exec→approval) verktyg + docs/WINDOWS_RECOVERY_RUNBOOK.md (plansmontering mot klarade fel). 6/6 fixtures + full svit 626/608/0/18 + golden 124→126"
     },
     {
       "rank": 13,
@@ -185,6 +185,13 @@
       "done": "PINK CURSOR / COMPUTER USE (host-milio: IMPLEMENTED + OFFLINE-VERIFIERAT, WINDOWS-LANE: NOT TESTED har): computer-use.js OBSERVE-PLAN-ACT-VERIFY-RECOVER-loop ovan pa BEFINTLIGA control.* SendMessage-survivor-lane (inga parallella system) + screen.capture; modelCall-seam = samma family som mission/workerOverride; done-claim refused utan verify-proof; W13 RepeatDetector own the strategy-wall (identiska plan = vägring, forced change); bounded maxSteps + explicit blocked-state med errorCategory (budget|model|stuck...); evidence steps.jsonl per session; ALLOWED_ACTIONS allowlist (inga godtyckliga modell-forstag). pink-cursor.js: verklig WinForms transparent topmost overlay (rosa glod citackel + label) via state.json-file 60ms-poll (inga sockets/deps) + quota/quit/hide/show/move; isWindowsDesktop-honest FORBIDDEN pa icke-Win. cursor.overlay + computer.use verktyg (exec-risk) inkopplade i befintligt registry. Golden 122 till 124 medvetet. 7/7 offline CU-tester + i18n-fix + schema-derivation-fix (default: kolon) + full svit 620/602/0/18",
       "percent": 55,
       "next": "Win-runner acceptance for CU-lane (interaktiv session, before/after screenshots, dedupe av CLAUDE-mandat Hal mandatkrav: actual interactive desktop tests) + UI-lager visualisering (Astra ager src/ui, frozen) + W11 RESET"
+    },
+    {
+      "round": 11,
+      "date": "2026-10-20",
+      "done": "W11 RESET-toolkit implementerad pa samma sakerhets-mekanismer som resten av systemet (dry-run measure only / token-bound apply / scope guard / blocked-claims): reset.js + 2 verktyg + recovery-runbook-doc. 6/6 reset-tester + full 626/608/0/18",
+      "percent": 58,
+      "next": "W4 browser/computer-control-loop-strangthening eller W5/W6-outkrafter (telelistar klar) eller win-runner-acceptancen for CU-lane + UI-repair stream-switch gapet (numeriserat OPEN i UI-specen)"
     }
   ]
 }
