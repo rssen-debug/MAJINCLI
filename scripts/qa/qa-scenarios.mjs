@@ -38,7 +38,8 @@ const CFG = {
   evid: path.resolve(process.env.QA_EVID || 'qa-evidence'),
   setup: process.env.QA_SETUP || '',
   setupShaFile: process.env.QA_SETUP_SHA || '',
-  models: (process.env.QA_MODELS || 'llama3.2:1b,qwen2.5:0.5b,smollm2:135m').split(',').map((s) => s.trim()).filter(Boolean),
+  models: (() => { const m = (process.env.QA_MODELS || 'llama3.2:1b,qwen2.5:0.5b,smollm2:135m'); return m === 'MECHANICS-ONLY' ? [] : m.split(',').map((x) => x.trim()).filter(Boolean); })(),
+  mechanicsOnly: (process.env.QA_MODELS || '') === 'MECHANICS-ONLY',
   only: process.env.QA_ONLY ? new Set(process.env.QA_ONLY.split(',').map((s) => s.trim())) : null,
 };
 const CL = { REAL: 'VERIFIED_REAL', CI: 'VERIFIED_CI', SIM: 'SIMULATED', BLOCKED: 'BLOCKED', FAIL: 'FAILED', SKIP: 'SKIPPED' };
@@ -756,6 +757,7 @@ const PLAN = [
   ['b01', 'browser automation through installed tool belt', 'browser-automation', CL.CI, b01],
 ];
 
+const LLM_REQUIRED = new Set(['d01', 'd03', 's08', 's10', 's11', 's12', 's13', 's14', 's16', 's17', 's23']);
 async function main() {
   console.log(`MAJIN QA REAL-WORLD engine — exe=${CFG.exe} home=${CFG.home} port=${CFG.port} evid=${CFG.evid} models=${CFG.models.join(',')}`);
   console.log(`classification ceiling: VERIFIED_CI (CI service session — GUI actuation lanes gate themselves)`);
@@ -768,6 +770,10 @@ async function main() {
   evidWrite('s00-boot', { bootMs, port: CFG.port, tokenFrom: 'config.json or stdout', exe: CFG.exe });
 
   for (const [id, name, lane, ceiling, fn] of PLAN) {
+    if (CFG.mechanicsOnly && LLM_REQUIRED.has(id)) {
+      await scenario(id, name, lane, ceiling, async (a) => a(CL.SKIP, 'no local model can serve on this hosted windows-latest CPU — measured 3 models × 3 attempts × 420 s timed out (documented external blocker, not a product verdict). Self-hosted lane (runner=interactive-desktop) is where model-dependent scenarios are verified.', { blocker: 'hosted-cpu-inference', measured: 'smollm2/qwen2.5/llama3.2 all unreachable in 90–420 s windows', remedy: 'scripts/qa/setup-majin-interactive-runner.ps1 + runner=self-hosted' }));
+      continue;
+    }
     await scenario(id, name, lane, ceiling, fn);
   }
 
