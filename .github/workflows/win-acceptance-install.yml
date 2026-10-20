@@ -1,0 +1,76 @@
+name: win-acceptance-install
+
+# 11A/11C/12B automation per owner directive (2026-10-22): what is automatable
+# on a disposable Windows runner MUST be automated. Downloads the real v0.9.20
+# release assets (public, no secrets), then on windows-latest:
+#  sha256: published hash vs installer hash (update-chain integrity)
+#  11A:    silent Inno install + first run (`majin --version` prints 0.9.x)
+#  11C:    seed user data, install OVER it, assert data survived
+#  12B:    `_serve` headless server running mid-task gets hard-killed,
+#         restart proves boot resilience
+# Emits ONE verdict JSON + uploads it. Dispatch-gated evidence runs.
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Acceptance verdict (11A/11C/12B)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $out = [ordered]@{ schema='majin.win-acceptance.v1'; ts=(Get-Date).ToUniversalTime().ToString('o'); checks=[ordered]@{}; notes=@() }
+          $rel = 'https://github.com/rssen-debug/MAJINCLI/releases/download/v0.9.20'
+          $setup = "$env:TEMP\majin-setup.exe"
+          Invoke-WebRequest "$rel/MAJIN-Setup.exe" -OutFile $setup
+          $shaRel = (Invoke-WebRequest "$rel/MAJIN-Setup.exe.sha256").Content.Trim().Split()[0]
+          $shaFile = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
+          $out.checks['sha256_match'] = ($shaRel -eq $shaFile)
+
+          # 11A: clean install + first run
+          & $setup /VERYSILENT /SUPPRESSMSGBOXES /NORESTART | Out-Null
+          $exe = "$env:LOCALAPPDATA\Programs\MAJIN\majin-win-x64.exe"
+          if (-not (Test-Path $exe)) { $exe = "$env:ProgramFiles\MAJIN\majin-win-x64.exe" }
+          $out.checks['installed'] = (Test-Path $exe)
+          $verOut = ''
+          if ($out.checks['installed']) {
+            # electron .exe: pipe the console through cmd.exe (session 0 safe)
+            $verOut = (cmd /c "`"$exe`" --version" 2>&1 | Out-String).Trim()
+          }
+          $out.checks['first_run_version'] = ($verOut -match '0\.9\.') ? $true : $false
+          $out.notes += "first_run_output=$verOut"
+
+          # 11C: data preservation across install-over-install
+          $homeApp = "$env:USERPROFILE\.majin"
+          New-Item -ItemType Directory -Force $homeApp | Out-Null
+          '{"cfg":{"seed":true,"createdFor":"11C-acceptance"}}' | Out-File "$homeApp\config.json"
+          'session-marker-content' | Out-File "$homeApp\session.marker"
+          & $setup /VERYSILENT /SUPPRESSMSGBOXES /NORESTART | Out-Null
+          $out.checks['data_preserved'] = (Test-Path "$homeApp\config.json") -and
+            ((Get-Content "$homeApp\config.json" -Raw) -match '11C-acceptance') -and
+            ((Get-Content "$homeApp\session.marker" -Raw) -match 'session-marker-content')
+
+          # 12B: mid-task hard kill + restart recovery (boot resilience)
+          $outPath = "$env:TEMP\restart-out.txt"
+          $p = Start-Process -FilePath cmd.exe -ArgumentList '/c "`"$exe`" _serve"' -PassThru -NoNewWindow
+          Start-Sleep -Seconds 4
+          $alive = -not $p.HasExited
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          $p2 = Start-Process -FilePath cmd.exe -ArgumentList "/c \`"$exe\`" --version > \`"$outPath\`" 2>&1 & exit 0" -PassThru -NoNewWindow
+          $p2.WaitForExit(20000) | Out-Null
+          Start-Sleep -Seconds 2
+          $restartOut = if (Test-Path $outPath) { Get-Content $outPath -Raw } else { '' }
+          $out.checks['kill_recovery'] = $alive -and ($restartOut -match '0\.9\.')
+          $out.notes += "kill_recovery alive=$alive restartOut=$($restartOut.Trim())"
+
+          $out | ConvertTo-Json -Depth 6 | Out-File verdict.json -Encoding utf8
+          Get-Content verdict.json -Raw
+      - name: Upload verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-acceptance-verdict
+          path: verdict.json
