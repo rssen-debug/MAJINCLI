@@ -9,7 +9,7 @@ test('empty messages fail locally before any upstream request', async () => {
   globalThis.fetch = async () => { called++; throw new Error('must not send'); };
   try {
     const route = { model: 'glm-5.3-flash', apiKey: 'fixture', endpoint: 'https://example.invalid/chat/completions', providerName: 'OpenCode Go' };
-    await assert.rejects(() => openaiOnce(route, { messages: [], maxTokens: 12, temperature: 0.2 }), /No user or system message/);
+    await assert.rejects(() => openaiOnce({ route, messages: [], maxTokens: 12, temperature: 0.2 }), /No user or system message/);
     assert.equal(called, 0, 'no invalid HTTP request');
   } finally { globalThis.fetch = previous; }
 });
