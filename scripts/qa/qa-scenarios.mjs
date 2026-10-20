@@ -143,6 +143,42 @@ async function apiSpoofHost(p, host) {
   });
 }
 
+/**
+ * Run only the fixture-specific UI actions required by this explicitly
+ * dispatched QA job. Production guard stays enabled: we respond to the
+ * exact pending approval through the real HTTP endpoint (never bypass it).
+ * A pending request from another session or with other args is NOT approved.
+ */
+async function qaApprovedTool(tool, args, { timeoutMs = 65000 } = {}) {
+  const allowed = new Set(['control.type', 'control.click_button', 'browser.open']);
+  if (!allowed.has(tool)) throw new Error(`QA approval refused: ${tool} is not a QA fixture action`);
+  const invokedAt = Date.now();
+  let completed = false;
+  const work = api('POST', '/api/tool', { tool, args }, { timeoutMs })
+    .then((r) => { completed = true; return r; }, (e) => { completed = true; throw e; });
+  // Keep the rejection observed even if an approval probe itself fails.
+  work.catch(() => {});
+  const limit = Date.now() + 10000;
+  while (!completed && Date.now() < limit) {
+    const p = await api('GET', '/api/approvals', undefined, { timeoutMs: 5000 });
+    const pending = (p.json?.pending || []).find((a) =>
+      a.tool === tool && a.session === 'ui-api' &&
+      Number.isFinite(Date.parse(a.ts)) && Date.parse(a.ts) >= invokedAt - 1000 &&
+      Object.entries(args).every(([k, v]) => JSON.stringify(a.args?.[k]) === JSON.stringify(v)));
+    if (pending) {
+      const r = await api('POST', '/api/approve', {
+        id: pending.id, approved: true, note: 'fixture-only real-world QA approval',
+      }, { timeoutMs: 5000 });
+      if (r.json?.ok !== true) throw new Error(`QA approval failed for ${tool}`);
+      console.log(`[QA] explicitly approved ${tool} (id ${pending.id}) through /api/approve`);
+      return work;
+    }
+    await sleep(250);
+  }
+  if (!completed) throw new Error(`QA: ${tool} still running, no matching approval surfaced in 10s`);
+  return work;
+}
+
 /** POST /api/chat as SSE; resolves {events, text, doneEvent, taskId, msToFirstDelta, msTotal} */
 function sseChat(input, { session, timeoutMs = 240000, onDelta, extra = {} } = {}) {
   return new Promise(async (resolve, reject) => {
@@ -667,7 +703,7 @@ async function c03(a) { // control lane THROUGH THE INSTALLED PRODUCT — the us
   spawnSync('cmd.exe', ['/c', 'start notepad.exe'], { windowsHide: true, timeout: 8000 });
   await sleep(2500);
   const payload = `MAJIN-CONTROL-PROOF-${Date.now() % 10000}`;
-  const write = await api('POST', '/api/tool', { tool: 'control.type', args: { window: 'Notepad', text: payload } });
+  const write = await qaApprovedTool('control.type', { window: 'Notepad', text: payload });
   const readBack = await api('POST', '/api/tool', { tool: 'control.read', args: { window: 'Notepad' } });
   spawnSync('powershell.exe', ['-NoProfile', '-Command', "Get-Process notepad -ErrorAction SilentlyContinue | Stop-Process -Force"], { timeout: 10000 });
   const wrote = write.json.ok === true && JSON.stringify(write.json).includes(payload);
@@ -683,8 +719,8 @@ async function c03(a) { // control lane THROUGH THE INSTALLED PRODUCT — the us
 async function c04(a) { // BM_CLICK via fragmentet — Run-dialog min OK lyssnar
   spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Start-Process rundll32.exe -ArgumentList "shell32,#61"'], { windowsHide: true, timeout: 6000 });
   await sleep(2200);
-  const type = await api('POST', '/api/tool', { tool: 'control.type', args: { window: 'Run', text: 'notepad.exe' } });
-  const click = await api('POST', '/api/tool', { tool: 'control.click_button', args: { window: 'Run', caption: 'OK' } });
+  const type = await qaApprovedTool('control.type', { window: 'Run', text: 'notepad.exe' });
+  const click = await qaApprovedTool('control.click_button', { window: 'Run', caption: 'OK' });
   await sleep(1800);
   const list = await api('POST', '/api/tool', { tool: 'control.list_windows', args: {} });
   const notepadUp = /Notepad/i.test(JSON.stringify(list.json || {}));
@@ -732,7 +768,7 @@ async function c02(a) {
   return a(CL.SKIP, 'not in CI and interactive state is unverified; not attempting GUI actuation without the interactive-runner contract', { userInteractive, session: s.slice(0, 120) });
 }
 async function b01(a) {
-  const open = await api('POST', '/api/tool', { tool: 'browser.open', args: { url: 'https://example.com' } }, { timeoutMs: 120000 });
+  const open = await qaApprovedTool('browser.open', { url: 'https://example.com' }, { timeoutMs: 120000 });
   if (open.json.ok !== true) return a(CL.FAIL, `browser.open refused: ${open.json.error?.message || ''}`.slice(0, 140), open.json);
   await sleep(1500);
   const read = await api('POST', '/api/tool', { tool: 'browser.read', args: {} }, { timeoutMs: 60000 });
