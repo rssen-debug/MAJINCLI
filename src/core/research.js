@@ -87,11 +87,22 @@ export function crossCheck(claimsBySource) {
       }
       merged.push({ sentence: c.sentence, anchors: c.anchors, support: 1, sources: [c.sourceId], conflicts: false });
     }
-    const texts = merged.map((m) => m.sentence);
+    // Only mark a conflict when distinct claims in this bucket explicitly oppose each other.
+    // A single sentence can contain both polarities while describing a timeline,
+    // so testing hasNeg && hasPos across the entire group produces false positives.
     for (const [neg, pos] of POLARS) {
-      const hasNeg = texts.some((t) => neg.test(t));
-      const hasPos = texts.some((t) => pos.test(t));
-      if (hasNeg && hasPos) for (const m of merged) m.conflicts = true;
+      for (let i = 0; i < merged.length; i++) {
+        for (let j = i + 1; j < merged.length; j++) {
+          const a = merged[i].sentence;
+          const b = merged[j].sentence;
+          const opposite = (neg.test(a) && pos.test(b) && !pos.test(a) && !neg.test(b))
+            || (pos.test(a) && neg.test(b) && !neg.test(a) && !pos.test(b));
+          if (opposite && sim(a, b) > 0.35) {
+            merged[i].conflicts = true;
+            merged[j].conflicts = true;
+          }
+        }
+      }
     }
     clusters.push(...merged);
   }
@@ -133,7 +144,7 @@ export function synthesize({ question, clusters, sources, ledger }) {
   }
   if (conflicted.length) {
     L.push(``); L.push(`## Contradictions detected (flagged, never merged)`);
-    for (const c of conflicted.slice(0, 8)) L.push(`- ${c.sentence} $(sources: ${c.sources.join(', ')})`);
+    for (const c of conflicted.slice(0, 8)) L.push(`- ${c.sentence} (sources: ${c.sources.join(', ')})`);
   }
   L.push(``); L.push(`## Source ledger (only actually fetched URLs)`);
   sources.forEach((s, i) => {
