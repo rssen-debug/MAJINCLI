@@ -26,6 +26,40 @@ function pickSchemas(registry, ctx) {
   return all.filter((t) => wanted.has(t.name));
 }
 
+/**
+ * Promote real, allowlisted tool schemas after tools.search.
+ * Previously tools.search listed fs.write/browser.shot but the next model call
+ * still received only the original tiny subset, so weak models guessed and
+ * failed with unknown_tool. Never bypass tools.allow or readOnly.
+ */
+export function expandDiscoveredTools(current, toolResult, registry, { readOnly = false, cap = 32 } = {}) {
+  if (!Array.isArray(current) || !current.includes('tools.search') || toolResult?.ok === false) return current;
+  let body;
+  try { body = typeof toolResult?.result === 'string' ? JSON.parse(toolResult.result) : toolResult?.result; }
+  catch { return current; }
+  if (!Array.isArray(body?.matches)) return current;
+  const visible = new Set(registry.schemas({ readOnly: Boolean(readOnly) }).map((tool) => tool.name));
+  const names = new Set(current.filter((name) => visible.has(name)));
+  for (const hit of body.matches) {
+    if (names.size >= cap) break;
+    if (typeof hit?.name === 'string' && visible.has(hit.name)) names.add(hit.name);
+  }
+  return [...names];
+}
+
+/**
+ * Only explicit execution requests count: not questions asking how to do it.
+ * Small LLMs sometimes say "done" without even trying a tool. Such answers
+ * get one bounded recovery opportunity and an honest incomplete verdict.
+ */
+export function requiresRealAction(input) {
+  const t = String(input || '').trim();
+  if (!t || /^(?:hur|how|why|varför|what|vad|explain|förklara|tell me|berätta|visa hur|can you explain)\b/i.test(t)) return false;
+  const request = /^(?:(?:please|snälla|kan du|could you|jag vill att du|i want you to|du ska)\s+)?(?:create|write|save|edit|modify|delete|remove|build|make|download|open|take|search|apply|skapa|skriv|spara|redigera|ändra|radera|ta bort|bygg|öppna|ladda ner|sök|ansök|ta en)\b/i;
+  const artifact = /(?:\b[\w.-]+\.(?:txt|md|json|js|mjs|jsx|ts|tsx|html|css|py|csv|png|jpg|pdf|docx|sol)\b|\bfile\b|\bfil(?:en|er)?\b|\bwebb(?:sida|plats)\b|\bwebsite\b|\bbrowser\b|\bwebbläsare\b|\bscreenshot\b|\bskärmbild\b|\bjobs?\b|\bjobb\b|\bagent\b)/i;
+  return request.test(t) && artifact.test(t);
+}
+
 /** Del 6A: ONE guard, two call sites. Monthly ledger check before a call costs
    anything; per-task check after each measured step. Returns null to proceed,
    or a result object hard-stopping the loop HONESTLY (errorKind 'budget'). */
@@ -49,7 +83,27 @@ export function budgetGate({ cfg, usageCtx = null, route, tally = null }) {
 export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = () => {}, signal, maxSteps, usage, ctx, allowTools = true, label = 'agent', providerErrorCap = 4, providerRetries = null, modelCall = null }) {
   const agent = cfg.get('agent') || {};
   const limit = Number(maxSteps) || agent.maxSteps || 40;
+  // Immutable goal anchor survives compact() and route escalation. Long turns
+  // used to lose the actual user's objective after thousands of tool tokens.
+  const initialGoal = [...messages].reverse().find((m) => m.role === 'user')?.content;
+  if (typeof initialGoal === 'string' && initialGoal.trim() &&
+      !messages.some((m) => m.role === 'system' && String(m.content).startsWith('ACTIVE GOAL:'))) {
+    const anchor = { role: 'system', content: 'ACTIVE GOAL: ' + initialGoal.trim().slice(0, 2200) +
+      '\\nUse only tools and verified side effects as evidence. Do not claim completion after errors or a step limit.' };
+    const firstSystem = messages.findIndex((m) => m.role === 'system');
+    messages.splice(firstSystem < 0 ? 0 : firstSystem + 1, 0, anchor);
+  }
   const toolLog = [];
+  // Only the REAL top-level agent enforces effectful-action proof. Mission
+  // workers/subagents have their own contract verifiers and step budgets;
+  // injecting extra retries there breaks DAG retry caps and parallelism.
+  const requestedRealRoute = (() => { try { return routeFor(cfg, job, { session: ctx?.session }); } catch { return null; } })();
+  const realProvider = requestedRealRoute && requestedRealRoute.kind !== 'mock' &&
+    !String(requestedRealRoute.ref || '').startsWith('demo/');
+  const actionGoal = label === 'main' && !ctx?.readOnly && allowTools &&
+    (ctx?.enforceActionEvidence === true || (!modelCall && realProvider)) &&
+    requiresRealAction(initialGoal);
+  let actionRetries = 0;
   let steps = 0;
   let errors = 0;
   let escalated = false;
@@ -163,6 +217,20 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
 
     const calls = res.toolCalls || [];
     if (!calls.length) {
+      // A model cannot mark an executable goal completed without making a
+      // SINGLE real tool call. One bounded retry can recover a missed tool.
+      if (actionGoal && !toolLog.some((t) => t.ok)) {
+        if (actionRetries < 1 && steps < limit) {
+          actionRetries += 1;
+          onEvent({ type: 'missing_action_retry', label, step: steps, reason: 'no successful tool call for executable goal' });
+          messages.push({ role: 'assistant', content: res.text || '(no action taken)' });
+          messages.push({ role: 'user', content: 'Your previous response executed ZERO tools. The user asked for an actual action, not a description. Call the real tool now (or tools.search to discover it); never claim done unless a verifiable tool has run.' });
+          continue;
+        }
+        return { text: 'I could not verify the requested action: no tool completed successfully. The task is NOT complete. ' +
+          (res.text ? ('Model reply: ' + res.text.slice(0, 250)) : ''),
+          steps, toolLog, usage: tally, escalated, incomplete: true, stopReason: 'missing_tool_evidence' };
+      }
       if (res.text) messages.push({ role: 'assistant', content: res.text });
       return { text: res.text || answer, steps, toolLog, usage: tally, escalated, stopReason: res.stopReason };
     }
@@ -191,6 +259,14 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     const results = allowTools && cfg.get('agent.parallel') !== false ? await Promise.all(calls.map(runOne)) : await sequential(calls, runOne);
 
     for (const r of results) {
+      if (r.name === 'tools.search' && r.out?.ok !== false && Array.isArray(ctx?.toolSubsetNames)) {
+        const previous = ctx.toolSubsetNames;
+        const expanded = expandDiscoveredTools(previous, r.out, registry, { readOnly: ctx?.readOnly });
+        if (expanded.length > previous.length) {
+          ctx.toolSubsetNames = expanded;
+          onEvent({ type: 'tool_subset_expand', added: expanded.filter((name) => !previous.includes(name)), count: expanded.length });
+        }
+      }
       const ok = r.out.ok !== false;
       if (!ok) errors += 1;
       else errors = Math.max(0, errors - 1);

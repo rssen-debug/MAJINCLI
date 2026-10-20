@@ -32,13 +32,15 @@ export function withTimeout(promise, { ms, code = 'tool_timeout', label = 'tool'
 /* No-progress detector: identical calls (name + args) more than `limit` times
    within one turn = never silently retrying that wall again. */
 export class RepeatDetector {
-  constructor(limit = 3) { this.limit = limit; this.map = new Map(); }
+  constructor(limit = 3) { this.limit = limit; this.lastKey = null; this.count = 0; }
   key(name, args) { try { return `${name}:${JSON.stringify(args ?? {})}`; } catch { return `${name}:<unserializable>`; } }
   hit(name, args) {
     const k = this.key(name, args);
-    const n = (this.map.get(k) || 0) + 1;
-    this.map.set(k, n);
-    return { count: n, repeat: n >= this.limit, key: k };
+    // A read of the same file after an intervening write is normal progress.
+    // Only consecutive identical actions signal a no-progress loop.
+    this.count = k === this.lastKey ? this.count + 1 : 1;
+    this.lastKey = k;
+    return { count: this.count, repeat: this.count >= this.limit, key: k };
   }
 }
 

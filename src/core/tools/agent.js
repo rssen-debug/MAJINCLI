@@ -51,7 +51,9 @@ export const agentTools = [
         const t0 = Date.now();
         try {
           const res = await run({ cfg: ctx.cfg, task: String(t.task).slice(0, 4000), job: t.job, maxSteps: Number(t.maxSteps) || 10, registry: ctx.registry, session: `${ctx.session}-sub-${Math.random().toString(36).slice(2, 6)}`, emit: ctx.emit, memory: ctx.memory });
-          return { task: t.task, ok: true, answer: res.text, steps: res.steps, ms: Date.now() - t0, tools: res.tools };
+          const ok = !res.error && !res.incomplete && !res.blocked && String(res.text || '').trim().length > 0;
+          return { task: t.task, ok, answer: res.text, error: ok ? null : res.error || res.blocked || res.stopReason || 'subagent incomplete',
+            incomplete: Boolean(res.incomplete), steps: res.steps, ms: Date.now() - t0, tools: res.tools };
         } catch (err) {
           return { task: t.task, ok: false, error: err.message, ms: Date.now() - t0 };
         }
