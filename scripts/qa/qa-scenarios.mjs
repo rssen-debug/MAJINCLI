@@ -355,7 +355,7 @@ async function d04(a) { // schema introspection: the INSTALLED product reports i
   const toolsList = r.json?.tools || [];
   const find = (name) => toolsList.find((t) => t.name === name);
   const compare = {};
-  const expected = { 'shell.run': ['command'], 'browser.open': ['url'], 'sys.ps': [], 'fs.write': ['path'] };
+  const expected = { 'shell.run': ['command'], 'browser.open': ['url'], 'sys.ps': [], 'fs.write': ['path', 'content'] };
   for (const [name, want] of Object.entries(expected)) {
     const t = find(name);
     compare[name] = t ? JSON.stringify(t.parameters?.required || []) : 'ABSENT';
