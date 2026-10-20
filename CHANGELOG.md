@@ -46,6 +46,15 @@ without saying so explicitly. Version tags map 1:1 to git tags.
   lane, ≤cap, logged, only-on-proof), quiet/un-annotated silence, bounded flood mute,
   direction discipline. Full suite: **534 / 517 / 0 / 17**.
 
+### Fixed during PR review (CI evidence)
+- **package-lock.json shipped CORRUPT (zero package entries)** — `npm ci` died in the check
+  job. Lock restored from the last healthy commit (`3c422dd`, 294 entries) and re-bumped
+  JSON-aware (root + packages[""] only — the naive full-text replace that preceded it is now
+  a banned pattern for structured files). **release-gate hardened**: `package-lock.json
+  structure` (entry count) is now part of the version-literals check, and a w6 sabotage test
+  proves an empty lock blocks the gate. Rule added to knownFailures: never text-replace into
+  package-lock; always JSON-aware edit + structure assert after any bump.
+
 
 ## 2026-10-20 — WAVE 10: skill visit telemetry — a per-skill counter the agent can see — v0.9.18
 

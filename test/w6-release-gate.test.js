@@ -50,6 +50,26 @@ test('w6: a deliberately broken matrix makes the gate fail (sabotage-proven)', (
   assert.equal(restore.code, 0, 'gate green again after restore (no residue)');
 });
 
+/* W11 postmortem: a wave once shipped a lock with zero package entries — npm ci
+   died in CI while the gate stayed green. Lock STRUCTURE is now part of the
+   version check, and this test proves the sabotage is caught. */
+test('w6: a structurally empty package-lock.json blocks the gate', () => {
+  const lockPath = path.join(ROOT, 'package-lock.json');
+  const original = fs.readFileSync(lockPath, 'utf8');
+  try {
+    const broken = JSON.parse(original);
+    broken.packages = { '': broken.packages[''] };
+    fs.writeFileSync(lockPath, JSON.stringify(broken, null, 2));
+    const r = run();
+    assert.equal(r.code, 1, 'empty lock must block');
+    assert.ok(r.out.includes('FAIL  version-literals'), r.out);
+    assert.match(r.out, /CORRUPT: only 1 package entries/);
+  } finally {
+    fs.writeFileSync(lockPath, original);
+  }
+  assert.equal(run().code, 0, 'gate recovers after restore');
+});
+
 test('w6: a planted opencode-shaped key is caught; the repo dummy is NOT a false positive', () => {
   const tmpDir = path.join(ROOT, 'test', 'w6-tmp-fixture');
   fs.mkdirSync(tmpDir, { recursive: true });
