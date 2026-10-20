@@ -112,7 +112,7 @@ async function withResponse(route, payload, { signal } = {}, consume) {
   const local = isLocalRoute(route);
   const maxMs = local ? TIMEOUT_LOCAL_MS : TIMEOUT_MS;
   const timeout = setTimeout(() => ctrl.abort(new Error('model response deadline exceeded')), maxMs);
-  timeout.unref?.();
+  // Keep the timer referenced while a response body is still pending.
   const onAbort = () => ctrl.abort(signal.reason || new Error('aborted'));
   if (signal?.aborted) onAbort();
   else signal?.addEventListener?.('abort', onAbort, { once: true });
