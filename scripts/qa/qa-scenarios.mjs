@@ -732,7 +732,7 @@ async function main() {
   for (const r of results) counts[r.status] = (counts[r.status] || 0) + 1;
   const report = {
     schema: 'majin.qa-realworld.v1',
-    product: { name: 'MAJIN', version: PKG_VERSION, artifact: 'published GitHub release v1.0.0', install: 'silent Inno Setup → %LOCALAPPDATA%\\Programs\\MAJIN' },
+    product: { name: 'MAJIN', version: PKG_VERSION, artifact: process.env.QA_ARTIFACT || 'published GitHub release v1.0.0', install: 'silent Inno Setup → %LOCALAPPDATA%\\Programs\\MAJIN' },
     env: {
       runner: process.env.GITHUB_ACTIONS ? 'github-hosted windows-latest (Session 0 service)' : os.type() + ' ' + os.release(),
       os: `${os.type()} ${os.release()}`,

@@ -26,6 +26,12 @@ on:
         required: false
         default: 'llama3.2:1b,qwen2.5:0.5b,smollm2:135m'
         type: string
+      source:
+        description: 'published = test the release users get · branch-build = build+install THIS ref (repair loop)'
+        required: false
+        default: 'published'
+        type: choice
+        options: ['published', 'branch-build']
 permissions:
   contents: read
 
@@ -36,7 +42,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build the installer from THIS ref (branch-build lane)
+        if: github.event.inputs.source == 'branch-build' || (github.event_name == 'push' && 'false' == 'true')
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force qa-stage | Out-Null
+          npm ci | Out-Null
+          python -m pip install --quiet ziglang
+          node scripts/build-setup.mjs *>&1 | Tee-Object -FilePath setup.log
+          node scripts/build-exe.mjs *>&1 | Tee-Object -FilePath build.log
+          if (-not (Test-Path dist/setup/majin-setup.exe)) { throw "branch build produced no installer — see setup.log/build.log" }
+          Copy-Item dist/setup/majin-setup.exe qa-stage\MAJIN-Setup.exe
+          $h = (Get-FileHash qa-stage\MAJIN-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          Set-Content qa-stage\MAJIN-Setup.exe.sha256 $h
+          "branch-built installer sha256=$h ($((Get-Item qa-stage\MAJIN-Setup.exe).Length) bytes) @ $env:GITHUB_SHA"
+
       - name: Download PUBLISHED v1.0.0 release artifacts (we test what users get)
+        if: github.event.inputs.source != 'branch-build'
         shell: pwsh
         run: |
           $rel = 'https://github.com/rssen-debug/MAJINCLI/releases/download/v1.0.0'
@@ -45,7 +67,7 @@ jobs:
           Invoke-WebRequest "$rel/MAJIN-Setup.exe.sha256" -OutFile qa-stage\MAJIN-Setup.exe.sha256
           (Get-Item qa-stage\MAJIN-Setup.exe).Length
 
-      - name: SHA-256 of installer must equal the PUBLISHED hash (no drift)
+      - name: SHA-256 of installer must equal its manifest (no drift)
         shell: pwsh
         run: |
           $raw = (Get-Content qa-stage\MAJIN-Setup.exe.sha256 -Raw).Trim()
@@ -145,6 +167,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         env:
           QA_MODELS_IN: ${{ github.event.inputs.models }}
+          QA_ARTIFACT: ${{ github.event.inputs.source == 'branch-build' && format('branch-build @{0}', github.sha) || format('published GitHub release v1.0.0 ({0})', github.sha) }}
 
       - name: Step summary (status table into the run page)
         if: always()
