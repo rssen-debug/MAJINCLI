@@ -11,6 +11,7 @@ import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
+import { inspectRequestedArtifact } from './goal-artifact.js';
 
 /*
  * Väljer vilka scheman modellen får se detta steg. Standard: hela den synliga
@@ -57,7 +58,11 @@ export function requiresRealAction(input) {
   if (!t || /^(?:hur|how|why|varför|what|vad|explain|förklara|tell me|berätta|visa hur|can you explain)\b/i.test(t)) return false;
   const request = /^(?:(?:please|snälla|kan du|could you|jag vill att du|i want you to|du ska)\s+)?(?:create|write|save|edit|modify|delete|remove|build|make|download|open|take|search|apply|skapa|skriv|spara|redigera|ändra|radera|ta bort|bygg|öppna|ladda ner|sök|ansök|ta en)\b/i;
   const artifact = /(?:\b[\w.-]+\.(?:txt|md|json|js|mjs|jsx|ts|tsx|html|css|py|csv|png|jpg|pdf|docx|sol)\b|\bfile\b|\bfil(?:en|er)?\b|\bwebb(?:sida|plats)\b|\bwebsite\b|\bbrowser\b|\bwebbläsare\b|\bscreenshot\b|\bskärmbild\b|\bjobs?\b|\bjobb\b|\bagent\b)/i;
-  return request.test(t) && artifact.test(t);
+  // Real-world prompts also start with "Actually use fs.write to create..." or
+  // "Gör ...", not always a bare English verb. Avoid silently disabling the
+  // output contract on those explicit execution requests.
+  const directToolRequest = /^(?:(?:please|actually|faktiskt|snälla)\s+)*(?:use|använd)\s+(?:fs\.write|fs\.patch|browser\.open|browser\.shot)\s+(?:to\s+)?(?:create|write|open|save|skapa|skriv|öppna|spara)\b/i;
+  return (request.test(t) || directToolRequest.test(t) || /^g[oö]r\b/i.test(t)) && artifact.test(t);
 }
 
 /** Del 6A: ONE guard, two call sites. Monthly ledger check before a call costs
@@ -104,6 +109,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     (ctx?.enforceActionEvidence === true || (!modelCall && realProvider)) &&
     requiresRealAction(initialGoal);
   let actionRetries = 0;
+  let artifactRetries = 0;
   let steps = 0;
   let errors = 0;
   let escalated = false;
@@ -230,6 +236,23 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         return { text: 'I could not verify the requested action: no tool completed successfully. The task is NOT complete. ' +
           (res.text ? ('Model reply: ' + res.text.slice(0, 250)) : ''),
           steps, toolLog, usage: tally, escalated, incomplete: true, stopReason: 'missing_tool_evidence' };
+      }
+      if (actionGoal) {
+        const contract = inspectRequestedArtifact(initialGoal, cfg.get('workspace'));
+        if (contract && !contract.ok) {
+          onEvent({ type: 'artifact_verify', label, step: steps, ok: false, target: contract.target, missing: contract.missing });
+          if (artifactRetries < 2 && steps < limit) {
+            artifactRetries += 1;
+            messages.push({ role: 'assistant', content: res.text || '(model claimed completion)' });
+            messages.push({ role: 'user', content: 'INDEPENDENT ARTIFACT CHECK FAILED: ' + contract.reason +
+              '. The user requested the file named ' + contract.workspaceRelative +
+              ' INSIDE the current MAJIN workspace. Use fs.write with that exact workspace-relative filename, and include every missing required element. Verify the file with fs.read before saying completed. Do not just repeat the claim.' });
+            continue;
+          }
+          return { text: 'Task NOT complete: ' + contract.reason + '. Expected file: ' + contract.workspaceRelative,
+            steps, toolLog, usage: tally, escalated, incomplete: true, stopReason: 'artifact_contract_failed', contract };
+        }
+        if (contract) onEvent({ type: 'artifact_verify', label, step: steps, ok: true, target: contract.target });
       }
       if (res.text) messages.push({ role: 'assistant', content: res.text });
       return { text: res.text || answer, steps, toolLog, usage: tally, escalated, stopReason: res.stopReason };
