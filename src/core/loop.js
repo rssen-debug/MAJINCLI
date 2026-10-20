@@ -94,7 +94,15 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     messages.splice(firstSystem < 0 ? 0 : firstSystem + 1, 0, anchor);
   }
   const toolLog = [];
-  const actionGoal = !ctx?.readOnly && allowTools && requiresRealAction(initialGoal);
+  // Only the REAL top-level agent enforces effectful-action proof. Mission
+  // workers/subagents have their own contract verifiers and step budgets;
+  // injecting extra retries there breaks DAG retry caps and parallelism.
+  const requestedRealRoute = (() => { try { return routeFor(cfg, job, { session: ctx?.session }); } catch { return null; } })();
+  const realProvider = requestedRealRoute && requestedRealRoute.kind !== 'mock' &&
+    !String(requestedRealRoute.ref || '').startsWith('demo/');
+  const actionGoal = label === 'main' && !ctx?.readOnly && allowTools &&
+    (ctx?.enforceActionEvidence === true || (!modelCall && realProvider)) &&
+    requiresRealAction(initialGoal);
   let actionRetries = 0;
   let steps = 0;
   let errors = 0;
