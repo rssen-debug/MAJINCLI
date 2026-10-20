@@ -25,7 +25,21 @@ Artifact `uia-probe-result` (run 39344950257, evid: docs/evidence/uia-probe-run1
   retries text input via (a) any descendant ValuePattern and (b) zero-dependency SendKeys fallback.
   The raw-UIA vs external-binding decision is recorded once run 2 lands.
 
-### Status — run 2 pending; decision recorded in DEV_CONTINUATION after evidence
+### Evidence — run 2 collected (probe v2, run 39346426347, evid: docs/evidence/uia-probe-run2-v2-2026-10-20.json)
+- The mystery resolved ONE layer down: Notepad's classic children DO enumerate —
+  `Edit` (the text surface) + `msctls_statusbar32` — but BOTH report `ControlType.Pane`
+  with **zero supported patterns**, and the SendKeys lane found no TextPattern reader
+  to verify against. Pattern-free `Edit` + dead input injection is the signature of
+  **Session 0**: GitHub hosted runners execute as a non-interactive service, where the
+  UIA/MSAA bridge cannot project control patterns and the desktop accepts no input.
+- Consequence (already certain): FlaUI would see the SAME pattern-free tree (it wraps
+  this exact bridge) and vision-based agents (UFO/OmniParser) the same dead desktop —
+  so no external library can fix a CI-runner limitation. The binding question is now an
+  environment question.
+- Probe v2.1 measures session identity (userInteractive, sessionId, userName) to close
+  the Session-0 hypothesis with data instead of inference; final decision recorded after run 3.
+
+### Status — run 3 pending (session-identity confirmation); final ADOPT/DEFER after evidence
 The probe has NOT yet run on a Windows runner at merge time. The FlaUI-vs-Microsoft-UFO binding decision follows only after the runner JSON exists (recorded as a separate evidence commit into `docs/DEV_CONTINUATION.json` decisions). Zero installs anywhere; no UI files touched.
 
 ### Verified

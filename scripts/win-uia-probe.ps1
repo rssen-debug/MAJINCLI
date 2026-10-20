@@ -25,7 +25,7 @@ param(
 )
 
 $result = [ordered]@{
-  schema    = 'majin.win-uia-probe.v2'
+  schema    = 'majin.win-uia-probe.v2.1'
   timestamp = (Get-Date).ToUniversalTime().ToString('o')
   env = [ordered]@{
     osVersion    = [System.Environment]::OSVersion.VersionString
@@ -33,6 +33,12 @@ $result = [ordered]@{
     clrVersion   = [System.Environment]::Version.ToString()
     machineName  = $env:COMPUTERNAME
     is64Bit      = [System.Environment]::Is64BitOperatingSystem
+    # v2.1: session identity — proves/disproves the Session-0 (non-interactive
+    # service desktop) hypothesis behind zero-pattern controls + dead SendKeys.
+    userName        = [System.Environment]::UserName
+    userDomain      = [System.Environment]::UserDomainName
+    userInteractive = [System.Environment]::UserInteractive
+    sessionId       = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
   }
   p1_assemblyAndRoot = [ordered]@{ loaded = $false; topWindowCount = 0; topWindows = @() }
   p2_negativeControl = [ordered]@{ windowName = 'MAJIN-Nonexistent-Window-7f3b9d2e'; found = $null; nullAsExpected = $false }
