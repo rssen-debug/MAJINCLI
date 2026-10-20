@@ -745,7 +745,7 @@ async function c04(a) { // BM_CLICK via fragmentet — Run-dialog min OK lyssnar
   // Windows' Run dialog is localized ("Kör" on Swedish Windows).
   const windows = await api('POST', '/api/tool', { tool: 'control.list_windows', args: {} });
   const titles = (windows.json?.meta?.windows || []).map((w) => String(w.title || ''));
-  const runTitle = titles.some((t) => /^K.r$/i.test(t)) ? 'Kör' : (titles.find((t) => /^Run$/i.test(t)) || 'Run'); // PS5.1 may decode "Kör" as "K�r" in metadata
+  const runTitle = titles.some((t) => /^K.r$/i.test(t)) ? 'K\u00f6r' : (titles.find((t) => /^Run$/i.test(t)) || 'Run'); // PS5.1 may decode the localized Run title with replacement characters
   const type = await qaApprovedTool('control.type', { window: runTitle, text: 'notepad.exe' });
   const click = await qaApprovedTool('control.click_button', { window: runTitle, caption: 'OK' });
   await sleep(1800);
