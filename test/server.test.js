@@ -513,3 +513,21 @@ test('/api/models discovers every Anthropic page and preserves the last good lis
   const afterFailure = JSON.parse((await get(`/api/config?t=${TOKEN}`)).body).config;
   assert.equal(afterFailure.providers['catalog-fixture'].models.length, 651);
 });
+
+test('/api/tools exposes live JSON Schema contracts, not only parameter names', async () => {
+  const r = await get(`/api/tools?t=${TOKEN}`);
+  assert.equal(r.status, 200);
+  const j = JSON.parse(r.body);
+  assert.equal(j.ok, true);
+  for (const [name, required] of Object.entries({
+    'shell.run': ['command'],
+    'browser.open': ['url'],
+    'fs.write': ['path', 'content'],
+    'sys.ps': [],
+  })) {
+    const t = j.tools.find((tool) => tool.name === name);
+    assert.ok(t, `${name} present in installed registry`);
+    assert.deepEqual(t.parameters.required, required, `${name} exact required keys`);
+    assert.equal(t.parameters.type, 'object');
+  }
+});
