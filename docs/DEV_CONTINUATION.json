@@ -1,5 +1,5 @@
 {
-  "lastVerifiedMain": "e7c1a60",
+  "lastVerifiedMain": "63a0dac",
   "lastCompletedMilestone": "GODLIKE V4 §7 rate-limit orchestrator (v0.7.2, suite 404/388/0/16)",
   "currentWorkstream": "GODLIKE V4 WAVE 2 — §5 adaptive topology dispatch (next isolated worktree)",
   "currentBranch": "main (post-merge)",
@@ -35,7 +35,7 @@
   "nextAction": "WAVE 3: delta memory protocol (§9); then WAVE 4 speculative lab (§6, off by default); perf lab A/B/C/D (§19) once topology variants exist",
   "version": "0.9.10",
   "milestone": "WAVE 2: adaptive topology dispatch + critical-path-first scheduling (local 459p/476t/0f/17s)",
-  "branch": "feature/w2-adaptive-topology (in PR)",
+  "branch": "main (post-merge)",
   "decisions": {
     "windows-control-adapter": {
       "decision": "ADOPT raw UIA (System.Windows.Automation, zero deps) as control API; two-tier text I/O (patterns first, SendInput fallback + read-back); DEFER FlaUI (same bridge, .NET dep, fixes nothing measured); DEFER UFO/OmniParser vision lane (cost + OmniParser license caution stands)",
