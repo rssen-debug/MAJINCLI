@@ -414,8 +414,9 @@ export class Agent {
             });
             if (m.kind === 'mission') {
               emit({ type: 'mission', nodes: m.nodes, workers: m.workers, okCount: m.okCount, failCount: m.failCount, blockedCount: m.blockedCount, verifiedCount: m.verifiedCount, repairedCount: m.repairedCount });
+              const allMissionOk = m.failCount === 0 && m.blockedCount === 0 && m.okCount === m.nodes;
               const text = [
-                `Mission done — ${m.okCount}/${m.nodes} parts ok` + (m.failCount ? `, ${m.failCount} failed` : '') + (m.blockedCount ? `, ${m.blockedCount} blocked` : '') + (m.verifiedCount ? ` (${m.verifiedCount} verified in the workspace${m.repairedCount ? `, ${m.repairedCount} after repair` : ''})` : '') + `. ${m.workers} workers decided by the analyzer (code, not the model).`,
+                `${allMissionOk ? 'Mission completed' : 'Mission incomplete'} — ${m.okCount}/${m.nodes} parts ok` + (m.failCount ? `, ${m.failCount} failed` : '') + (m.blockedCount ? `, ${m.blockedCount} blocked` : '') + (m.verifiedCount ? ` (${m.verifiedCount} verified in the workspace${m.repairedCount ? `, ${m.repairedCount} after repair` : ''})` : '') + `. ${m.workers} workers decided by the analyzer (code, not the model).`,
                 '',
                 ...m.textSummary,
               ].join('\n');
@@ -426,6 +427,8 @@ export class Agent {
               return {
                 text,
                 mission: { nodes: m.nodes, workers: m.workers, okCount: m.okCount, failCount: m.failCount, blockedCount: m.blockedCount, wallMs: m.result.wallMs, analysis: m.analysis },
+                incomplete: !allMissionOk,
+                stopReason: allMissionOk ? 'mission_done' : 'mission_incomplete',
                 steps: 0,
                 tools: [],
                 usage: { input: 0, output: 0, costUsd: 0 },
