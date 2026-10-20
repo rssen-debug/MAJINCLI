@@ -14,6 +14,30 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 
 
 
+
+## 2026-10-20 — WAVE 10: skill visit telemetry — a per-skill counter the agent can see — v0.9.18
+
+### Added (user directive)
+- **Per-skill visit counter (`Skills.hit`)** — a visit is counted ONLY at the moment a skill is
+  actually presented to the model: (a) injected into the system prompt (ambient channel), or
+  (b) returned by a deliberate `majin.skill action=match` lookup. Never speculatively —
+  pruned and disabled skills receive no visits, a zero-match lookup counts nothing. Disk-backed
+  (`uses` + ISO `lastUsed` in the skill frontmatter, atomic writes, slug-deduped): two agent
+  processes count one truth, a crash cannot inflate it.
+- **Agent-visible counter in the prompt** — each skill line now carries
+  `[visited ×N · streak S]` (streak decoration only when a streak exists). The model can reason
+  about which skills it has actually been shown before, not guess.
+- **K2-consistent ledger** — a content edit preserves `uses`/`lastUsed` (added to the
+  accountability carry-over list): an edit never launders the visit history either.
+- `list()` surfaces `uses` for UI/CLI consumers.
+
+### Verified
+- `test/w10-skill-visits.test.js` — 7 tests: disk persistence + atomicity + lastUsed,
+  shown-counted/pruned-not counting, prompt counter + increment + streak decoration,
+  match-lookup counting (misses count nothing), edit preservation, disabled never visited,
+  list() surfacing. All skill suites 25/25 together; full suite **529 / 512 / 0 / 17**.
+
+
 ## 2026-10-20 — WAVE 9: cross-platform path hygiene closed + guard test — v0.9.17
 
 ### Fixed
