@@ -66,9 +66,13 @@ const POLARS = [
   [/\b(increas|grew?|risin|upp|högre)\w*/i, /\b(decreas|declin|fell|sänk|minsk|lower)\w*/i],
 ];
 function opposingPolarity(a, b) {
-  return POLARS.some(([neg, pos]) =>
-    (neg.test(a) && !pos.test(a) && pos.test(b) && !neg.test(b))
-    || (pos.test(a) && !neg.test(a) && neg.test(b) && !pos.test(b)));
+  return POLARS.some(([neg, pos]) => {
+    // Explicit negation wins over a positive verb in the same clause:
+    // "never requires" is negative, "always requires" is positive.
+    const aPol = neg.test(a) ? -1 : (pos.test(a) ? 1 : 0);
+    const bPol = neg.test(b) ? -1 : (pos.test(b) ? 1 : 0);
+    return aPol !== 0 && bPol !== 0 && aPol !== bPol;
+  });
 }
 export function crossCheck(claimsBySource) {
   const buckets = new Map();
@@ -92,20 +96,13 @@ export function crossCheck(claimsBySource) {
       }
       merged.push({ sentence: c.sentence, anchors: c.anchors, support: 1, sources: [c.sourceId], conflicts: false });
     }
-    // Only mark a conflict when distinct claims in this bucket explicitly oppose each other.
-    // A single sentence can contain both polarities while describing a timeline,
-    // so testing hasNeg && hasPos across the entire group produces false positives.
-    for (const [neg, pos] of POLARS) {
-      for (let i = 0; i < merged.length; i++) {
-        for (let j = i + 1; j < merged.length; j++) {
-          const a = merged[i].sentence;
-          const b = merged[j].sentence;
-          const opposite = (neg.test(a) && pos.test(b) && !pos.test(a) && !neg.test(b))
-            || (pos.test(a) && neg.test(b) && !neg.test(a) && !pos.test(b));
-          if (opposite && sim(a, b) > 0.35) {
-            merged[i].conflicts = true;
-            merged[j].conflicts = true;
-          }
+    // Opposite claims must be separate clusters and refer to substantially similar terms.
+    for (let i = 0; i < merged.length; i++) {
+      for (let j = i + 1; j < merged.length; j++) {
+        if (opposingPolarity(merged[i].sentence, merged[j].sentence)
+            && sim(merged[i].sentence, merged[j].sentence) > 0.35) {
+          merged[i].conflicts = true;
+          merged[j].conflicts = true;
         }
       }
     }
