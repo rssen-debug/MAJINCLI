@@ -67,7 +67,7 @@
       "id": "W13-never-stuck-metasvit",
       "wave": "W13",
       "desc": "Injected-failure-suite (knappar som försvinner, layouts ändrast, crash, timeout) + recovery metrics (success rate, time, interventions).",
-      "status": "PARTIAL"
+      "status": "VERIFIED-CORE (outbound): channel.send ×1 verktyg (risk exec => approval-gated) rotar till official-REST-klienter: Discord v10, Slack chat.postMessage, Matrix PUT send/m.room.message/<txn>, generisk webhook (https-tvang + HMAC-signering), email via provider-API-rrela (Mailgun-kompatibel). EKA avslutningar: saknad token = not_configured (ALDRIG simulerat sänding); api-fel = yttrar exakt svarsmeddelande; https-only for webhook. HONEST GAP: inbound chatbot-adapters for Discord/Slack/Matrix (poll/websocket) ej implementerade annu — nasta utbyggnad pa denna rad. 8/8 tester (Transport-fake endast for URL/header/payload-forme; samtliga fail-detektorer kora mot REAL fetc-forme)"
     },
     {
       "rank": 10,
@@ -157,6 +157,13 @@
       "done": "W5 EVENT FLOWS: flows engine + 6 verktyg (add/list/enable/remove/trigger/webhook.recorded) + server-route POST /api/flows/hook/<id> (token-gated, samma guard som allt annat) + cho-chokidar@4 runtime-dependency verified (live watch detektion) + bundle-styrka 1MB+3incl flows-tools i bundle + 8/8 fixtures + golden uppdatering medveten 114→120 + npm test 591/575/0/16",
       "percent": 43,
       "next": "W8 kanal-utokad (Discord/Slack/Matrix/Email — reuse modelenbaust on telegram/whatsapp patterns) eller W13 never-stuck"
+    },
+    {
+      "round": 7,
+      "date": "2026-10-20",
+      "done": "W8 CHANNEL EXPANSION (outbound-delen): channels/send.js (5 kanaler, shared post-helper med abort-timeout) + channel.send-verktyg med dryRun-preview-lage + https-only + HMAC for webhooks + i18n fix-uppgard (utrutade svenska litteraler ur mina nya files) + 8/8 tester + golden uppdatering 120→121 (medvetet) + full svit 599/583/0/16",
+      "percent": 46,
+      "next": "W13 NEVER-STUCK (watchdogs + bounded loops + cancellation + stalled-aP) eller W9 (heartbeat/cron/turn-continuation dar W13 är baken)"
     }
   ]
 }
