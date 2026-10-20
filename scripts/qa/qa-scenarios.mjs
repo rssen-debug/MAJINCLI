@@ -245,7 +245,6 @@ async function s05(a) {
     const r = await api('GET', `/${asset}`, undefined, { raw: true });
     settled.push({ asset, status: r.status, mime: r.headers.get('content-type') || '' });
   }
-  const auth = (await api('GET', '/api/state/unknown', {}).headers) ? true : true;
   const ok = idx.status === 200 && idxBody.length > 5000 && settled.every((s) => s.status === 200);
   return a(ok ? CL.CI : CL.FAIL, ok
     ? `UI index (${idxBody.length}B) + ${settled.length} assets served with token auth`
