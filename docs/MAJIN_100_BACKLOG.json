@@ -112,7 +112,7 @@
       "id": "W14-benchmark",
       "wave": "W14",
       "desc": "Rollback-verifiering, reproducible-builds-gate, competitive benchmark (goalbaserad, mätbar, aldrig ojämförad).",
-      "status": "PARTIAL"
+      "status": "VERIFIED-CORE: majin.self_audit med 5 regler (unsupported-claims, mock-mode-residue, unfinished-markers, status-drift, recovery-readiness) — varje finding med file:line+why-evidens, 7/7 unit, live-run pa repot: notes-only/clean (1 legitim low borjndokumenterad TODO) + golden 129 + full svit; utvecklingslopet delayade regler med falska positiver innan commit (proof-negative test galler)"
     }
   ],
   "roundLog": [
@@ -206,6 +206,13 @@
       "done": "W6 POWER TRANSFER instantiated concretely: docs/REUSE.md register (chokidar/UFO/browser-use-pattern/TradingAgents/pkg-med-evidence-rader) + SoM-grounding for browser.adaptern (browser-use-patenne adaptation, aldrig kopierad rampi): browser.elements (marks+refs) + browser.click-ref extension (selector eller ref) + browser.clear_marks med ref-tears; 6/6 unit + live-Chromium-bevis (fick-titeln ändrad via e1-klick, marks-drawn-clear-stabe) + full regression 641/623/0/18",
       "percent": 63,
       "next": "W14 self-audit (systemet auditar sin egen arlighet-top-down, mock-hantering foralltating) eller W4 browser-control-loop"
+    },
+    {
+      "round": 14,
+      "date": "2026-10-20",
+      "done": "W14 SELF-AUDIT: majin.self_audit (5 regler, evidence-bearing); utvecklingen fangade sjalv 2 falska positiver pre-commit (diwithTyped-diagnostics i re.js + auditors egna symbolanenergalengder) — korrigerade INNAN landning (detektorer comprehensive dieskall inte lata ga vissel); 7/7 unit + live-audit verdict 'notes only' (1 kand låg TODO) + npm test fulla svit; golden 128 to 129",
+      "percent": 66,
+      "next": "W4 browser-control-loop (nu med SoM-grounding under) eller win-runner acceptance eller W6 fortsatt absorption (ny registry-row per commit)"
     }
   ]
 }

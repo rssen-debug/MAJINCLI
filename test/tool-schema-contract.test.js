@@ -66,8 +66,8 @@ test('schema: gyllene mängder mot det verkliga bältet (d04-sanning nu ägd)', 
   }
 });
 
-test('schema: verktygs-skiktet äga 128 verktyg (4 control + 124 kärna — + browser.elements + browser.clear_marks tillagda medvetet)', () => {
-  assert.equal(ALL_TOOLS.length, 128, 'reparationer får inte tyst lägga till eller ta bort verktyg');
+test('schema: verktygs-skiktet äga 129 verktyg (4 control + 125 kärna — + majin.self_audit tillagd medvetet)', () => {
+  assert.equal(ALL_TOOLS.length, 129, 'reparationer får inte tyst lägga till eller ta bort verktyg');
   const groups = [...new Set(ALL_TOOLS.map((t) => t.group))];
   assert.ok(groups.includes('control'), 'control-gruppen måste vara shipped');
 });
