@@ -17,6 +17,32 @@ without saying so explicitly. Version tags map 1:1 to git tags.
 
 
 
+## 2026-10-20 — REAL-WORLD REPAIRS (Fas 1, independent QA audit 16/34 → repair loop)
+
+**Arenas oberoende real-world-audit (34 scenarier mot installerad v1.0.0 på windows-latest)
+mätte ärligt: 16 VERIFIED / 17 FAILED / 1 honest-skip. Reparationer (alla lokalt gröna,
+554/537/0, och med branch-build QA-lane på win-qa-realworld mot installerad binär):**
+
+- **R1 (d04/s18/b01)** required-derivation deklarativ & paket-säker: `run.toString()`
+  överlevde inte bundling — installerad exe rapporterade fel scheman (`shell.run→[]`,
+  `fs.write→append`, `browser.open→headless`). Markörer på ~143 parametrar + kontrakttest.
+- **R4-a (s16)** user-raden journaleras omedelbart vid turn-start.
+- **R4-b (s23)** memory-recall delar på icke-alfanumerik — IFACT-kodord (IRONWOOD-799)
+  träffar även single-token-frågor (smoke-mätt).
+- **R5 (s25)** `sys.info` statiskt `os.freemem()` — dynamic import kraschade paketerad
+  exe (`ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`).
+- **R2 (s08)** lokal provider + timeout ⇒ `kind:'slow'` ärligt meddelande; 600 s
+  lokal-timeout-lane (gateways 180 s kvar).
+- **u03** slutförd stream med TOM body = ärlig felbubbla — aldrig tyst bortplockad spinner.
+- **Control SHIPPED (användardirektiv)**: `control.list_windows/read/type/click_button`
+  i produktbältet — Win32-SendMessage-lane (enda uppmätt överlevande lane på
+  windows-2025-runnern; UIA & SendKeys mätt döda 2×). `type` verifieras via
+  obligatorisk WM_GETTEXT-återläsning; exec-gated; ärlig vägran utanför Windows.
+  CI-scenario c03 kör Notepad byte-exakt via det installerade bältet.
+- **s04 omdesignad**: mäter äkta gränsen — spoofad Host vägras även från loopback.
+- **QA-lane**: `source=branch-build` bygger+installerar FRÅN refen (reparationsslinga);
+  `published`=sanningsspar. Ordningsfix build-exe före setup (run 39421716141).
+
 ## 2026-10-20 — v1.0.0 — RELEASE CANDIDATE: 99/100 matrix, full evidence wave
 
 **First release-candidate.** Same-day evidence wave closed every machine-earnable row of the
