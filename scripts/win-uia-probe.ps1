@@ -42,7 +42,7 @@ trap {
 Mark 'probe-start'
 
 $result = [ordered]@{
-  schema    = 'majin.win-uia-probe.v2.4'
+  schema    = 'majin.win-uia-probe.v2.5'
   timestamp = (Get-Date).ToUniversalTime().ToString('o')
   env = [ordered]@{
     osVersion    = [System.Environment]::OSVersion.VersionString
@@ -394,8 +394,63 @@ if ($proc -and -not $proc.HasExited) {
 } elseif ($proc) { $script:result.p3_notepad.closedOk = $true }
 
 $script:result.capabilities.locateControls = $script:result.capabilities.locateControls -or ($script:result.p5_subtreeAndFallback.nodeCount -gt 0)
-$script:result.capabilities.textInput = $script:result.p3_notepad.setValueOk -or $script:result.p5_subtreeAndFallback.fallbackValueWriteOk -or $script:result.p5_subtreeAndFallback.sendKeysOk -or $script:result.p7_runDialogFixture.setValueOk
-$script:result.capabilities.readBack  = $script:result.p3_notepad.readBackMatches -or $script:result.p5_subtreeAndFallback.fallbackReadBackMatches -or $script:result.p5_subtreeAndFallback.sendKeysOk -or $script:result.p7_runDialogFixture.readBackMatches
+Mark 'P8-begin'
+# P8: Win32 message-level text I/O on the real shell Run dialog. UIA's control/pattern
+# tree is degenerate in the CI session (everything maps to Pane, zero patterns — see P7
+# forensics), so exercise the same computer-use scenario at the window-message layer:
+# FindWindow -> FindWindowEx(Edit) -> WM_SETTEXT(marker) -> WM_GETTEXT verify -> clear.
+$p8 = [ordered]@{
+  ran = $true; windowFound = $false; editFound = $false
+  setTextOk = $false; readBackMatches = $false; clearedOk = $false; closedOk = $false; note = $null
+}
+try {
+  Add-Type -Namespace MAJINP8 -Name Win32 -MemberDefinition @"
+[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError=true, CharSet=System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern System.IntPtr FindWindow(string lpClassName, string lpWindowName);
+[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError=true, CharSet=System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern System.IntPtr FindWindowEx(System.IntPtr hwndParent, System.IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern System.IntPtr SendMessage(System.IntPtr hWnd, uint Msg, System.IntPtr wParam, string lParam);
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern int SendMessage(System.IntPtr hWnd, uint Msg, int wParam, System.Text.StringBuilder lParam);
+"@
+  if ($dlgProc -and -not $dlgProc.HasExited) { Stop-Process -Id $dlgProc.Id -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500 }
+  Start-Process -FilePath "explorer.exe" -ArgumentList 'shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}' | Out-Null
+  $dlgHwnd = [IntPtr]::Zero
+  for ($i=0; $i -lt 40 -and $dlgHwnd -eq [IntPtr]::Zero; $i++) {
+    $dlgHwnd = [MAJINP8.Win32]::FindWindow('#32770', 'Run')
+    if ($dlgHwnd -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 250 }
+  }
+  if ($dlgHwnd -ne [IntPtr]::Zero) {
+    $p8.windowFound = $true
+    $editHwnd = [MAJINP8.Win32]::FindWindowEx($dlgHwnd, [IntPtr]::Zero, 'Edit', $null)
+    if ($editHwnd -ne [IntPtr]::Zero) {
+      $p8.editFound = $true
+      [void][MAJINP8.Win32]::SendMessage($editHwnd, 0x000C, [IntPtr]::Zero, $p7marker)     # WM_SETTEXT
+      Start-Sleep -Milliseconds 200
+      $sb = New-Object System.Text.StringBuilder -ArgumentList 512
+      [void][MAJINP8.Win32]::SendMessage($editHwnd, 0x000D, 512, $sb)                     # WM_GETTEXT
+      $got = $sb.ToString()
+      $p8.setTextOk = $true
+      $p8.readBackMatches = ($got -eq $p7marker)
+      if ($p8.readBackMatches) {
+        [void][MAJINP8.Win32]::SendMessage($editHwnd, 0x000C, [IntPtr]::Zero, "")          # clear
+        Start-Sleep -Milliseconds 150
+        $sb2 = New-Object System.Text.StringBuilder -ArgumentList 512
+        [void][MAJINP8.Win32]::SendMessage($editHwnd, 0x000D, 512, $sb2)
+        $p8.clearedOk = ($sb2.ToString() -eq "")
+      }
+    } else { $p8.note = "no Edit HWND under Run dialog" }
+    [void][MAJINP8.Win32]::SendMessage($dlgHwnd, 0x0010, [IntPtr]::Zero, $null)           # WM_CLOSE
+    Start-Sleep -Milliseconds 500
+    $p8.closedOk = ([MAJINP8.Win32]::FindWindow('#32770', 'Run') -eq [IntPtr]::Zero)
+  } else { $p8.note = "Run dialog HWND never appeared (FindWindow)" }
+  Mark 'P8-done'
+} catch { $p8.note = "P8 lane exception: $($_.Exception.Message)" }
+$script:result.p8_win32Messaging = $p8
+
+$script:result.capabilities.textInput = $script:result.p3_notepad.setValueOk -or $script:result.p5_subtreeAndFallback.fallbackValueWriteOk -or $script:result.p5_subtreeAndFallback.sendKeysOk -or $script:result.p7_runDialogFixture.setValueOk -or $script:result.p8_win32Messaging.setTextOk
+$script:result.capabilities.readBack  = $script:result.p3_notepad.readBackMatches -or $script:result.p5_subtreeAndFallback.fallbackReadBackMatches -or $script:result.p5_subtreeAndFallback.sendKeysOk -or $script:result.p7_runDialogFixture.readBackMatches -or $script:result.p8_win32Messaging.readBackMatches
 
 Mark 'emit'
 $result | ConvertTo-Json -Depth 10 | Set-Content -Path $OutFile -Encoding utf8
