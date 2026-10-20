@@ -107,20 +107,39 @@ switch ($Action) {
 
 let psFile = null;
 function bridgePath() {
-  if (psFile) return psFile;
-  const f = path.join(os.tmpdir(), 'majin-control-bridge.ps1');
-  if (!fs.existsSync(f) || fs.readFileSync(f, 'utf8').length !== PS.length) fs.writeFileSync(f, PS);
+  if (psFile && fs.existsSync(psFile)) return psFile;
+  // Unique private directory: never execute a predictable shared-temp .ps1.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-control-'));
+  const f = path.join(dir, 'bridge.ps1');
+  fs.writeFileSync(f, PS, { flag: 'wx', mode: 0o600 });
   psFile = f;
   return f;
 }
 
+// EncodedCommand is constant; untrusted window/text/caption are opaque JSON in
+// the child environment, never interpolated into cmd.exe or PowerShell syntax.
+const BRIDGE_COMMAND = 'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' +
+  Buffer.from([
+    '$p = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:MAJIN_CONTROL_PAYLOAD)) | ConvertFrom-Json',
+    '& $env:MAJIN_CONTROL_SCRIPT -Action $p.action -Window $p.window -Text $p.text -Caption $p.caption',
+  ].join('; '), 'utf16le').toString('base64');
+
+export function encodeControlRequest(action, { window = '', text = '', caption = '' } = {}) {
+  const json = JSON.stringify({ action, window, text, caption });
+  // Windows environment variable strings have a finite length; fail cleanly.
+  if (Buffer.byteLength(json, 'utf8') > 12000) throw new RangeError('control payload exceeds 12 KB');
+  return { command: BRIDGE_COMMAND, payload: Buffer.from(json, 'utf8').toString('base64') };
+}
+
 async function runBridge(action, { window = '', text = '', caption = '' } = {}) {
-  const ps = await import('./shell.js').then((m) => m.selectShell?.({ windows: true })).catch(() => null);
-  const f = bridgePath();
-  const args = IS_WIN
-    ? `-NoProfile -ExecutionPolicy Bypass -File "${f}" -Action '${action}' -Window '${window.replace(/'/g, "''")}' -Text '${text.replace(/'/g, "''")}' -Caption '${caption.replace(/'/g, "''")}'`
-    : '';
-  const r = await runShell(`powershell ${args}`, { timeoutSec: 30, maxChars: 60000 });
+  let req;
+  try { req = encodeControlRequest(action, { window, text, caption }); }
+  catch (e) { return { ok: false, error: { code: 'payload_too_large', message: e.message } }; }
+  const r = await runShell(req.command, {
+    timeoutSec: 30,
+    maxChars: 60000,
+    env: { MAJIN_CONTROL_SCRIPT: bridgePath(), MAJIN_CONTROL_PAYLOAD: req.payload },
+  });
   const line = String(r.stdout || '').trim().split(/\r?\n/).pop() || '';
   let j = null;
   try { j = JSON.parse(line); } catch { /* fall */ }
