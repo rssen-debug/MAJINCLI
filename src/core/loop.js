@@ -70,6 +70,16 @@ export function budgetGate({ cfg, usageCtx = null, route, tally = null }) {
 export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = () => {}, signal, maxSteps, usage, ctx, allowTools = true, label = 'agent', providerErrorCap = 4, providerRetries = null, modelCall = null }) {
   const agent = cfg.get('agent') || {};
   const limit = Number(maxSteps) || agent.maxSteps || 40;
+  // Immutable goal anchor survives compact() and route escalation. Long turns
+  // used to lose the actual user's objective after thousands of tool tokens.
+  const initialGoal = [...messages].reverse().find((m) => m.role === 'user')?.content;
+  if (typeof initialGoal === 'string' && initialGoal.trim() &&
+      !messages.some((m) => m.role === 'system' && String(m.content).startsWith('ACTIVE GOAL:'))) {
+    const anchor = { role: 'system', content: 'ACTIVE GOAL: ' + initialGoal.trim().slice(0, 2200) +
+      '\\nUse only tools and verified side effects as evidence. Do not claim completion after errors or a step limit.' };
+    const firstSystem = messages.findIndex((m) => m.role === 'system');
+    messages.splice(firstSystem < 0 ? 0 : firstSystem + 1, 0, anchor);
+  }
   const toolLog = [];
   let steps = 0;
   let errors = 0;
