@@ -29,13 +29,12 @@ jobs:
         run: |
           node src/cli/majin.js doctor
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Full live provider diagnostic (separate non-gating evidence)
-        continue-on-error: true
+      - name: Full live provider diagnostic (release blocker)
         shell: powershell
         run: |
           node src/cli/majin.js doctor --full
           if ($LASTEXITCODE -ne 0) {
-            Write-Warning 'LIVE_PROVIDER_CHECK_FAILED: configured provider/model requires repair; release NOT cleared.'
+            Write-Error 'LIVE_PROVIDER_CHECK_FAILED: configured provider/model requires repair; release NOT cleared.'
             exit $LASTEXITCODE
           }
   full-suite-linux:
