@@ -25,7 +25,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { def } from './registry.js';
-import { runShell, IS_WIN } from './shell.js';
+import { IS_WIN } from './shell.js';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 const PS = String.raw`
 # MAJIN control bridge — inlined by src/core/tools/wincontrol.js (ps1 template)
@@ -118,11 +122,11 @@ function bridgePath() {
 
 // EncodedCommand is constant; untrusted window/text/caption are opaque JSON in
 // the child environment, never interpolated into cmd.exe or PowerShell syntax.
-const BRIDGE_COMMAND = 'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' +
-  Buffer.from([
+const BRIDGE_ENCODED = Buffer.from([
     '$p = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:MAJIN_CONTROL_PAYLOAD)) | ConvertFrom-Json',
     '& $env:MAJIN_CONTROL_SCRIPT -Action $p.action -Window $p.window -Text $p.text -Caption $p.caption',
   ].join('; '), 'utf16le').toString('base64');
+const BRIDGE_COMMAND = 'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' + BRIDGE_ENCODED;
 
 export function encodeControlRequest(action, { window = '', text = '', caption = '' } = {}) {
   const json = JSON.stringify({ action, window, text, caption });
@@ -135,15 +139,39 @@ async function runBridge(action, { window = '', text = '', caption = '' } = {}) 
   let req;
   try { req = encodeControlRequest(action, { window, text, caption }); }
   catch (e) { return { ok: false, error: { code: 'payload_too_large', message: e.message } }; }
-  const r = await runShell(req.command, {
-    timeoutSec: 30,
-    maxChars: 60000,
-    env: { MAJIN_CONTROL_SCRIPT: bridgePath(), MAJIN_CONTROL_PAYLOAD: req.payload },
-  });
-  const line = String(r.stdout || '').trim().split(/\r?\n/).pop() || '';
+  // A nested "powershell -Command powershell -EncodedCommand" loses structured
+  // bridge output on real interactive desktops (observed as CLIXML on stderr).
+  // Execute the constant encoded script DIRECTLY; user inputs remain opaque
+  // JSON in environment, never interpolated into PowerShell source.
+  let stdout = '';
+  let stderr = '';
+  let failure = null;
+  try {
+    const run = await execFileAsync('powershell.exe',
+      ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',BRIDGE_ENCODED],
+      { timeout: 30000, maxBuffer: 120000, windowsHide: true,
+        env: { ...process.env, MAJIN_CONTROL_SCRIPT: bridgePath(), MAJIN_CONTROL_PAYLOAD: req.payload } });
+    stdout = String(run.stdout || '');
+    stderr = String(run.stderr || '');
+  } catch (e) {
+    failure = e;
+    stdout = String(e.stdout || '');
+    stderr = String(e.stderr || '');
+  }
+  const line = stdout.trim().split(/\r?\n/).pop() || '';
   let j = null;
-  try { j = JSON.parse(line); } catch { /* fall */ }
-  if (!j) return { ok: false, error: { code: r.error ? 'spawn_failed' : 'bridge_parse', message: r.error || `bridge returned no JSON (${String(r.stderr || line).slice(0, 160)})`, hint: r.hint || null } };
+  try { j = JSON.parse(line); } catch { /* no structured result */ }
+  if (!j) {
+    // PowerShell 5.1 can serialize process errors as CLIXML. Extract the
+    // actual Error stream and provide a bounded diagnostic, not a fake PASS.
+    const psErrors = [...stderr.matchAll(/<S S="Error">([\s\S]*?)<\/S>/g)]
+      .map(m => m[1].replace(/_x000D_|_x000A_/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>'))
+      .join(' ').slice(-480);
+    const detail = psErrors || stderr.replace(/#< CLIXML[\s\S]{0,300}/,'').slice(-480).trim() ||
+      String(failure?.message || '').slice(0,180) || 'no JSON output';
+    return { ok:false, error: { code:failure?'bridge_exit':'bridge_parse',
+      message:'Win32 control bridge did not return JSON: '+detail } };
+  }
   if (j.ok === false) return { ok: false, error: { code: j.error?.code || 'control_failed', message: j.error?.message || 'control op failed', hint: j.error?.hint || null }, meta: j };
   return { ok: true, report: j, meta: j };
 }
