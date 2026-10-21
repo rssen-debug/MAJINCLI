@@ -25,7 +25,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { def } from './registry.js';
-import { runShell, IS_WIN } from './shell.js';
+import { IS_WIN } from './shell.js';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 const PS = String.raw`
 # MAJIN control bridge — inlined by src/core/tools/wincontrol.js (ps1 template)
@@ -62,11 +66,11 @@ public class Ctl {
     return found;
   }
   public static IntPtr FindChildEdit(IntPtr parent){ IntPtr edit=IntPtr.Zero;
-    EnumChildWindows(parent,(h,l)=>{ var c=ClassOf(h); if(c=="Edit"||c=="RichEdit20W"||c=="RichEdit50W"){ if(edit==IntPtr.Zero) edit=h; } else if(edit==IntPtr.Zero && c=="ComboBoxEx32"){ edit=h; } return true; }, IntPtr.Zero);
+    EnumChildWindows(parent,(h,l)=>{ var c=ClassOf(h); if(c=="Edit"||c=="RichEdit20W"||c=="RichEdit50W"||c.StartsWith("WindowsForms10.EDIT.",StringComparison.OrdinalIgnoreCase)){ if(edit==IntPtr.Zero) edit=h; } else if(edit==IntPtr.Zero && c=="ComboBoxEx32"){ edit=h; } return true; }, IntPtr.Zero);
     return edit;
   }
   public static IntPtr FindButton(IntPtr parent, string caption){ IntPtr btn=IntPtr.Zero; var low=caption.ToLower();
-    EnumChildWindows(parent,(h,l)=>{ if(ClassOf(h)=="Button"){ var sb=new StringBuilder(256); SendMessage(h, WM_GETTEXT, (IntPtr)sb.Capacity, sb);
+    EnumChildWindows(parent,(h,l)=>{ if(ClassOf(h)=="Button"||ClassOf(h).StartsWith("WindowsForms10.BUTTON.",StringComparison.OrdinalIgnoreCase)){ var sb=new StringBuilder(256); SendMessage(h, WM_GETTEXT, (IntPtr)sb.Capacity, sb);
       var t=sb.ToString().Replace("&","").ToLower(); if(t.Contains(low)){ btn=h; return false; } } return true; }, IntPtr.Zero);
     return btn;
   }
@@ -111,18 +115,20 @@ function bridgePath() {
   // Unique private directory: never execute a predictable shared-temp .ps1.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-control-'));
   const f = path.join(dir, 'bridge.ps1');
-  fs.writeFileSync(f, PS, { flag: 'wx', mode: 0o600 });
+  // Windows PowerShell 5.1 decodes bare UTF-8 PS1 as ANSI. A BOM prevents
+  // non-ASCII diagnostic hints from corrupting the parser/JSON output.
+  fs.writeFileSync(f, '\uFEFF' + PS, { flag: 'wx', mode: 0o600 });
   psFile = f;
   return f;
 }
 
 // EncodedCommand is constant; untrusted window/text/caption are opaque JSON in
 // the child environment, never interpolated into cmd.exe or PowerShell syntax.
-const BRIDGE_COMMAND = 'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' +
-  Buffer.from([
+const BRIDGE_ENCODED = Buffer.from([
     '$p = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:MAJIN_CONTROL_PAYLOAD)) | ConvertFrom-Json',
     '& $env:MAJIN_CONTROL_SCRIPT -Action $p.action -Window $p.window -Text $p.text -Caption $p.caption',
   ].join('; '), 'utf16le').toString('base64');
+const BRIDGE_COMMAND = 'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' + BRIDGE_ENCODED;
 
 export function encodeControlRequest(action, { window = '', text = '', caption = '' } = {}) {
   const json = JSON.stringify({ action, window, text, caption });
@@ -135,15 +141,52 @@ async function runBridge(action, { window = '', text = '', caption = '' } = {}) 
   let req;
   try { req = encodeControlRequest(action, { window, text, caption }); }
   catch (e) { return { ok: false, error: { code: 'payload_too_large', message: e.message } }; }
-  const r = await runShell(req.command, {
-    timeoutSec: 30,
-    maxChars: 60000,
-    env: { MAJIN_CONTROL_SCRIPT: bridgePath(), MAJIN_CONTROL_PAYLOAD: req.payload },
-  });
-  const line = String(r.stdout || '').trim().split(/\r?\n/).pop() || '';
+  // A nested "powershell -Command powershell -EncodedCommand" loses structured
+  // bridge output on real interactive desktops (observed as CLIXML on stderr).
+  // Execute the constant encoded script DIRECTLY; user inputs remain opaque
+  // JSON in environment, never interpolated into PowerShell source.
+  let stdout = '';
+  let stderr = '';
+  let failure = null;
+  try {
+    const run = await execFileAsync('powershell.exe',
+      ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',BRIDGE_ENCODED],
+      { timeout: 30000, maxBuffer: 120000, windowsHide: true,
+        env: { ...process.env, MAJIN_CONTROL_SCRIPT: bridgePath(), MAJIN_CONTROL_PAYLOAD: req.payload } });
+    stdout = String(run.stdout || '');
+    stderr = String(run.stderr || '');
+  } catch (e) {
+    failure = e;
+    stdout = String(e.stdout || '');
+    stderr = String(e.stderr || '');
+  }
+  // A PowerShell bridge can produce progress/warnings around the contract
+  // JSON. Read the most recent actual JSON object rather than assuming the
+  // final output line is the payload.
+  const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
   let j = null;
-  try { j = JSON.parse(line); } catch { /* fall */ }
-  if (!j) return { ok: false, error: { code: r.error ? 'spawn_failed' : 'bridge_parse', message: r.error || `bridge returned no JSON (${String(r.stderr || line).slice(0, 160)})`, hint: r.hint || null } };
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const candidate = JSON.parse(lines[i]);
+      if (candidate && typeof candidate === 'object' && typeof candidate.ok === 'boolean') {
+        j = candidate; break;
+      }
+    } catch { /* continue to another output line */ }
+  }
+  if (!j) {
+    // PowerShell 5.1 can serialize process errors as CLIXML. Extract the
+    // actual Error stream and provide a bounded diagnostic, not a fake PASS.
+    const psErrors = [...stderr.matchAll(/<S S="Error">([\s\S]*?)<\/S>/g)]
+      .map(m => m[1].replace(/_x000D_|_x000A_/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>'))
+      .join(' ').slice(-480);
+    const plain = stderr.replace(/<[^>]*>/g,' ').replace(/_x000D_|_x000A_/g,' ').replace(/\s+/g,' ').trim();
+    const exit = failure ? ('exit=' + String(failure.code ?? '?') + ' signal=' + String(failure.signal ?? '-')) : 'exit=0';
+    const detail = psErrors || plain.slice(-620) || String(failure?.message || '').slice(0,180) || 'no JSON output';
+    return { ok:false, error: { code:failure?'bridge_exit':'bridge_parse',
+      message:'Win32 control bridge ' + exit + ', stdout_bytes=' + stdout.length +
+        ', stderr_bytes=' + stderr.length + ', stdout_tail=' +
+        stdout.slice(-270).replace(/MAJIN_QA_[A-Z0-9]+/g,'QA_TEXT') + ': ' + detail } };
+  }
   if (j.ok === false) return { ok: false, error: { code: j.error?.code || 'control_failed', message: j.error?.message || 'control op failed', hint: j.error?.hint || null }, meta: j };
   return { ok: true, report: j, meta: j };
 }

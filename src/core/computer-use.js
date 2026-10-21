@@ -124,6 +124,15 @@ export async function computerUse(goal, {
       continue;
     }
     if (plan.kind === 'done') {
+      // "done" WITHOUT independent verification is not completion. The
+      // previous implementation treated verify(null) as ok=true, allowing a
+      // model to mark a desktop action complete without evidence.
+      if (!plan.verify) {
+        lastVerifyNote = 'The requested desktop outcome is NOT VERIFIED. Return a done action with a measurable verify check (window_exists or read_contains).';
+        logStep(dir, { phase: 'unverified_done_claim', step, note: lastVerifyNote });
+        emit({ type: 'cu_unverified', step, note: lastVerifyNote });
+        continue;
+      }
       const v = await verify({ registry, ctx: { ...baseCtx, session: `cu:${id}` }, check: plan.verify });
       logStep(dir, { phase: v.ok ? 'complete' : 'unverified_done_claim', step, verify: v });
       if (!v.ok) {

@@ -21,4 +21,14 @@ Source baseline: main at 403424913dafa0f1623dc265bdc52832d8947107, after PR #211
 
 The self-hosted runner MAJIN-INTERACTIVE-01 (2026-10-21, run 39584274075) was confirmed in an interactive Windows session and executed real MAJIN control.list/type/read/click against a disposable QA window with verified saved bytes; it also observed the W12 pink overlay appear, move and hide in actual screen pixels (only synthetic QA pixels sampled, no desktop screenshot uploaded). These are real limited-scope tests, not a generic autonomous desktop task.
 
-**Still NOT VERIFIED without separately grounded evidence:** autonomous agent-to-GUI end-to-end completion using a real cloud model on the owner's PC, arbitrary third-party desktop apps, update-over-old-installed-binary on the owner's device, and every provider/model/account combination. CI test coverage is not a blanket 100% certificate.
+**Verified narrowly on the owner's interactive Windows session:** real OpenCode Go planned MAJIN computer.use Win32 actions in a disposable QA window; independently checked persisted bytes. W12 cursor pixels appeared, moved, and disappeared. Run [39588560481](https://github.com/rssen-debug/MAJINCLI/actions/runs/39588560481), source commit 40d47236cb530c693d9c16986876b9d2208763eb. **Still NOT VERIFIED:** arbitrary third-party Windows apps, all model/account combinations, automatic update over an installed end-user binary, or a broad multi-hour desktop mission. QA fixture proof is not a blanket 100% certificate.
+
+## Verified interactive Windows desktop fix scope
+
+- On the self-hosted Windows desktop runner, real WinForms list/type/read/click/save for a disposable QA app; saved bytes read back exactly.
+- MAJIN computer.use executes a bounded OBSERVE→PLAN→ACT→VERIFY chain on that disposable window, both with a deterministic test planner and with actual OpenCode Go model inference. Real cloud model chooses actions; test checks the saved QA file.
+- Pink overlay pixels are sampled in-memory in a small region and proved to appear, move, update label state and disappear; no private screenshots or unrelated window titles uploaded.
+- Reference owner-PC workflow: https://github.com/rssen-debug/MAJINCLI/actions/runs/39586059993 (earlier Go+pink PASS). Follow-on W11/W12 + live-cloud acceptance workflow: https://github.com/rssen-debug/MAJINCLI/actions/runs/39588560481 (PASS; same QA code incorporated into the release candidate).
+- Only synthetic QA app and basic Win32 Edit/Button controls verified. This DOES NOT prove universal arbitrary app navigation, user-file manipulation, or unsupervised high-impact actions.
+
+- v1.0.2 main build-exe additionally re-downloads both public EXEs and SHA256 manifests to prove their bytes match the newly built binaries. An absent or mismatched asset is a release-gate failure.
