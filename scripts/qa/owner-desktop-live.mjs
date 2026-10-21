@@ -109,6 +109,11 @@ try {
   assert.ok(pixelCanary>=12, 'Desktop pixel capture is unavailable even for the synthetic QA window ('+pixelCanary+' pink samples); interactive process != visible unlocked display');
   verdict.desktopPixelCanary=true;
   console.log('REAL SCREEN PIXEL CANARY PASS: verified synthetic QA window pixels only');
+  // The canary fixture uses a pink background and should not hide or impersonate
+  // the actual overlay. Close the synthetic window BEFORE W12 sampling.
+  if (app?.pid) { try { app.kill(); } catch {} }
+  await sleep(650);
+
 
 
   const dimsScript = 'Add-Type -AssemblyName System.Windows.Forms; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; Write-Output ($b.Width.ToString()+","+$b.Height.ToString())';
@@ -127,6 +132,7 @@ try {
   await sleep(2400);
   const first=colorCount(x1,y1);
   if (first < 12) {
+    const initial=colorCount(100,100);
     // Diagnose a real PowerShell overlay startup failure while retaining NO
     // screenshots. A direct second launch exposes parser/runtime diagnostics
     // that the normal detached, stdio-ignored overlay process cannot report.
@@ -141,7 +147,7 @@ try {
     const stopped=diag.exitCode;
     try{diag.kill();}catch{}
     const diagnostic=(err||output).replace(/C:\\\\Users\\\\[^\\\\]+/gi,'C:Users:[redacted]').slice(0,600);
-    throw new Error('W12 overlay no screen pixels ('+first+'); direct PS exit='+String(stopped)+'; diagnostic='+diagnostic);
+    throw new Error('W12 overlay no screen pixels ('+first+'), initial position pink='+initial+'; direct PS exit='+String(stopped)+'; diagnostic='+diagnostic);
   }
   assert.ok(first>=12,'W12 overlay not visible at first target ('+first+' pink samples)');
   verdict.pinkVisible=true;
