@@ -87,7 +87,10 @@ if ($interactive) {
 # A5 checks only ACTUAL computer.use dry-plan tool wiring.
 # Never infer live desktop-control success from this non-interactive probe.
 Add-Step 'A5' 'computer.use dry-plan wiring smoke (NO live desktop action)' {
-  $probe = Join-Path $Repo 'qa\win-acceptance\computer-use-smoke.mjs'
+  # The A5 tool probe lives BESIDE this script, regardless of the -Repo
+  # parameter. In hosted Windows CI a default param expression resolved
+  # $Repo to D:\, incorrectly searching D:\qa\... for a file in checkout.
+  $probe = Join-Path $PSScriptRoot 'computer-use-smoke.mjs'
   # Diagnosis over guesswork: the runner recorded MODULE_NOT_FOUND for a path
   # we could not see. Normalise + log the resolved path before trusting it.
   $probe = [System.IO.Path]::GetFullPath($probe)
