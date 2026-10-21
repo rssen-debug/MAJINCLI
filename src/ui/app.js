@@ -908,20 +908,61 @@ function micToggle(){
   if(S.handsFree){S.handsFree=false;stopMic();speechSynthesis?.cancel();}
   else {S.handsFree=true;S.voice=true;$('b-voice')?.classList.add('on');startMic();}
 }
-function speak(t){
-  if(!S.voice||!('speechSynthesis' in window))return;
+let currentVoiceAudio=null, voiceRequest=null;
+async function neuralNarrator(text){
+  const controller=new AbortController();
+  voiceRequest=controller;
+  const timeout=setTimeout(()=>controller.abort(),25000);
+  try {
+    const res=await fetch('http://127.0.0.1:18765/speak',{
+      method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({text}),signal:controller.signal
+    });
+    if(!res.ok)throw new Error('Local Kokoro voice unavailable');
+    const wav=await res.blob();
+    if(wav.type && !wav.type.includes('wav'))throw new Error('Local narrator did not return WAV');
+    const url=URL.createObjectURL(wav);
+    const audio=new Audio(url);currentVoiceAudio=audio;
+    try {
+      await new Promise((resolve,reject)=>{
+        audio.onended=resolve;audio.onerror=()=>reject(new Error('WAV playback failed'));
+        audio.play().catch(reject);
+      });
+      return true;
+    } finally {URL.revokeObjectURL(url);}
+  } finally {
+    clearTimeout(timeout);voiceRequest=null;
+    if(currentVoiceAudio){currentVoiceAudio.pause();currentVoiceAudio=null;}
+  }
+}
+function browserNarrator(clean){
+  return new Promise(resolve=>{
+    if(!('speechSynthesis' in window)){resolve();return;}
+    const u=new SpeechSynthesisUtterance(clean);
+    const lang=S.st?.config?.ui?.voice?.lang||'sv-SE';
+    u.lang=lang;u.rate=S.st?.config?.ui?.voice?.rate||1.04;
+    const voices=speechSynthesis.getVoices().filter(x=>x.lang?.slice(0,2).toLowerCase()===lang.slice(0,2).toLowerCase());
+    u.voice=voices.find(x=>/natural|neural/i.test(x.name))||voices[0]||null;
+    u.onend=resolve;u.onerror=resolve;
+    speechSynthesis.cancel();speechSynthesis.speak(u);
+  });
+}
+async function speak(t){
+  if(!S.voice)return;
   const clean=String(t).replace(/[*_#]/g,'').slice(0,700).trim();
   if(!clean)return;
   stopMic();
-  const u=new SpeechSynthesisUtterance(clean);
-  const lang=S.st?.config?.ui?.voice?.lang||'sv-SE';
-  u.lang=lang;u.rate=S.st?.config?.ui?.voice?.rate||1.04;
-  const choices=speechSynthesis.getVoices().filter(x=>x.lang?.slice(0,2).toLowerCase()===lang.slice(0,2).toLowerCase());
-  u.voice=choices.find(x=>/natural|neural/i.test(x.name))||choices[0]||null;
-  u.onstart=()=>{speechActive=true;voiceState('speaking','MAJIN speaking…');};
-  const done=()=>{speechActive=false;voiceState('idle','Voice ready');if(S.handsFree&&!S.busy)startMic();};
-  u.onend=done;u.onerror=done;
-  speechSynthesis.cancel();speechSynthesis.speak(u);
+  speechActive=true;voiceState('speaking','MAJIN speaking…');
+  try {
+    // English narration uses the local Kokoro male model. Swedish content
+    // falls back to OS Swedish until a properly licensed sv voice is installed.
+    const isEnglish = S.narratorEnglish === true;
+    if(isEnglish){try{await neuralNarrator(clean);return;}catch(e){voiceState('speaking','Local voice unavailable; using system voice');}}
+    await browserNarrator(clean);
+  } finally {
+    speechActive=false;voiceState('idle','Voice ready');
+    if(S.handsFree&&!S.busy)startMic();
+  }
 }
 
 /* ------------------------------- composer ------------------------------- */
@@ -1170,6 +1211,17 @@ try { if (!window.MAJIN_STUDIO && localStorage.getItem('majin.expert') === '1') 
 $('b-panel').onclick = () => {
   document.body.classList.toggle('pan-off');
   $('b-panel').classList.toggle('on');
+};
+S.narratorEnglish = false;
+try { S.narratorEnglish = localStorage.getItem('majin.voice.narratorEN') === 'true'; } catch {}
+$('b-narrator')?.classList.toggle('on', S.narratorEnglish);
+$('b-narrator')?.setAttribute('aria-pressed', String(S.narratorEnglish));
+$('b-narrator').onclick = () => {
+  S.narratorEnglish = !S.narratorEnglish;
+  $('b-narrator').classList.toggle('on', S.narratorEnglish);
+  $('b-narrator').setAttribute('aria-pressed', String(S.narratorEnglish));
+  try {localStorage.setItem('majin.voice.narratorEN', String(S.narratorEnglish));}catch{}
+  toast(S.narratorEnglish ? 'English Kokoro narrator enabled. Speak English for best quality.' : 'System voice enabled.');
 };
 $('b-voice').onclick = () => {
   S.voice = !S.voice;

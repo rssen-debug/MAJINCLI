@@ -266,6 +266,7 @@ body[data-voice-mode="speaking"] #mic{box-shadow:0 0 0 4px rgba(124,224,182,.17)
 #mic-state{font-size:11px;color:var(--dim);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @keyframes majin-orb{50%{transform:scale(1.06);box-shadow:0 0 0 8px rgba(255,143,208,.06)}}
 @media(prefers-reduced-motion:reduce){body[data-voice-mode] #mic{animation:none}}
+#b-narrator{border:1px solid var(--line);background:var(--bg2);color:var(--dim);border-radius:9px;padding:6px 10px;font-size:11px}#b-narrator.on{border-color:var(--cy);color:var(--cy);background:var(--cysoft)}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
@@ -298,6 +299,7 @@ body[data-voice-mode="speaking"] #mic{box-shadow:0 0 0 4px rgba(124,224,182,.17)
   <button id="b-rail" title="Sidebar" aria-label="Toggle sidebar">☰</button>
   <button id="b-theme" title="Light / dark">◐</button>
   <button id="b-voice" title="Speak responses" aria-label="Toggle spoken responses">Voice</button>
+  <button id="b-narrator" type="button" title="Use local Kokoro English narrator when installed; otherwise use system voice" aria-pressed="false">Narrator EN</button>
   <button id="b-test" title="Run self-test">◎</button>
   <button id="b-stop" class="danger" title="Emergency stop — abort the running task">■</button>
   <span id="v-tag" title="the version this window is actually running — never guess again"></span>
