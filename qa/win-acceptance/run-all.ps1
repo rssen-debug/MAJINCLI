@@ -65,7 +65,7 @@ if ($interactive) {
     if (-not $proc) { $results.Add([ordered]@{ step = 'A1'; title = 'pink cursor overlay visible + drawn on screen'; status = 'FAIL'; evidence = 'no MAJIN/pink-cursor process found — start the app first'; artifact = $null }); return }
     $shot = Shot 'A1-pink-cursor'
     $found = Select-BitmapColor -Path $shot -Hex 'FF3CA5'
-    $results.Add([ordered]@{ step = 'A1'; title = 'pink cursor overlay visible + drawn on screen'; status = ($found ? 'PASS' : 'FAIL'); evidence = "canvas scan for #ff3ca5: $found"; artifact = $shot })
+    $results.Add([ordered]@{ step = 'A1'; title = 'pink cursor overlay visible + drawn on screen'; status = ($(if $found { 'PASS' } else { 'FAIL' })); evidence = "canvas scan for #ff3ca5: $found"; artifact = $shot })
   }
 }
 
@@ -73,7 +73,7 @@ if ($interactive) {
 Add-Step 'A5' 'computer.use lane smoke' {
   $exit = & node (Join-Path $Repo 'src\cli.js') --smoke 2>&1
   $ok = $LASTEXITCODE -eq 0
-  $results.Add([ordered]@{ step = 'A5'; title = 'computer.use lane smoke'; status = ($ok ? 'PASS' : 'FAIL'); evidence = "exit=$LASTEXITCODE tail=$($exit[-3..-1] -join ' | ')"; artifact = $null })
+  $results.Add([ordered]@{ step = 'A5'; title = 'computer.use lane smoke'; status = ($(if $ok { 'PASS' } else { 'FAIL' })); evidence = "exit=$LASTEXITCODE tail=$($exit[-3..-1] -join ' | ')"; artifact = $null })
 }
 
 

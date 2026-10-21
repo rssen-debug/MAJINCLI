@@ -1,4 +1,5 @@
 import test from 'node:test';
+import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { validateAcceptance, verdict, RULES } from '../scripts/verify-win-acceptance.mjs';
 
@@ -40,6 +41,12 @@ test('W12 DoD-required steps must exist — their absence is a contract violatio
 test('W12 interactive must be an explicit boolean — "probably" is rejected', () => {
   const d = good(); d.interactive = 'yes, I think so';
   assert.ok(validateAcceptance(d).some((x) => /interactive must be a boolean/.test(x)));
+});
+
+test('W12 the runner ps1 stays Windows PowerShell 5.1-safe (CI lesson: ternary dies there)', () => {
+  const ps = fs.readFileSync(new URL('../../qa/win-acceptance/run-all.ps1', import.meta.url), 'utf8');
+  assert.equal(/\?\s*'[^']*'\s*:/.test(ps), false, 'PS7-only ternary detected — windows-latest service shell is powershell 5.1');
+  assert.equal(/&&|\|\|/.test(ps.split('\n').filter((l) => !/also|http/i.test(l) || /status =/.test(l)).join('\n')), false, 'PS7-only && or || in runner ps1');
 });
 
 test('W12 release gate: required steps that are NOT PASS block --gate mode', () => {
