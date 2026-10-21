@@ -14,6 +14,19 @@
 - Den lokala Windows-runnern är enligt användaren **redan installerad och tidigare använd**. Installera inte om utan konkret anledning.
 - OpenCode **Go** (molnleverantör), inte OpenCode Zen. Lokal Qwen är inte produktens standard; Qwen-testet får köras på GitHub Actions-hostad runner.
 
+## PRIORITET 0 — Pusha Arenas redan färdiga merge-lösning NU
+
+Arena har i sin egen session sagt att merge-resolution redan finns lokalt och erbjudit att pusha den till `fix/v102-merge-resolution`. **Detta är första obligatoriska handlingen, inte en fråga till användaren.**
+
+1. Leta upp den befintliga lokala worktree/branchen/committen med merge-resolution i Arenas arbetsmiljö. Kontrollera `git status`, `git worktree list`, `git branch -avv`, `git log` och `git diff`. Förlora inte opushade ändringar.
+2. Om ändringarna är okommittade: kontrollera konfliktmarkörer, kör relevanta syntax-/unit-tester, stagea **endast avsedda filer** och committa. Om de redan är committade, återanvänd committen. Använd aldrig `git push --force` för att skriva över andras arbete.
+3. Pusha lösningen till remote-grenen `fix/v102-merge-resolution` (`git push -u origin HEAD:refs/heads/fix/v102-merge-resolution`, efter att du verifierat att du är på rätt commit och att remote inte har nyare ändringar). Om branchen redan finns: fetch och integrera först.
+4. Kontrollera med `git ls-remote --heads origin fix/v102-merge-resolution` och via GitHub att pushen verkligen syns. Spara commit-SHA och länk.
+5. Öppna en PR mot **rätt målgren** eller integrera den granskade resolutionen i PR #213:s releasegren utan att skriva över andra agenters ändringar. Kontrollera att PR #213 blir mergebar.
+6. **Fortsätt sedan direkt med alla steg nedan**: case 05, alla CI-gates, Windows-runner, OpenCode Go, installer, merge, release och SHA256. Stanna inte efter push, fråga inte användaren att välja alternativ 1/2/3.
+
+Om den påstått färdiga lokala resolutionen inte längre finns: säg det i loggen, gör en ny korrekt trevägsmerge från aktuell remote och pusha den. Markera inte detta som färdigt förrän remote-grenen finns och koden är verifierad.
+
 ## Obligatoriskt arbetsflöde
 
 ### 1. Inventera och säkra arbetet
