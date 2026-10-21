@@ -6,7 +6,7 @@ test('speech recognition arms, sends actual user transcript and suspends while a
   assert.match(src,/window\.SpeechRecognition\s*\|\|\s*window\.webkitSpeechRecognition/);
   assert.match(src,/r\.interimResults=true/);
   assert.match(src,/if\(!complete\.trim\(\)\) return/);
-  assert.match(src,/send\(command\)/);
+  assert.match(src,/send\(command, \{ voiceTurn: true \}\)/);
   assert.match(src,/S\.handsFree=true/);
   assert.match(src,/if\(S\.handsFree&&!S\.busy\)startMic\(\)/);
   assert.match(src,/engine\.cancel\(\);engine\.resume\(\);engine\.speak\(u\)/);
