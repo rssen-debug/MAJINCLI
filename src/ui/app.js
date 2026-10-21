@@ -78,7 +78,7 @@ document.getElementById('scroller')?.addEventListener('click', (event) => {
   const encoded = button.getAttribute('data-majin-file') || '';
   let file = '';
   try { file = decodeURIComponent(encoded); } catch { return; }
-  if (!/^workspace[\\/][\\w .\\/\\-]+\\.(?:html?|md|txt|json|css|js|ts|jsx|tsx|py|csv|svg)$/i.test(file)) return;
+  if (!/^workspace[\\/][A-Za-z0-9_ .\\/\-]+\.(?:html?|md|txt|json|css|js|ts|jsx|tsx|py|csv|svg)$/i.test(file)) return;
   window.MAJIN_STUDIO?.previewFile(file.replace(/^workspace[\\/]/i, ''));
 });
 
