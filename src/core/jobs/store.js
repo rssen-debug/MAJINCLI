@@ -77,7 +77,18 @@ export async function withAppsLock(fn, { maxWaitMs = 5000, holder = 'task' } = {
       await fsp.writeFile(path.join(lock, 'holder.txt'), `${holder} \u00b7 ${new Date().toISOString()} \u00b7 pid:${process.pid}`);
       break;
     } catch (e) {
-      if (e.code !== 'EEXIST') throw e;
+      // Windows can temporarily raise EPERM (instead of EEXIST) while a lock
+      // directory is being removed by another writer. Retry ONLY when this
+      // process can still WRITE the parent; genuine permission errors fail.
+      // The existing maxWaitMs bound still applies, never wait forever.
+      let transientWindowsEperm = false;
+      if (process.platform === 'win32' && e.code === 'EPERM') {
+        try {
+          await fsp.access(path.dirname(lock), fs.constants.W_OK);
+          transientWindowsEperm = true;
+        } catch { /* actual inaccessible parent: preserve original error */ }
+      }
+      if (e.code !== 'EEXIST' && !transientWindowsEperm) throw e;
       try {
         const st = await fsp.stat(lock);
         if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {

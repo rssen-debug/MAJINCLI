@@ -11,7 +11,7 @@ import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
-import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion } from './goal-artifact.js';
+import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion, pinSingleExactTextWrite, verifySingleExactTextCreation } from './goal-artifact.js';
 import { verifyJobIdLineage, pinJobShortlistWrite } from './mission-data-evidence.js';
 import { verifyFollowupJobSelection } from './mission-data-evidence.js';
 
@@ -338,10 +338,18 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       const pin = actionGoal && !ctx?.readOnly
         ? (pinSingleFileWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs) ||
            pinJobShortlistWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs)) : null;
-      const args = pin?.args || candidateArgs;
+      // Do not combine two independent guesses (wrong target path AND wrong
+      // content). A wrong-path write may still be pinned by the existing
+      // contract, but must be repaired by the model if its bytes are wrong.
+      const contentPin = actionGoal && !ctx?.readOnly && !pin?.corrected
+        ? pinSingleExactTextWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs) : null;
+      const args = contentPin?.args || pin?.args || candidateArgs;
       if (pin?.corrected) {
         onEvent({ type: 'artifact_path_corrected', label, step: steps, tool: c.name,
           originalPath: pin.originalPath, requestedPath: pin.requestedPath });
+      }
+      if (contentPin?.corrected) {
+        onEvent({ type: 'artifact_content_corrected', label, step: steps, target: contentPin.target });
       }
       onEvent({ type: 'tool_begin', label, step: steps, callId: c.id, name: c.name });
       const rep = wdDetect.hit(c.name, args);
@@ -398,6 +406,21 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         tool_call_id: r.id,
         content: guarded.text,
       });
+    }
+
+    // Atomic "create x.txt containing EXACTLY TOKEN": independent byte proof
+    // after the real, permitted write is enough. Avoid asking a weak model to
+    // re-write identical bytes until the repeat-loop detector blocks progress.
+    // Not applicable to edit/delete/multiple-artifact or free-form tasks.
+    if (actionGoal && !ctx?.readOnly && results.length === 1 && results[0].name === 'fs.write') {
+      const write = results[0];
+      const proof = verifySingleExactTextCreation(initialGoal, cfg.get('workspace'),
+        write.name, write.args, write.out?.ok !== false);
+      if (proof?.ok) {
+        onEvent({ type: 'artifact_exact_text_verified', label, step: steps, target: proof.target });
+        return { text: proof.text, steps, toolLog, usage: tally, escalated,
+          stopReason: 'verified_exact_text_write' };
+      }
     }
 
     // A single approved fs.delete with independent absent-file proof is

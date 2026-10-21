@@ -4,7 +4,14 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { _resetJobsFiles, upsertApplication, loadApplications, withAppsLock, appsLockPath } from '../src/core/jobs/store.js';
+// Tests must NEVER share the user's default %LOCALAPPDATA%/MAJIN/jobs or a
+// folder with other parallel Node test workers. The previous Windows QA run
+// had EPERM/EEXIST races between test processes resetting that shared folder.
+const qaJobsHome=fs.mkdtempSync(path.join(os.tmpdir(),'majin-jobs-lock-'));
+process.env.MAJIN_HOME=qaJobsHome;
+const { _resetJobsFiles, upsertApplication, loadApplications, withAppsLock, appsLockPath } =
+  await import('../src/core/jobs/store.js');
+test.after(()=>fs.rmSync(qaJobsHome,{recursive:true,force:true}));
 
 test('JOBS named-lock: 20 concurrent upserts from 5 sessions all SURVIVE race-free (no lost update)', async () => {
   _resetJobsFiles();
