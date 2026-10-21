@@ -461,6 +461,47 @@ export function repairLiteralEscapedNewlineEchoCliWrite(goal, workspace, tool, a
     reason: 'replaced the exact observed escaped source line break between two ESM statements' };
 }
 
+
+/**
+ * Repair ONE measured free-model regression without general-purpose rewriting.
+ * Qwen emitted an ESM respond(message) function but sent each CLI argument to
+ * fs.writeFileSync(path.join(__dirname, 'response.txt'), ...). In .mjs,
+ * __dirname is undefined, so the command exits 1 and never prints a reply.
+ *
+ * Accept only the complete observed program shape, a single template-return
+ * responder, no other statements and no added side effects. This transforms
+ * the requested CLI output channel; it does NOT prove success until the
+ * independent Docker CLI oracle exercises two distinct arguments.
+ */
+export function repairSimpleFileWritingEchoCliWrite(goal, workspace, tool, args) {
+  if (tool !== 'fs.write' || typeof args?.path !== 'string' ||
+      typeof args?.content !== 'string') return null;
+  const target = explicitTarget(goal, workspace);
+  const request = String(goal || '');
+  if (!target || !/\.mjs$/i.test(target.name) ||
+      path.resolve(target.workspace, args.path) !== target.path ||
+      !/\bno\s+external\s+dependencies\b/i.test(request) ||
+      !/\bCLI\b/i.test(request) ||
+      !/\brespond\s*\(\s*message\s*\)/i.test(request) ||
+      !/\bprocess\.argv\b/i.test(request)) return null;
+  const src = args.content.replace(/\r\n/g, '\n').trim();
+  if (src.length > 1400) return null;
+  // Full-source allowlist: original imports, one pure responder, only the
+  // observed wrong .mjs entrypoint. Extra statements or arbitrary file paths
+  // are intentionally NOT rewritten.
+  const pattern = /^(?:#![^\r\n]*\n\s*)?import\s+fs\s+from\s+['"]node:fs['"];\s*import\s+path\s+from\s+['"]node:path['"];\s*export\s+function\s+respond\s*\(\s*message\s*\)\s*\{\s*return\s+(\x60[^\x60\r\n]*\$\{\s*message\s*\}[^\x60\r\n]*\x60)\s*;\s*\}\s*process\.argv\.slice\s*\(\s*2\s*\)\.forEach\s*\(\s*arg\s*=>\s*\{\s*fs\.writeFileSync\s*\(\s*path\.join\s*\(\s*__dirname\s*,\s*['"]response\.txt['"]\s*\)\s*,\s*respond\s*\(\s*arg\s*\)\s*\)\s*;\s*\}\s*\)\s*;?$/;
+  const match = pattern.exec(src);
+  if (!match || (match[1].match(/\$\{/g) || []).length !== 1) return null;
+  const content =
+    'export function respond(message) { return ' + match[1] + '; }\n' +
+    'import { pathToFileURL } from "node:url";\n' +
+    'if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {\n' +
+    '  console.log(respond(process.argv.slice(2).join(" ")));\n' +
+    '}\n';
+  return { corrected: true, target: target.name, args: { ...args, content },
+    reason: 'rewired exact invalid ESM __dirname file-writing echo into a CLI that prints runtime arguments' };
+}
+
 export function repairSimpleCommonJsEchoCliWrite(goal, workspace, tool, args) {
   if (tool !== 'fs.write' || !args || typeof args.path !== 'string' ||
       typeof args.content !== 'string') return null;

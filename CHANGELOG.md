@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-21 — v1.0.2 — Reliable checkpoint resume
+
+**Fixat:** En återupptagen GRAND ARCHITECT-mission kan inte längre återanvända en gammal VERIFIED-stämpel för en borttagen/ändrad fil. Tidigare checkpoints valideras mot färska kontrakt och, där filhash finns, mot tidigare hash. Node-ID får inte längre av misstag återanvända en annan instruktion eller beroendegraf.
+
+**Säkerhet:** Om en checkpoint avser en åtgärd vars utfall inte säkert kan kontrolleras utan att köra åtgärden igen, blockeras automatiskt återförsök med `REQUIRES_REVIEW`. Riskfyllda åtgärder spelas inte upp blint.
+
+**CI:** Den riktiga Qwen-gatens externa `ollama pull` får högst tre försök vid temporärt 503-fel. Tre misslyckade hämtningar = röda CI-resultat; inga falska PASS.
+
+**Verifiering:** PR #211:s åtta kontroller gröna, inklusive Windows installer och real cloud Go. v1.0.2 behöver **egna** gröna PR-/main-gates och en publicerad release med fyra korrekta assets. Windows self-hosted runner har separat testat MAJIN-kontrollverktyg mot en isolerad syntetisk GUI-window och W12 pink-overlay pixels. Detta ersätter **inte** ett verifierat generellt autonomt GUI-uppdrag med molnmodell, och garanterar inte samtliga användarmiljöer.
+
+
 Date headers, newest first. Under each date: **Ändrat** (what changed), **Fixat** (what was
 broken), **Verifierat** (the exact command and its result). Verified means the Linux sandbox +
 GitHub Actions CI unless stated otherwise; nothing here claims a browser or human Windows click

@@ -240,3 +240,42 @@ jobs:
           # the installer is always there; the single-file exe only when pkg worked
           fail_on_unmatched_files: false
           generate_release_notes: true
+      - name: verify public release bytes and SHA256 against the fresh CI build
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.release_target.outputs.publish == 'true' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = '${{ steps.release_target.outputs.tag }}'
+          $dir = Join-Path $env:RUNNER_TEMP 'majin-published-release-check'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $downloaded = $false
+          for ($attempt=1; $attempt -le 3; $attempt++) {
+            gh release download $tag --repo $env:GITHUB_REPOSITORY --dir $dir --pattern '*.exe' --pattern '*.sha256' --clobber
+            if ($LASTEXITCODE -eq 0) { $downloaded = $true; break }
+            Write-Warning "Release asset download attempt $attempt/3 failed; retrying"
+            Start-Sleep -Seconds (5 * $attempt)
+          }
+          if (-not $downloaded) { throw "Published $tag assets could not be downloaded for verification" }
+          $pairs = @(
+            @{ name='MAJIN-Setup.exe'; local='dist/installer/MAJIN-Setup.exe' },
+            @{ name='majin-win-x64.exe'; local='dist/majin-win-x64.exe' }
+          )
+          foreach ($pair in $pairs) {
+            $local = $pair.local
+            $published = Join-Path $dir $pair.name
+            $checksumFile = "$published.sha256"
+            if (-not (Test-Path $local) -or -not (Test-Path $published) -or -not (Test-Path $checksumFile)) {
+              throw "Missing source, public binary, or checksum: $($pair.name)"
+            }
+            $srcHash = (Get-FileHash -Algorithm SHA256 $local).Hash.ToLowerInvariant()
+            $pubHash = (Get-FileHash -Algorithm SHA256 $published).Hash.ToLowerInvariant()
+            $checksumText = (Get-Content -Raw $checksumFile).Trim()
+            if ($checksumText -notmatch '^([0-9a-fA-F]{64})\s+\S+$') { throw "Invalid SHA256 manifest: $($pair.name)" }
+            $manifestHash = $Matches[1].ToLowerInvariant()
+            if ($srcHash -ne $pubHash -or $pubHash -ne $manifestHash) {
+              throw "SHA256 MISMATCH: public artifact $($pair.name) differs from newly built binary or checksum"
+            }
+            "VERIFIED $tag $($pair.name) sha256=$pubHash" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          }
+          Write-Output "Public $tag release binary integrity VERIFIED for both executable assets."

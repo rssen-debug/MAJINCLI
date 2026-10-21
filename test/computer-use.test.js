@@ -101,7 +101,8 @@ test('CU overlay: overlay PS1 materializes under workspace/cursor (script is rea
   const p = ensureOverlayFiles(dir);
   const src = fs.readFileSync(p.ps1, 'utf8');
   assert.ok(src.includes('System.Windows.Forms'), 'the overlay is a real layered WinForms script');
-  assert.ok(src.includes('TransparencyKey'), 'click-through transparency trick present');
+  assert.ok(src.includes('Add_Paint'), 'real WinForms pink pointer is drawn using the registered Paint event');
+  assert.ok(src.includes('Opacity'), 'real interactive desktop renders the dark cursor backing instead of hiding the whole form');
   assert.equal(sessionId('a'), sessionId('a'), 'session id stable');
   assert.ok(VERSION.startsWith('majin-computer-use/'));
 });
