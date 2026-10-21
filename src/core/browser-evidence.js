@@ -3,7 +3,7 @@
  * observe/act/verify separation. Evaluates read-only DOM state, never performs
  * an action or infers "success" from an HTTP 200 / successful click.
  */
-export const VERIFY_JS = String.raw\`((args) => {
+export const VERIFY_JS = String.raw`((args) => {
   const selector = args.selector || '';
   let el = null;
   try { if (selector) el = document.querySelector(selector); }
@@ -25,7 +25,7 @@ export const VERIFY_JS = String.raw\`((args) => {
     titleMatch: args.title ? document.title.toLowerCase().includes(args.title.toLowerCase()) : null,
   };
   return state;
-})(__MAJIN_ARGS__)\`;
+})(__MAJIN_ARGS__)`;
 
 export function verificationCriteria(input = {}) {
   const selector = String(input.selector || '').trim().slice(0, 350);
