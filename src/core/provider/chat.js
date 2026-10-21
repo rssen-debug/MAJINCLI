@@ -8,6 +8,7 @@ import { admit, record, noteViolation, retryAfterMs, classify, estimateInputToke
 import { openaiStream, openaiOnce } from './openai.js';
 import { anthropicStream, anthropicOnce } from './anthropic.js';
 import { mockComplete } from './mock.js';
+import { responsesStream, responsesOnce } from './responses.js';
 
 export class ProviderError extends Error {
   constructor(msg, { status = 0, code = 'provider_error', hint = null, retryable = false } = {}) {
@@ -138,6 +139,7 @@ async function dispatch(o) {
     });
   }
   if (route.kind === 'anthropic') return o.stream ? anthropicStream(o) : anthropicOnce(o);
+  if (route.kind === 'responses') return o.stream ? responsesStream(o) : responsesOnce(o);
   return o.stream ? openaiStream(o) : openaiOnce(o);
 }
 
