@@ -54,3 +54,10 @@ test('W6 stub-eval-shaped contract: GROUND_JS shape matches what the bridge retu
   clearRefs('contract');
   assert.ok(VERSION.startsWith('majin-ground/'));
 });
+
+test('browser grounding uses accessible labels and does not read typed form values',()=>{
+  assert.doesNotMatch(GROUND_JS,/el\.value/,'typed form values could contain passwords, tokens or private text');
+  assert.match(GROUND_JS,/el\.labels\?\.\[0\]/);
+  assert.match(GROUND_JS,/aria-labelledby/);
+  assert.match(GROUND_JS,/\[sensitive field\]/);
+});
