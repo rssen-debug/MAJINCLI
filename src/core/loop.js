@@ -11,7 +11,7 @@ import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
-import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion, pinSingleExactTextWrite, verifySingleExactTextCreation, repairSimpleCommanderCliWrite, repairSimpleMixedEsmCliWrite, verifyLocalTokenDemoFiles, isLocalTokenDemoGoal } from './goal-artifact.js';
+import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion, pinSingleExactTextWrite, verifySingleExactTextCreation, repairSimpleCommanderCliWrite, repairSimpleMixedEsmCliWrite, unchangedInvalidJavaScriptWrite, verifyLocalTokenDemoFiles, isLocalTokenDemoGoal } from './goal-artifact.js';
 import { verifyJobIdLineage, pinJobShortlistWrite } from './mission-data-evidence.js';
 import { verifyFollowupJobSelection } from './mission-data-evidence.js';
 
@@ -163,6 +163,9 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
   const wdDetect = new RepeatDetector(Math.max(2, Number(cfg.get('agent.maxRepeatCalls') || 3)));
   const wdClock = new TurnClock();
   let wdRepeatBlocked = false;
+  // Only previously FAILED actual writes in this same agent turn are eligible
+  // for unchanged-invalid-code protection. No global cache and no user data.
+  const invalidJsWrites = new Map();
 
   while (steps < limit) {
     const wdBox = wdClock.over(wdTurnMaxMs);
@@ -361,9 +364,27 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         onEvent({ type: 'artifact_content_corrected', label, step: steps, target: contentPin.target });
       }
       onEvent({ type: 'tool_begin', label, step: steps, callId: c.id, name: c.name });
-      const rep = wdDetect.hit(c.name, args);
+      const key = typeof args.path === 'string' ? args.path : null;
+      const previous = key ? invalidJsWrites.get(key) : null;
+      const unchangedBad = actionGoal && !ctx?.readOnly && previous
+        ? unchangedInvalidJavaScriptWrite(initialGoal, cfg.get('workspace'), c.name, args, previous.content)
+        : null;
+      const rep = unchangedBad ? null : wdDetect.hit(c.name, args);
       let out;
-      if (rep.repeat) {
+      if (unchangedBad) {
+        previous.repeats += 1;
+        // One corrective tool response can still help a small model.
+        // If it ignores that explicit error, stop truthfully rather than
+        // writing the same invalid artifact forever.
+        if (previous.repeats >= 2) wdRepeatBlocked = true;
+        out = { ok: false, ms: 0, error: {
+          code: 'unchanged_invalid_artifact',
+          message: unchangedBad.reason +
+            (wdRepeatBlocked ? ' Repeated without changes; turn blocked.' : ''),
+        } };
+        onEvent({ type: 'artifact_unchanged_invalid', label, step: steps,
+          target: unchangedBad.target, repeats: previous.repeats });
+      } else if (rep.repeat) {
         out = { ok: false, ms: 0, error: { code: 'repeat_loop', message: `same call "${c.name}" repeated ${rep.count}x with identical args — stopped, never silently retried (change approach)`, key: rep.key } };
         wdRepeatBlocked = true;
       } else {
@@ -404,6 +425,12 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       ) : null;
       if (writeProof) {
         onEvent({ type: 'artifact_write_verify', label, step: steps, target: writeProof.target, ok: writeProof.ok });
+        if (r.name === 'fs.write' && typeof r.args?.path === 'string' &&
+            typeof r.args.content === 'string') {
+          if (writeProof.ok) invalidJsWrites.delete(r.args.path);
+          else if (/\.(?:js|mjs)$/i.test(r.args.path))
+            invalidJsWrites.set(r.args.path, { content: r.args.content, repeats: 0 });
+        }
       }
       const responseText = ok ? String(r.out.result ?? '(ok)') +
         (writeProof ? '\n' + writeProof.text : '')

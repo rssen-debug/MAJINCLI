@@ -184,6 +184,19 @@ export function feedbackForJavaScriptWrite(goal, workspace, tool, args, writtenO
   if (actual !== target.path) return null;
   const check = inspectRequestedArtifact(goal, workspace);
   if (!check) return null;
+  // Genuine Qwen2.5:3b case 05: it re-wrote the exact same .mjs three
+  // times with an unterminated template literal. A concrete *syntax-safe*
+  // miniature example is more actionable than just "node --check failed".
+  // It is guidance ONLY; never silently overwrite the model's source.
+  const syntaxHint = !check.ok && /\.mjs$/i.test(target.name) &&
+    check.missing.some(x => x.startsWith('invalid JavaScript syntax')) &&
+    /\bCLI\b/i.test(goal) && /\brespond\s*\(\s*message\s*\)/i.test(goal) &&
+    /\bno\s+external\s+dependencies\b/i.test(goal)
+      ? '\nA minimal valid ESM CLI pattern to adapt: ' +
+        'export function respond(message) { return "Received: " + message; } ' +
+        'console.log(respond(process.argv[2] || "")); ' +
+        'Use complete quote/backtick pairs and NO duplicate declarations.'
+      : '';
   const cliRequireHint = !check.ok && /\.mjs$/i.test(target.name) &&
     check.missing.some(x => x.startsWith('CommonJS require(')) &&
     /\bCLI\b|process\.argv|command.line/i.test(goal)
@@ -197,9 +210,34 @@ export function feedbackForJavaScriptWrite(goal, workspace, tool, args, writtenO
     : { ok: false, target: target.name,
         text: 'ARTIFACT WRITE CHECK FAILED for ' + target.name + ': ' +
           check.missing.join('; ').slice(0, 650) +
-          '. Repair THIS SAME file using fs.write; do not claim done yet.' + cliRequireHint };
+          '. Repair THIS SAME file using fs.write; do not claim done yet.' + syntaxHint + cliRequireHint };
 }
 
+
+
+
+/**
+ * Guard against a weak model repeatedly submitting IDENTICAL invalid code.
+ * The first permitted write must have happened in this same turn; caller
+ * supplies that prior recorded content. Never compare/redirect unrelated
+ * files, never execute code, and never treat identical writes as progress.
+ */
+export function unchangedInvalidJavaScriptWrite(goal, workspace, tool, args, lastBadContent) {
+  if (tool !== 'fs.write' || typeof lastBadContent !== 'string' ||
+      typeof args?.content !== 'string' || args.content !== lastBadContent) return null;
+  const target = explicitTarget(goal, workspace);
+  if (!target || !/\.(?:mjs|js)$/i.test(target.name) ||
+      path.resolve(target.workspace, String(args.path || '')) !== target.path) return null;
+  // If another agent or external process repaired the file, a stale snapshot
+  // must NOT be the basis for rejecting a new action.
+  const verdict = feedbackForJavaScriptWrite(goal, workspace, tool, args, true);
+  if (!verdict || verdict.ok) return null;
+  let disk;
+  try { disk = fs.readFileSync(target.path, 'utf8'); } catch { return null; }
+  if (disk !== args.content) return null;
+  return { target: target.name, reason: 'UNCHANGED INVALID JAVASCRIPT: the same bytes are already on disk. ' +
+    verdict.text + '\nDo NOT issue another identical fs.write. Rewrite the source with different, syntactically valid content.' };
+}
 
 /**
  * A narrowly scoped destructive-action completion oracle.
