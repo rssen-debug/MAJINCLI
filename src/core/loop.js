@@ -67,6 +67,36 @@ export function requiresRealAction(input) {
   return (request.test(t) || directToolRequest.test(t) || /^g[oö]r\b/i.test(t)) && artifact.test(t);
 }
 
+/**
+ * Deterministic recovery for a small-model browser.open tool call that omitted
+ * the URL even though the user's CURRENT actionable instruction contains ONE
+ * explicit HTTP(S) destination. Never guess, browse inferred sites, or take a
+ * URL from untrusted page output/chat history.
+ *
+ * The normal tool permission/approval checks still apply after recovery.
+ */
+export function recoverExplicitBrowserUrl(goal, tool, args) {
+  if (tool !== 'browser.open' || !args || typeof args !== 'object' ||
+      (typeof args.url === 'string' && args.url.trim())) return null;
+  const prompt = String(goal || '').trim();
+  if (/^(?:how|why|what|hur|varför|vad|förklara|explain)\b/i.test(prompt) ||
+      !/\b(?:browser\.open|open\s+(?:(?:the|a)\s+)?(?:browser|page|webpage|url)|visit\s+(?:(?:the|a)\s+)?(?:page|website|url)|öppna|besök)\b/i.test(prompt)) return null;
+  const refs = new Set();
+  for (const hit of prompt.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
+    const candidate = hit[0].replace(/[)\]}.;,!?]+$/, '');
+    try {
+      const url = new URL(candidate);
+      if (!['http:', 'https:'].includes(url.protocol) || !url.hostname ||
+          url.username || url.password) continue;
+      refs.add(url.href);
+    } catch { /* never invent or auto-correct a malformed URL */ }
+  }
+  if (refs.size !== 1) return null;
+  const url = [...refs][0];
+  return { args: { ...args, url }, url, recovered: true,
+    reason: 'restored the one explicit HTTP(S) URL in the active user goal' };
+}
+
 /** Del 6A: ONE guard, two call sites. Monthly ledger check before a call costs
    anything; per-task check after each measured step. Returns null to proceed,
    or a result object hard-stopping the loop HONESTLY (errorKind 'budget'). */
@@ -292,10 +322,19 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
 
     const runOne = async (c) => {
       const suppliedArgs = safeParse(c.argsJson);
+      const urlRecovery = label === 'main' && !ctx?.readOnly
+        ? recoverExplicitBrowserUrl(initialGoal, c.name, suppliedArgs) : null;
+      const candidateArgs = urlRecovery?.args || suppliedArgs;
+      if (urlRecovery) {
+        // The URL is from the user's explicit request; do not echo any secret
+        // query or path components into the event stream.
+        onEvent({ type: 'browser_url_recovered', label, step: steps,
+          hostname: new URL(urlRecovery.url).hostname });
+      }
       const pin = actionGoal && !ctx?.readOnly
-        ? (pinSingleFileWrite(initialGoal, cfg.get('workspace'), c.name, suppliedArgs) ||
-           pinJobShortlistWrite(initialGoal, cfg.get('workspace'), c.name, suppliedArgs)) : null;
-      const args = pin?.args || suppliedArgs;
+        ? (pinSingleFileWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs) ||
+           pinJobShortlistWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs)) : null;
+      const args = pin?.args || candidateArgs;
       if (pin?.corrected) {
         onEvent({ type: 'artifact_path_corrected', label, step: steps, tool: c.name,
           originalPath: pin.originalPath, requestedPath: pin.requestedPath });
