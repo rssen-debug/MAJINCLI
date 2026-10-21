@@ -374,6 +374,11 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #send{transition:transform .18s ease,filter .18s ease}
 #composer #send:not(:disabled):hover{transform:translateY(-1px);filter:brightness(1.1)}
 @media(prefers-reduced-motion:reduce){#composer,#composer #send{transition:none!important}}
+/* One understated evidence-glow INSIDE the existing chat composer. */
+#composer #work-progress[data-phase="verified"]{color:#baf5d6;border-top-color:rgba(113,232,185,.22)}
+#composer #work-progress[data-phase="verified"] .pulse{background:#9be5c5;box-shadow:0 0 0 3px rgba(118,225,182,.12);animation:none}
+#composer #work-progress[data-phase="verified"]::after{background:linear-gradient(90deg,transparent,rgba(143,237,199,.85),transparent);animation-duration:1.6s}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verified"]::after{animation:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
