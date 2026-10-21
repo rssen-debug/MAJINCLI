@@ -193,3 +193,16 @@ test('iss: the installer never lets a stale process outlive an upgrade', () => {
   assert.match(iss, /PrepareToInstall/, 'a PrepareToInstall hook exists');
   assert.match(iss, /taskkill\.exe[^\n]*\/F \/IM/, 'the running app is closed before files are replaced');
 });
+
+
+test('installed MAJIN icon and both shortcuts reference the generated artwork, not a Windows host icon', () => {
+  assert.match(iss, /^Source: "majin\\.ico"; DestDir: "\\{app\\}"; Flags: ignoreversion$/m);
+  assert.match(iss, /^UninstallDisplayIcon=\\{app\\}\\\\majin\\.ico$/m);
+  assert.match(iss, /Name: "\\{group\\}\\\\\\{#MyAppName\\}"[^\\n]*IconFilename: "\\{app\\}\\\\majin\\.ico"/);
+  assert.match(iss, /Name: "\\{autodesktop\\}\\\\\\{#MyAppName\\}"[^\\n]*IconFilename: "\\{app\\}\\\\majin\\.ico"/);
+  const exe = read('scripts/build-exe.mjs');
+  assert.match(exe, /refresh-icon\\.ps1/);
+  assert.match(exe, /path\\.join\\(dist, 'assets', 'majin\\.ico'\\)/);
+  const build = read('scripts/build-installer.mjs');
+  assert.match(build, /'dist', 'assets', 'majin\\.ico'/);
+});
