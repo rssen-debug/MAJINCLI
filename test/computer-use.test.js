@@ -106,3 +106,24 @@ test('CU overlay: overlay PS1 materializes under workspace/cursor (script is rea
   assert.equal(sessionId('a'), sessionId('a'), 'session id stable');
   assert.ok(VERSION.startsWith('majin-computer-use/'));
 });
+
+test('CU: mouse_move is permitted only with numeric screen coordinates and uses mouse.move tool', async () => {
+  assert.equal(normalizeAction({action:'mouse_move',x:100,y:200}).kind,'mouse_move');
+  assert.equal(normalizeAction({action:'mouse_move',x:'not-a-coordinate',y:200}).kind,'invalid');
+  const used=[];
+  const registry={exec:async(name,args)=>{
+    used.push({name,args});
+    if(name==='control.list_windows')return {ok:true,result:[]};
+    if(name==='screen.capture')return {ok:false,error:{message:'headless fixture'}};
+    if(name==='mouse.move')return {ok:true,meta:{verified:true,x:args.x,y:args.y}};
+    return {ok:false,error:{message:'fixture tool unavailable'}};
+  }};
+  const tmp=ws();
+  let index=0;
+  const result=await computerUse('move pointer safely',{
+    workspaceDir:tmp,registry,maxSteps:2,
+    modelCall:async()=>index++===0?{action:'mouse_move',x:100,y:200}:{action:'blocked',reason:'No independent UI target verification'},
+  });
+  assert.equal(result.ok,false,'move-only is not a completed task');
+  assert.ok(used.some(v=>v.name==='mouse.move' && v.args.x===100 && v.args.y===200));
+});
