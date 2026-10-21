@@ -330,6 +330,16 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 @keyframes orb-breathe{50%{transform:scale(1.14);opacity:.75}}
 @keyframes orb-drift{50%{border-radius:43% 57% 54% 46%}}
 @media(prefers-reduced-motion:reduce){#composer .voice-orb *{animation:none!important}}
+
+/* Verification pulse: one tiny inline status in composer, not another panel. */
+#composer #work-progress{position:relative;overflow:hidden;transition:color .2s ease,border-color .2s ease}
+#composer #work-progress[data-phase="verify"]{color:#d6b5ff;border-top-color:rgba(212,138,255,.27)}
+#composer #work-progress[data-phase="verify"] .pulse{background:#d8a6ff;box-shadow:0 0 10px #a855f795}
+#composer #work-progress[data-phase="problem"]{color:#ffa9b4;border-top-color:rgba(255,126,153,.25)}
+#composer #work-progress[data-phase="problem"] .pulse{background:#ff9cae;animation:majin-pulse-hold 1.5s ease-in-out infinite}
+#composer #work-progress[data-phase="active"] .pulse{background:#f39be3}
+@keyframes majin-pulse-hold{50%{opacity:.45;box-shadow:0 0 0 6px rgba(255,126,153,0)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress .pulse{animation:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
