@@ -4,6 +4,7 @@
  * och WhatsApp-webhooken. Token låser dörren; webbläsarfönstret får den automatiskt.
  */
 import http from 'node:http';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +16,11 @@ import { tasks, fileLocks, eta } from '../tasks.js';
 import { parseTaskCommand, statusText } from '../intent-tasks.js';
 import { analyzeMetaAccount, marketingStatus, checkMarketingConfig, wantsMarketingSetup } from '../marketing.js';
 import { channelStatus } from '../marketing-channels.js';
+import { parseIntent } from '../routes.js';
+import { PRESETS, needsKeyFor } from '../presets.js';
+import { complete, explainError } from '../provider/chat.js';
+import { discoverModels } from '../provider/catalog.js';
+import { importPricing } from '../pricing.js';
 
 const SELF_DIR = (() => {
   try {
@@ -160,7 +166,6 @@ export function createServer(rt) {
       const secret = cfg.get('channels.whatsapp.cloud.appSecret');
       if (secret) {
         const sig = String(req.headers['x-hub-signature-256'] || '');
-        const crypto = await import('node:crypto');
         const want = `sha256=${crypto.createHmac('sha256', secret).update(raw).digest('hex')}`;
         if (!sig || sig !== want) return text(res, 403, 'bad signature');
       }
@@ -565,7 +570,6 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       return json(res, 200, { ok: r.ok, diff: r.diff, errors: r.errors, preview: r.preview && { moa: r.preview.moa?.policy, routes: r.preview.models?.routes } });
     }
     if (p === '/api/intent' && req.method === 'POST') {
-      const { parseIntent } = await import('../routes.js');
       const body = await readJson(req);
       const i = parseIntent(String(body.text || ''), cfg);
       const dry = i.matched ? cfg.patch(i.patch, { dry: true }) : { ok: false, errors: [], diff: [] };
@@ -580,7 +584,6 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
         if (out.ok === false) return json(res, 422, { ok: false, error: out.error?.message || 'provider action failed', hint: out.error?.hint || null });
         return json(res, 200, { ok: true, action: body.action, result: out.result, meta: out.meta || null, providers: cfg.providerStatus() });
       }
-      const { PRESETS, needsKeyFor } = await import('../presets.js');
       const preset = PRESETS[body.preset];
       const name = String(body.name || (preset ? body.preset : 'custom')).replace(/[^a-z0-9_-]/gi, '').toLowerCase().slice(0, 24);
       if (!name) return json(res, 400, { ok: false, error: 'the provider-specific name is missing' });
@@ -615,14 +618,13 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const want = String(body.ref || '').trim();
       const named = String(body.provider || cfg.get('models.provider') || '');
       const ref = want.includes('/') ? want : want || `${named}/${(cfg.get(`providers.${named}.models`) || [])[0] || 'default'}`;
-      const { complete } = await import('../provider/chat.js');
       const route = cfg.resolveModel(ref, 'router');
       const t0 = Date.now();
       try {
         const r = await complete({ route, job: 'test', messages: [{ role: 'user', content: 'Answer with exactly: OK' }], maxTokens: String(ref).startsWith('opencode/') ? 600 : 64, temperature: 0, retries: 0 });
         return json(res, 200, { ok: true, ms: Date.now() - t0, text: String(r.text).slice(0, 60), usage: r.usage });
       } catch (err) {
-        const info = err.majin || (await import('../provider/chat.js')).explainError(err, route);
+        const info = err.majin || explainError(err, route);
         return json(res, 200, {
           ok: false, error: info.human || err.message, code: err.code || null, kind: info.kind,
           hint: err.hint || null, ms: Date.now() - t0,
@@ -633,11 +635,9 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const name = String(url.searchParams.get('provider') || cfg.get('models.provider'));
       const prov = (cfg.get('providers') || {})[name];
       if (!prov) return json(res, 404, { ok: false, error: 'unknown provider' });
-      const { discoverModels } = await import('../provider/catalog.js');
       const { payload, ...result } = await discoverModels(prov);
       if (result.ok) {
         cfg.patch({ providers: { [name]: { models: result.models } } }, { source: 'catalog' });
-        const { importPricing } = await import('../pricing.js');
         await importPricing(cfg, name, payload, { source: name + ':/models' }).catch(() => {});
       }
       return json(res, 200, { ...result, provider: name });
@@ -708,7 +708,6 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
       const abs = path.join(dirs.uploads, `${Date.now()}-${name}`);
       fs.mkdirSync(dirs.uploads, { recursive: true });
       fs.writeFileSync(abs, buf);
-      const crypto = await import('node:crypto');
       const sha = crypto.createHash('sha256').update(buf).digest('hex');
       return json(res, 200, { ok: true, path: abs, name, size: buf.length, sha256: sha });
     }

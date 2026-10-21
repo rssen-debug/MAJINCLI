@@ -20,6 +20,8 @@ import { Dataset } from './dataset.js';
 import { Scheduler } from './schedule.js';
 import { approvals } from './guard.js';
 import { readHistory } from './context.js';
+import { recordEffect, sha256 } from './effects.js';
+import { Channels } from './channels/index.js';
 
 import { VERSION as APP_VERSION } from './version.js';
 export const VERSION = APP_VERSION;
@@ -42,13 +44,11 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
      tool logged — a crash never makes us write the same file twice. */
   (async () => {
     try {
-      const { recordEffect, sha256 } = await import('./effects.js');
-      const nodeFs = (await import('node:fs')).default;
       bus.on('file.write', (ev) => {
         try {
           if (!ev || !ev.session || !ev.path) return;
           let hash = null;
-          try { hash = sha256(nodeFs.readFileSync(ev.path)); } catch { /* transient */ }
+          try { hash = sha256(fs.readFileSync(ev.path)); } catch { /* transient */ }
           recordEffect(ev.session, { kind: 'fs.write', target: ev.path, hash, status: 'completed' });
         } catch { /* journaling must never break the tool loop */ }
       });
@@ -73,7 +73,6 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
 
   let chans = null;
   if (channels && (cfg.get('channels.telegram.enabled') || cfg.get('channels.whatsapp.enabled'))) {
-    const { Channels } = await import('./channels/index.js');
     chans = new Channels({ cfg, agent, registry, scheduler: sched, bus });
     ctx.channels = chans;
     agent.channels = chans;
