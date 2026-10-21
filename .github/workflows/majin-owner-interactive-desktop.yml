@@ -45,6 +45,13 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           if ($LASTEXITCODE -ne 0) { throw 'npm ci failed in QA checkout' }
+      - name: Check JS syntax and cloud desktop planner safeguards
+        shell: powershell
+        run: |
+          node --check src/core/tools/computer.js
+          if ($LASTEXITCODE -ne 0) { throw 'computer tool syntax failed' }
+          node --test test/computer-use-live-contract.test.js test/computer-use.test.js test/wincontrol.test.js
+          if ($LASTEXITCODE -ne 0) { throw 'computer-use contract regression failed' }
       - name: Verify actual GUI tool operations and W12 pink pixels
         shell: powershell
         timeout-minutes: 6
