@@ -200,11 +200,11 @@
     }
   }
   function resetRun() {
-    previewRequest?.abort(); files.clear(); renderFiles();
-    $('studio-preview').textContent = '';
-    const empty = node('div', 'studio-empty');
-    empty.append(node('span', 'constellation-idle', '◇'), node('h3', '', 'From idea to something real.'), node('p', '', 'Select a file in Files to inspect the actual output of this run.'));
-    $('studio-preview').append(empty); setState('idle');
+    // A new chat turn is NOT a new filesystem. Keep artifacts and the live
+    // preview visible while the agent edits the same website over many turns.
+    // Clearing this map made a working website disappear after any follow-up.
+    renderFiles();
+    setState('idle');
   }
   function filterChats() {
     const query = $('chat-search').value.trim().toLowerCase(); let matches = 0;
