@@ -51,6 +51,13 @@ function md(t) {
   s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
   s = s.replace(/(?:^|\n)(#{1,6})\s*(.+)$/gm, (_m, h, txt) => `\n<span style="color:var(--cy);letter-spacing:.08em">${txt}</span>\n`);
   s = s.replace(/\u0000(\d+)\u0000/g, (_m, i) => blocks[Number(i)]);
+  // Workspace files mentioned in a completed answer should be OPENABLE, not
+  // dead inline code. The local /api/file endpoint enforces workspace bounds;
+  // only a tightly restricted relative file path gets an action.
+  s = s.replace(/<code>(workspace[\\/][\w .\\/\-]+\.(?:html?|md|txt|json|css|js|ts|jsx|tsx|py|csv|svg))<\/code>/gi,
+    (_m, file) => '<code>' + file + '</code> <button type="button" class="chat-open-file" data-majin-file="' +
+      encodeURIComponent(file) + '" aria-label="Preview ' + file.split(/[\\/]/).pop() + '">Open preview</button>');
+
   return s;
 }
 
@@ -62,6 +69,19 @@ function scroll(force = false) {
 $('scroller').addEventListener('scroll', () => {
   const n = $('scroller'); S.readingHistory = n.scrollHeight - n.clientHeight - n.scrollTop > 100;
 });
+
+/* File previews are delegated because streamed answers continuously replace
+   their markup. No untrusted paths are executed as commands. */
+document.getElementById('scroller')?.addEventListener('click', (event) => {
+  const button = event.target.closest?.('button.chat-open-file');
+  if (!button) return;
+  const encoded = button.getAttribute('data-majin-file') || '';
+  let file = '';
+  try { file = decodeURIComponent(encoded); } catch { return; }
+  if (!/^workspace[\\/][\\w .\\/\\-]+\\.(?:html?|md|txt|json|css|js|ts|jsx|tsx|py|csv|svg)$/i.test(file)) return;
+  window.MAJIN_STUDIO?.previewFile(file.replace(/^workspace[\\/]/i, ''));
+});
+
 function addMsg(cls, who, text) {
   const welcome = $('home');
   if (welcome) welcome.remove();
