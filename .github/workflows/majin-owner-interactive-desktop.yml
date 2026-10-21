@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  issues: write # only bounded QA verdict on PR #218, no files or secrets
 concurrency:
   group: interactive-desktop-bridge
   cancel-in-progress: true
@@ -84,3 +85,22 @@ jobs:
             qa-evidence/universal-owner.json
           retention-days: 7
           if-no-files-found: warn
+      - name: Post sanitized owner Windows QA status to PR #218
+        if: ${{ always() && github.ref == 'refs/heads/fix/icon-and-universal-win-qa-20261021' }}
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $file = Join-Path $env:GITHUB_WORKSPACE 'qa-evidence/universal-owner.json'
+          if (Test-Path $file) {
+            $r = Get-Content $file -Raw | ConvertFrom-Json
+            $summary = "MAJIN owner Windows QA, commit `$env:GITHUB_SHA`: Go=$($r.model), Blender=$($r.blender), synthetic jobs=$($r.jobs). Tests only; no real applications sent. Blender NOT_TESTED means not installed or not available. Run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          } else {
+            $summary = "MAJIN owner Windows QA did NOT produce a verdict; preflight or earlier step blocked. Run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          }
+          $json = @{body=$summary} | ConvertTo-Json -Compress
+          $headers = @{ Authorization="Bearer $env:GH_TOKEN"; Accept='application/vnd.github+json'; 'User-Agent'='MAJIN-QA' }
+          try {
+            Invoke-RestMethod -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/issues/218/comments" -Method Post -ContentType 'application/json' -Headers $headers -Body ([Text.Encoding]::UTF8.GetBytes($json)) | Out-Null
+            Write-Host 'PR QA status posted (only PASS/FAIL/NOT_TESTED labels, no local paths)'
+          } catch { Write-Warning 'Could not post owner QA status; report remains in workflow artifact' }
