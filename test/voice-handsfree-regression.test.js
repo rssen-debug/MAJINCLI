@@ -30,3 +30,12 @@ test('release version is consistent across all packaging paths',()=>{
     const text=fs.readFileSync(p,'utf8');assert.match(text,/1\.0\.8/);
   }
 });
+
+test('speech output reports playback failure and never strands hands-free listening',()=>{
+  const src=fs.readFileSync('src/ui/app.js','utf8');
+  assert.match(src,/Speech playback timed out/);
+  assert.match(src,/Speech playback failed/);
+  assert.match(src,/Voice output failed/);
+  assert.match(src,/finally\s*\{\s*speechActive=false;/);
+  assert.match(src,/if\(S\.handsFree&&!S\.busy\)startMic\(\)/);
+});
