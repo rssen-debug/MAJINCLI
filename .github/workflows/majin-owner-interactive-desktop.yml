@@ -1,0 +1,47 @@
+name: MAJIN interactive desktop bridge preflight
+on:
+  push:
+    branches: [qa/interactive-desktop-bridge-20261021]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: interactive-desktop-bridge
+  cancel-in-progress: true
+jobs:
+  preflight:
+    name: Verify actual owner-PC desktop bridge without changing user files
+    runs-on: [self-hosted, windows, interactive-desktop, majin-qa]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check interactive desktop in current process session (no screenshots)
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          Add-Type -AssemblyName System.Windows.Forms
+          $sessionId = (Get-Process -Id $PID).SessionId
+          $screen = [System.Windows.Forms.Screen]::PrimaryScreen
+          $bounds = $screen.Bounds
+          $interactive = [Environment]::UserInteractive
+          $isRealSession = $interactive -and ($sessionId -gt 0) -and ($bounds.Width -ge 600) -and ($bounds.Height -ge 400)
+          $proof = [ordered]@{
+            schema='majin.owner-desktop-preflight.v1'
+            interactive=$interactive
+            sessionAboveZero=($sessionId -gt 0)
+            usableScreen=($bounds.Width -ge 600 -and $bounds.Height -ge 400)
+            runnerIsSelfHosted=($env:RUNNER_ENVIRONMENT -eq 'self-hosted')
+            detected=($isRealSession -and ($env:RUNNER_ENVIRONMENT -eq 'self-hosted'))
+            note='No app started, no screenshot, no mouse or keyboard action; read-only desktop preflight.'
+          }
+          $proof | ConvertTo-Json -Compress | Set-Content -Encoding utf8 (Join-Path $env:RUNNER_TEMP 'majin-interactive-preflight.json')
+          $proof | ConvertTo-Json -Compress | Write-Host
+          if (-not $proof.detected) { throw 'No proven interactive desktop on the connected runner; GUI live testing blocked.' }
+      - name: Upload non-sensitive preflight verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owner-desktop-preflight
+          path: ${{ runner.temp }}/majin-interactive-preflight.json
+          retention-days: 7
+          if-no-files-found: warn
