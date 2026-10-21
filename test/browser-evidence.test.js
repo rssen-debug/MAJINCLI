@@ -89,3 +89,22 @@ test('composer focus is visually distinguished without new panels',async()=>{
   assert.match(html,/#composer #send:not\(:disabled\):hover/);
   assert.match(html,/prefers-reduced-motion/);
 });
+
+test('SPA verifier demands a sustained result instead of trusting a transient DOM flash',async()=>{
+  const fs=await import('node:fs');
+  const src=fs.readFileSync('src/core/tools/web.js','utf8');
+  assert.match(src,/stableMs: 'string optional 0–1500/);
+  assert.match(src,/const stableMs=Math.min\(1500,Math.max\(0/);
+  assert.match(src,/if\(firstPassingAt===null\)firstPassingAt=now/);
+  assert.match(src,/if\(now-firstPassingAt>=stableMs\)break/);
+  assert.match(src,/else firstPassingAt=null/);
+  assert.match(src,/name:'stable_duration'/);
+});
+test('MAJIN progress uses a minimal animated thread that respects reduced motion',async()=>{
+  const fs=await import('node:fs');
+  const html=fs.readFileSync('src/ui/index.html','utf8');
+  assert.match(html,/#composer #work-progress::after/);
+  assert.match(html, /data-phase="stalled"/);
+  assert.match(html, /data-phase="verified"/);
+  assert.match(html, /prefers-reduced-motion:reduce/);
+});
