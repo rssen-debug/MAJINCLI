@@ -27,7 +27,7 @@ test('live DOM walker returns the actual consent checkbox and submit button sele
     element({id:'consent',name:'consent',type:'checkbox',label:'I agree',checked:false}),
     element({tag:'BUTTON',id:'submit',type:'submit',label:'Apply to fixture'}),
   ]);
-  assert.deepEqual(controls.map(x=>x.selector),['#job','#consent','#submit']);
+  assert.deepEqual(Array.from(controls,x=>x.selector),['#job','#consent','#submit']);
   const hints=formatControlHints(controls);
   assert.match(hints,/#consent.*checkbox, unchecked/);
   assert.match(hints,/#submit.*Apply to fixture/);
@@ -42,7 +42,7 @@ test('never leak password, hidden input, file upload, or any input values',()=>{
     element({id:'visible',label:'Email',value:'private@example.com'}),
     element({id:'concealed',visible:false,label:'Secret',value:'internal'}),
   ]);
-  assert.deepEqual(controls.map(x=>x.selector),['#visible']);
+  assert.deepEqual(Array.from(controls,x=>x.selector),['#visible']);
   const hint=formatControlHints(controls);
   assert.match(hint,/#visible/);
   assert.doesNotMatch(hint,/super-secret|sensitive-auth|private@|private\\|concealed/);
