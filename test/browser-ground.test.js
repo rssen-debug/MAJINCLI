@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, findGroundedControls, VERSION } from '../src/core/browser-ground.js';
@@ -82,4 +83,4 @@ test('each round keeps working feedback in a single accessible composer row',()=
   assert.match(fs,/@keyframes majin-progress-glide/);
   assert.match(fs,/prefers-reduced-motion:reduce/);
 });
-function requireFixture(){ return readFileSync('src/ui/index.html','utf8'); }
+function requireFixture(){ return fs.readFileSync('src/ui/index.html','utf8'); }
