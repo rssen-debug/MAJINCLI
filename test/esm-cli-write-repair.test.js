@@ -22,7 +22,7 @@ test('REAL Qwen3B regression: syntax-valid CommonJS in .mjs is NOT verified',()=
   fs.writeFileSync(path.join(ws,name),qwenResult);
   const st=inspectRequestedArtifact(goal,ws);
   assert.equal(st.ok,false);
-  assert.match(st.reason,/CommonJS module\.exports\/exports is not usable in \.mjs/);
+  assert.match(st.reason,/CommonJS module\.exports is not an ES module export in \.mjs/);
   const feedback=feedbackForJavaScriptWrite(goal,ws,'fs.write',{path:name},true);
   assert.equal(feedback.ok,false);
   assert.match(feedback.text,/CommonJS module\.exports is not an ES module export/);
