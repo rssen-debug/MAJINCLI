@@ -36,17 +36,26 @@ function Assert-BrandPixels([string]$IcoPath) {
       if ($bytes[[int]$off+$j] -ne $magic[$j]) { throw "ICON_CHECK: $w frame is not PNG" }
     }
   }
-  $icon = [System.Drawing.Icon]::new($IcoPath, 256, 256)
+  # .NET Icon.ToBitmap() rejects some valid PNG-compressed ICO containers.
+  # Windows Explorer and resedit consume them, but validate the source PNG
+  # frame directly here: PNG bytes, dimensions and brand pixel are definitive.
+  $framePos = 6 + ($sizes.Count - 1) * 16
+  $frameSize = [int][BitConverter]::ToUInt32($bytes, $framePos + 8)
+  $frameOffset = [int][BitConverter]::ToUInt32($bytes, $framePos + 12)
+  $imageBytes = New-Object byte[] $frameSize
+  [Array]::Copy($bytes, $frameOffset, $imageBytes, 0, $frameSize)
+  $memory = [IO.MemoryStream]::new([byte[]]$imageBytes)
   try {
-    $bmp = $icon.ToBitmap()
+    $bmp = [System.Drawing.Bitmap]::new($memory)
     try {
-      # x=25%, y=50% is within the pink background of the branded PNG.
+      if ($bmp.Width -ne 256 -or $bmp.Height -ne 256) { throw 'ICON_CHECK: 256 frame has wrong PNG dimensions' }
+      # x=12%, y=50% is the opaque pink background, outside the M glyph.
       $color = $bmp.GetPixel([int]($bmp.Width*.12), [int]($bmp.Height*.5))
       if ($color.R -lt 155 -or $color.R -le $color.G * 1.4 -or $color.B -lt 40) {
         throw "ICON_CHECK: icon has no pink MAJIN brand pixel (R=$($color.R),G=$($color.G),B=$($color.B))"
       }
     } finally { $bmp.Dispose() }
-  } finally { $icon.Dispose() }
+  } finally { $memory.Dispose() }
   Write-Host "ICON_VERIFIED: $($sizes.Count) PNG frames, pink MAJIN artwork, $($bytes.Length) bytes"
 }
 
