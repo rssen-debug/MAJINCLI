@@ -70,7 +70,8 @@ export function buildStateFromParts({ id, goal, nodeIds, parts, compiled, verifi
       else if (p.ok === false) { status = 'failed'; error = String(p.error || '').slice(0, 400); }
       else if (p.blocked) { status = 'blocked'; error = String(p.reason || '') + (p.limit ? ` [LIMIT:${p.limit.toUpperCase()}]` : ''); }
     }
-    return { id: n.id, status, text, error, verifiedSummary };
+    // Persist the exact task identity: node IDs alone are not stable across LLM recompilation.
+    return { id: n.id, input: n.input, deps: n.deps || [], status, text, error, verifiedSummary };
   });
   const done = nodes.every((n) => ['verified', 'done'].includes(n.status));
   return { id, goal, status: done ? 'complete' : 'blocked', nodeIds, nodes, verifiedCount, limitsHit: [...(limitsHit || [])] };
