@@ -114,6 +114,26 @@ export function inspectRequestedArtifact(input, workspace) {
       if (asksCLI && asksArgs && !/process\.argv/i.test(data)) {
         missing.push('requested CLI argument handling (process.argv)');
       }
+      // Real free Qwen3B regression: a syntactically valid exported respond()
+      // coexisted with hard-coded constants QA_PING / DIFFERENT, and the CLI
+      // silently printed NOTHING for QA_PING_<unique> / QA_OTHER_<unique>.
+      // Regex-only "has export + has console.log + has process.argv" passed
+      // even though the responder was never called from the CLI.
+      // The explicit one-argument respond() CLI goal must propagate a runtime
+      // argument to that function; keep this a STATIC requirement, never run
+      // user-generated source inside the MAJIN process.
+      if (asksCLI && asksArgs && asksRespond) {
+        const noDefinition = data.replace(/\b(?:export\s+)?(?:async\s+)?function\s+respond\s*\([^)]*\)/g, '');
+        const respondsToArgument = /\brespond\s*\(\s*(?:process\.argv\s*\[\s*2\s*\]|args\s*\[\s*0\s*\]|(?:message|input|arg|text|prompt|payload|userInput)\b)/i.test(noDefinition);
+        // A CLI that directly prints args[0] or process.argv[2] can also
+        // correctly handle previously unseen inputs without invoking respond().
+        // Do not reject an independently runnable valid legacy path merely
+        // because the exported function is not used by that CLI branch.
+        const printsRuntimeArgument = /\b(?:console\.(?:log|info)|process\.stdout\.write)\s*\(\s*(?:process\.argv\s*\[\s*2\s*\]|args\s*\[\s*0\s*\]|argv\s*\[\s*0\s*\])/i.test(noDefinition);
+        if (!respondsToArgument && !printsRuntimeArgument) {
+          missing.push('CLI does not call respond() with the runtime argument; hardcoded QA_PING / DIFFERENT branches do not handle arbitrary inputs. Use console.log(respond(process.argv[2] || "")) so ANY new input is reflected in output');
+        }
+      }
       // A real Qwen3B run printed console.log(process.argv) instead of the
       // requested respond(message) answer. This is valid JS and contains a
       // console.log AND process.argv, so the previous static oracle falsely
