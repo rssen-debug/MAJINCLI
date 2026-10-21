@@ -14,6 +14,7 @@ import { guardToolContent } from './injection.js';
 import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion, pinSingleExactTextWrite, verifySingleExactTextCreation, repairSimpleCommanderCliWrite, repairSimpleMixedEsmCliWrite, unchangedInvalidJavaScriptWrite, verifyLocalTokenDemoFiles, isLocalTokenDemoGoal } from './goal-artifact.js';
 import { verifyJobIdLineage, pinJobShortlistWrite } from './mission-data-evidence.js';
 import { verifyFollowupJobSelection } from './mission-data-evidence.js';
+import { verifyIsolatedNodeCli } from './cli-proof.js';
 
 /*
  * Väljer vilka scheman modellen får se detta steg. Standard: hela den synliga
@@ -442,6 +443,23 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         tool_call_id: r.id,
         content: guarded.text,
       });
+    }
+
+    // For an explicitly requested single-file Node CLI, a successful real
+    // write plus static contract and TWO dynamic Docker probes prove completion.
+    // Never run generated code on the host. With no cached Docker image (common
+    // on Windows), verification returns null and the regular loop continues.
+    // This eliminates pointless rewrite/re-read loops after a working CLI,
+    // without weakening the repeat guard or grading a file merely by existence.
+    if (actionGoal && !ctx?.readOnly &&
+        results.some(r => r.name === 'fs.write' && r.out?.ok !== false)) {
+      const cliProof = verifyIsolatedNodeCli(initialGoal, cfg.get('workspace'));
+      if (cliProof?.ok) {
+        onEvent({ type: 'artifact_cli_verified', label, step: steps, target: cliProof.target,
+          isolation: 'docker-no-network-read-only', probes: 2 });
+        return { text: cliProof.text, steps, toolLog, usage: tally, escalated,
+          stopReason: cliProof.stopReason };
+      }
     }
 
     // Explicit isolated TWO-FILE testnet demo: real permitted writes already
