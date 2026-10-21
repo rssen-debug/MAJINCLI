@@ -44,7 +44,7 @@ test('W12 interactive must be an explicit boolean — "probably" is rejected', (
 });
 
 test('W12 the runner ps1 stays Windows PowerShell 5.1-safe (CI lesson: ternary dies there)', () => {
-  const ps = fs.readFileSync(new URL('../../qa/win-acceptance/run-all.ps1', import.meta.url), 'utf8');
+  const ps = fs.readFileSync(new URL('../qa/win-acceptance/run-all.ps1', import.meta.url), 'utf8');
   assert.equal(/\?\s*'[^']*'\s*:/.test(ps), false, 'PS7-only ternary detected — windows-latest service shell is powershell 5.1');
   assert.equal(/&&|\|\|/.test(ps.split('\n').filter((l) => !/also|http/i.test(l) || /status =/.test(l)).join('\n')), false, 'PS7-only && or || in runner ps1');
 });
