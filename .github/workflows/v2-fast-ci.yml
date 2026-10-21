@@ -40,3 +40,5 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Full node test suite
         run: npm test
+      - name: MAJIN GAUNTLET (deterministic end-to-end verification scenarios)
+        run: node scripts/gauntlet/v2-gauntlet.mjs
