@@ -114,6 +114,15 @@ export function inspectRequestedArtifact(input, workspace) {
       if (asksCLI && asksArgs && !/process\.argv/i.test(data)) {
         missing.push('requested CLI argument handling (process.argv)');
       }
+      // A real Qwen3B run printed console.log(process.argv) instead of the
+      // requested respond(message) answer. This is valid JS and contains a
+      // console.log AND process.argv, so the previous static oracle falsely
+      // declared the CLI ready. For explicit respond(message) CLI goals,
+      // reject logging the raw argument vector as the output.
+      if (asksCLI && asksArgs && asksRespond &&
+          /(?:console\.log|console\.info|process\.stdout\.write)\s*\(\s*(?:JSON\.stringify\s*\(\s*)?process\.argv\s*\)?\s*\)/.test(data)) {
+        missing.push('CLI prints the raw process.argv array instead of respond(process.argv[2]); call respond(message) and print its returned text');
+      }
       if (/non.placeholder|helpful/i.test(input) && /(?:your response here|\bTODO\b|\bplaceholder\b)/i.test(data)) {
         missing.push('placeholder code is not a working response');
       }
