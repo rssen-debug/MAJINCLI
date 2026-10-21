@@ -21,7 +21,7 @@ test('OpenCode Go cannot silently be confused with OpenCode Zen or a shared GLM 
 
 test('partial or stale saved routes are not mistaken for successful whole-agent model selection',()=>{
   const routes=sample('opencode','glm-5.3-flash');
-  routes.routes[4]={job:'re',provider:'opencodezen',ref:'opencodezen/glm-5.3-flash'};
+  routes.routes[routes.routes.findIndex(r=>r.job==='re')]={job:'re',provider:'opencodezen',ref:'opencodezen/glm-5.3-flash'};
   const failure=confirmSelectedModel(routes,'opencode','glm-5.3-flash',JOBS);
   assert.equal(failure.ok,false);
   assert.ok(failure.missing.includes('re'));
