@@ -1304,9 +1304,18 @@ window.addEventListener('load', async () => {
   listen();
   await refresh();
   await loadHistory();
-  // Background update check completes after the first paint; refresh the
-  // badge without making a second model call or interrupting the conversation.
-  setTimeout(() => refresh(true), 6500);
+  // Check on every app launch and repaint as soon as the request finishes.
+  // A fixed 6.5-second refresh missed slow GitHub responses until the next
+  // hourly check, leaving the update chip invisible even after CLI detected it.
+  // Do not block chat or app startup on GitHub's network latency.
+  if (S.st?.config?.updates?.check !== false) {
+    void (async () => {
+      try {
+        await api('/update', { method: 'POST', body: { action: 'check', force: true } });
+      } catch { /* Offline GitHub must not interrupt MAJIN; Check updates remains visible. */ }
+      await refresh(true);
+    })();
+  }
   // Keep a running window informed of later releases, even if never reopened.
   setInterval(async () => {
     try {
