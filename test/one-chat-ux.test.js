@@ -43,7 +43,7 @@ test('first run is one connection decision, not a wall of provider cards', () =>
   assert.doesNotMatch(onboard, /innerHTML/, 'provider metadata cannot inject HTML');
   const app = read('src/ui/app.js');
   assert.match(app, /showWelcome\(\)/, 'new chat has a helpful, quiet empty state');
-  assert.match(app, /await api\('\/update', \{ method: 'POST', body: \{ action: 'check', force: true \} \} \)/, 'startup checks for updates and repaints on completion');
+  assert.match(app, /await api\('\/update', \{ method: 'POST', body: \{ action: 'check', force: true \} \}\)/, 'startup checks for updates and repaints on completion');
   assert.match(app, /await refresh\(true\)/, 'the update badge repaints after GitHub check finishes');
   assert.match(app, /force: true/, 'the running window checks for releases later');
 });
