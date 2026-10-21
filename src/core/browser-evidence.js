@@ -27,6 +27,7 @@ export const VERIFY_JS = String.raw`((args) => {
     exists: selector ? count > 0 : null, unique: selector ? count === 1 : null,
     matchCount: selector ? Math.min(count, 1000) : null, visible: selector ? visible(el) : null,
     checked: el?.matches?.('input[type="checkbox"],input[type="radio"]') ? !!el.checked : null,
+    enabled: el ? !el.matches(':disabled,[aria-disabled="true"],[inert]') && !el.closest('[inert]') : null,
     textMatch: args.text ? text.toLowerCase().includes(args.text.toLowerCase()) : null,
     urlMatch: args.url ? location.href.includes(args.url) : null,
     titleMatch: args.title ? document.title.toLowerCase().includes(args.title.toLowerCase()) : null,
@@ -41,12 +42,13 @@ export function verificationCriteria(input = {}) {
   const title = String(input.title || '').trim().slice(0, 200);
   const present = ['true','false'].includes(String(input.present)) ? String(input.present) === 'true' : null;
   const checked = ['true','false'].includes(String(input.checked)) ? String(input.checked) === 'true' : null;
+  const enabled = ['true','false'].includes(String(input.enabled)) ? String(input.enabled) === 'true' : null;
   if (!selector && !url && !title) return { ok:false, reason:'Specify a selector, URL fragment or title fragment to verify' };
-  if ((text || present !== null || checked !== null) && !selector) return {ok:false, reason:'Element text, presence and checkbox checks require selector'};
+  if ((text || present !== null || checked !== null || enabled !== null) && !selector) return {ok:false, reason:'Element text, presence and checkbox checks require selector'};
   if (checked !== null && !selector) return {ok:false, reason:'Checkbox assertion requires selector'};
-  if (present === false && (text || checked !== null))
+  if (present === false && (text || checked !== null || enabled !== null))
     return {ok:false, reason:'An absent element cannot also have matching text or checkbox state'};
-  return { ok:true, selector, text, url, title, present, checked };
+  return { ok:true, selector, text, url, title, present, checked, enabled };
 }
 
 export function verifyObserved(criteria, observed) {
@@ -60,6 +62,7 @@ export function verifyObserved(criteria, observed) {
       assertions.push({name:'element_visible',expected:true,actual:observed.visible === true});
       if (criteria.text) assertions.push({name:'element_text_contains',expected:true,actual:observed.textMatch === true});
       if (criteria.checked !== null) assertions.push({name:'checkbox_checked',expected:criteria.checked,actual:observed.checked});
+      if (criteria.enabled !== null) assertions.push({name:'element_enabled',expected:criteria.enabled,actual:observed.enabled});
     }
   }
   if (criteria.url) assertions.push({name:'url_contains',expected:true,actual:observed.urlMatch === true});

@@ -71,3 +71,21 @@ test('click can assert post-action effects in one bounded browser call',async()=
   assert.match(src,/verified: proof\?\.ok/);
   assert.match(src,/if\(requiresVerification && !expected\.ok\)/);
 });
+
+test('disabled native or aria-disabled controls cannot be called ready',()=>{
+  const c=verificationCriteria({selector:'#publish',enabled:'true'});
+  assert.equal(c.ok,true);
+  const no=verifyObserved(c,{valid:true,url:'https://example.test',title:'Page',exists:true,unique:true,visible:true,enabled:false});
+  assert.equal(no.ok,false);
+  assert.equal(no.failures[0].name,'element_enabled');
+  const yes=verifyObserved(c,{valid:true,url:'https://example.test',title:'Page',exists:true,unique:true,visible:true,enabled:true});
+  assert.equal(yes.ok,true);
+  assert.equal(verificationCriteria({enabled:'true'}).ok,false,'enabled assertion requires a grounded selector');
+});
+test('composer focus is visually distinguished without new panels',async()=>{
+  const fs=await import('node:fs');
+  const html=fs.readFileSync('src/ui/index.html','utf8');
+  assert.match(html,/#composer:focus-within/);
+  assert.match(html,/#composer #send:not\(:disabled\):hover/);
+  assert.match(html,/prefers-reduced-motion/);
+});

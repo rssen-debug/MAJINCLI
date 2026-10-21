@@ -366,6 +366,14 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="stalled"]{--ember:#ffd197;--halo:rgba(255,209,151,.22)}
 #composer #work-progress[data-phase="stalled"] .pulse{animation-duration:2.5s}
 #composer #work-progress[data-phase="stalled"]::after{opacity:.25;animation-duration:4s}
+/* Small UX refinement: the whole composer responds to keyboard focus.
+   No extra panels, overlays or competing voice surfaces. */
+#composer{transition:border-color .24s ease,box-shadow .24s ease,background-color .24s ease}
+#composer:focus-within{border-color:rgba(255,130,213,.56)!important;box-shadow:0 0 0 1px rgba(255,130,213,.13),0 10px 34px rgba(215,65,167,.1)!important}
+#composer #input:focus{box-shadow:none!important;outline:none!important}
+#composer #send{transition:transform .18s ease,filter .18s ease}
+#composer #send:not(:disabled):hover{transform:translateY(-1px);filter:brightness(1.1)}
+@media(prefers-reduced-motion:reduce){#composer,#composer #send{transition:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
