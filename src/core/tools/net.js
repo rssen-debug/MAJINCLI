@@ -8,6 +8,7 @@ import path from 'node:path';
 import { def } from './registry.js';
 import { runShell, IS_WIN } from './shell.js';
 import { resolveIn } from './files.js';
+import { analyzeImage } from '../vision.js';
 
 const CSV = 'ConvertTo-Csv -NoTypeInformation';
 
@@ -198,6 +199,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
       // Static import: pkg's vm context has no dynamic import callback.
       /* capture to a UNIQUE temp first — a reader must never pick up a half-written
          frame, and a stale successful-looking file must never pass as a fresh one (P2) */
+      fsSync.mkdirSync(path.dirname(out.abs), { recursive: true });
       const tmp = `${out.abs}.cap-${process.pid}-${Date.now()}.part`;
       const qTmp = JSON.stringify(tmp); // safe double-quoted form for POSIX shells
       const ltrb = region ? ltrbFromRegion(region) : null;
@@ -229,7 +231,6 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
       fsSync.renameSync(tmp, out.abs); /* atomic on same volume: no half frames, no stale receipts */
       const size = fsSync.statSync(out.abs).size;
       if (then === 'describe') {
-        const { analyzeImage } = await import('../vision.js');
         const d = await analyzeImage({ cfg: ctx.cfg, imagePath: out.abs, question: 'What is on screen? Describe windows, text, errors and what may need fixing.' });
         return { result: `${out.abs} (${size} byte)\n\n${d}`, meta: { path: out.abs, validatedPng: true, bytes: size }, summary: 'screenshot + description' };
       }
