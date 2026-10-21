@@ -150,6 +150,11 @@ export function routeFor(cfg, job, opts = {}) {
   const ref = routes[job] || routes.tasks || routes.chat;
   const r = safeResolve(cfg, job, ref);
   if (r && r.apiKey) return r;
+  // Explicit OpenCode Go / Zen selection must NEVER silently reroute to
+  // DeepSeek or the demo model because its key is missing. Preserve the
+  // intended provider so the user sees the correct authentication error.
+  // This also covers global (non-session) selections from the model picker.
+  if (r && (r.providerName === 'opencode' || r.providerName === 'opencodezen')) return r;
   const fb = fallback(cfg, job);
   if (fb) {
     bus.warn('route.fallback', { job, wanted: ref, used: fb.ref, why: 'no key for the requested provider' });
