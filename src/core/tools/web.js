@@ -11,7 +11,7 @@ import { bus } from '../log.js';
 import { openFor, closeFor, isOpen, journal } from '../browser.js';
 import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, findGroundedControls, VERSION as GROUND_V } from '../browser-ground.js';
 import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
-import { VERIFY_JS, verificationCriteria, verifyObserved } from '../browser-evidence.js';
+import { VERIFY_JS, verificationCriteria, verifyObserved, browserRecoveryAdvice } from '../browser-evidence.js';
 
 const followedSafe = (fol) => (fol && fol.followed === true ? true : false);
 
@@ -408,7 +408,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         if(!proof.ok)return {ok:false,error:{
           code:'post_click_assertion_failed',
           message:'The click happened but its requested effect was NOT verified. Re-observe the page before trying a different approach.',
-          failures:proof.failures
+          failures:proof.failures, recovery:browserRecoveryAdvice(proof.failures)
         },meta:{clicked:hit.text,attempts,observed:proof.observed},summary:'click outcome NOT verified'};
       }
       return {
@@ -570,7 +570,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       if(!verdict.ok){
         return {ok:false,error:{code:'assertion_failed',
           message:'Browser outcome NOT verified. Re-observe with browser.elements/read and choose a different recovery step; do not repeat an identical action.',
-          failures:verdict.failures},meta:{assertions:verdict.assertions,observed:verdict.observed},
+          failures:verdict.failures, recovery:browserRecoveryAdvice(verdict.failures)},meta:{assertions:verdict.assertions,observed:verdict.observed},
           summary:'verification FAILED'};
       }
       return {ok:true,result:'Verified live browser outcome: '+verdict.assertions.map(a=>a.name+'='+a.actual).join(', '),
