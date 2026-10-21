@@ -9,6 +9,7 @@ import { CHANNELS_OUT } from '../channels/send.js';
 export const channelTools = [
   def({
     name: 'channel.send',
+    required: ['channel', 'text'], // url/subject/to/embeds/blocks depend on the selected channel
     group: 'channels',
     risk: 'exec',
     desc: 'Send a message to a configured outbound channel (discord/slack/matrix/email/webhook). Missing credentials NEVER pretend: you get a not_configured diagnosis instead. Configure under channels.<name>.* in majin config.',
