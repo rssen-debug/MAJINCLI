@@ -66,11 +66,11 @@ public class Ctl {
     return found;
   }
   public static IntPtr FindChildEdit(IntPtr parent){ IntPtr edit=IntPtr.Zero;
-    EnumChildWindows(parent,(h,l)=>{ var c=ClassOf(h); if(c=="Edit"||c=="RichEdit20W"||c=="RichEdit50W"){ if(edit==IntPtr.Zero) edit=h; } else if(edit==IntPtr.Zero && c=="ComboBoxEx32"){ edit=h; } return true; }, IntPtr.Zero);
+    EnumChildWindows(parent,(h,l)=>{ var c=ClassOf(h); if(c=="Edit"||c=="RichEdit20W"||c=="RichEdit50W"||c.StartsWith("WindowsForms10.EDIT.",StringComparison.OrdinalIgnoreCase)){ if(edit==IntPtr.Zero) edit=h; } else if(edit==IntPtr.Zero && c=="ComboBoxEx32"){ edit=h; } return true; }, IntPtr.Zero);
     return edit;
   }
   public static IntPtr FindButton(IntPtr parent, string caption){ IntPtr btn=IntPtr.Zero; var low=caption.ToLower();
-    EnumChildWindows(parent,(h,l)=>{ if(ClassOf(h)=="Button"){ var sb=new StringBuilder(256); SendMessage(h, WM_GETTEXT, (IntPtr)sb.Capacity, sb);
+    EnumChildWindows(parent,(h,l)=>{ if(ClassOf(h)=="Button"||ClassOf(h).StartsWith("WindowsForms10.BUTTON.",StringComparison.OrdinalIgnoreCase)){ var sb=new StringBuilder(256); SendMessage(h, WM_GETTEXT, (IntPtr)sb.Capacity, sb);
       var t=sb.ToString().Replace("&","").ToLower(); if(t.Contains(low)){ btn=h; return false; } } return true; }, IntPtr.Zero);
     return btn;
   }
@@ -115,7 +115,9 @@ function bridgePath() {
   // Unique private directory: never execute a predictable shared-temp .ps1.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-control-'));
   const f = path.join(dir, 'bridge.ps1');
-  fs.writeFileSync(f, PS, { flag: 'wx', mode: 0o600 });
+  // Windows PowerShell 5.1 decodes bare UTF-8 PS1 as ANSI. A BOM prevents
+  // non-ASCII diagnostic hints from corrupting the parser/JSON output.
+  fs.writeFileSync(f, '\uFEFF' + PS, { flag: 'wx', mode: 0o600 });
   psFile = f;
   return f;
 }
