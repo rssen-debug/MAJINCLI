@@ -923,11 +923,13 @@ async function neuralNarrator(text){
     if(wav.type && !wav.type.includes('wav'))throw new Error('Local narrator did not return WAV');
     const url=URL.createObjectURL(wav);
     const audio=new Audio(url);currentVoiceAudio=audio;
-    await new Promise((resolve,reject)=>{
-      audio.onended=resolve;audio.onerror=()=>reject(new Error('WAV playback failed'));
-      audio.play().catch(reject);
-    });
-    return true;
+    try {
+      await new Promise((resolve,reject)=>{
+        audio.onended=resolve;audio.onerror=()=>reject(new Error('WAV playback failed'));
+        audio.play().catch(reject);
+      });
+      return true;
+    } finally {URL.revokeObjectURL(url);}
   } finally {
     clearTimeout(timeout);voiceRequest=null;
     if(currentVoiceAudio){currentVoiceAudio.pause();currentVoiceAudio=null;}
