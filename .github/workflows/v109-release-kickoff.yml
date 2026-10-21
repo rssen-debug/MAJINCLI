@@ -1,0 +1,53 @@
+name: MAJIN v1.0.9 release kickoff (one-time)
+# The connected GitHub app can merge code but cannot create Git tags.
+# A same-repository PR safely kicks off this one-time release task.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize]
+permissions:
+  contents: write
+  actions: write
+jobs:
+  publish-tag:
+    if: ${{ github.repository == 'rssen-debug/MAJINCLI' && github.event.pull_request.head.repo.full_name == 'rssen-debug/MAJINCLI' && github.head_ref == 'release/kickoff-v1.0.9' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Confirm EXACT tested source and release version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          actual=$(git rev-parse origin/main)
+          expected='f8361b219809d3f63104664365b7f7f1d724b8ae'
+          test "$actual" = "$expected" || { echo "::error::main changed ($actual); refusing unreviewed release"; exit 1; }
+          actual_version=$(node -p "require('./package.json').version")
+          test "$actual_version" = '1.0.9' || { echo "::error::Unexpected version $actual_version"; exit 1; }
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v1.0.9" >/dev/null 2>&1; then
+            echo "v1.0.9 tag already exists; refusing to retag"; exit 1
+          fi
+      - name: Create v1.0.9 tag on reviewed main commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f ref='refs/tags/v1.0.9' \
+            -f sha='f8361b219809d3f63104664365b7f7f1d724b8ae' \
+            --jq '.ref + " -> " + .object.sha'
+      - name: Dispatch existing build-exe workflow using the release tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh workflow run build-exe.yml --ref v1.0.9 -f keep_exe=true
+          echo "Dispatched build-exe.yml on v1.0.9. The installer and portable EXE must be verified in the workflow, and SHA256 checked before declaring success." >> "$GITHUB_STEP_SUMMARY"
