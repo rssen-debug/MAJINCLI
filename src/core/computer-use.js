@@ -69,11 +69,12 @@ export async function verify({ registry, ctx, check }) {
 }
 
 /* PLAN → action normalization (model output is NEVER trusted blind) */
-const ALLOWED_ACTIONS = new Set(['list_windows', 'type', 'read', 'click_button', 'capture', 'done', 'blocked']);
+const ALLOWED_ACTIONS = new Set(['list_windows', 'type', 'read', 'click_button', 'capture', 'mouse_move', 'done', 'blocked']);
 export function normalizeAction(plan) {
   if (!plan || typeof plan !== 'object') return { kind: 'invalid', error: 'plan was not an object' };
   const kind = String(plan.action || '').toLowerCase();
   if (!ALLOWED_ACTIONS.has(kind)) return { kind: 'invalid', error: `model proposed unallowed action "${kind}" — refused (allowlist only)` };
+  if (kind === 'mouse_move' && (!Number.isSafeInteger(Number(plan.x)) || !Number.isSafeInteger(Number(plan.y)))) return { kind: 'invalid', error: 'mouse_move requires integer x,y screen coordinates' };
   if (kind === 'type' && (!plan.window || plan.text === undefined)) return { kind: 'invalid', error: 'type requires window + text' };
   if (kind === 'click_button' && !(plan.window && plan.caption)) return { kind: 'invalid', error: 'click_button requires window + caption' };
   return { kind, args: plan, verify: plan.verify || null };
@@ -159,7 +160,8 @@ export async function computerUse(goal, {
     }
 
     /* ACT — through the real tool lane, approvals intact */
-    const tool = plan.kind === 'capture' ? 'screen.capture'
+    const tool = plan.kind === 'mouse_move' ? 'mouse.move'
+      : plan.kind === 'capture' ? 'screen.capture'
       : plan.kind === 'type' ? 'control.type'
       : plan.kind === 'read' ? 'control.read'
       : plan.kind === 'click_button' ? 'control.click_button'
@@ -187,5 +189,5 @@ export async function computerUse(goal, {
 }
 
 function labelFor(kind) {
-  return { type: 'Typing…', click_button: 'Clicking…', read: 'Reading…', list_windows: 'Inspecting…', capture: 'Observing…' }[kind] || 'Working…';
+  return { mouse_move: 'Moving pointer…', type: 'Typing…', click_button: 'Clicking…', read: 'Reading…', list_windows: 'Inspecting…', capture: 'Observing…' }[kind] || 'Working…';
 }
