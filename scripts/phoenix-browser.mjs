@@ -329,13 +329,23 @@ try {
   // The header update control is intentionally hidden on narrow mobile layouts.
   // Assert its desktop behavior in desktop viewport, then keep the safe fixture.
   await page.setViewportSize({ width: 1440, height: 900 });
+  // Check updates is always visible: even if GitHub has not replied yet,
+  // the user never needs CMD to retry. Cache data from CLI must also show.
+  await page.evaluate(() => paintHeader({ ...S.st, update: null,
+    config: { ...S.st.config, updates: { check: true, latest: '99.0.0' } } }));
+  assert.equal(await page.locator('#c-update').isVisible(), true, 'cache immediately displays the update');
+  assert.match(await page.locator('#c-update').textContent(), /Update.*99.0.0/i);
+  await page.evaluate(() => paintHeader({ ...S.st, update: null,
+    config: { ...S.st.config, updates: { check: true, latest: null } } }));
+  assert.equal(await page.locator('#c-update').isVisible(), true, 'manual check stays visible even with no release result');
+  assert.match(await page.locator('#c-update').textContent(), /Check updates/i);
   // Update controls use a fixture acknowledgment; never install over this machine.
   const updateFixture = { latest: '99.0.0', available: true, status: 'available', notice: 'New release' };
   await page.evaluate(upd => paintHeader({ ...S.st, update: upd }), updateFixture);
   assert.equal(await page.locator('#c-update').isVisible(), true);
   await page.locator('#c-update').click();
   await page.evaluate(upd => paintHeader({ ...S.st, update: upd }), updateFixture);
-  assert.match(await page.locator('#c-update').textContent(), /install.*99.0.0/);
+  assert.match(await page.locator('#c-update').textContent(), /install.*99.0.0/i);
   let installRequests = 0;
   await page.route('**/api/update?**', async r => { installRequests++; await new Promise(resolve => setTimeout(resolve, 250)); await r.fulfill({ json: { ok: false, error: 'fixture installer declined' } }); });
   await page.locator('#c-update').click();
@@ -345,7 +355,8 @@ try {
   assert.equal(installRequests, 1);
   await page.unroute('**/api/update?**');
   await page.evaluate(() => paintHeader({ ...S.st, update: { latest: S.st.version, status: 'up_to_date', available: false, notice: '' } }));
-  assert.equal(await page.locator('#c-update').isVisible(), false, 'latest version has no update badge');
+  assert.equal(await page.locator('#c-update').isVisible(), true, 'Check updates remains discoverable even when current');
+  assert.match(await page.locator('#c-update').textContent(), /Check updates/i);
   await page.locator('#input').fill('Keep this unsent draft');
   await page.evaluate(() => { S.session = 'audit-update-resume'; });
   let stateRequests = 0;
