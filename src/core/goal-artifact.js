@@ -73,6 +73,16 @@ export function inspectRequestedArtifact(input, workspace) {
       }
     }
     if (/\.mjs$/i.test(target.name)) {
+      // Real Qwen3B CLI run #39531419484 repeatedly wrote `module.exports` to
+      // a .mjs ES module. Node --check passed (syntax only) but imports broke
+      // and the CLI produced no output. Explain the module-system mismatch
+      // immediately, rather than repeatedly saying "export missing".
+      if (/\b(?:module\.exports|exports\.respond)\b/.test(data)) {
+        missing.push('CommonJS module.exports is not an ES module export in .mjs; ' +
+          'replace it with export function respond(message) { return "Reply: " + message; } ' +
+          'and add console.log(respond(process.argv[2] || "")) for the CLI. ' +
+          'Remove module.exports and exports.respond entirely.');
+      }
       const asksRespond = /\brespond\s*\(\s*message\s*\)/i.test(input);
       const asksExport = /\bexport\s+(?:a\s+)?(?:function\s+)?respond\b/i.test(input) ||
         /\bexport\s+function\s+respond/i.test(input);
