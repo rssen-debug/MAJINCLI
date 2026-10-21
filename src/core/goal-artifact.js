@@ -69,32 +69,39 @@ export function inspectRequestedArtifact(input, workspace) {
         env: { ...process.env, NODE_OPTIONS: '' },
       });
       if (syntax.error || syntax.status !== 0) {
-        // stderr contains the MODEL's source code and absolute paths; echo
-        // only Node's bounded diagnostic line, never the surrounding lines.
-        const diagnostic = String(syntax.stderr || '')
-          .split(/\r?\n/).map(x => x.trim())
-          .find(x => /^(?:SyntaxError|Error):\s*/.test(x));
+        // Node stderr can include the model's source and absolute paths:
+        // return ONLY a bounded diagnostic type, never adjacent source lines.
+        const diagnostic = String(syntax.stderr || '').split(/\r?\n/)
+          .map(x => x.trim()).find(x => /^(?:SyntaxError|Error):\s*/.test(x));
         missing.push('invalid JavaScript syntax (node --check failed' +
           (diagnostic ? ': ' + diagnostic.slice(0, 180) : '') +
-          '; fix this file before claiming done)');
+          '; repair this file before claiming done)');
       }
     }
     if (/\.mjs$/i.test(target.name)) {
+      // Real Qwen3B CLI run #39531419484 repeatedly wrote `module.exports` to
+      // a .mjs ES module. Node --check passed (syntax only) but imports broke
+      // and the CLI produced no output. Explain the module-system mismatch
+      // immediately, rather than repeatedly saying "export missing".
+      if (/\b(?:module\.exports|exports\.respond)\b/.test(data)) {
+        missing.push('CommonJS module.exports is not an ES module export in .mjs; ' +
+          'replace it with export function respond(message) { return "Reply: " + message; } ' +
+          'and add console.log(respond(process.argv[2] || "")) for the CLI. ' +
+          'Remove module.exports and exports.respond entirely.');
+      }
+      // Actual Qwen3B regression on latest merged code: the model generated
+      // "const cli = require('commander')" after an ESM export in ONE .mjs
+      // file. node --check passed but runtime exited 1 because require is
+      // undefined in .mjs, and 'commander' violates "no external deps".
+      // This is a specific static failure, not arbitrary source execution.
+      if (/\brequire\s*\(\s*['"][^'"]+['"]\s*\)/.test(data)) {
+        missing.push('CommonJS require(...) is not available in .mjs; remove it and use built-in process.argv[2] for CLI arguments');
+      }
       const asksRespond = /\brespond\s*\(\s*message\s*\)/i.test(input);
       const asksExport = /\bexport\s+(?:a\s+)?(?:function\s+)?respond\b/i.test(input) ||
         /\bexport\s+function\s+respond/i.test(input);
       const asksCLI = /\bCLI\b|command.line\s+(?:entrypoint|interface)/i.test(input);
       const asksArgs = /\b(?:different|argument|process\.argv|QA_PING)\b/i.test(input);
-      // Node treats .mjs as ES MODULES, regardless of package.json.
-      // Qwen2.5:3b generated 'module.exports = {...}' four times in the
-      // real CLI QA and could not run it. Syntax-only 'node --check' cannot
-      // catch that CJS runtime failure.
-      if (/^\s*(?:module\.exports|exports\.[A-Za-z_$][\w$]*)\s*=/m.test(data)) {
-        missing.push('CommonJS module.exports/exports is not usable in .mjs; use ES-module export function respond(message) instead');
-      }
-      if (/^\s*(?:const|let|var)\s+\w+\s*=\s*require\s*\(/m.test(data)) {
-        missing.push('CommonJS require(...) is not usable in .mjs without special setup; use ES-module import syntax');
-      }
       if (asksRespond && !/(?:function\s+respond\s*\(|(?:const|let)\s+respond\s*=)/i.test(data)) {
         missing.push('requested respond(message) implementation');
       }
@@ -168,20 +175,18 @@ export function feedbackForJavaScriptWrite(goal, workspace, tool, args, writtenO
   if (actual !== target.path) return null;
   const check = inspectRequestedArtifact(goal, workspace);
   if (!check) return null;
-  const wantsResponder = /\.mjs$/i.test(target.name) &&
-    /\brespond\s*\(\s*message\s*\)/i.test(goal) &&
-    /\bCLI\b|command.line/i.test(goal);
-  const guidance = wantsResponder && !check.ok
-    ? '\\nES MODULE CLI PATTERN (adapt the response text to the task): ' +
-      "export function respond(message) { return 'Reply: ' + message; } " +
-      "console.log(respond(process.argv[2] || ''));" +
-      '\\nIMPORTANT: .mjs cannot use module.exports. Do not repeat the same invalid code.'
-    : '';
+  const cliRequireHint = !check.ok && /\.mjs$/i.test(target.name) &&
+    check.missing.some(x => x.startsWith('CommonJS require(')) &&
+    /\bCLI\b|process\.argv|command.line/i.test(goal)
+      ? '\nUse NO external CLI parser: export function respond(message) { return "Reply: " + message; } ' +
+        'console.log(respond(process.argv[2] || "")); ' +
+        'Do not import or require commander; .mjs does not define require.'
+      : '';
   return check.ok
     ? { ok: true, target: target.name,
         text: 'ARTIFACT WRITE CHECK: requested JavaScript file passed syntax and static contract checks (not yet execution-tested).' }
     : { ok: false, target: target.name,
         text: 'ARTIFACT WRITE CHECK FAILED for ' + target.name + ': ' +
           check.missing.join('; ').slice(0, 650) +
-          '. Repair THIS SAME file using fs.write; do not claim done yet.' + guidance };
+          '. Repair THIS SAME file using fs.write; do not claim done yet.' + cliRequireHint };
 }
