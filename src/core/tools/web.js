@@ -313,7 +313,15 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       })()`);
       if (!hit.found) {
         const code = ref ? 'ref_stale' : 'no_such_element';
-        return { ok: false, error: { code, message: ref ? `element ${ref} vanished from the DOM (page re-rendered?) — run browser.elements again for fresh refs; clicking a NEW node by assumption is refused` : `no clickable element matches ${selector}`, hint: 'browser.elements the page and click by number — CSS guesses are only the fallback' } };
+        // Small free LLMs tend to retry guessed selectors such as
+        // #apply-button despite a real button named #submit on the page.
+        // Include CURRENT DOM-derived selectors in the failed action itself.
+        const controls = await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
+        const candidates = formatControlHints(controls);
+        return { ok: false, error: { code,
+          message: ref ? `element ${ref} vanished from the DOM (page re-rendered?) — do not guess a replacement` : `no clickable element matches ${selector}`,
+          hint: 'Use an EXACT selector from the visible controls below (or browser.elements for live numbered refs). Avoid browser.open again unless navigation is required.' + candidates,
+        } };
       }
       /* a click may spawn a NEW tab (target=_blank, window.open): follow it
          so the agent lands where the page actually went */
@@ -345,6 +353,12 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const r = await b.eval(`(() => {
         const el = document.querySelector(${sel});
         if (!el) return { found: false };
+        // A checkbox/radio/button is an ACTION, not a value to overwrite.
+        // Assigning input.value can corrupt a form submission without checking.
+        const inputType = String(el.getAttribute('type') || '').toLowerCase();
+        if (['checkbox', 'radio', 'submit', 'button', 'reset'].includes(inputType)) {
+          return { found: true, wrongType: inputType };
+        }
         el.focus();
         const proto = el.tagName === 'SELECT' ? window.HTMLSelectElement.prototype : (el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype);
         const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
@@ -354,7 +368,16 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         // Report only equality with the requested input, never the raw value.
         return { found: true, stuck: el.value === ${val} };
       })()`);
-      if (!r.found) return { ok: false, error: { code: 'no_such_element', message: `no field matches ${selector}`, hint: 'browser.read the page first' } };
+      if (!r.found) {
+        const controls = await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
+        return { ok: false, error: { code: 'no_such_element', message: `no field matches ${selector}`,
+          hint: 'Use EXACT selectors from these live controls. Checkboxes and buttons need browser.click, not browser.fill. Do not reopen the page to guess fields.' + formatControlHints(controls),
+        } };
+      }
+      if (r.wrongType) {
+        return { ok: false, error: { code: 'wrong_control_type', message: `browser.fill cannot set a ${r.wrongType}`,
+          hint: 'Use browser.click with this exact selector and confirm the checked result. The control was not modified.' } };
+      }
       if (!r.stuck) return { ok: false, error: { code: 'value_rejected', message: 'the page reverted the value immediately — the field may have javascript validation', hint: 'type slower substrings or confirm the field with browser.shot' } };
       return { ok: true, result: 'filled — browser confirmed input retained (value hidden)', meta: { retained: true, valueHidden: true }, summary: 'field filled and verified' };
     },

@@ -47,6 +47,26 @@ test('REAL browser: fill redacts personal field value; checkbox reports CHECKED;
       assert.match(opened.result,/#consent/);
       assert.match(opened.result,/#submit/);
       assert.doesNotMatch(JSON.stringify(opened),/hidden-consent-value-never-echo/);
+      // Replay real Qwen3B case10 errors: guessed selectors and trying to
+      // FILL a checkbox rather than CLICK it. Error hints must be actionable.
+      const wrongFill=await T['browser.fill'].run({selector:'#consent-checkbox',value:'private-token-not-for-logs'},ctx);
+      assert.equal(wrongFill.ok,false);
+      assert.equal(wrongFill.error.code,'no_such_element');
+      assert.match(wrongFill.error.hint,/#consent \(input, checkbox, unchecked\)/);
+      assert.match(wrongFill.error.hint,/#submit \(button/);
+      assert.doesNotMatch(JSON.stringify(wrongFill),/private-token-not-for-logs|hidden-consent-value-never-echo/);
+      const wrongClick=await T['browser.click'].run({selector:'#apply-button'},ctx);
+      assert.equal(wrongClick.ok,false);
+      assert.equal(wrongClick.error.code,'no_such_element');
+      assert.match(wrongClick.error.hint,/#submit \(button/);
+      assert.doesNotMatch(JSON.stringify(wrongClick),/private@example\\.test|hidden-consent-value-never-echo/);
+      const cannotFillCheckbox=await T['browser.fill'].run({selector:'#consent',value:'overwritten'},ctx);
+      assert.equal(cannotFillCheckbox.ok,false);
+      assert.equal(cannotFillCheckbox.error.code,'wrong_control_type');
+      assert.match(cannotFillCheckbox.error.hint,/browser.click/);
+      const stillUnchecked=await T['browser.read'].run({},ctx);
+      assert.match(stillUnchecked.result,/#consent \(input, checkbox, unchecked\)/);
+      assert.doesNotMatch(JSON.stringify(stillUnchecked),/hidden-consent-value-never-echo/);
       const filled=await T['browser.fill'].run({selector:'#email',value:SECRET},ctx);
       assert.equal(filled.ok,true,JSON.stringify(filled));
       assert.doesNotMatch(JSON.stringify(filled),/private@example\.test/);
