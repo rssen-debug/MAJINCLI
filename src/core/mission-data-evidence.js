@@ -84,3 +84,28 @@ export function verifyFollowupJobSelection(goal, messages, workspace) {
   return { ...base,ok,missing:ok?[]:['expected exact job ID '+id+' from '+sources[0]+', not '+saved.trim().slice(0,80)],
     reason:ok?'exact job ID verified against prior source JSON':'selected job ID does not match prior source JSON' };
 }
+
+
+/**
+ * One source JSON -> one named Markdown output is a single artifact goal.
+ * Qwen can generate the correct contents but fs.write a model-invented
+ * /tmp/shortlist.md instead of the user's workspace/shortlist.md.
+ * Correct ONLY this explicit, unambiguous output write; never redirect
+ * fs.read, requests with multiple targets, or any unrelated tool.
+ */
+export function pinJobShortlistWrite(goal, workspace, tool, args) {
+  if (tool !== 'fs.write' || !args || typeof args.path !== 'string' || !args.path.trim()) return null;
+  const lineage = verifyJobIdLineage(goal, workspace);
+  if (!lineage?.source || !lineage?.output) return null;
+  const root = path.resolve(workspace);
+  const requestedPath = path.resolve(root, lineage.output);
+  const attemptedPath = path.resolve(root, args.path);
+  if (attemptedPath === requestedPath) return null;
+  return {
+    args: { ...args, path: lineage.output },
+    originalPath: args.path,
+    requestedPath: lineage.output,
+    corrected: true,
+    reason: 'explicit source JSON -> one output Markdown file: keep fs.write inside user workspace',
+  };
+}
