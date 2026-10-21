@@ -62,7 +62,8 @@ try {
   $ver = node benchmark\desktop-tasks\rename-file-dialog-win\verify.mjs 2>&1
   $ver | Out-File (Join-Path $evo 'laneA-verifier.txt')
   if ($LASTEXITCODE -eq 0) { $aNote = "verifier PASS on real %TEMP% (manual-reference rename; agent credit remains interactive lane): $ver" } else { $aNote = "verifier exit $LASTEXITCODE : $ver" }
-  LaneResult 'W11-desktop-eval' ($LASTEXITCODE -eq 0) $aNote
+  LaneResult 'W11-manual-reference' ($LASTEXITCODE -eq 0) $aNote
+  $summary.lanes['W11-agent-live'] = [ordered]@{ ok = $false; status = 'BLOCKED'; note = 'No autonomous agent desktop execution was observed by this script' }
 } catch {
   LaneResult 'W11-desktop-eval' $false "rename/verify failed: $($_.Exception.Message)"
 }
@@ -114,11 +115,15 @@ Then: git add docs/evidence/live-run-$stamp docs/evidence/desktop-bench-$stamp.*
 "@ | Out-File $checklist -Encoding utf8
 if ((Test-Path $checklist) -and ((Get-Content $checklist -Raw).Length -gt 400)) {
   LaneResult 'W12-scaffold' $true "PREPARED ONLY: checklist written; W12 interactive acceptance is NOT VERIFIED"
+  $summary.lanes['W12-interactive'] = [ordered]@{ ok = $false; status = 'BLOCKED'; note = 'Requires independent visual observation and screenshot on interactive Windows desktop' }
 } else {
   LaneResult 'W12-scaffold' $false "checklist template failed to write"
+  $summary.lanes['W12-interactive'] = [ordered]@{ ok = $false; status = 'BLOCKED'; note = 'Checklist generation failed; interactive verification not performed' }
 }
 
 # ---------- summary ----------
+$summary['release_ready'] = $false
+$summary['release_blockers'] = @('W11-agent-live', 'W12-interactive')
 $sumFile = Join-Path $evo 'RUN-SUMMARY.json'
 ($summary | ConvertTo-Json -Depth 6) | Out-File $sumFile -Encoding utf8
 $readBack = $null
