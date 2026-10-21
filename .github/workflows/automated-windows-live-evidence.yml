@@ -19,10 +19,17 @@ jobs:
           node-version: '22'
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+      - name: Parse Windows script with UTF-8 aware PowerShell 7
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'scripts/windows/live-acceptance-run.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.ToString() }; throw 'PowerShell syntax invalid' }
       - name: Run live lanes on CI Windows
         shell: pwsh
         run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/live-acceptance-run.ps1
+          pwsh -NoProfile -File scripts/windows/live-acceptance-run.ps1
       - name: Check recorded results, without claiming interactive success
         shell: pwsh
         run: |

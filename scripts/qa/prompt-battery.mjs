@@ -173,8 +173,10 @@ const agentName = 'my-agent-' + stamp + '.mjs';
 await caseRun('05', 'build-ai-agent',
   'Actually create and save a working Node.js CLI agent module in ' + agentName +
   '. Export function respond(message) that returns a helpful non-placeholder response containing the message. ' +
+  'Implement a real CLI entrypoint that reads process.argv.slice(2) at runtime and passes the actual received text to respond(message). ' +
   'When run as node ' + agentName + ' QA_PING, the CLI MUST print a response that includes QA_PING. ' +
-  'Running it with a DIFFERENT argument must print that other argument. No external dependencies. Not just a placeholder or a function with no CLI.',
+  'When run again with a DIFFERENT argument, it MUST echo the newly received argument, not a hard-coded QA_PING example. ' +
+  'Use process.argv, not a fixed sample string. No external dependencies. Not just a placeholder or a function with no CLI.',
   ['fs.write','fs.read'], () => {
     const exists = has(agentName);
     const src = read(agentName);

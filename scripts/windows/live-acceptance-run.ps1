@@ -38,9 +38,9 @@ Say "MAJIN live acceptance run $stamp on $env:COMPUTERNAME"
 $nodeOk = $false
 try {
   $nv = (node --version).TrimStart('v') -split '\.' 2>$null
-  $nodeOk = ($null -ne $node) -and ([int]$nv[0] -ge 20)
+  $nodeOk = ($null -ne $nv) -and ($nv.Count -gt 0) -and ([int]$nv[0] -ge 20)
 } catch { $nodeOk = $false }
-if (-not $nodeOk) { Say "FATAL: Node 20+ required (found node? $($null -ne (Get-Command node -ErrorAction SilentlyContinue)))"; exit 1 }
+if (-not $nodeOk) { Say "FATAL: Node 20+ required (found node? $($null -ne (Get-Command node -ErrorAction SilentlyContinue)))"; Pop-Location; exit 1 }
 if (-not (Test-Path 'package.json')) { Say "FATAL: run from the repository root (package.json not found)"; exit 1 }
 if (-not (Test-Path 'node_modules')) { Say "node_modules missing — running npm ci first..."; npm ci --silent }
 
@@ -65,7 +65,8 @@ try {
   LaneResult 'W11-manual-reference' ($LASTEXITCODE -eq 0) $aNote
   $summary.lanes['W11-agent-live'] = [ordered]@{ ok = $false; status = 'BLOCKED'; note = 'No autonomous agent desktop execution was observed by this script' }
 } catch {
-  LaneResult 'W11-desktop-eval' $false "rename/verify failed: $($_.Exception.Message)"
+  LaneResult 'W11-manual-reference' $false "rename/verify failed: $($_.Exception.Message)"
+  $summary.lanes['W11-agent-live'] = [ordered]@{ ok = $false; status = 'BLOCKED'; note = 'No autonomous agent desktop execution was observed by this script' }
 }
 node scripts\desktop-bench.mjs --save 2>&1 | Out-File (Join-Path $evo 'laneA-desktop-bench.log')
 if ($LASTEXITCODE -eq 0) { Say "  desktop-bench re-verified on win32 (see laneA-desktop-bench.log)" }
