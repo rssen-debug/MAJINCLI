@@ -409,6 +409,21 @@
       ],
       "evidence": "docs/evidence/w11-desktop-vision-2026-10-21.md + docs/evidence/desktop-bench-2026-10-21.{json,md}; npm test 859/0/17",
       "verdict": "99/100 — CAP kvarstår: W11 core-maskin sanning verifierad i sandlådan, men LIVE screenshot/UFO-eval-körningen kräver Windows-hårdvara; W12 interaktiv acceptance kräver användarens maskin. 100 = rikitig hårdvara, aldrig simulation."
+    },
+    {
+      "round": 37,
+      "focus": "W2 ENV-BLOCK -> LIVE-ACCEPTANCE (github-lane): research.run kord mot VERKLIG egress (api.github.com) inuti sandlådan — 0 fixtures",
+      "done": [
+        "scripts/research-live-acceptance.mjs: searchFn=real HTTPS api.github.com/search/repositories, fetchFn=GitHub README-API base64->utf8; token ur GITHUB_TOKEN-miljö, aldrig lagrat",
+        "Live-körning: 4 riktiga källor (lukeed/sade, mdbetancourt/soly, th317erd/simple-yargs, TheBrenny/big-kahuna), 22 findings, unsupported=0, verdict \"all claims sourced\"; 18 conflicted flaggade (motorns kors-kontroll verklig)",
+        "Adapter-transparens tvingad: query-ladder deklareras per steg i adapter-notes.json (github full-text AND:ar termer — naturliga frågor=0 catch); IR-läxa: interrogativa \"which\" styrde källor felVänt till which-verktyg (thefuck/node-which/pyenv) -> stopword-fix + frågan anpassad till sök-motorns semantik",
+        "Tunn-undermålin högljudd: <3 källor eller unsupported claims => exit!=0 \"refusing to count it as acceptance evidence\"",
+        "test/research-live-acceptance.test.js 5/5: evidential audit av committade receipts (offline-deterministisk) — riktiga github-URLs med fetch-tidsstämnar, findings>=3, unsupported=0, adapter-notes högljudda",
+        "Evidence committat: docs/evidence/research-live-2026-10-21/{report.md,ledger.json,sources.jsonl,adapter-notes.json}; regression 859->864/0/17",
+        "Referens-oförändrat ärligt: DuckDuckGo-/Bing-lanen förblir ENV-BLOCKAD (sandbox-egress) — full-env-acceptans återstår"
+      ],
+      "evidence": "docs/evidence/w2-live-acceptance-2026-10-21.md + docs/evidence/research-live-2026-10-21/*; npm test 864/0/17",
+      "verdict": "99/100 — CAP kvarstår: W11-live + W12 interaktiv acceptance på användarens maskin är de återstående portarna till 100."
     }
   ],
   "percent": 99

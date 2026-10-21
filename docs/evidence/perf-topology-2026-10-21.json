@@ -1,24 +1,24 @@
 {
-  "stamp": "2026-10-21T05:50:01.874Z",
+  "stamp": "2026-10-21T06:12:19.034Z",
   "scale": 0.4,
   "runs": 3,
   "scenarios": {
     "A": {
       "name": "wide fan-out (8 indep, cap 2)",
-      "cpMedianMs": 140,
-      "legacyMedianMs": 140,
-      "ratio": 0.999
+      "cpMedianMs": 139,
+      "legacyMedianMs": 139,
+      "ratio": 1
     },
     "B": {
       "name": "deep chain + 6 shorts (cap 2)",
-      "cpMedianMs": 217,
-      "legacyMedianMs": 218,
-      "ratio": 0.996
+      "cpMedianMs": 218,
+      "legacyMedianMs": 217,
+      "ratio": 1.002
     },
     "C": {
       "name": "11× est-overrun (est 10, actual ~110, cap 3)",
       "adaptive": {
-        "wallMs": 179,
+        "wallMs": 178,
         "contractionEvents": 2,
         "capReduced": true
       },
@@ -30,9 +30,9 @@
     },
     "D": {
       "name": "ranker on 2 000 nodes + 200-node pass-through grid",
-      "rank2000Ms": 4.32,
+      "rank2000Ms": 4.52,
       "ranksComputed": 2000,
-      "grid200WallMs": 13
+      "grid200WallMs": 10
     }
   }
 }
