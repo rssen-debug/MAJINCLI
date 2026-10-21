@@ -281,9 +281,10 @@
     /* spec B: the chip states provider · model — never an ambiguous model name
        alone (OpenCode Go must not read as plain glm-x.x, never silently Zen). */
     const provName = prov?.displayName || prov?.preset || chat?.provider || '';
-    chip.textContent = (PICKER.current && configured ? `${provName} · ${shortModel(PICKER.current)}` : 'Choose a model') + ' ▾';
-    chip.title = `${provName || 'provider'} — ${PICKER.current || 'no model set'}`;
-    chip.title = PICKER.current || 'no model set';
+    chip.textContent = (PICKER.current
+      ? `${provName} · ${shortModel(PICKER.current)}${configured ? '' : ' · Connect'}`
+      : 'Choose a model') + ' ▾';
+    chip.title = `${provName || 'provider'} — ${PICKER.current || 'no model set'}${configured ? '' : ' (connection required)'}`;
     chip.hidden = false;
     chip.setAttribute('aria-haspopup', 'dialog');
     chip.setAttribute('aria-expanded', String(PICKER.openFlag));
@@ -375,13 +376,39 @@
     browser.append(provider, search, filters, capabilities, msg, list, more, manual, manage);
     pane.append(head, browser);
     let models = [], freeOnly = false, limit = 60, generation = 0, unverified = false;
+    let selecting = false;
     const accept = async (id) => {
-      msg.textContent = 'Selecting model…';
+      if (selecting) return;
+      selecting = true;
+      msg.textContent = 'Saving and verifying model…';
       const name = provider.value;
       const routes = Object.fromEntries(ROUTE_JOBS.map((j) => [j, name + '/' + id]));
-      const r = await apiLocal('/config', { method: 'PATCH', body: { models: { provider: name, routes }, moa: { policy: 'off' } } }).catch(() => null);
-      if (r?.ok) { closePicker(); if (typeof window.refresh === 'function') window.refresh(); }
-      else msg.textContent = tellErr(r, 'Could not save this model. Try again.');
+      try {
+        const r = await apiLocal('/config', { method: 'PATCH', body: { models: { provider: name, routes }, moa: { policy: 'off' } } });
+        if (!r?.ok) {
+          msg.textContent = tellErr(r, 'Could not save this model. Try again.');
+          return;
+        }
+        // A PATCH success only proves that one request was accepted. Read back
+        // the actual ACTIVE routes before closing; another process or a stale
+        // UI state may still be using a different provider/model.
+        const fresh = await apiLocal('/state?tools=0');
+        const { confirmSelectedModel } = await import('/model-confirm.js');
+        const proof = confirmSelectedModel(fresh, name, id, ROUTE_JOBS);
+        if (!proof.ok) {
+          msg.textContent = proof.reason + (proof.missing.length ? ': ' + proof.missing.join(', ') : '') + '. Refresh or try again.';
+          return;
+        }
+        OB.st = fresh;
+        if (window.S) window.S.st = fresh;
+        await paintChip();
+        closePicker();
+        if (typeof window.refresh === 'function') void window.refresh();
+      } catch {
+        msg.textContent = 'Model save was sent but could not be verified. Check the connection and retry.';
+      } finally {
+        selecting = false;
+      }
     };
     manualGo.onclick = () => { const id = manualInput.value.trim(); if (id) accept(id); };
     function paint() {
