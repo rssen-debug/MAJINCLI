@@ -10,3 +10,5 @@
 | V1 full test suite baseline | VERIFIED | 930/0/17 on v2/main at ff46586+; CI run 39674378385 SUCCESS |
 | Windows interactive desktop lane | PARTIAL | V1 evidence (runs 39588560481/39586059993); must rerun against 2.0.0-alpha on runner -> planned |
 | Compiler/DAG/scheduler | NOT_IMPLEMENTED | snapshot docs/v2/ARCHITECTURE.md sec.3 |
+| Verifier registry (file/http/pixel + dom-capability) | VERIFIED | test/v2-verifiers-events.test.js 8/8; pixel proof uses real PNG fixtures written via pngjs; dom degrades honestly |
+| Typed event bus (brief 108) | VERIFIED | ring-buffer audit + listener isolation asserted; node:events zero-dep decision |

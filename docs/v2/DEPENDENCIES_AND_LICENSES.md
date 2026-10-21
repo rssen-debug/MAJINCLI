@@ -8,6 +8,8 @@ Repo philosophy measured: ONE runtime dep today (chokidar). Every new dep must e
 | Component | Choice | License | Why this one (evidence 2026-10-21) | Footprint |
 |---|---|---|---|---|
 | Scheduler concurrency | **p-queue** (sindresorhus) | MIT | 4.3k stars, ~30M weekly npm downloads, v10.0.0 released within days, two tiny deps (eventemitter3, p-timeout), ESM, Node>=20. Mean-reversion alternative = hand-rolled concurrency with subtle race risk (the exact spot agents get wrong). | +1 dep (~100 KB bundled) |
+| PNG encode/decode (pixel verifier) | **pngjs** @7.0.0 (lukeapage) | MIT | 57M+ weekly npm downloads, 2,229 dependent packages, pure JS, encodes and decodes (tests generate own fixtures). Maintenance flag "inactive" (no release since 2023) — ACCEPTED risk because PNG is a static spec with completion; no vulnerabilities reported. | +1 dep, zero sub-deps |
+| DOM verifier | **playwright** (already in repo as devDependency) | Apache-2.0 | Reuse, do not re-adopt: verifier degrades honestly to DEPENDENCY_MISSING when not installed, so production bundle unaffected. | none (optional capability) |
 
 ## Evaluated and deferred / rejected (with reasons)
 
