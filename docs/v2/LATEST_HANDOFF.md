@@ -1,6 +1,6 @@
 # MAJIN V2 — LATEST HANDOFF (owner-facing, 2026-10-21)
 
-V2 HEAD (v2/main): bfa740fa (GAUNTLET harness live: 5 scenarios, verified success 100%, false success 0, runs in CI)
+V2 HEAD (v2/main): f7a24225 (memory store + context engine merged after honest CI repair incident, see postmortem)
 
 COMPLETED (this working day, verified):
 - v2/main created from V1 tip 282a8ff; V1 untouched (policy: only v2/* branches carry V2 code)
@@ -26,6 +26,9 @@ FAILED: none open on v2/main
 BLOCKED: none
 
 OPEN PRS: scheduler PR (merge tracks end of this turn)
+
+INCIDENT POSTMORTEM (2026-10-21, documented per anti-coverup policy):
+ 1. PR #249 merged while branch CI was FAILED (poll loop went on completed, not conclusion). 2. Cause: .gitignore "memory/" silently swallowed kernel src dir src/v2/memory/; local suite was green only because files existed untracked. REPAIRS: #250 negation rule + store.js; CI green branch + post-merge (f7a24225). GUARD: merges require conclusion==success now; ignored-file check in add-source routine.
 
 NEXT (roadmap order):
 1. Hardware lane vs 2.0.0-alpha on the owner PC via majin-remote-command (PHASE 4 prep, gauntlet as scenario base)
