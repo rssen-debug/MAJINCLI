@@ -7,7 +7,7 @@
   const ACTIVE = new Set(['running', 'waiting', 'paused']);
   const LABELS = { idle: 'Ready', connecting: 'Connecting to your model', thinking: 'Thinking', working: 'Working', waiting: 'Waiting for your approval', done: 'Response complete', error: 'Request needs attention', stopped: 'Stopped' };
   const TABS = ['activity', 'files', 'preview', 'settings'];
-  let tasks = [], taskLimit = 30, selected = null, state = 'idle', previewRequest = null, previousFocus = null;
+  let tasks = [], taskLimit = 30, selected = null, state = 'idle', previewRequest = null, previousFocus = null, previewedPath = null;
 
   function node(tag, cls, text) {
     const n = document.createElement(tag);
@@ -159,6 +159,7 @@
     }
   }
   async function previewFile(path) {
+    previewedPath = path;
     if (!files.has(path)) { files.set(path, {}); renderFiles(); }
     if ($('studio').hidden) open('preview'); else selectTab('preview');
     previewRequest?.abort();
@@ -197,6 +198,13 @@
   function onEvent(ev) {
     if (ev.type === 'tool_result' && ev.ok && typeof ev.meta?.path === 'string') {
       files.set(ev.meta.path, { bytes: ev.meta.bytes }); renderFiles();
+      // Refresh the actual file when it changes. Only auto-open the first
+      // HTML artifact if the preview is empty; never replace an active view
+      // with an unrelated log, screenshot or generated file.
+      if (ev.meta.path === previewedPath ||
+          (!previewedPath && /\.html?$/i.test(ev.meta.path))) {
+        void previewFile(ev.meta.path);
+      }
     }
   }
   function resetRun() {
