@@ -28,7 +28,7 @@ jobs:
     env:
       CI: 'true'
       MAJIN_QA_SANDBOX: '1'
-      QA_MODEL: qwen2.5:3b
+      QA_MODEL: qwen2.5-coder:3b
       QA_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.full && '01,02,03,04,05,06,07,08,09,10,11' || '01,04,05' }}
       MAJIN_LLM_LOCAL_TIMEOUT: '75000'
       MAJIN_LLM_TIMEOUT: '75000'
