@@ -43,3 +43,7 @@ The self-hosted runner MAJIN-INTERACTIVE-01 (2026-10-21, run 39584274075) was co
 - New real-device, nonintrusive self-hosted Windows acceptance workflow.
 
 **Install/update note:** the user may need to install or update this version to run the newly fixed code; a QA runner checkout alone does not install the release onto the user's computer. Interactive-desktopen patch-releases rubric notes this explicitly so no one mistakes a QA checkout for an installed 1.0.2 binary.
+
+## Successor release version (2026-10-21)
+
+The tag `v1.0.2` already points at `29193b533c8934cab41d326db455ff8894fc7316` (the prior main baseline). To prevent a new installer's binaries being mislabeled by an existing tag, the interactive Windows fixes and current acceptance gate changes are published as **v1.0.3** only after all CI gates pass on the final pull-request head. Do not force-move or reuse the earlier v1.0.2 tag. Never call v1.0.2 assets proof of the new v1.0.3 build. The main build workflow must publish and independently SHA256-verify both v1.0.3 Windows EXEs before RELEASE READY.
