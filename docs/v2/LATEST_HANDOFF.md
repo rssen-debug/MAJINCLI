@@ -1,6 +1,6 @@
 # MAJIN V2 — LATEST HANDOFF (owner-facing, 2026-10-21)
 
-V2 HEAD (v2/main): b96fc1ec (kernel + scheduler + verifier registry + event bus merged)
+V2 HEAD (v2/main): bfa740fa (GAUNTLET harness live: 5 scenarios, verified success 100%, false success 0, runs in CI)
 
 COMPLETED (this working day, verified):
 - v2/main created from V1 tip 282a8ff; V1 untouched (policy: only v2/* branches carry V2 code)
@@ -28,6 +28,6 @@ BLOCKED: none
 OPEN PRS: scheduler PR (merge tracks end of this turn)
 
 NEXT (roadmap order):
-1. GAUNTLET harness skeleton (PHASE 10) + first golden tasks against the verifier registry
+1. Hardware lane vs 2.0.0-alpha on the owner PC via majin-remote-command (PHASE 4 prep, gauntlet as scenario base)
 2. Context engine + memory store (PHASE 7) with JSON-first persistence, sqlite decision at alpha packaging
-3. Hardware lane vs 2.0.0-alpha on the owner PC via majin-remote-command (PHASE 4 prep)
+3. Voice pipeline scaffolding check (PHASE 6); promptfoo candidate for model benchmarking milestone
