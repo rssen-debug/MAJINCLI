@@ -6,7 +6,7 @@ test('speech recognition arms, sends actual user transcript and suspends while a
   assert.match(src,/window\.SpeechRecognition\s*\|\|\s*window\.webkitSpeechRecognition/);
   assert.match(src,/r\.interimResults=true/);
   assert.match(src,/if\(!complete\.trim\(\)\) return/);
-  assert.match(src,/send\(command\)/);
+  assert.match(src,/send\(command, \{ voiceTurn: true \}\)/);
   assert.match(src,/S\.handsFree=true/);
   assert.match(src,/if\(S\.handsFree&&!S\.busy\)startMic\(\)/);
   assert.match(src,/engine\.cancel\(\);engine\.resume\(\);engine\.speak\(u\)/);
@@ -40,4 +40,22 @@ test('speech output reports playback failure and never strands hands-free listen
   assert.match(src,/Voice output failed/);
   assert.match(src,/finally\s*\{\s*speechActive=false;/);
   assert.match(src,/if\(S\.handsFree&&!S\.busy\)startMic\(\)/);
+});
+
+test('keyboard turns do not trigger Talk; spoken turns stay hands-free',()=>{
+  const src=fs.readFileSync('src/ui/app.js','utf8');
+  assert.match(src,/async function send\(text, options = \{\}\)/);
+  assert.match(src,/if \(!options\.voiceTurn\) \{/);
+  assert.match(src,/if \(S\.handsFree\) \{ S\.handsFree = false; stopMic\(\); \}/);
+  assert.match(src,/S\.voiceTurn = Boolean\(options\.voiceTurn\)/);
+  assert.match(src,/send\(command, \{ voiceTurn: true \}\)/);
+  assert.match(src,/S\.voice && S\.voiceTurn && !S\.cancelled/);
+});
+test('workspace preview is persistent between tasks and reloads after HTML writes',()=>{
+  const studio=fs.readFileSync('src/ui/studio.js','utf8');
+  const reset=studio.match(/function resetRun\(\) \{([\s\S]*?)\n  \}/)?.[1];
+  assert.ok(reset);
+  assert.doesNotMatch(reset,/files\.clear\(\)|studio-preview'\)\.textContent = ''/);
+  assert.match(studio,/previewedPath = path/);
+  assert.match(studio,/void previewFile\(ev\.meta\.path\)/);
 });
