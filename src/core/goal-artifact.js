@@ -190,3 +190,31 @@ export function feedbackForJavaScriptWrite(goal, workspace, tool, args, writtenO
           check.missing.join('; ').slice(0, 650) +
           '. Repair THIS SAME file using fs.write; do not claim done yet.' + cliRequireHint };
 }
+
+
+/**
+ * A narrowly scoped destructive-action completion oracle.
+ * Only a SINGLE explicitly named workspace file and successful, guard-approved
+ * fs.delete can finish a delete-only turn. This prevents an extra empty-stream
+ * inference from turning a VERIFIED deletion into a false failure, or causing
+ * retries of irreversible operations.
+ *
+ * Does not delete files itself. Reads filesystem state after the real tool
+ * has completed. Unsupported/multi-action instructions return null.
+ */
+export function verifySingleFileDeletion(goal, workspace, tool, args, toolOk) {
+  const request=String(goal || '').trim();
+  if (tool !== 'fs.delete' || !toolOk || !args || typeof args.path !== 'string' ||
+      !/^(?:delete|remove|radera|ta\s+bort)\b/i.test(request) ||
+      /\b(?:then|afterwards|also|sedan|därefter|också|and\s+(?:create|write|send|open))\b/i.test(request)) return null;
+  const target=explicitTarget(request,workspace);
+  if(!target) return null;
+  const selected=path.resolve(target.workspace,args.path);
+  if(selected!==target.path || !fs.existsSync(target.workspace)) return null;
+  const demandsPermanent=/\bpermanent(?:ly)?\b|\bpermanent\s*:\s*true\b/i.test(request);
+  if(demandsPermanent && args.permanent!==true) return null;
+  if(fs.existsSync(target.path)) return {ok:false,target:target.name,reason:'requested file still exists in workspace'};
+  return {ok:true,target:target.name,reason:'requested file is confirmed absent after approved fs.delete',
+    text:'Deleted ' + target.name + ' — verified absent from MAJIN workspace' +
+      (args.permanent===true?' (permanent deletion)':'') + '.'};
+}

@@ -11,7 +11,7 @@ import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
-import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite } from './goal-artifact.js';
+import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, verifySingleFileDeletion } from './goal-artifact.js';
 import { verifyJobIdLineage, pinJobShortlistWrite } from './mission-data-evidence.js';
 import { verifyFollowupJobSelection } from './mission-data-evidence.js';
 
@@ -391,6 +391,23 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         tool_call_id: r.id,
         content: guarded.text,
       });
+    }
+
+    // A single approved fs.delete with independent absent-file proof is
+    // ALREADY the requested outcome. Do not ask the model again, risking an
+    // empty Ollama response, time-box or a second destructive attempt.
+    if (actionGoal && results.length === 1 && results[0].name === 'fs.delete') {
+      const candidate = results[0];
+      const deletion = verifySingleFileDeletion(
+        initialGoal, cfg.get('workspace'), candidate.name, candidate.args,
+        candidate.out?.ok !== false
+      );
+      if (deletion?.ok) {
+        onEvent({ type: 'artifact_delete_verified', label, step: steps,
+          target: deletion.target, ok: true });
+        return { text: deletion.text, steps, toolLog, usage: tally, escalated,
+          stopReason: 'verified_single_delete' };
+      }
     }
 
     const escalateAfter = Number(cfg.get('routing.escalateAfterErrors')) || 2;
