@@ -954,7 +954,7 @@ async function speak(t){
   try {
     // English narration uses the local Kokoro male model. Swedish content
     // falls back to OS Swedish until a properly licensed sv voice is installed.
-    const isEnglish = (S.st?.config?.ui?.voice?.lang||'sv-SE').startsWith('en');
+    const isEnglish = S.narratorEnglish === true;
     if(isEnglish){try{await neuralNarrator(clean);return;}catch(e){voiceState('speaking','Local voice unavailable; using system voice');}}
     await browserNarrator(clean);
   } finally {
@@ -1209,6 +1209,17 @@ try { if (!window.MAJIN_STUDIO && localStorage.getItem('majin.expert') === '1') 
 $('b-panel').onclick = () => {
   document.body.classList.toggle('pan-off');
   $('b-panel').classList.toggle('on');
+};
+S.narratorEnglish = false;
+try { S.narratorEnglish = localStorage.getItem('majin.voice.narratorEN') === 'true'; } catch {}
+$('b-narrator')?.classList.toggle('on', S.narratorEnglish);
+$('b-narrator')?.setAttribute('aria-pressed', String(S.narratorEnglish));
+$('b-narrator').onclick = () => {
+  S.narratorEnglish = !S.narratorEnglish;
+  $('b-narrator').classList.toggle('on', S.narratorEnglish);
+  $('b-narrator').setAttribute('aria-pressed', String(S.narratorEnglish));
+  try {localStorage.setItem('majin.voice.narratorEN', String(S.narratorEnglish));}catch{}
+  toast(S.narratorEnglish ? 'English Kokoro narrator enabled. Speak English for best quality.' : 'System voice enabled.');
 };
 $('b-voice').onclick = () => {
   S.voice = !S.voice;
