@@ -9,6 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { forwardsJoinedRuntimeThroughLocal } from './argv-joined-dataflow.js';
 
 const TARGET = /(?<![\/\\\w.-])([\w-]+\.(?:txt|md|json|js|mjs|jsx|ts|tsx|html|css|py|csv|sol))\b/gi;
 
@@ -135,7 +136,8 @@ export function inspectRequestedArtifact(input, workspace) {
         // This is a runtime-derived argument, not a hardcoded QA_PING token.
         const forwardsJoinedRuntime = /\brespond\s*\(\s*process\.argv\.slice\s*\(\s*2\s*\)\.join\s*\(/i.test(noDefinition) ||
           (/\brespond\s*\(\s*args\.join\s*\(/i.test(noDefinition) &&
-           /\b(?:const|let)\s+args\s*=\s*process\.argv\.slice\s*\(\s*2\s*\)/i.test(data));
+           /\b(?:const|let)\s+args\s*=\s*process\.argv\.slice\s*\(\s*2\s*\)/i.test(data)) ||
+          forwardsJoinedRuntimeThroughLocal(noDefinition);
         if (!respondsToArgument && !printsRuntimeArgument && !forwardsJoinedRuntime) {
           missing.push('CLI does not call respond() with the runtime argument; hardcoded QA_PING / DIFFERENT branches do not handle arbitrary inputs. Use console.log(respond(process.argv[2] || "")) so ANY new input is reflected in output');
         }
