@@ -82,7 +82,7 @@
       "id": "W12-pink-cursor",
       "wave": "W12",
       "desc": "Native Windows overlay (utan src/ui-röring), click-through, smooth movement, click-highlight, pause/resume/stop, human-takeover-yield, crash-recovery.",
-      "status": "ACCEPTANCE-PACK REDO: qa/win-acceptance/run-all.ps1 (interaktiv Windows-runner: screenshot-artifacts, canvas-scan for #ff3ca5, computer.use smoke-exit, A0 NOT TESTED vid non-interactive i stallet for att gissa) + scripts/verify-win-acceptance.mjs (kontrakt win-acceptance/1: PASS fordrar artifact/bevis, A1+A5 DoD-krav, FAIL/NOT TESTED BLOCKERAR gata arligt) + test/win-acceptance.test.js 6/6; sjalva interaktiva korningen pakter win-runner (miljo) — dokumenterat som utestående, inte markerat klart"
+      "status": "ACCEPTANCE-PACK REDO: qa/win-acceptance/run-all.ps1 (interaktiv Windows-runner: screenshot-artifacts, canvas-scan for #ff3ca5, computer.use smoke-exit, A0 NOT TESTED vid non-interactive i stallet for att gissa) + scripts/verify-win-acceptance.mjs (kontrakt win-acceptance/1: PASS fordrar artifact/bevis, A1+A5 DoD-krav, FAIL/NOT TESTED BLOCKERAR gata arligt) + test/win-acceptance.test.js 6/6; sjalva interaktiva korningen pakter win-runner (miljo) — dokumenterat som utestående, inte markerat klart | CI-LOOP SLUTEN: win-runner-acceptance.yml (workflow_dispatch + weekly + PR + branch-push) kicks packen pa windows-latest i service-session och UPPLADDAR artifacts (out-json + shots) => varje framtida push producerar NY WIN- Evidens-verdicet valideras mot kontrakt utan att fejla pa avsaknade interactive-steps nollhara --gate flitstuds ochkonkch interactive: false (aldrig grattis-gron); interactive gate fortsatt apply-pa din maskin"
     },
     {
       "rank": 12,
@@ -305,6 +305,13 @@
       "done": "GLM acceptane-closeout MITAT: 401 AUTH (inte natverk) verifierat via 3 candidatebasade + permanent probe med klassifierare (exit-koder korrekta); 4/4 tester; denna gate oforandrad krav: rotera nyckeln forst",
       "percent": 91,
       "next": "win-runner acceptance pa er maskin + roterad GLM-nyckel"
+    },
+    {
+      "round": 28,
+      "date": "2026-10-21",
+      "done": "W12 CI-loop: acceptance-pack kors veckovis+per-push pa windows-latest, produceret mottaglig evidence artifacts alla ganger (continue-on-error: true), verifikation mot kontraktet (aldrig forced-green; interactive-gate kvar-anpassad); YAML-validerad (js-yaml load passes, 7 steg)",
+      "percent": 92,
+      "next": "interactive win-acceptance-koring pa er maskin for PASS-grade, alternativt nasta REUSE-absorbance"
     }
   ]
 }

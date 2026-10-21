@@ -4,7 +4,7 @@
 
 > Ärlighetsregel: ingen % utan reproducerbart bevis. Gamla COMPLETION_MATRIX.md (100/100 på papper) motsägs av uppmätta artefakter och ersätts av DENNA fil som sanning.
 
-## Total ekvivalent status: **91/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
+## Total ekvivalent status: **92/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
 
 ## Per-våg (VERIFIED kräver artefakt, INTE bara att koden finns)
 
