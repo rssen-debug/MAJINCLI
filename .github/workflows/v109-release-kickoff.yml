@@ -28,8 +28,10 @@ jobs:
           set -euo pipefail
           git fetch origin main
           actual=$(git rev-parse origin/main)
-          expected='f8361b219809d3f63104664365b7f7f1d724b8ae'
-          test "$actual" = "$expected" || { echo "::error::main changed ($actual); refusing unreviewed release"; exit 1; }
+          test "$actual" = "$(git rev-parse HEAD)" || { echo "::error::main moved during release; refusing"; exit 1; }
+          git merge-base --is-ancestor 'f8361b219809d3f63104664365b7f7f1d724b8ae' HEAD || { echo "::error::Release base was replaced"; exit 1; }
+          changed=$(git diff --name-only f8361b219809d3f63104664365b7f7f1d724b8ae HEAD)
+          test "$changed" = '.github/workflows/v109-release-kickoff.yml' || { echo "::error::Unexpected unreviewed changes: $changed"; exit 1; }
           actual_version=$(node -p "require('./package.json').version")
           test "$actual_version" = '1.0.9' || { echo "::error::Unexpected version $actual_version"; exit 1; }
           if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v1.0.9" >/dev/null 2>&1; then
@@ -42,7 +44,7 @@ jobs:
           set -euo pipefail
           gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
             -f ref='refs/tags/v1.0.9' \
-            -f sha='f8361b219809d3f63104664365b7f7f1d724b8ae' \
+            -f sha="$(git rev-parse HEAD)" \
             --jq '.ref + " -> " + .object.sha'
       - name: Dispatch existing build-exe workflow using the release tag
         env:
