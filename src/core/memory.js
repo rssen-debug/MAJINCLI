@@ -11,10 +11,13 @@ import { bus } from './log.js';
 const stop = new Set(['och', 'att', 'det', 'som', 'för', 'med', 'den', 'the', 'and', 'this', 'that', 'with', 'from', 'jag', 'du', 'pa', 'på', 'av', 'en', 'et', 'at', 'är', 'ar', 'har', 'ha', 'ska', 'borde', 'kunde']);
 
 function words(s) {
+  /* s23 (real-world audit 2026-10-20): code-tokens like "IRONWOOD-799" or
+     "order.1234" were kept WHOLE (with '.' and '-'), so a single-token recall
+     ("IRONWOOD") never matched. Split on everything that is not a letter or
+     number — symmetric for fact AND query, so hyphenated/dot facts recall. */
   return String(s || '')
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s.-]/gu, ' ')
-    .split(/\s+/)
+    .split(/[^\p{L}\p{N}]+/u)
     .filter((w) => w.length > 2 && !stop.has(w));
 }
 

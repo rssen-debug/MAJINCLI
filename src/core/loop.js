@@ -1,3 +1,4 @@
+import { withTimeout, withAbortDeadline, RepeatDetector, TurnClock } from './watchdog.js';
 /**
  * MAJIN — verktygsslingan.
  * Samma loop för huvudagenten och subagenter. Stegvisa beslut:
@@ -10,6 +11,10 @@ import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
+import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion, pinSingleExactTextWrite, verifySingleExactTextCreation, repairSimpleCommanderCliWrite, repairSimpleMixedEsmCliWrite, repairSimpleCommonJsEchoCliWrite, repairLiteralEscapedNewlineEchoCliWrite, unchangedInvalidJavaScriptWrite, verifyLocalTokenDemoFiles, isLocalTokenDemoGoal } from './goal-artifact.js';
+import { verifyJobIdLineage, pinJobShortlistWrite } from './mission-data-evidence.js';
+import { verifyFollowupJobSelection } from './mission-data-evidence.js';
+import { verifyIsolatedNodeCli } from './cli-proof.js';
 
 /*
  * Väljer vilka scheman modellen får se detta steg. Standard: hela den synliga
@@ -23,6 +28,78 @@ function pickSchemas(registry, ctx) {
   if (!Array.isArray(names) || !names.length) return all;
   const wanted = new Set(names.filter((n) => registry.has(n)));
   return all.filter((t) => wanted.has(t.name));
+}
+
+/**
+ * Promote real, allowlisted tool schemas after tools.search.
+ * Previously tools.search listed fs.write/browser.shot but the next model call
+ * still received only the original tiny subset, so weak models guessed and
+ * failed with unknown_tool. Never bypass tools.allow or readOnly.
+ */
+export function expandDiscoveredTools(current, toolResult, registry, { readOnly = false, cap = 32 } = {}) {
+  if (!Array.isArray(current) || !current.includes('tools.search') || toolResult?.ok === false) return current;
+  let body;
+  try { body = typeof toolResult?.result === 'string' ? JSON.parse(toolResult.result) : toolResult?.result; }
+  catch { return current; }
+  if (!Array.isArray(body?.matches)) return current;
+  const visible = new Set(registry.schemas({ readOnly: Boolean(readOnly) }).map((tool) => tool.name));
+  const names = new Set(current.filter((name) => visible.has(name)));
+  for (const hit of body.matches) {
+    if (names.size >= cap) break;
+    if (typeof hit?.name === 'string' && visible.has(hit.name)) names.add(hit.name);
+  }
+  return [...names];
+}
+
+/**
+ * Only explicit execution requests count: not questions asking how to do it.
+ * Small LLMs sometimes say "done" without even trying a tool. Such answers
+ * get one bounded recovery opportunity and an honest incomplete verdict.
+ */
+export function requiresRealAction(input) {
+  const t = String(input || '').trim();
+  if (!t || /^(?:hur|how|why|varför|what|vad|explain|förklara|tell me|berätta|visa hur|can you explain)\b/i.test(t)) return false;
+  const request = /^(?:(?:please|actually|faktiskt|snälla|kan du|could you|jag vill att du|i want you to|du ska)\s+)*(?:create|write|save|edit|modify|delete|remove|build|make|download|open|take|search|apply|skapa|skriv|spara|redigera|ändra|radera|ta bort|bygg|öppna|ladda ner|sök|ansök|ta en)\b/i;
+  const artifact = /(?:\b[\w.-]+\.(?:txt|md|json|js|mjs|jsx|ts|tsx|html|css|py|csv|png|jpg|pdf|docx|sol)\b|\bfile\b|\bfil(?:en|er)?\b|\bwebb(?:sida|plats)\b|\bwebsite\b|\bbrowser\b|\bwebbläsare\b|\bscreenshot\b|\bskärmbild\b|\bjobs?\b|\bjobb\b|\bagent\b)/i;
+  // Real-world prompts also start with "Actually use fs.write to create..." or
+  // "Gör ...", not always a bare English verb. Avoid silently disabling the
+  // output contract on those explicit execution requests.
+  const directToolRequest = /^(?:(?:please|actually|faktiskt|snälla)\s+)*(?:use|använd)\s+(?:fs\.write|fs\.patch|browser\.open|browser\.shot)\s+(?:to\s+)?(?:create|write|open|save|skapa|skriv|öppna|spara)\b/i;
+  // Multi-verb action prompts often start with a READ and then request a
+  // destructive/overwrite mutation. "Read foo.txt, then modify it" used to
+  // bypass final content proof because the first word was not "edit".
+  const readThenWrite = /^(?:read|läs|open|öppna)\b[\s\S]{0,260}\b(?:then|and then|sedan|och sedan)\s+(?:modify|edit|update|rewrite|overwrite|change|ändra|redigera|skriv|spara)\b/i;
+  return (request.test(t) || directToolRequest.test(t) || readThenWrite.test(t) || /^g[oö]r\b/i.test(t)) && artifact.test(t);
+}
+
+/**
+ * Deterministic recovery for a small-model browser.open tool call that omitted
+ * the URL even though the user's CURRENT actionable instruction contains ONE
+ * explicit HTTP(S) destination. Never guess, browse inferred sites, or take a
+ * URL from untrusted page output/chat history.
+ *
+ * The normal tool permission/approval checks still apply after recovery.
+ */
+export function recoverExplicitBrowserUrl(goal, tool, args) {
+  if (tool !== 'browser.open' || !args || typeof args !== 'object' ||
+      (typeof args.url === 'string' && args.url.trim())) return null;
+  const prompt = String(goal || '').trim();
+  if (/^(?:how|why|what|hur|varför|vad|förklara|explain)\b/i.test(prompt) ||
+      !/\b(?:browser\.open|open\s+(?:(?:the|a)\s+)?(?:browser|page|webpage|url)|visit\s+(?:(?:the|a)\s+)?(?:page|website|url)|öppna|besök)\b/i.test(prompt)) return null;
+  const refs = new Set();
+  for (const hit of prompt.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
+    const candidate = hit[0].replace(/[)\]}.;,!?]+$/, '');
+    try {
+      const url = new URL(candidate);
+      if (!['http:', 'https:'].includes(url.protocol) || !url.hostname ||
+          url.username || url.password) continue;
+      refs.add(url.href);
+    } catch { /* never invent or auto-correct a malformed URL */ }
+  }
+  if (refs.size !== 1) return null;
+  const url = [...refs][0];
+  return { args: { ...args, url }, url, recovered: true,
+    reason: 'restored the one explicit HTTP(S) URL in the active user goal' };
 }
 
 /** Del 6A: ONE guard, two call sites. Monthly ledger check before a call costs
@@ -45,10 +122,34 @@ export function budgetGate({ cfg, usageCtx = null, route, tally = null }) {
   return null;
 }
 
-export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = () => {}, signal, maxSteps, usage, ctx, allowTools = true, label = 'agent', providerErrorCap = 4, providerRetries = null }) {
+export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = () => {}, signal, maxSteps, usage, ctx, allowTools = true, label = 'agent', providerErrorCap = 4, providerRetries = null, modelCall = null }) {
   const agent = cfg.get('agent') || {};
   const limit = Number(maxSteps) || agent.maxSteps || 40;
+  // Immutable goal anchor survives compact() and route escalation. Long turns
+  // used to lose the actual user's objective after thousands of tool tokens.
+  const initialGoal = [...messages].reverse().find((m) => m.role === 'user')?.content;
+  if (typeof initialGoal === 'string' && initialGoal.trim() &&
+      !messages.some((m) => m.role === 'system' && String(m.content).startsWith('ACTIVE GOAL:'))) {
+    const anchor = { role: 'system', content: 'ACTIVE GOAL: ' + initialGoal.trim().slice(0, 2200) +
+      '\\nUse only tools and verified side effects as evidence. Do not claim completion after errors or a step limit.' };
+    const firstSystem = messages.findIndex((m) => m.role === 'system');
+    messages.splice(firstSystem < 0 ? 0 : firstSystem + 1, 0, anchor);
+  }
   const toolLog = [];
+  // Only the REAL top-level agent enforces effectful-action proof. Mission
+  // workers/subagents have their own contract verifiers and step budgets;
+  // injecting extra retries there breaks DAG retry caps and parallelism.
+  const requestedRealRoute = (() => { try { return routeFor(cfg, job, { session: ctx?.session }); } catch { return null; } })();
+  const realProvider = requestedRealRoute && requestedRealRoute.kind !== 'mock' &&
+    !String(requestedRealRoute.ref || '').startsWith('demo/');
+  const followupSource = verifyFollowupJobSelection(initialGoal, messages, cfg.get('workspace'));
+  const sourceLineage = verifyJobIdLineage(initialGoal, cfg.get('workspace'));
+  const actionGoal = label === 'main' && !ctx?.readOnly && allowTools &&
+    (ctx?.enforceActionEvidence === true || (!modelCall && realProvider)) &&
+    (requiresRealAction(initialGoal) || Boolean(followupSource) || Boolean(sourceLineage) ||
+      isLocalTokenDemoGoal(initialGoal));
+  let actionRetries = 0;
+  let artifactRetries = 0;
   let steps = 0;
   let errors = 0;
   let escalated = false;
@@ -57,8 +158,27 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
   let brief = messages.find((m) => m.role === 'system' && String(m.content).startsWith('ARBETSMINNESBRIEF'))?.content || '';
   const tally = { input: 0, output: 0, costUsd: 0 };
   const turnRoutes = new Map(); // stepJob -> route pinned for this turn
+  /* W13 never-stuck machinery: per-tool hard timeout + repeat-loop detector + turn time-box. */
+  const wdToolTimeoutMs = Math.max(1000, Number(cfg.get('agent.toolTimeoutSec') || 300) * 1000);
+  const wdTurnMaxMs = Math.max(250, Number(cfg.get('agent.maxTurnSec') || 1800) * 1000);
+  const wdDetect = new RepeatDetector(Math.max(2, Number(cfg.get('agent.maxRepeatCalls') || 3)));
+  const wdClock = new TurnClock();
+  let wdRepeatBlocked = false;
+  // Only previously FAILED actual writes in this same agent turn are eligible
+  // for unchanged-invalid-code protection. No global cache and no user data.
+  const invalidJsWrites = new Map();
 
   while (steps < limit) {
+    const wdBox = wdClock.over(wdTurnMaxMs);
+    if (wdBox.over) {
+      bus.warn('loop.turn_timeout', { label, steps, elapsedMs: wdBox.elapsedMs, wdTurnMaxMs });
+      onEvent({ type: 'turn_timeout', label, steps, elapsedMs: wdBox.elapsedMs, limitMs: wdTurnMaxMs });
+      return { text: answer || '(time-boxed turn)', steps, toolLog, usage: tally, escalated, stopReason: 'turn_timeout', blocked: 'the turn exceeded its time box — split the work or raise agent.maxTurnSec deliberately' };
+    }
+    if (wdRepeatBlocked) {
+      bus.warn('loop.repeat_block', { label, steps });
+      return { text: answer || '(blocked: repeated identical tool call — see toolLog)', steps, toolLog, usage: tally, escalated, stopReason: 'repeat_block', blocked: 'no progress: identical tool call repeated >= maxRepeatCalls' };
+    }
     if (signal?.aborted) {
       bus.warn('loop.aborted', { label, steps });
       return { text: answer || '(avbruten)', steps, toolLog, usage: tally, aborted: true, escalated };
@@ -89,24 +209,40 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
 
     let res;
     try {
-      res = await complete({
-        route,
-        job: `${label}:${stepJob}`,
-        messages,
-        tools: sentTools,
-        toolChoice: allowTools ? undefined : 'none',
-        stream: true,
-        maxTokens: agent.maxTokens || 6000,
-        temperature: agent.temperature ?? 0.2,
-        retries: providerRetries ?? agent.retries ?? 2,
-        signal,
-        onEvent: (ev) => {
-          if (ev.type === 'delta') onEvent({ type: 'delta', label, text: ev.text });
-          else if (ev.type === 'thinking') onEvent({ type: 'thinking', label, text: ev.text });
-          else onEvent({ type: 'tool', label, name: ev.name });
-        },
-      });
+      const timeLeftMs = Math.max(1, wdTurnMaxMs - wdClock.over(wdTurnMaxMs).elapsedMs);
+      res = await withAbortDeadline(async (stepSignal) => {
+        if (typeof modelCall === 'function') {
+          /* Injectable seam also obeys timebox, even if a fake model ignores the signal. */
+          return modelCall({ messages, stepJob, step: steps, tools: sentTools, signal: stepSignal });
+        }
+        return complete({
+          route,
+          job: `${label}:${stepJob}`,
+          messages,
+          tools: sentTools,
+          toolChoice: allowTools ? undefined : 'none',
+          stream: true,
+          maxTokens: agent.maxTokens || 6000,
+          temperature: agent.temperature ?? 0.2,
+          retries: providerRetries ?? agent.retries ?? 2,
+          signal: stepSignal,
+          onEvent: (ev) => {
+            if (ev.type === 'delta') onEvent({ type: 'delta', label, text: ev.text });
+            else if (ev.type === 'thinking') onEvent({ type: 'thinking', label, text: ev.text });
+            else onEvent({ type: 'tool', label, name: ev.name });
+          },
+        });
+      }, { ms: timeLeftMs, parentSignal: signal, label: 'MAJIN model turn' });
     } catch (err) {
+      if (err?.code === 'turn_timeout') {
+        onEvent({ type: 'turn_timeout', label, steps, elapsedMs: wdClock.over(wdTurnMaxMs).elapsedMs, limitMs: wdTurnMaxMs });
+        return { text: answer || 'MAJIN stopped this model call at the configured turn deadline; the task is not complete.',
+          steps, toolLog, usage: tally, escalated, incomplete: true,
+          stopReason: 'turn_timeout', blocked: 'model call did not finish before agent.maxTurnSec' };
+      }
+      if (err?.code === 'aborted' || signal?.aborted) {
+        return { text: answer || '(avbruten)', steps, toolLog, usage: tally, aborted: true, escalated };
+      }
       errors += 1;
       const info = err.majin || explainError(err, route);
       bus.error('loop.provider', { label, step: steps, error: err.message, code: err.code, kind: info.kind });
@@ -142,6 +278,51 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
 
     const calls = res.toolCalls || [];
     if (!calls.length) {
+      // A model cannot mark an executable goal completed without making a
+      // SINGLE real tool call. One bounded retry can recover a missed tool.
+      if (actionGoal && !toolLog.some((t) => t.ok)) {
+        if (actionRetries < 1 && steps < limit) {
+          actionRetries += 1;
+          onEvent({ type: 'missing_action_retry', label, step: steps, reason: 'no successful tool call for executable goal' });
+          messages.push({ role: 'assistant', content: res.text || '(no action taken)' });
+          messages.push({ role: 'user', content: 'Your previous response executed ZERO tools. The user asked for an actual action, not a description. Call the real tool now (or tools.search to discover it); never claim done unless a verifiable tool has run.' });
+          continue;
+        }
+        return { text: 'I could not verify the requested action: no tool completed successfully. The task is NOT complete. ' +
+          (res.text ? ('Model reply: ' + res.text.slice(0, 250)) : ''),
+          steps, toolLog, usage: tally, escalated, incomplete: true, stopReason: 'missing_tool_evidence' };
+      }
+      if (actionGoal) {
+        const artifact = inspectRequestedArtifact(initialGoal, cfg.get('workspace'));
+        const followup = verifyFollowupJobSelection(initialGoal, messages, cfg.get('workspace'));
+        const lineage = verifyJobIdLineage(initialGoal, cfg.get('workspace'));
+        const contract = lineage && !lineage.ok ? {
+          ok: false, target: lineage.output, workspaceRelative: lineage.output,
+          source: lineage.source,
+          missing: [...(lineage.missing || []), ...(lineage.missingTitles || [])],
+          reason: lineage.reason,
+        } : followup && !followup.ok
+          ? (artifact ? { ...artifact, ok: false, missing: [...(artifact.missing || []), ...followup.missing],
+              reason: followup.reason, source: followup.source } : followup)
+          : (lineage || artifact || followup);
+        if (contract && !contract.ok) {
+          onEvent({ type: 'artifact_verify', label, step: steps, ok: false, target: contract.target, missing: contract.missing });
+          if (artifactRetries < 2 && steps < limit) {
+            artifactRetries += 1;
+            messages.push({ role: 'assistant', content: res.text || '(model claimed completion)' });
+            messages.push({ role: 'user', content: 'INDEPENDENT ARTIFACT CHECK FAILED: ' + contract.reason +
+              '. The user requested the file named ' + contract.workspaceRelative +
+              ' INSIDE the current MAJIN workspace. Use fs.write with that exact workspace-relative filename, and include every missing required element: ' +
+              String((contract.missing || []).join('; ')).slice(0, 600) +
+              (contract.source ? '. Read the original source file ' + contract.source + ' and copy EVERY exact job ID and title from source, never placeholders such as Job1 or job2.' : '') +
+              '. Verify the file with fs.read before saying completed. Do not just repeat the claim.' });
+            continue;
+          }
+          return { text: 'Task NOT complete: ' + contract.reason + '. Expected file: ' + contract.workspaceRelative,
+            steps, toolLog, usage: tally, escalated, incomplete: true, stopReason: 'artifact_contract_failed', contract };
+        }
+        if (contract) onEvent({ type: 'artifact_verify', label, step: steps, ok: true, target: contract.target });
+      }
       if (res.text) messages.push({ role: 'assistant', content: res.text });
       return { text: res.text || answer, steps, toolLog, usage: tally, escalated, stopReason: res.stopReason };
     }
@@ -149,16 +330,90 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     messages.push({ role: 'assistant', content: res.text || '', tool_calls: calls.map((c) => ({ id: c.id, name: c.name, args: safeParse(c.argsJson) })) });
 
     const runOne = async (c) => {
-      const args = safeParse(c.argsJson);
+      const suppliedArgs = safeParse(c.argsJson);
+      const urlRecovery = label === 'main' && !ctx?.readOnly
+        ? recoverExplicitBrowserUrl(initialGoal, c.name, suppliedArgs) : null;
+      const candidateArgs = urlRecovery?.args || suppliedArgs;
+      if (urlRecovery) {
+        // The URL is from the user's explicit request; do not echo any secret
+        // query or path components into the event stream.
+        onEvent({ type: 'browser_url_recovered', label, step: steps,
+          hostname: new URL(urlRecovery.url).hostname });
+      }
+      const pin = actionGoal && !ctx?.readOnly
+        ? (pinSingleFileWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs) ||
+           pinJobShortlistWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs)) : null;
+      // Do not combine two independent guesses (wrong target path AND wrong
+      // content). A wrong-path write may still be pinned by the existing
+      // contract, but must be repaired by the model if its bytes are wrong.
+      const contentPin = actionGoal && !ctx?.readOnly && !pin?.corrected
+        ? pinSingleExactTextWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs) : null;
+      // Only one narrowly recognized repair per write: changing both path
+      // AND source structure at once risks overwriting an unrelated artifact.
+      const cliRepair = actionGoal && !ctx?.readOnly && !pin?.corrected && !contentPin
+        ? (repairSimpleCommanderCliWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs) ||
+           repairSimpleMixedEsmCliWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs) ||
+           repairSimpleCommonJsEchoCliWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs) ||
+           repairLiteralEscapedNewlineEchoCliWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs)) : null;
+      const args = cliRepair?.args || contentPin?.args || pin?.args || candidateArgs;
+      if (cliRepair?.corrected) {
+        onEvent({ type: 'artifact_cli_dependency_repaired', label, step: steps, target: cliRepair.target });
+      }
+      if (pin?.corrected) {
+        onEvent({ type: 'artifact_path_corrected', label, step: steps, tool: c.name,
+          originalPath: pin.originalPath, requestedPath: pin.requestedPath });
+      }
+      if (contentPin?.corrected) {
+        onEvent({ type: 'artifact_content_corrected', label, step: steps, target: contentPin.target });
+      }
       onEvent({ type: 'tool_begin', label, step: steps, callId: c.id, name: c.name });
-      const out = await registry.exec(c.name, args, { ...ctx, session: ctx?.session ?? 'desktop', step: steps, readOnly: Boolean(ctx?.readOnly) });
+      const key = typeof args.path === 'string' ? args.path : null;
+      const previous = key ? invalidJsWrites.get(key) : null;
+      const unchangedBad = actionGoal && !ctx?.readOnly && previous
+        ? unchangedInvalidJavaScriptWrite(initialGoal, cfg.get('workspace'), c.name, args, previous.content)
+        : null;
+      const rep = unchangedBad ? null : wdDetect.hit(c.name, args);
+      let out;
+      if (unchangedBad) {
+        previous.repeats += 1;
+        // One corrective tool response can still help a small model.
+        // If it ignores that explicit error, stop truthfully rather than
+        // writing the same invalid artifact forever.
+        if (previous.repeats >= 2) wdRepeatBlocked = true;
+        out = { ok: false, ms: 0, error: {
+          code: 'unchanged_invalid_artifact',
+          message: unchangedBad.reason +
+            (wdRepeatBlocked ? ' Repeated without changes; turn blocked.' : ''),
+        } };
+        onEvent({ type: 'artifact_unchanged_invalid', label, step: steps,
+          target: unchangedBad.target, repeats: previous.repeats });
+      } else if (rep.repeat) {
+        out = { ok: false, ms: 0, error: { code: 'repeat_loop', message: `same call "${c.name}" repeated ${rep.count}x with identical args — stopped, never silently retried (change approach)`, key: rep.key } };
+        wdRepeatBlocked = true;
+      } else {
+        try {
+          out = await withTimeout(registry.exec(c.name, args, { ...ctx, session: ctx?.session ?? 'desktop', step: steps, readOnly: Boolean(ctx?.readOnly) }), { ms: wdToolTimeoutMs, label: `tool ${c.name}` });
+        } catch (werr) {
+          out = { ok: false, ms: wdToolTimeoutMs, error: { code: werr.code === 'tool_timeout' ? 'tool_timeout' : werr.code || 'tool_error', message: werr.message } };
+        }
+      }
       // args följer med i loggen: utan dem är en spårning värdelös som träningsdata
       // (och trådhistoriken kan inte återskapa *varför* verktyget kördes).
       return { id: c.id, name: c.name, args, out };
     };
-    const results = allowTools && cfg.get('agent.parallel') !== false ? await Promise.all(calls.map(runOne)) : await sequential(calls, runOne);
+    const results = await runToolCalls(calls, runOne, {
+      parallel: allowTools && cfg.get('agent.parallel') !== false
+    });
 
     for (const r of results) {
+      if (r.name === 'tools.search' && r.out?.ok !== false && Array.isArray(ctx?.toolSubsetNames)) {
+        const previous = ctx.toolSubsetNames;
+        const expanded = expandDiscoveredTools(previous, r.out, registry, { readOnly: ctx?.readOnly });
+        if (expanded.length > previous.length) {
+          ctx.toolSubsetNames = expanded;
+          onEvent({ type: 'tool_subset_expand', added: expanded.filter((name) => !previous.includes(name)), count: expanded.length });
+        }
+      }
       const ok = r.out.ok !== false;
       if (!ok) errors += 1;
       else errors = Math.max(0, errors - 1);
@@ -167,13 +422,90 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       /* Del 10C: outside data is scanned for override attempts. Clean
          results stay byte-identical (zero token tax); a hit is annotated in
          the very message the model reads AND surfaced as an event. */
-      const guarded = guardToolContent(r.name, ok ? String(r.out.result ?? '(ok)') : `ERROR [${r.out.error?.code || 'error'}]: ${r.out.error?.message}\n${r.out.error?.hint ? `HINT: ${r.out.error.hint}` : ''}`);
+      const writeProof = actionGoal ? (
+        feedbackForJavaScriptWrite(initialGoal, cfg.get('workspace'), r.name, r.args, ok) ||
+        feedbackForExactContentWrite(initialGoal, cfg.get('workspace'), r.name, r.args, ok)
+      ) : null;
+      if (writeProof) {
+        onEvent({ type: 'artifact_write_verify', label, step: steps, target: writeProof.target, ok: writeProof.ok });
+        if (r.name === 'fs.write' && typeof r.args?.path === 'string' &&
+            typeof r.args.content === 'string') {
+          if (writeProof.ok) invalidJsWrites.delete(r.args.path);
+          else if (/\.(?:js|mjs)$/i.test(r.args.path))
+            invalidJsWrites.set(r.args.path, { content: r.args.content, repeats: 0 });
+        }
+      }
+      const responseText = ok ? String(r.out.result ?? '(ok)') +
+        (writeProof ? '\n' + writeProof.text : '')
+        : `ERROR [${r.out.error?.code || 'error'}]: ${r.out.error?.message}\n${r.out.error?.hint ? `HINT: ${r.out.error.hint}` : ''}`;
+      const guarded = guardToolContent(r.name, responseText);
       if (guarded.hits.length) onEvent({ type: 'injection_warning', label, step: steps, tool: r.name, patterns: guarded.hits.map((h) => h.id) });
       messages.push({
         role: 'tool',
         tool_call_id: r.id,
         content: guarded.text,
       });
+    }
+
+    // For an explicitly requested single-file Node CLI, a successful real
+    // write plus static contract and TWO dynamic Docker probes prove completion.
+    // Never run generated code on the host. With no cached Docker image (common
+    // on Windows), verification returns null and the regular loop continues.
+    // This eliminates pointless rewrite/re-read loops after a working CLI,
+    // without weakening the repeat guard or grading a file merely by existence.
+    if (actionGoal && !ctx?.readOnly &&
+        results.some(r => r.name === 'fs.write' && r.out?.ok !== false)) {
+      const cliProof = verifyIsolatedNodeCli(initialGoal, cfg.get('workspace'));
+      if (cliProof?.ok) {
+        onEvent({ type: 'artifact_cli_verified', label, step: steps, target: cliProof.target,
+          isolation: 'docker-no-network-read-only', probes: 2 });
+        return { text: cliProof.text, steps, toolLog, usage: tally, escalated,
+          stopReason: cliProof.stopReason };
+      }
+    }
+
+    // Explicit isolated TWO-FILE testnet demo: real permitted writes already
+    // persisted both source+notes. Stop before a potentially stalled provider
+    // call, but never claim a real token was deployed or audited.
+    if (actionGoal && !ctx?.readOnly) {
+      const demo = verifyLocalTokenDemoFiles(initialGoal, cfg.get('workspace'), results);
+      if (demo?.ok) {
+        onEvent({ type: 'local_token_demo_verified', label, step: steps, files: demo.files });
+        return { text: demo.text, steps, toolLog, usage: tally, escalated,
+          stopReason: 'verified_local_token_demo_files' };
+      }
+    }
+
+    // Atomic "create x.txt containing EXACTLY TOKEN": independent byte proof
+    // after the real, permitted write is enough. Avoid asking a weak model to
+    // re-write identical bytes until the repeat-loop detector blocks progress.
+    // Not applicable to edit/delete/multiple-artifact or free-form tasks.
+    if (actionGoal && !ctx?.readOnly && results.length === 1 && results[0].name === 'fs.write') {
+      const write = results[0];
+      const proof = verifySingleExactTextCreation(initialGoal, cfg.get('workspace'),
+        write.name, write.args, write.out?.ok !== false);
+      if (proof?.ok) {
+        onEvent({ type: 'artifact_exact_text_verified', label, step: steps, target: proof.target });
+        return { text: proof.text, steps, toolLog, usage: tally, escalated,
+          stopReason: 'verified_exact_text_write' };
+      }
+    }
+
+    // A single approved fs.delete with independent absent-file proof is
+    // ALREADY the requested outcome. Do not ask the model again, risking an
+    // empty Ollama response, time-box or a second destructive attempt.
+    if (actionGoal && results.length === 1 && results[0].name === 'fs.delete') {
+      const candidate = results[0];
+      const deletion = verifySingleFileDeletion(
+        initialGoal, cfg.get('workspace'), candidate.name, candidate.args,
+        candidate.out?.ok !== false
+      );
+      if (deletion?.ok) {
+        onEvent({ type: 'artifact_delete_verified', label, step: steps,
+          target: deletion.target, ok: true });
+        return { text: deletion.text, steps, toolLog, usage: tally, escalated,
+          stopReason: 'verified_single_delete' };
+      }
     }
 
     const escalateAfter = Number(cfg.get('routing.escalateAfterErrors')) || 2;
@@ -201,6 +533,29 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     escalated,
     incomplete: true,
   };
+}
+
+/**
+ * Browser sessions, interactive shells and dependent filesystem operations are
+ * ordered state machines. An LLM may emit browser.open, browser.read, shot in
+ * ONE response; Promise.all made read/shot race with open, producing fake
+ * "no browser is open" failures. Independent tools remain concurrent.
+ */
+export function requiresOrderedToolCalls(calls) {
+  if (!Array.isArray(calls) || calls.length <= 1) return false;
+  const names = calls.map(c => String(c?.name || ''));
+  if (names.some(n => n.startsWith('browser.') || n.startsWith('exec.'))) return true;
+  if (names.includes('fs.delete')) return true;
+  if (names.includes('fs.write') && names.includes('fs.read')) return true;
+  return false;
+}
+
+export async function runToolCalls(calls, runOne, { parallel = true } = {}) {
+  if (!Array.isArray(calls)) throw new TypeError('calls must be an array');
+  if (typeof runOne !== 'function') throw new TypeError('runOne must be a function');
+  return parallel && !requiresOrderedToolCalls(calls)
+    ? Promise.all(calls.map(runOne))
+    : sequential(calls, runOne);
 }
 
 async function sequential(calls, runOne) {

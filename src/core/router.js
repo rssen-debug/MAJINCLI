@@ -5,6 +5,7 @@
  * as tiebreak only when the two are close. Never blocks a turn.
  */
 import path from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
 import { bus } from './log.js';
 import { complete } from './provider/chat.js';
 
@@ -129,6 +130,16 @@ export async function llmClassify(text, { cfg, candidates = ['code', 're', 'task
   }
 }
 
+// OpenCode Go requires a stable, conversation-specific header. Never send raw
+// conversation IDs or expose them to the gateway. Auxiliary routes within the
+// same conversation reuse this ID for consistent routing and prompt caching.
+const noSessionId = 'ses_' + randomUUID().replaceAll('-', '');
+function attachGoSession(route, session) {
+  if (route?.providerName !== 'opencode') return route;
+  const id = session ? 'ses_' + createHash('sha256').update(String(session)).digest('hex').slice(0, 32) : noSessionId;
+  return { ...route, extraHeaders: { ...(route.extraHeaders || {}), 'x-opencode-session': id, 'user-agent': 'MAJIN-coding-agent/1.0' } };
+}
+
 /** route ref for a job, with key availability respected. */
 export function routeFor(cfg, job, opts = {}) {
   /* P0 (UI-agent handover 2026-10-19): a chat may PIN its own route so a
@@ -142,20 +153,25 @@ export function routeFor(cfg, job, opts = {}) {
     const bref = bound[job] || bound.tasks;
     if (bref) {
       const r = safeResolve(cfg, job, bref);
-      if (r) return r;
+      if (r) return attachGoSession(r, session);
       bus.warn('route.session-bad', { session, job, ref: bref, why: 'unresolvable — falling back to the global table' });
     }
   }
   const routes = cfg.get('models.routes') || {};
   const ref = routes[job] || routes.tasks || routes.chat;
   const r = safeResolve(cfg, job, ref);
-  if (r && r.apiKey) return r;
+  if (r && r.apiKey) return attachGoSession(r, session);
+  // Explicit OpenCode Go / Zen selection must NEVER silently reroute to
+  // DeepSeek or the demo model because its key is missing. Preserve the
+  // intended provider so the user sees the correct authentication error.
+  // This also covers global (non-session) selections from the model picker.
+  if (r && (r.providerName === 'opencode' || r.providerName === 'opencodezen')) return attachGoSession(r, session);
   const fb = fallback(cfg, job);
   if (fb) {
     bus.warn('route.fallback', { job, wanted: ref, used: fb.ref, why: 'no key for the requested provider' });
-    return fb;
+    return attachGoSession(fb, session);
   }
-  return r;
+  return attachGoSession(r, session);
 }
 
 function safeResolve(cfg, job, ref) {

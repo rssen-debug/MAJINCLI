@@ -415,3 +415,12 @@ matrix rows were unaffected; only these prose entries went missing briefly.)*
    permanently in docs/BENCHMARKS.md; the live test gate (MAJIN_LIVE=1) keeps
    CI deterministic while the reproduction command stays one line long.
 
+
+## 2026-10-20 — Första runtime-beroendet: chokidar@4 (MIT, node>=14, pure JS)
+
+Kontext: W5 event-flows needs kross-plattformskorrekt file-watching (fs.watch halter pa Windows: blodiga — batch, mtime-negativ timing, unicode sokvagar). Aggressivanalys: bygga sdett sjalv = bot-termouse wheel-reinvention motit partners user-order (re-use rather than rebuild). chokidar@4 har: erprovad Windows/UNC-stod, awaitWriteFinish (for Write-completed-event som matchar fil-dialoger), MIT, ingen native-build.
+
+- [x] Sakerhet: pure JS, kaj som ingenva native-compilation pa installerare.
+- [x] Bundle: majin.cjs esbuild badden proofed (chokidar i bundle ✓ 1053 KB byggs rent fran kallan, ingen behova extra paket).
+- [x] Licens: MIT — licens-frihet kompatibilitet Bekraftad.
+- [x] Alternative avvisade: fs.watch (felbuster), watch@legacy, gaze (maintenance).

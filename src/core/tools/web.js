@@ -9,6 +9,8 @@ import { def } from './registry.js';
 import { resolveIn } from './files.js';
 import { bus } from '../log.js';
 import { openFor, closeFor, isOpen, journal } from '../browser.js';
+import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, VERSION as GROUND_V } from '../browser-ground.js';
+import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
 
 const followedSafe = (fol) => (fol && fol.followed === true ? true : false);
 
@@ -109,7 +111,7 @@ export const webTools = [
     group: 'web',
     risk: 'read',
     desc: 'Search the web. No API key needed (duckduckgo/bing fallback). Returns title, url and snippet.',
-    params: { query: 'string: what to look for', count: 'number: results to return (default 8)', engine: 'string: auto | duckduckgo | bing | searxng | brave [auto|duckduckgo|bing|searxng|brave]' },
+    params: { query: 'string: what to look for', count: 'number: results to return (default: 8)', engine: 'string: auto | duckduckgo | bing | searxng | brave. optional (default: auto) [auto|duckduckgo|bing|searxng|brave]' },
     examples: ['web.search({query:"pe file format data directories"})'],
     async run({ query, count = 8, engine = 'auto' }, ctx) {
       const key = `search:${engine}:${query}`;
@@ -145,11 +147,11 @@ export const webTools = [
     desc: 'Fetch a URL as clean text (or json/raw). Use for docs, APIs and pages. Follows redirects, size-capped.',
     params: {
       url: 'string: http(s) address',
-      extract: 'string: text | html | json | raw [text|html|json|raw]',
-      maxChars: 'number: max characters in the response (default 24000)',
-      method: 'string: GET | POST | PUT | DELETE [GET|POST|PUT|DELETE]',
-      headers: 'object: extra headers',
-      body: 'string: request body for POST/PUT',
+      extract: 'string: text | html | json | raw. optional (default: text) [text|html|json|raw]',
+      maxChars: 'number: max characters in the response (default: 24000)',
+      method: 'string: GET | POST | PUT | DELETE. optional (default: GET) [GET|POST|PUT|DELETE]',
+      headers: 'object: extra headers (optional)',
+      body: 'string: request body for POST/PUT (optional)',
     },
     examples: ['web.fetch({url:"https://api.deepseek.com/models"})'],
         required: ['url'],
@@ -188,7 +190,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     group: 'web',
     risk: 'write',
     desc: 'Download a file into the workspace (samples, archives, documents). Executables require an approval — an agent should not run something by accident.',
-    params: { url: 'string: address', path: 'string: target file (default under uploads/)', sha256: 'string: expected hash, verified when given' },
+    params: { url: 'string: address', path: 'string: target file (default: under uploads/)', sha256: 'string: expected hash, verified when given (optional)' },
     async run({ url, path: p, sha256 }, ctx) {
       if (!/^https?:\/\//i.test(url)) throw new Error('url must be http(s)');
       const name = p || path.join('downloads', path.basename(new URL(url).pathname) || 'file.bin');
@@ -221,7 +223,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     group: 'web',
     risk: 'exec',
     desc: 'Open a URL in a browser window MAJIN drives (Chrome or Edge on this machine). One window per task; capped fleet. Use browser.read/click/fill/shot next.',
-    params: { url: 'string: http(s) address', headless: 'boolean: no visible window (default true)' },
+    params: { url: 'string: http(s) address', headless: 'boolean: no visible window (default: true)' },
     examples: ['browser.open({url:"https://example.com"})'],
     async run({ url, headless = true }, ctx) {
       const session = ctx.session || 'default';
@@ -229,9 +231,10 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       try {
         const b = await openFor({ session, url: String(url), headless, cfgGet: (k) => ctx.cfg.get(k) });
         const meta = await b.eval('(() => ({ url: location.href, title: document.title }))()');
+        const controls = await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
         return {
           ok: true,
-          result: `opened — page says: "${meta.title}" at ${meta.url}`,
+          result: `opened — page says: "${meta.title}" at ${meta.url}` + formatControlHints(controls),
           meta: { url: meta.url, title: meta.title },
           summary: `opened ${meta.title || meta.url}`,
         };
@@ -261,7 +264,10 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const r = await b.eval(expr);
       journal.guard(session, `browser.read:${selector}`);
       if (!r.ok && selector) return { ok: false, error: { code: 'no_such_element', message: `no element matches ${selector}` } };
-      return { ok: true, result: r.text || '(page is empty)', meta: { url: r.url, title: r.title, chars: (r.text || '').length }, summary: `${(r.text || '').length} chars from ${r.title || r.url}` };
+      const controls = selector ? [] : await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
+      return { ok: true, result: (r.text || '(page is empty)') + formatControlHints(controls),
+        meta: { url: r.url, title: r.title, chars: (r.text || '').length, groundedControls: Array.isArray(controls) ? controls.length : 0 },
+        summary: `${(r.text || '').length} chars from ${r.title || r.url}` };
     },
   }),
 
@@ -270,32 +276,63 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     group: 'web',
     risk: 'exec',
     desc: 'Click an element by CSS selector and report what actually happened (element text + URL after the click). Screenshots via browser.shot when you need to look.',
-    params: { selector: 'string: CSS selector of the thing to click' },
-    examples: ['browser.click({selector:"button[type=submit]"})'],
-    async run({ selector }, ctx) {
+    params: {
+      selector: 'string: CSS selector of the thing to click (optional — or give ref)',
+      ref: 'string: numbered element reference from browser.elements, e.g. "e3" (optional — or give selector)',
+    },
+    examples: ['browser.click({selector:"button[type=submit]"})', 'browser.click({ref:"e3"})'],
+    async run({ selector, ref }, ctx) {
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
-      journal.guard(session, `browser.click:${selector}`);
+      if (!selector && !ref) return { ok: false, error: { code: 'bad_input', message: 'give selector or ref (from browser.elements)' } };
+      journal.guard(session, `browser.click:${selector || ref}`);
       const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
-      const sel = JSON.stringify(String(selector));
+      let sel;
+      if (ref) {
+        const cached = recallRef(session, ref);
+        if (!cached) return { ok: false, error: { code: 'ref_unknown', message: `no element known for ref "${ref}" in this session — run browser.elements first to ground the page` } };
+        sel = JSON.stringify(`[data-majin-ref=${JSON.stringify(String(ref))}]`);
+      } else {
+        sel = JSON.stringify(String(selector));
+      }
       const hit = await b.eval(`(() => {
         const el = document.querySelector(${sel});
         if (!el) return { found: false };
         el.scrollIntoView({ block: 'center' });
-        const t = String(el.innerText || el.value || el.getAttribute('aria-label') || el.tagName).slice(0, 80);
+        // NEVER echo input.value: it can contain passwords, tokens, email or
+        // uploaded data. Use rendered label/accessible name for click evidence.
+        const t = String(el.innerText || el.labels?.[0]?.textContent ||
+          el.getAttribute('aria-label') || el.tagName).replace(/\s+/g, ' ').trim().slice(0, 80);
+        const type = String(el.getAttribute('type') || '').toLowerCase();
+        const isCheckbox = el.tagName === 'INPUT' && type === 'checkbox';
+        const before = isCheckbox ? Boolean(el.checked) : null;
         el.click();
-        return { found: true, tag: String(el.tagName).toLowerCase(), text: t };
+        return { found: true, tag: String(el.tagName).toLowerCase(), text: t,
+          checked: isCheckbox ? Boolean(el.checked) : null,
+          changed: isCheckbox ? Boolean(el.checked) !== before : null };
       })()`);
-      if (!hit.found) return { ok: false, error: { code: 'no_such_element', message: `no clickable element matches ${selector}`, hint: 'browser.read the page and pick a selector from the real text' } };
+      if (!hit.found) {
+        const code = ref ? 'ref_stale' : 'no_such_element';
+        // Small free LLMs tend to retry guessed selectors such as
+        // #apply-button despite a real button named #submit on the page.
+        // Include CURRENT DOM-derived selectors in the failed action itself.
+        const controls = await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
+        const candidates = formatControlHints(controls);
+        return { ok: false, error: { code,
+          message: ref ? `element ${ref} vanished from the DOM (page re-rendered?) — do not guess a replacement` : `no clickable element matches ${selector}`,
+          hint: 'Use an EXACT selector from the visible controls below (or browser.elements for live numbered refs). Avoid browser.open again unless navigation is required.' + candidates,
+        } };
+      }
       /* a click may spawn a NEW tab (target=_blank, window.open): follow it
          so the agent lands where the page actually went */
       const fol = await (b.followNewTarget ? b.followNewTarget({ windowMs: 1500 }) : { followed: false });
       const after = fol.followed ? { url: fol.url, title: fol.title } : await b.eval('(() => ({ url: location.href, title: document.title }))()');
       return {
         ok: true,
-        result: `clicked ${hit.tag} "${hit.text}"${fol.followed ? ' (new tab followed)' : ''} — page now: "${after.title}" at ${after.url}`,
-        meta: { tag: hit.tag, text: hit.text, urlAfter: after.url, title: after.title, openedNewTab: fol.followed },
-        summary: `clicked "${hit.text}"`,
+        result: `clicked ${hit.tag} "${hit.text}"${typeof hit.checked === 'boolean' ? (hit.checked ? ' — checkbox CHECKED' : ' — checkbox UNCHECKED') : ''}${fol.followed ? ' (new tab followed)' : ''} — page now: "${after.title}" at ${after.url}`,
+        meta: { tag: hit.tag, text: hit.text, checked: hit.checked, checkboxChanged: hit.changed,
+          urlAfter: after.url, title: after.title, openedNewTab: fol.followed },
+        summary: `clicked "${hit.text}"${typeof hit.checked === 'boolean' ? (hit.checked ? ' (checked)' : ' (unchecked)') : ''}`,
       };
     },
   }),
@@ -316,17 +353,33 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const r = await b.eval(`(() => {
         const el = document.querySelector(${sel});
         if (!el) return { found: false };
+        // A checkbox/radio/button is an ACTION, not a value to overwrite.
+        // Assigning input.value can corrupt a form submission without checking.
+        const inputType = String(el.getAttribute('type') || '').toLowerCase();
+        if (['checkbox', 'radio', 'submit', 'button', 'reset'].includes(inputType)) {
+          return { found: true, wrongType: inputType };
+        }
         el.focus();
         const proto = el.tagName === 'SELECT' ? window.HTMLSelectElement.prototype : (el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype);
         const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
         if (setter) setter.call(el, ${val}); else el.value = ${val};
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
-        return { found: true, stuck: el.value === ${val}, value: el.value.slice(0, 40) };
+        // Report only equality with the requested input, never the raw value.
+        return { found: true, stuck: el.value === ${val} };
       })()`);
-      if (!r.found) return { ok: false, error: { code: 'no_such_element', message: `no field matches ${selector}`, hint: 'browser.read the page first' } };
+      if (!r.found) {
+        const controls = await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
+        return { ok: false, error: { code: 'no_such_element', message: `no field matches ${selector}`,
+          hint: 'Use EXACT selectors from these live controls. Checkboxes and buttons need browser.click, not browser.fill. Do not reopen the page to guess fields.' + formatControlHints(controls),
+        } };
+      }
+      if (r.wrongType) {
+        return { ok: false, error: { code: 'wrong_control_type', message: `browser.fill cannot set a ${r.wrongType}`,
+          hint: 'Use browser.click with this exact selector and confirm the checked result. The control was not modified.' } };
+      }
       if (!r.stuck) return { ok: false, error: { code: 'value_rejected', message: 'the page reverted the value immediately — the field may have javascript validation', hint: 'type slower substrings or confirm the field with browser.shot' } };
-      return { ok: true, result: `filled — page kept value "${r.value}"`, meta: { value: r.value }, summary: `filled ${selector}` };
+      return { ok: true, result: 'filled — browser confirmed input retained (value hidden)', meta: { retained: true, valueHidden: true }, summary: 'field filled and verified' };
     },
   }),
 
@@ -382,6 +435,47 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
   }),
 
   def({
+    name: 'browser.elements',
+    group: 'web',
+    risk: 'read',
+    desc: 'W6 Set-of-Marks grounding: number every interactive element on the open page, draw the matching pink marks on screen, and return the references so browser.click({ref:"eN"}) hits deterministically instead of guessing. Refs are of-the-moment evidence; a re-rendered DOM makes them stale (browser.click then says ref_stale honestly).',
+    params: { refresh: 'string: "true" = re-walk the DOM now and replace the cached refs (optional, default: false)' },
+    examples: ['browser.elements({})'],
+    async run({ refresh }, ctx) {
+      const session = ctx.session || 'default';
+      journal.guard(session, 'browser.elements');
+      if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
+      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
+      if (String(refresh) === 'true') clearRefs(session);
+      const payload = await b.eval(GROUND_JS).catch((e) => ({ error: String(e?.message || e) }));
+      if (payload?.error) return { ok: false, error: { code: 'ground_eval', message: 'page walk failed: ' + payload.error } };
+      rememberRefs(session, payload.elements || []);
+      return {
+        ok: true,
+        result: renderElementsText(payload),
+        meta: { version: GROUND_V, count: payload.count, url: payload.url, title: payload.title },
+        summary: `${payload.count} elements grounded on this page`,
+      };
+    },
+  }),
+def({
+    name: 'browser.clear_marks',
+    group: 'web',
+    risk: 'write',
+    desc: 'Remove all pink Set-of-Marks overlay numbers and cached refs — honest teardown marker (refs become ref_unknown after this).',
+    params: { noParams: 'string: none (optional)' },
+    examples: ['browser.clear_marks({})'],
+    async run(_, ctx) {
+      const session = ctx.session || 'default';
+      journal.guard(session, 'browser.clear_marks');
+      if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser open' } };
+      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
+      await b.eval(CLEAR_JS).catch(() => undefined);
+      clearRefs(session);
+      return { ok: true, result: 'marks + cached refs cleared on the page', summary: 'marks cleared' };
+    },
+  }),
+def({
     name: 'browser.close',
     group: 'web',
     risk: 'write',

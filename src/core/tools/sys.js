@@ -16,7 +16,11 @@ export const sysTools = [
     params: {},
     async run(_a, ctx) {
       const cpus = os.cpus();
-      const free = (await import('node:os')).freemem();
+      /* R5 (s25 real-world audit 2026-10-20): dynamic import() here crashed the
+         PACKAGED exe (vm context without importModuleDynamically →
+         ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING). os is already a static import —
+         never re-import it dynamically. */
+      const free = os.freemem();
       return {
         result: JSON.stringify(
           {
@@ -47,7 +51,7 @@ export const sysTools = [
     group: 'system',
     risk: 'read',
     desc: 'Process list (name, pid, memory, cpu). Filterable with a regex.',
-    params: { filter: 'string: regex against process names (optional)', sortBy: 'string: mem | cpu | name [mem|cpu|name]', limit: 'number: max lines (default 40)' },
+    params: { filter: 'string: regex against process names (optional)', sortBy: 'string: mem | cpu | name. optional (default: mem) [mem|cpu|name]', limit: 'number: max lines (default: 40)' },
     async run({ filter, sortBy = 'mem', limit = 40 }) {
       const cmd = IS_WIN
         ? `Get-Process | Select-Object Name,Id,Responding,@{n='WS_MB';e={[math]::Round($_.WorkingSet64/1MB,1)}},@{n='CPU_s';e={if($_.CPU){[math]::Round($_.CPU,1)}else{0}}} | ConvertTo-Csv -NoTypeInformation`
@@ -79,7 +83,7 @@ export const sysTools = [
     group: 'system',
     risk: 'read',
     desc: 'Listening ports + pid. Use it to see what already runs (e.g. the MAJIN ui, frida, ollama).',
-    params: { port: 'number: filter on one port' },
+    params: { port: 'number: filter on one port (optional)' },
     async run({ port }) {
       const cmd = IS_WIN
         ? "Get-NetTCPConnection -State Listen | Select-Object LocalAddress,LocalPort,OwningProcess | Sort-Object LocalPort | ConvertTo-Csv -NoTypeInformation"
@@ -124,7 +128,7 @@ export const sysTools = [
     group: 'system',
     risk: 'read',
     desc: 'Quick top-N by CPU/memory with the command line — used to spot suspicious processes.',
-    params: { n: 'number: how many (default 8)' },
+    params: { n: 'number: how many (default 8) (optional)' },
     async run({ n = 8 }) {
       const cmd = IS_WIN
         ? `Get-CimInstance Win32_Process | Sort-Object WorkingSetSize -Descending | Select-Object -First ${Number(n) || 8} ProcessId,Name,CommandLine,WorkingSetSize | ConvertTo-Csv -NoTypeInformation`
@@ -146,7 +150,7 @@ export const sysTools = [
     group: 'system',
     risk: 'read',
     desc: 'Services/processes that start automatically — persistence check (RE and plain debugging).',
-    params: { filter: 'string: regex' },
+    params: { filter: 'string: regex (optional)' },
     async run({ filter }) {
       const cmd = IS_WIN
         ? "Get-CimInstance Win32_StartupCommand | Select-Object Name,Command,Location,User | ConvertTo-Csv -NoTypeInformation; '---RUN---'; Get-ItemProperty 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -ErrorAction SilentlyContinue | ConvertTo-Csv -NoTypeInformation"

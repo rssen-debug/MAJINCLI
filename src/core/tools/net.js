@@ -68,7 +68,7 @@ export const netTools = [
     group: 'network',
     risk: 'read',
     desc: 'Look up a domain (A/AAAA/TXT/CNAME/NS/MX). Used to follow IOCs found in a binary.',
-    params: { host: 'string: domain or IP', type: 'string: A | AAAA | TXT | CNAME | NS | MX | ANY [A|AAAA|TXT|CNAME|NS|MX|ANY]' },
+    params: { host: 'string: domain or IP', type: 'string: A | AAAA | TXT | CNAME | NS | MX | ANY [A|AAAA|TXT|CNAME|NS|MX|ANY] (optional)' },
     async run({ host, type = 'A' }) {
       const dns = await import('node:dns').then((m) => m.default);
       const fn = { A: 'resolve4', AAAA: 'resolve6', TXT: 'resolveTxt', CNAME: 'resolveCname', NS: 'resolveNs', MX: 'resolveMx', ANY: 'resolveAny' }[type] || 'resolve4';
@@ -87,7 +87,7 @@ export const netTools = [
     group: 'network',
     risk: 'read',
     desc: 'Probe a TCP port (open/closed) with a timeout. Only use it against things you own.',
-    params: { host: 'string: host', port: 'n: number: port', timeoutMs: 'number: milliseconds (default 1500)' },
+    params: { host: 'string: host', port: 'n: number: port', timeoutMs: 'number: milliseconds (default: 1500)' },
     async run({ host, port, timeoutMs = 1500 }) {
       const net = await import('node:net').then((m) => m.default);
       return new Promise((resolve) => {
@@ -113,7 +113,7 @@ export const netTools = [
     group: 'network',
     risk: 'read',
     desc: 'Raw HTTP request (method, headers, body). Use for your own APIs and for testing a local web service.',
-    params: { url: 'string: address', method: 'string: GET | POST | PUT | DELETE | HEAD | OPTIONS [GET|POST|PUT|DELETE|HEAD|OPTIONS]', headers: 'object: extra headers', body: 'string: body', maxChars: 'number: response cap (default 8000)' },
+    params: { url: 'string: address', method: 'string: GET | POST | PUT | DELETE | HEAD | OPTIONS. optional (default: GET) [GET|POST|PUT|DELETE|HEAD|OPTIONS]', headers: 'object: extra headers (optional)', body: 'string: body (optional)', maxChars: 'number: response cap (default: 8000)' },
         required: ['url'],
 async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
       const t0 = Date.now();
@@ -132,7 +132,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
     group: 'network',
     risk: 'exec',
     desc: 'Start a temporary HTTP server that shares a folder (to pull samples into the sandbox). Returns the URL + job id.',
-    params: { dir: 'string: folder to share', port: 'number: port (default 0 = any free port)' },
+    params: { dir: 'string: folder to share (optional)', port: 'number: port (default 0 = any free port) (optional)' },
     async run({ dir = '.', port = 0 }, ctx) {
       const http = await import('node:http');
       const fsp = await import('node:fs/promises');
@@ -191,7 +191,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
     group: 'screen',
     risk: 'read',
     desc: 'Take a screenshot (PNG). On Windows via .NET; needs no extra software.',
-    params: { path: 'string: target file (default screenshot-<time>.png)', region: 'string: x,y,width,height', then: 'string: describe | save [describe|save]' },
+    params: { path: 'string: target file (default: screenshot-<time>.png)', region: 'string: x,y,width,height (optional)', then: 'string: describe | save [describe|save] (optional)' },
     async run({ path: p, region, then = 'save' }, ctx) {
       const out = resolveIn(ctx, p || `skarmbild-${Date.now()}.png`);
       const fsSync = await import('node:fs');
@@ -255,7 +255,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
     group: 'system',
     risk: 'read',
     desc: 'Push a Windows toast notification or let MAJIN speak out loud. Use it when a long job finishes.',
-    params: { title: 'string: title', body: 'string: body text', speak: 'boolean: speak it too' },
+    params: { title: 'string: title', body: 'string: body text (optional)', speak: 'boolean: speak it too (optional)' },
     async run({ title = 'MAJIN', body, speak = false }) {
       const t = String(title).replace(/'/g, "''").slice(0, 80);
       const b = String(body ?? '').replace(/'/g, "''").slice(0, 300);
