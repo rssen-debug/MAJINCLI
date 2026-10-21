@@ -131,3 +131,31 @@ export function pinSingleFileWrite(input, workspace, tool, args) {
     reason: 'single explicitly named output artifact is pinned to user-specified workspace basename',
   };
 }
+
+
+/**
+ * Immediate WRITE-TIME proof for an explicit single JavaScript artifact.
+ * When small LLMs write malformed CLI agents, waiting until their final answer
+ * burns the turn budget on read/re-read loops. Give concrete, bounded evidence
+ * IN the fs.write tool response so the model can repair in its NEXT action.
+ *
+ * This function never executes generated code: inspectRequestedArtifact uses
+ * Node --check with a strict bound. Successful filesystem writes remain
+ * successful tool calls, but they are NOT artifact completion proof.
+ */
+export function feedbackForJavaScriptWrite(goal, workspace, tool, args, writtenOk) {
+  if (tool !== 'fs.write' || !writtenOk || !args || typeof args.path !== 'string') return null;
+  const target = explicitTarget(goal, workspace);
+  if (!target || !/\.(?:js|mjs)$/i.test(target.name)) return null;
+  const actual = path.resolve(target.workspace, args.path);
+  if (actual !== target.path) return null;
+  const check = inspectRequestedArtifact(goal, workspace);
+  if (!check) return null;
+  return check.ok
+    ? { ok: true, target: target.name,
+        text: 'ARTIFACT WRITE CHECK: requested JavaScript file passed syntax and static contract checks (not yet execution-tested).' }
+    : { ok: false, target: target.name,
+        text: 'ARTIFACT WRITE CHECK FAILED for ' + target.name + ': ' +
+          check.missing.join('; ').slice(0, 650) +
+          '. Repair THIS SAME file using fs.write; do not claim done yet.' };
+}

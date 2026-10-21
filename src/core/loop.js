@@ -11,7 +11,7 @@ import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
-import { inspectRequestedArtifact, pinSingleFileWrite } from './goal-artifact.js';
+import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite } from './goal-artifact.js';
 import { verifyJobIdLineage, pinJobShortlistWrite } from './mission-data-evidence.js';
 import { verifyFollowupJobSelection } from './mission-data-evidence.js';
 
@@ -338,7 +338,14 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       /* Del 10C: outside data is scanned for override attempts. Clean
          results stay byte-identical (zero token tax); a hit is annotated in
          the very message the model reads AND surfaced as an event. */
-      const guarded = guardToolContent(r.name, ok ? String(r.out.result ?? '(ok)') : `ERROR [${r.out.error?.code || 'error'}]: ${r.out.error?.message}\n${r.out.error?.hint ? `HINT: ${r.out.error.hint}` : ''}`);
+      const writeProof = actionGoal ? feedbackForJavaScriptWrite(initialGoal, cfg.get('workspace'), r.name, r.args, ok) : null;
+      if (writeProof) {
+        onEvent({ type: 'artifact_write_verify', label, step: steps, target: writeProof.target, ok: writeProof.ok });
+      }
+      const responseText = ok ? String(r.out.result ?? '(ok)') +
+        (writeProof ? '\n' + writeProof.text : '')
+        : `ERROR [${r.out.error?.code || 'error'}]: ${r.out.error?.message}\n${r.out.error?.hint ? `HINT: ${r.out.error.hint}` : ''}`;
+      const guarded = guardToolContent(r.name, responseText);
       if (guarded.hits.length) onEvent({ type: 'injection_warning', label, step: steps, tool: r.name, patterns: guarded.hits.map((h) => h.id) });
       messages.push({
         role: 'tool',
