@@ -267,6 +267,25 @@ body[data-voice-mode="speaking"] #mic{box-shadow:0 0 0 4px rgba(124,224,182,.17)
 @keyframes majin-orb{50%{transform:scale(1.06);box-shadow:0 0 0 8px rgba(255,143,208,.06)}}
 @media(prefers-reduced-motion:reduce){body[data-voice-mode] #mic{animation:none}}
 #b-narrator{border:1px solid var(--line);background:var(--bg2);color:var(--dim);border-radius:9px;padding:6px 10px;font-size:11px}#b-narrator.on{border-color:var(--cy);color:var(--cy);background:var(--cysoft)}
+/* Voice stage — compact, clear states, always attached to the Talk control. */
+#voice-stage[hidden]{display:none!important}
+#voice-stage{position:fixed;z-index:70;left:50%;bottom:88px;transform:translateX(-50%);width:min(520px,calc(100vw - 28px));min-height:86px;display:flex;align-items:center;gap:18px;padding:18px 22px;border:1px solid rgba(255,143,208,.42);border-radius:24px;background:linear-gradient(135deg,rgba(38,22,39,.97),rgba(15,13,23,.98));box-shadow:0 22px 70px rgba(0,0,0,.58),0 0 36px rgba(255,110,190,.12);backdrop-filter:blur(22px)}
+.voice-orb{width:58px;height:58px;display:flex;align-items:center;justify-content:center;gap:4px;flex-shrink:0;border-radius:50%;background:radial-gradient(circle at 35% 30%,#703f75,#241328 70%);border:1px solid rgba(255,160,220,.3)}
+.voice-orb span{width:4px;height:13px;border-radius:8px;background:#ff91c6;animation:majin-sound 1.05s ease-in-out infinite alternate}
+.voice-orb span:nth-child(2){animation-delay:.14s}.voice-orb span:nth-child(3){animation-delay:.32s}.voice-orb span:nth-child(4){animation-delay:.19s}.voice-orb span:nth-child(5){animation-delay:.4s}
+body[data-voice-mode="speaking"] .voice-orb span{background:#a6efc9;animation-duration:.65s}
+body[data-voice-mode="thinking"] .voice-orb span{animation-duration:1.8s;opacity:.7}
+body[data-voice-mode="paused"] .voice-orb span{animation-play-state:paused;height:5px}
+.voice-stage-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.voice-stage-copy strong{font-size:15px;font-weight:650;color:var(--ink)}
+.voice-stage-copy small{font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#voice-stage-stop{flex-shrink:0;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.06);padding:10px 13px;color:var(--ink);cursor:pointer}
+@keyframes majin-sound{from{height:5px}to{height:31px}}
+@media(prefers-reduced-motion:reduce){.voice-orb span{animation:none}}
+#work-progress[hidden]{display:none!important}
+#work-progress{display:flex;align-items:center;gap:9px;padding:7px 13px;margin:0 0 7px;border:1px solid rgba(255,143,208,.14);background:rgba(255,143,208,.04);border-radius:11px;color:var(--dim);font-size:11px}
+#work-progress .pulse{width:7px;height:7px;border-radius:50%;background:var(--cy);box-shadow:0 0 0 3px rgba(255,143,208,.1);animation:majin-orb 1.4s infinite}
+#work-progress-label{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
@@ -317,12 +336,18 @@ body[data-voice-mode="speaking"] #mic{box-shadow:0 0 0 4px rgba(124,224,182,.17)
   </div>
   <div id="main"><section id="imagine" hidden></section><div id="scroller"></div><footer>
   <div id="run-state" data-state="idle" hidden><span class="living-orb" aria-hidden="true"><i></i><i></i><i></i></span><span id="run-label">Ready</span><button id="run-details">View activity <span aria-hidden="true">↗</span></button></div>
+  <div id="work-progress" role="status" aria-live="polite" hidden><span class="pulse" aria-hidden="true"></span><span id="work-progress-label">Starting…</span><span id="work-progress-timer">0s</span></div>
   <div id="composer">
     <textarea id="input" placeholder="Message MAJIN" rows="1" aria-label="Message MAJIN"></textarea>
     <button id="send" type="button" aria-label="Send message" title="Send message" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path class="send-arrow" d="M12 19V5m-6 6 6-6 6 6"/><rect class="send-stop" x="6" y="6" width="12" height="12" rx="2"/></svg></button>
   </div>
   <div class="crow">
     <button id="mic" title="Start hands-free voice conversation" aria-pressed="false">Talk</button><span id="mic-state"></span>
+    <div id="voice-stage" role="region" aria-label="MAJIN voice conversation" hidden>
+      <div class="voice-orb" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="voice-stage-copy"><strong id="voice-stage-label">Ready to talk</strong><small id="voice-caption">Speak naturally. I’ll answer when you finish.</small></div>
+      <button id="voice-stage-stop" type="button" aria-label="End voice conversation">End call</button>
+    </div>
     <span class="grow" id="status" role="status" aria-live="polite">Ready</span>
     <span id="drop" class="drop">drop a file → RE analysis</span>
   </div>
