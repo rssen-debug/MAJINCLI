@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, VERSION } from '../src/core/browser-ground.js';
+import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, findGroundedControls, VERSION } from '../src/core/browser-ground.js';
 
 test('W6 GROUND_JS is a self-contained page script (marks + refs + DOM anchoring)', () => {
   assert.match(GROUND_JS, /data-majin-ref/);
