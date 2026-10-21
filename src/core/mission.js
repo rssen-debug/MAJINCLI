@@ -431,8 +431,26 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
        previous objective is carried, never re-run — zero repeated side effects. */
     const c0 = carried(node.id);
     if (c0 && c0.verified) {
-      emit({ type: 'mission_carried', id: node.id });
-      return { text: c0.value?.text || c0.text || '', usage: null, carried: true, verifiedSummary: c0.verifiedSummary || null };
+      // A checkpoint is a claim, not evidence that still exists. Validate the
+      // CURRENT graph's contracts before skipping an already-executed worker.
+      // In particular, the file may have disappeared or been edited after a crash.
+      const contracts = buildContracts(node.input);
+      const text = c0.value?.text || c0.text || '';
+      const results = await Promise.all(contracts.map((c) => verifyContract(c, { cfg, partText: text })));
+      const oldDigest = String(c0.verifiedSummary || '').match(/\bsha:([a-f0-9]{8,64})\b/i)?.[1] || null;
+      const newDigest = results.find((r) => r.type === 'file_exists')?.evidence?.match(/\bsha:([a-f0-9]{8,64})\b/i)?.[1] || null;
+      const contentChanged = Boolean(oldDigest && newDigest && oldDigest !== newDigest);
+      if (contracts.length && results.every((r) => r.ok) && !contentChanged) {
+        const verified = contractVerdict(contracts, results);
+        emit({ type: 'mission_carried', id: node.id, reverified: true });
+        return { text, usage: null, carried: true, verifiedSummary: verified.summary };
+      }
+      // Nodes without independent contracts are not safely resumable: their
+      // prior success might have been only prose, an external call, or a side effect.
+      const reason = !contracts.length ? 'no independently verifiable contracts'
+        : contentChanged ? 'artifact content hash changed'
+        : contractFailureNames(results).join('; ');
+      emit({ type: 'mission_carry_invalid', id: node.id, reason });
     }
     const v = await worker(node, ctx);
     chargeBudget(v);
@@ -478,16 +496,11 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
       if (p.value && p.value.carried) { p.carried = true; p.verified = { ok: true, summary: 'carried from previous objective' }; verifiedCount += 1; }
       continue;
     }
-    /* carried verified part: trust the recorded verdict, name the provenance */
-    if (p.value && p.value.carried && p.value.verifiedSummary) {
-      p.carried = true;
-      p.verified = { ok: true, summary: p.value.verifiedSummary };
-      verifiedCount += 1;
-      continue;
-    }
+    /* Carried parts must pass live contract verification too. A recorded
+       summary is provenance only, never a substitute for checking the disk. */
     let results = await Promise.all(contracts.map((c) => verifyContractLegacy(c, { cfg, part: p })));
     let vr = contractVerdict(contracts, results);
-    if (vr.ok) { p.verified = vr; verifiedCount += 1; if (checkpoints) { journalEvent(cpDir, { event: 'verified', node: n.id }); writeState(cpDir, buildStateFromParts({ id: mId, goal: input, nodeIds: compiled.nodes.map((x) => x.id), parts, compiled, verifiedCount, limitsHit })); } continue; }
+    if (vr.ok) { p.verified = vr; if (p.value?.carried) p.carried = true; verifiedCount += 1; if (checkpoints) { journalEvent(cpDir, { event: 'verified', node: n.id }); writeState(cpDir, buildStateFromParts({ id: mId, goal: input, nodeIds: compiled.nodes.map((x) => x.id), parts, compiled, verifiedCount, limitsHit })); } continue; }
     emit({ type: 'mission_verify_fail', id: n.id, reason: contractFailureNames(results).join('; ') });
     /* Del 4C: bounded repair. Each round is charged to the same budget, the
        loop honors the mission timeout, and after repairRounds the part fails
