@@ -4,7 +4,17 @@
  * Deliberately NO desktop actuation or model request. Exit status reports
  * wiring only; an installed, interactive GUI still requires A1/A2+ checks.
  */
-import { computerTools } from '../../src/core/tools/computer.js';
+// Dynamic import: a static import would escape this probe's error handling
+// entirely when the tool module itself fails to load (as it did on a real
+// Windows Actions runner, surfaced only as a bare stack + node banner).
+let computerTools;
+try {
+  ({ computerTools } = await import('../../src/core/tools/computer.js'));
+} catch (err) {
+  console.error('BLOCKED: tool module itself failed to load');
+  console.error(err && err.stack ? err.stack : String(err));
+  process.exit(1);
+}
 
 const tool = computerTools.find(t => t.name === 'computer.use');
 if (!tool || typeof tool.run !== 'function') {

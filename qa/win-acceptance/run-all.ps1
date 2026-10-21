@@ -91,7 +91,10 @@ Add-Step 'A5' 'computer.use dry-plan wiring smoke (NO live desktop action)' {
   $output = & node $probe 2>&1
   $code = $LASTEXITCODE
   $ok = $code -eq 0
-  $tail = (@($output) | Select-Object -Last 3) -join ' | '
+  # 2>&1 turns stderr lines into ErrorRecord objects whose default rendering
+  # shows the .NET type name (RemoteException) instead of the actual message.
+  # .ToString() each entry so node stack lines survive into the evidence tail.
+  $tail = (@($output) | ForEach-Object { $_.ToString() } | Select-Object -Last 6) -join ' | '
   $results.Add([ordered]@{ step = 'A5'; title = 'computer.use dry-plan wiring smoke (NO live desktop action)'; status = ($(if ($ok) { 'PASS' } else { 'FAIL' })); evidence = "exit=$code dry-plan ONLY; no real mouse or GUI assertion; $tail"; artifact = $null })
 }
 
