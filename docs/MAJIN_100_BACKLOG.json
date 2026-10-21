@@ -9,7 +9,8 @@
       "wave": "metaspår",
       "desc": "Hämta slutresultaten från den interaktiva/GLM-lane som det (Astra) driver; härma 33/12-tabellen in i status-matrisen.",
       "blocker": "väntar på run 39474266667",
-      "evidence": "qa-artifacts/ + docs/evidence/"
+      "evidence": "qa-artifacts/ + docs/evidence/",
+      "status": "MATT-ANSVAR (2026-10-21): providern svarar exakt HTTP 401 \"令牌已过期或验证不正确\" (expired/invalid token) pa tre plausa basar via probe — aerligyinte-en-natverks-fraga; scripts/verify-glm-bridge.mjs ar permanent closeout-probe (klassificere OPEN/AUTH-BLOCKED/UNREACHABLE, never-masked); 4/4 classifier-tester; ateroln ej brun-lane far checkas innan nyckel roterats — markedil OPEN-UPNARLEDADKT, INTE FARKEDT FOR ADAMG"
     },
     {
       "rank": 2,
@@ -297,6 +298,13 @@
       "done": "jobs STORE named-lock implementerad (mkdir-atomiskt, stale-steal med audit-trail, maxWait timeout, auto-release vid throw) = den enda kvarvarande open-debt-markern fran self-audit nu STANGD: self-audit verdict FOINAN clean 0/0/0/0 for HELA repot (forsta gangen); 3/3 lock-tester (20 concurrent upserts survive, stale-steal, exception-release); full svit 740/724/0/16",
       "percent": 90,
       "next": "win-runner acceptance eller live-channel-send med godkanda creds"
+    },
+    {
+      "round": 27,
+      "date": "2026-10-21",
+      "done": "GLM acceptane-closeout MITAT: 401 AUTH (inte natverk) verifierat via 3 candidatebasade + permanent probe med klassifierare (exit-koder korrekta); 4/4 tester; denna gate oforandrad krav: rotera nyckeln forst",
+      "percent": 91,
+      "next": "win-runner acceptance pa er maskin + roterad GLM-nyckel"
     }
   ]
 }
