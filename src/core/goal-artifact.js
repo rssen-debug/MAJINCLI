@@ -130,7 +130,13 @@ export function inspectRequestedArtifact(input, workspace) {
         // Do not reject an independently runnable valid legacy path merely
         // because the exported function is not used by that CLI branch.
         const printsRuntimeArgument = /\b(?:console\.(?:log|info)|process\.stdout\.write)\s*\(\s*(?:process\.argv\s*\[\s*2\s*\]|args\s*\[\s*0\s*\]|argv\s*\[\s*0\s*\])/i.test(noDefinition);
-        if (!respondsToArgument && !printsRuntimeArgument) {
+        // A correct multi-word CLI may forward ALL live argv values through
+        // process.argv.slice(2).join(' '), rather than reading only argv[2].
+        // This is a runtime-derived argument, not a hardcoded QA_PING token.
+        const forwardsJoinedRuntime = /\brespond\s*\(\s*process\.argv\.slice\s*\(\s*2\s*\)\.join\s*\(/i.test(noDefinition) ||
+          (/\brespond\s*\(\s*args\.join\s*\(/i.test(noDefinition) &&
+           /\b(?:const|let)\s+args\s*=\s*process\.argv\.slice\s*\(\s*2\s*\)/i.test(data));
+        if (!respondsToArgument && !printsRuntimeArgument && !forwardsJoinedRuntime) {
           missing.push('CLI does not call respond() with the runtime argument; hardcoded QA_PING / DIFFERENT branches do not handle arbitrary inputs. Use console.log(respond(process.argv[2] || "")) so ANY new input is reflected in output');
         }
       }
