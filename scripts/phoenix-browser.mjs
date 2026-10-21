@@ -345,7 +345,7 @@ try {
   assert.equal(await page.locator('#c-update').isVisible(), true);
   await page.locator('#c-update').click();
   await page.evaluate(upd => paintHeader({ ...S.st, update: upd }), updateFixture);
-  assert.match(await page.locator('#c-update').textContent(), /install.*99.0.0/);
+  assert.match(await page.locator('#c-update').textContent(), /install.*99.0.0/i);
   let installRequests = 0;
   await page.route('**/api/update?**', async r => { installRequests++; await new Promise(resolve => setTimeout(resolve, 250)); await r.fulfill({ json: { ok: false, error: 'fixture installer declined' } }); });
   await page.locator('#c-update').click();
