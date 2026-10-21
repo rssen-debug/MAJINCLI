@@ -1,13 +1,13 @@
 {
-  "stamp": "2026-10-21T00:17:00.920Z",
+  "stamp": "2026-10-21T00:21:58.227Z",
   "scale": 0.4,
   "runs": 3,
   "scenarios": {
     "A": {
       "name": "wide fan-out (8 indep, cap 2)",
       "cpMedianMs": 140,
-      "legacyMedianMs": 139,
-      "ratio": 1.007
+      "legacyMedianMs": 140,
+      "ratio": 1.003
     },
     "B": {
       "name": "deep chain + 6 shorts (cap 2)",
@@ -30,7 +30,7 @@
     },
     "D": {
       "name": "ranker on 2 000 nodes + 200-node pass-through grid",
-      "rank2000Ms": 3.54,
+      "rank2000Ms": 4.99,
       "ranksComputed": 2000,
       "grid200WallMs": 14
     }

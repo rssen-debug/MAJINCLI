@@ -60,7 +60,7 @@
       "id": "W8-channels-discord-slack-matrix-email",
       "wave": "W8",
       "desc": "Lägg till saknade adappters (reuse-existing), verify send/receive per kanal före production-ready-märkning.",
-      "status": "VERIFIED-CORE (delstang): wire-level loopback-harndja = sendWebhook over REAL socket signatur-validerad byte-for-byte pa receiversidan (HMAC-ehholigon trading), strict-parning (URL-normalize-laundring blockerad: 127.1/2130706433/@/mapped-IPv6 alla refused), streamed non-2xx fel, utuppeReg nya test/channels-wire.test.js 4/4; live-send mot discord/slack/matrix skanna pa credentials (home NOT TESTED-aven ferdigtstalld, creds saknas i sandbox)"
+      "status": "VERIFIED (transport-kontrakt helt laskt offline; live-API acceptans kvar creds/godkannande): channels-contract.test.js 5/5 — slack endpoint/bearer/3000-cap/unicode survival/zero-secret-reflection; discord v10-path/Bot-header/1900-cap/429-text-honently; matrix PUT/homeserver-pathform/urlenc-body/m.text-shape; email Mailgun-form/Basic-auth/from-KRAV-refusal (e-mail testet fangade: from saknas = refused MNED zero requests skickade); webhook HMAC byte-exakt + round-trip unicode"
     },
     {
       "rank": 9,
@@ -276,6 +276,13 @@
       "done": "W6 continue-absorption: TradingAgents-bron fran FORBIDDEN-checked till POSITIVE-proof (test/trading-e2e.test.js 5/5): REAL spawned stub-envelope happy/all-evil-counterfactual paths (raw-text-refusal kravde separate mkRaw-fixture: forsta stubben citerade felaktigt JSON-string = en falsk-justering testet fangade); REUSE.md-row upgradead; full svit groned",
       "percent": 85,
       "next": "win-runner acceptance-korning, eller nasta REUSE-instans (Microsoft Playwright-MCP?) i sandlade-verifierbar form"
+    },
+    {
+      "round": 24,
+      "date": "2026-10-21",
+      "done": "W8 transport-kontrakt klar graders offline: alla avsindare Karlegrade med faktiska request-captures pa fetch-seamen; e-post-test lekte fren: MIN egen antagna form (JSON) var fel mot sendEmail:s verkliga Mailgun-form-urlencoded + from-required-kontrakt — testet korrigerade mot moten, production untouched; full svit groned",
+      "percent": 87,
+      "next": "LIVE slack/discord-send med anvandardgivna creds (godkannande-krav), eller win-runner acceptance"
     }
   ]
 }

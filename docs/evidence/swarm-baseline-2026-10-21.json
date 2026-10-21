@@ -7,8 +7,8 @@
     "jitterMs": 15,
     "seed": 62
   },
-  "speedupMedian": 6.69,
-  "serialMedianMs": 475,
+  "speedupMedian": 6.68,
+  "serialMedianMs": 474,
   "parallelMedianMs": 71,
   "theoreticalMax": 6.25,
   "overlap": {
@@ -26,7 +26,7 @@
   "parity": true,
   "failures": 0,
   "chain": {
-    "wallMs": 194,
+    "wallMs": 193,
     "criticalPathMs": 192,
     "depsRespected": true,
     "okCount": 3
@@ -35,7 +35,7 @@
     {
       "kind": "serial",
       "rep": 0,
-      "wallMs": 475,
+      "wallMs": 474,
       "okCount": 8,
       "failCount": 0,
       "overlap": 0,
@@ -45,7 +45,7 @@
     {
       "kind": "parallel",
       "rep": 0,
-      "wallMs": 70,
+      "wallMs": 71,
       "okCount": 8,
       "failCount": 0,
       "overlap": 28,
@@ -65,7 +65,7 @@
     {
       "kind": "parallel",
       "rep": 1,
-      "wallMs": 75,
+      "wallMs": 74,
       "okCount": 8,
       "failCount": 0,
       "overlap": 28,
@@ -75,7 +75,7 @@
     {
       "kind": "serial",
       "rep": 2,
-      "wallMs": 452,
+      "wallMs": 453,
       "okCount": 8,
       "failCount": 0,
       "overlap": 0,
