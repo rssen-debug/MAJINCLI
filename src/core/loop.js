@@ -1,4 +1,5 @@
 import { withTimeout, withAbortDeadline, RepeatDetector, TurnClock } from './watchdog.js';
+import { RecoveryBudget } from './strategy-recovery.js';
 /**
  * MAJIN — verktygsslingan.
  * Samma loop för huvudagenten och subagenter. Stegvisa beslut:
@@ -163,7 +164,9 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
   const wdTurnMaxMs = Math.max(250, Number(cfg.get('agent.maxTurnSec') || 1800) * 1000);
   const wdDetect = new RepeatDetector(Math.max(2, Number(cfg.get('agent.maxRepeatCalls') || 3)));
   const wdClock = new TurnClock();
+  const wdRecovery = new RecoveryBudget(1);
   let wdRepeatBlocked = false;
+  let wdRecoveryHint = null;
   // Only previously FAILED actual writes in this same agent turn are eligible
   // for unchanged-invalid-code protection. No global cache and no user data.
   const invalidJsWrites = new Map();
@@ -390,8 +393,25 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         onEvent({ type: 'artifact_unchanged_invalid', label, step: steps,
           target: unchangedBad.target, repeats: previous.repeats });
       } else if (rep.repeat) {
-        out = { ok: false, ms: 0, error: { code: 'repeat_loop', message: `same call "${c.name}" repeated ${rep.count}x with identical args — stopped, never silently retried (change approach)`, key: rep.key } };
-        wdRepeatBlocked = true;
+        // Never execute an identical third call. An already-FAILED action may
+        // receive ONE strategy revision; successful duplicates or a second
+        // repeat still hard-stop. Permissions and tool budgets are unchanged.
+        const recovery = wdRecovery.assess({ tool: c.name, key: rep.key, toolLog });
+        if (recovery.recover) {
+          wdRecoveryHint = recovery.hint;
+          onEvent({ type: 'agent_recovery', label, step: steps, tool: c.name,
+            phase: 'strategy_change', attempt: recovery.attempt, remaining: recovery.remaining });
+          out = { ok: false, ms: 0, error: {
+            code: 'strategy_change_required', message: recovery.hint, key: rep.key,
+          } };
+        } else {
+          out = { ok: false, ms: 0, error: {
+            code: 'repeat_loop',
+            message: `same call "${c.name}" repeated ${rep.count}x with identical args — stopped, never silently retried (change approach)`,
+            key: rep.key,
+          } };
+          wdRepeatBlocked = true;
+        }
       } else {
         try {
           out = await withTimeout(registry.exec(c.name, args, { ...ctx, session: ctx?.session ?? 'desktop', step: steps, readOnly: Boolean(ctx?.readOnly) }), { ms: wdToolTimeoutMs, label: `tool ${c.name}` });
@@ -401,7 +421,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       }
       // args följer med i loggen: utan dem är en spårning värdelös som träningsdata
       // (och trådhistoriken kan inte återskapa *varför* verktyget kördes).
-      return { id: c.id, name: c.name, args, out };
+      return { id: c.id, name: c.name, args, out, repeatKey: rep?.key || null };
     };
     const results = await runToolCalls(calls, runOne, {
       parallel: allowTools && cfg.get('agent.parallel') !== false
@@ -419,7 +439,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       const ok = r.out.ok !== false;
       if (!ok) errors += 1;
       else errors = Math.max(0, errors - 1);
-      toolLog.push({ tool: r.name, args: r.args ?? {}, ok, error: ok ? null : r.out.error?.message || 'unknown error', ms: r.out.ms, summary: summarize(r.out) });
+      toolLog.push({ tool: r.name, args: r.args ?? {}, ok, repeatKey: r.repeatKey, error: ok ? null : r.out.error?.message || 'unknown error', ms: r.out.ms, summary: summarize(r.out) });
       onEvent({ type: 'tool_result', label, step: steps, callId: r.id, tool: r.name, ok, ms: r.out.ms ?? null, error: r.out.error || null, spilled: r.out.spilled || null, summary: summarize(r.out), meta: r.out.meta || null });
       /* Del 10C: outside data is scanned for override attempts. Clean
          results stay byte-identical (zero token tax); a hit is annotated in
@@ -447,6 +467,13 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         tool_call_id: r.id,
         content: guarded.text,
       });
+    }
+
+    if (wdRecoveryHint && !wdRepeatBlocked) {
+      // Give the model the strategic alternative after its tool result.
+      // Keep the original failed tool call in history as evidence.
+      messages.push({ role: 'user', content: wdRecoveryHint });
+      wdRecoveryHint = null;
     }
 
     // For an explicitly requested single-file Node CLI, a successful real
