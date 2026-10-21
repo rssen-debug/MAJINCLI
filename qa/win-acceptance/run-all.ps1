@@ -88,6 +88,15 @@ if ($interactive) {
 # Never infer live desktop-control success from this non-interactive probe.
 Add-Step 'A5' 'computer.use dry-plan wiring smoke (NO live desktop action)' {
   $probe = Join-Path $Repo 'qa\win-acceptance\computer-use-smoke.mjs'
+  # Diagnosis over guesswork: the runner recorded MODULE_NOT_FOUND for a path
+  # we could not see. Normalise + log the resolved path before trusting it.
+  $probe = [System.IO.Path]::GetFullPath($probe)
+  Write-Host "A5 probe path: $probe"
+  Write-Host "A5 probe exists: $(Test-Path $probe) ; cwd=$(Get-Location) ; PSScriptRoot=$PSScriptRoot"
+  if (-not (Test-Path $probe)) {
+    $results.Add([ordered]@{ step = 'A5'; title = 'computer.use dry-plan wiring smoke (NO live desktop action)'; status = 'FAIL'; evidence = "probe file missing at resolved path: $probe (PSScriptRoot=$PSScriptRoot, cwd=$(Get-Location))"; artifact = $null })
+    return
+  }
   $output = & node $probe 2>&1
   $code = $LASTEXITCODE
   $ok = $code -eq 0

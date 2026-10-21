@@ -32,6 +32,15 @@ jobs:
           MAJIN_ACCEPTANCE_NONINTERACTIVE: "1"
       - name: Validate the evidence conforms to the contract
         run: node scripts/verify-win-acceptance.mjs "$env:RUNNER_TEMP\win-acceptance.json"
+      - name: A5 must PASS (computer.use dry-plan needs no GUI)
+        shell: node {0}
+        run: |
+          const fs = require('node:fs');
+          const doc = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/win-acceptance.json', 'utf8'));
+          const a5 = doc.steps.find(s => s.step === 'A5');
+          if (a5 && a5.status === 'PASS') { console.log('A5 PASS — tool wiring verified: ' + a5.evidence); process.exit(0); }
+          console.error('A5 must PASS even without a desktop (pure Node wiring check): ' + JSON.stringify(a5));
+          process.exit(1);
       - name: Enforce the gate ONLY when interactive evidence was captured
         shell: node {0}
         run: |
