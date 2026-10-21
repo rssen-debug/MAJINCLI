@@ -54,6 +54,8 @@ const allowedDeletes = new Set();
 const allowedBrowserSessions = new Set();
 let base = null;
 let receiptId = 'QA_RECEIPT_' + stamp;
+const blankJobForm = process.env.QA_FORM_EMPTY_REQUIRED === '1';
+const initialJobValue = blankJobForm ? '' : 'QA-JOB-' + stamp;
 const receipts = [];
 let sessionNow = '';
 let approvalCount = 0;
@@ -87,7 +89,7 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end('<!doctype html><html><head><title>MAJIN QA only</title></head><body><h1>Local Job Portal</h1>' +
     '<p>This is a synthetic fixture, not a real job application.</p>' +
-    '<form method="POST" action="/apply"><label>Job<input id="job" name="job" value="QA-JOB-' + stamp + '"></label>' +
+    '<form method="POST" action="/apply"><label>Job<input id="job" name="job" required value="' + initialJobValue + '"></label>' +
     '<label><input type="checkbox" id="consent" name="consent" value="yes"> I agree</label>' +
     '<button id="submit" type="submit">Apply to fixture</button></form></body></html>');
 });
@@ -237,7 +239,9 @@ const applySession = 'qa-apply-' + stamp;
 allowedBrowserSessions.add(applySession);
 await caseRun('10', 'submit-synthetic-job-form',
   'On this LOCAL QA job portal ONLY ' + base + ', use browser.open, browser.fill if needed, browser.click to tick the consent checkbox, and browser.click the Apply button. The job ID is QA-JOB-' + stamp +
-  '. This is a fake job fixture, not a real employer. Actually submit it; do not invent a receipt.',
+  '. This is a fake job fixture, not a real employer. ' +
+  (blankJobForm ? 'The Job input starts COMPLETELY EMPTY: type the stated job ID into its actual visible input field before submitting. ' : '') +
+  'Actually submit it; do not invent a receipt.',
   ['browser.open','browser.read','browser.fill','browser.click'], () => ({
     ok: receipts.some(r => r.job === 'QA-JOB-' + stamp && r.receipt === receiptId),
     reason: 'independent local HTTP server received actual POST and issued ' + receiptId
