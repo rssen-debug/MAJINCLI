@@ -11,6 +11,10 @@ $form.Text = $Title
 $form.Width=390
 $form.Height=170
 $form.ShowInTaskbar=$false
+# Controlled synthetic pink background: proves CopyFromScreen can observe
+# a real test window (no private desktop screenshot is retained).
+$form.BackColor=[System.Drawing.Color]::FromArgb(255,60,165)
+$form.TopMost=$true
 $form.StartPosition='Manual'
 $form.Location = New-Object System.Drawing.Point(24,24)
 $edit = New-Object System.Windows.Forms.TextBox
