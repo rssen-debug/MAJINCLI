@@ -89,14 +89,15 @@
     const select = el('select', 'ob-input');
     select.id = 'ob-choice';
     const presets = (OB.st && OB.st.presets || []).filter((p) => p.name !== 'mock');
-    const order = ['deepseek', 'openrouter', 'openai', 'gemini', 'anthropic', 'groq', 'kilocode', 'nous', 'ollama', 'lmstudio'];
+    const order = ['opencode', 'openrouter', 'deepseek', 'openai', 'gemini', 'anthropic', 'groq', 'kilocode', 'nous', 'opencodezen', 'ollama', 'lmstudio'];
     const sorted = [...presets].sort((a, b) => (order.indexOf(a.name) < 0 ? 100 : order.indexOf(a.name)) - (order.indexOf(b.name) < 0 ? 100 : order.indexOf(b.name)));
     for (const p of sorted) {
       const option = el('option', '', p.label + (status(p.name)?.ready ? ' · connected' : ''));
       option.value = p.name;
       select.append(option);
     }
-    select.value = existing ? existing.name : 'deepseek';
+    // Cloud-first onboarding: suggest OpenCode Go when available, without changing saved choices.
+    select.value = existing ? existing.name : (presets.some((p) => p.name === 'opencode') ? 'opencode' : sorted[0]?.name || '');
     if (!select.value && sorted.length) select.value = sorted[0].name;
     label.append(select);
     box.append(label);
