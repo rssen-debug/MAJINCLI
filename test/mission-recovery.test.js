@@ -109,3 +109,63 @@ test('W7: dead mission never claims completion — final state blocked with reas
   assert.ok(st.nodes.some((n) => n.status === 'failed' || n.status === 'blocked'));
   assert.ok((st.limitsHit || []).length >= 1, 'limit marker (retry/replan) recorded: ' + JSON.stringify(st.limitsHit));
 });
+
+
+for (const sabotage of ['deleted', 'content-changed']) {
+  test('W7 checkpoint revalidation: ' + sabotage + ' verified artifact is re-executed, not falsely carried', async () => {
+    const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mrec-stale-'));
+    const goal = makeMissionGoal();
+    const firstCalls = {};
+    await runMission({
+      cfg: stubCfg(wsDir), registry: null, session: 'stale', input: goal,
+      modelCall: async () => compileGraph(),
+      workerOverride: workerFactory(wsDir, { a: 'ok', b: 'crash' }, firstCalls),
+    });
+    const cpDir = checkpointDir(wsDir, canonicalMissionId(goal));
+    const firstState = readState(cpDir);
+    assert.equal(firstState.nodes.find((n) => n.id === 'a').status, 'verified');
+    assert.equal(firstCalls.a, 1);
+
+    const alpha = path.join(wsDir, 'alpha.txt');
+    if (sabotage === 'deleted') fs.unlinkSync(alpha);
+    else fs.appendFileSync(alpha, '\nUNAUTHORIZED CHANGE');
+    const nextCalls = {};
+    const events = [];
+    const resumed = await runMission({
+      cfg: stubCfg(wsDir), registry: null, session: 'stale', input: goal,
+      modelCall: async () => compileGraph(),
+      workerOverride: workerFactory(wsDir, { a: 'ok', b: 'ok' }, nextCalls),
+      emit: (event) => events.push(event),
+    });
+    assert.equal(nextCalls.a, 1, 'changed evidence must force a real new execution');
+    assert.equal(nextCalls.b, 1);
+    assert.ok(events.some((event) => event.type === 'mission_carry_invalid' && event.id === 'a'),
+      'must report why checkpoint carry was rejected');
+    assert.equal(resumed.carriedCount, 0, 'invalidated result must not count as carried');
+    assert.equal(fs.readFileSync(alpha, 'utf8'), 'HELLO-ALPHA');
+    assert.equal(readState(cpDir).status, 'complete');
+  });
+}
+
+test('W7 checkpoint revalidation: intact verified artifact is carried without repeating side effects', async () => {
+  const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mrec-intact-'));
+  const goal = makeMissionGoal();
+  await runMission({
+    cfg: stubCfg(wsDir), registry: null, session: 'intact', input: goal,
+    modelCall: async () => compileGraph(),
+    workerOverride: workerFactory(wsDir, { a: 'ok', b: 'crash' }, {}),
+  });
+  const nextCalls = {};
+  const events = [];
+  const resumed = await runMission({
+    cfg: stubCfg(wsDir), registry: null, session: 'intact', input: goal,
+    modelCall: async () => compileGraph(),
+    workerOverride: workerFactory(wsDir, { a: 'ok', b: 'ok' }, nextCalls),
+    emit: (event) => events.push(event),
+  });
+  assert.equal(nextCalls.a, undefined, 'intact verified artifact must not be rewritten');
+  assert.equal(nextCalls.b, 1);
+  assert.equal(resumed.carriedCount, 1);
+  assert.ok(events.some((event) => event.type === 'mission_carried' && event.id === 'a' && event.reverified === true));
+  assert.equal(readState(checkpointDir(wsDir, canonicalMissionId(goal))).status, 'complete');
+});
