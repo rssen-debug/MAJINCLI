@@ -8,7 +8,7 @@ against the repository during this pass; nothing is aspirational.
 | Fact | Evidence |
 |---|---|
 | Production branch | `main` |
-| V1 baseline commit | `b8dfc3e1b8` (Merge PR #234) |
+| V1 baseline commit | `b8dfc3e1b8` (Merge PR #234); `v2/main` itself was cut from `282a8ff` (Merge PR #235 v1.0.9 update-distribution, still pure V1 line, the latest verified V1 tip at cut time) |
 | V1 single version literal | `src/core/version.js` = `1.0.9`; package.json/lock agree |
 | Latest published V1 release | tag `v1.0.8`, published 2026-10-21T18:52:58Z |
 | Release publisher | `.github/workflows/build-exe.yml`, tags `v*` (guarded on V2 line) |
