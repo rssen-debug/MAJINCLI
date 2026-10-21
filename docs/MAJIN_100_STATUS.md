@@ -4,7 +4,7 @@
 
 > Ärlighetsregel: ingen % utan reproducerbart bevis. Gamla COMPLETION_MATRIX.md (100/100 på papper) motsägs av uppmätta artefakter och ersätts av DENNA fil som sanning.
 
-## Total ekvivalent status: **94/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
+## Total ekvivalent status: **95/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
 
 ## Per-våg (VERIFIED kräver artefakt, INTE bara att koden finns)
 
@@ -23,7 +23,7 @@
 | W11 Windows desktop vision | **PARTIAL-VERIFIED-DEL** | ✅ c01/c02 uppmätta; wincontrol.js-brygga i PR #94; agent-c04 run-dialog → Notepad kedjan var bevisad med skärmdumpar i tidigare iteration. Saknas: screenshot/vision-agent/UFO-evaluering + full uppgifts-e2e |
 | W12-CU-drivs kopplat (ny): computer-use.js loop + pink-cursor.js overlay pa befintlig control.* lane | **IMPLEMENTED-ENGINE / VERIFIED-OFFLINE / WIN-CI-AUTOMATED** | 7/7 offline; STANDING Windows-CI: A5 dry-plan PASS pa riktig windows-latest Node 22 (Actions run 39527628978, artifact win-acceptance-d2f2b72...) med hard gate; A0/A1 ãrligt NOT TESTED i service-session — full gate vantar pa interaktiv-evidens; 6 CI-rundor rotorsaksfixade (PS5.1-semi, BOM, param-scoping)
 W12 Pink AI cursor | **MISSING** | inget overlay/cursor-spår; tillåts inhemskt, separat från src/ui |
-| W13 Never-stuck engine | **PARTIAL** | ❌under motivirovol recovery success rate: QA-engine klarar 25/33 på äkta miljö; injec-failure + metrics-svit saknas |
+| W13 Never-stuck engine | **VERIFIED-CORE (metrics+e2e deterministisk) / LIVE-AGENT-SIDE PENDING** | injec-failure + metrics-svit BYGGD (det som saknades): src/core/recovery-metrics.js = 15 chaos-rader pa RIKTIGA komponenter (runSwarm retry/deadline/abort/adaptive/rank, watchdog timeout/repeat/stall/approval, teams budget+crash-resume, mission checkpoint-carry, classifier) — recovery rate 100.0%, stuck=0, unhandledLeak=0, alla rader innanfor bound; gate-rubber-band: STUCK-rad infangsad medvetet pre-fix (exit=1). Mönster fran absorb-scan chaostoolkit/chaostoolkit (Apache-2.0): steady-state-hypothesis+bound, metod med fault-injektion, dom fran matning. Live-provider QA-engine-progress (25/33-axeln) kvar cred-gated (samma W2/W8-block). Evidens: docs/evidence/w13-recovery-matrix-2026-10-21.{json,md} + test/recovery-metrics.test.js (4/4) + full 774/0/17 |
 | W14 Release & benchmark | **PARTIAL-VERIFIED-DEL** | ✅ installerera-pipeline (SHA-256==installer, silent install, update check real-GitHub — Allied CI-verifierade). Saknas: rollback, reproducible, rollback-gates, competitive benchmark |
 
 ## Befintligt BEKRAFTAT värde (bär replikation)

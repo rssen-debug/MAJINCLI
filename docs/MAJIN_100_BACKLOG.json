@@ -335,7 +335,20 @@
       ],
       "evidence": "docs/evidence/w4-teams-absorb-2026-10-21.md; full npm test 760/0/17",
       "verdict": "94/100"
+    },
+    {
+      "round": 31,
+      "focus": "W13 never-stuck: saknade injec-failure + metrics-svit byggd pa absorb-pattern (chaostoolkit) och RIKTIGA ENGINE-komponenter — inget nytt hjul",
+      "done": [
+        "absorb: chaostoolkit/chaostoolkit (75 filer, Apache-2.0) — experiment-ontologi (steady-state-hypothesis+bound, metod=fault-injektion, dom fran matning) ateranvendd direkt",
+        "src/core/recovery-metrics.js: 15 rader over runSwarm/watchdog/teams/mission-checkpoint/classifier; verdict recovered|controlled|STUCK|not_tested; invariant I1-I4 gate-paus",
+        "reella rotorsaker i sviten sjalv atgardade maste-mitt: unref-timer = tyst process-dod mitt i matris (sleep keep-alive fix), adaptive-raden kravde nodes>cap (beslutspunkter), fel-strang matchades mot REAL validateGraph-text i stallet for gissad",
+        "scripts/w13-recovery-matrix.mjs + docs/evidence/w13-recovery-matrix-2026-10-21.{json,md}; test/recovery-metrics.test.js 4/4 (tacit no-fake-green-kontroll)",
+        "resultat: recoveryRate=1.000, stuck=0, unhandledRejection=0, 15/15 inom bound"
+      ],
+      "evidence": "docs/evidence/w13-recovery-matrix-2026-10-21.json; npm test 774/0/17",
+      "verdict": "95/100"
     }
   ],
-  "percent": 94
+  "percent": 95
 }
