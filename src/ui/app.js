@@ -196,8 +196,39 @@ function moaGauge(ev) {
   scroll();
 }
 
+/* Work pulse: honest current phase and time since last server event.
+   Never claim success while the model is idle or a tool is stuck. */
+let workLastEvent=0,workPhase='Starting';
+function workPulse(phase){
+  if(!S.busy)return;
+  if(phase)workPhase=String(phase).slice(0,130);
+  workLastEvent=Date.now();
+  const bar=$('work-progress');if(bar)bar.hidden=false;
+}
+setInterval(()=>{
+  const bar=$('work-progress');if(!bar)return;
+  bar.hidden=!S.busy;
+  if(!S.busy)return;
+  const total=Math.floor((Date.now()-S.t0)/1000);
+  const silent=Math.floor((Date.now()-(workLastEvent||S.t0))/1000);
+  const stalled=silent>=18;
+  if($('work-progress-label'))$('work-progress-label').textContent=
+    stalled ? workPhase+' · No update for '+silent+'s — still waiting for the current operation' : workPhase;
+  if($('work-progress-timer'))$('work-progress-timer').textContent=total+'s';
+},1000);
+
 /* ------------------------------ event pump ------------------------------ */
 function onEvent(ev) {
+  if (S.busy) {
+    if (ev.type === 'route') workPulse('Choosing the best model');
+    else if (ev.type === 'step') workPulse('Step '+ev.step+'/'+ev.of+' · '+(ev.model||'model'));
+    else if (ev.type === 'tool' || ev.type === 'tool_begin') workPulse('Using '+(ev.name||ev.tool||'a tool'));
+    else if (ev.type === 'tool_result') workPulse(ev.ok?'Tool finished · reviewing results':'Tool failed · adjusting approach');
+    else if (ev.type === 'thinking') workPulse('Thinking through the next step');
+    else if (ev.type === 'delta') workPulse('Writing the response');
+    else if (ev.type === 'escalate') workPulse('Switching models');
+    else if (ev.type === 'compact') workPulse('Organizing context');
+  }
   if (ev.type === 'task') S.taskId = ev.task;
   if (S.stopRequested && ['error', 'answer'].includes(ev.type)) {
     if (!S.deferredStopEvent || (ev.type === 'error' && S.deferredStopEvent.type !== 'error')) S.deferredStopEvent = ev;
@@ -349,6 +380,7 @@ async function send(text, options = {}) {
   autoGrow();
   S.busy = true;
   S.t0 = Date.now();
+  workPulse('Connecting to MAJIN');
   syncSendButton();
   setStatus('working…');
   const ac = new AbortController();
