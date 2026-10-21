@@ -1,6 +1,8 @@
 name: automated-windows-live-evidence
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [fix/realworld-repairs]
   push:
     branches: [fix/realworld-repairs]
     paths:
@@ -23,6 +25,7 @@ jobs:
         shell: pwsh
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/live-acceptance-run.ps1
+          if ($LASTEXITCODE -ne 0) { throw "live acceptance exited with $LASTEXITCODE" }
       - name: Check recorded results, without claiming interactive success
         shell: pwsh
         run: |
@@ -33,6 +36,15 @@ jobs:
           $result = Get-Content $file -Raw | ConvertFrom-Json
           if ($null -eq $result.lanes.'W11-manual-reference' -and $null -eq $result.lanes.'W11-desktop-eval') { throw 'Missing W11 reference verdict' }
           if ($null -eq $result.lanes.'W12-scaffold') { throw 'Missing W12 scaffold verdict' }
+          if ($result.release_ready -ne $false) { throw 'Non-interactive CI must not report release_ready=true' }
+          $blockers = @($result.release_blockers)
+          foreach ($required in @('W11-agent-live', 'W12-interactive')) {
+            if ($required -notin $blockers) { throw "Missing release blocker: $required" }
+            $lane = $result.lanes.PSObject.Properties[$required]
+            if ($null -eq $lane -or $lane.Value.ok -ne $false -or $lane.Value.status -ne 'BLOCKED') {
+              throw "Interactive lane must remain BLOCKED on CI: $required"
+            }
+          }
           Write-Host 'CI service-session: W11 agent-live and W12 interactive are NOT VERIFIED.'
           Write-Host 'A successful workflow does not authorize release.'
       - name: Upload actual run artifacts
