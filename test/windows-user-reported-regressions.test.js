@@ -41,5 +41,5 @@ test('MAJIN provides safe workspace previews directly in assistant chat',()=>{
   assert.match(app,/chat-open-file/);
   assert.match(app,/MAJIN_STUDIO\?\.previewFile/);
   assert.match(source('src/ui/onboard.js'),/Show OpenCode Go models/);
-  assert.match(source('src/core/pink-cursor.js'),/Get-Content -Raw -Encoding UTF8/);
+  assert.match(source('src/core/pink-cursor.js'),/Get-Content \$StateFile -Raw -Encoding UTF8/);
 });
