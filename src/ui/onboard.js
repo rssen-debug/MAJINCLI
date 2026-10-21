@@ -329,7 +329,11 @@
     close.onclick = closePicker;
     head.append(title, close);
     const st = OB.st || window.S?.st;
-    const providers = (st?.providers || []).filter((p) => p.kind !== 'mock');
+    const providers = (st?.providers || []).filter((p) => p.kind !== 'mock').sort((a, b) => {
+      // Keep Go easy to find; never silently replace the currently active model.
+      const priority = (p) => p.name === 'opencode' ? 0 : p.name === 'opencodezen' ? 90 : 10;
+      return priority(a) - priority(b);
+    });
     const active = st?.routes?.find((r) => r.job === 'chat')?.provider;
     const provider = el('select', 'ob-input');
     provider.setAttribute('aria-label', 'Provider');
