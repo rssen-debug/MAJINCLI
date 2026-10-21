@@ -20,3 +20,13 @@ test('voice UI has accessible audio meter and browser translate suppression',()=
   assert.match(html,/id="voice-stage"/);
   assert.match(html,/aria-pressed="false"/);
 });
+
+test('Windows browser app titlebar icon uses same pink MAJIN identity with cache-busting path',()=>{
+  const html=fs.readFileSync('src/ui/index.html','utf8');
+  const svg=fs.readFileSync('src/ui/majin-brand.svg','utf8');
+  assert.match(html,/rel="icon" type="image\/svg\+xml" sizes="any" href="\/majin-brand\.svg\?v=2"/);
+  assert.doesNotMatch(html,/rel="icon" href="\/logo\.png"/);
+  assert.match(svg,/<svg /);
+  assert.match(svg,/#ed599d/);
+  assert.match(svg,/<rect[^>]+rx="17"/);
+});
