@@ -216,7 +216,7 @@ export function feedbackForJavaScriptWrite(goal, workspace, tool, args, writtenO
   // times with an unterminated template literal. A concrete *syntax-safe*
   // miniature example is more actionable than just "node --check failed".
   // It is guidance ONLY; never silently overwrite the model's source.
-  const literalNewlineHint = !check.ok && check.missing.some(x => x.startsWith('invalid JavaScript syntax')) && String(args.content || '').includes(String.fromCharCode(92) + 'n')
+  const literalNewlineHint = !check.ok && check.missing.some(x => x.startsWith('invalid JavaScript syntax')) && (() => { try { return fs.readFileSync(target.path, 'utf8').includes(String.fromCharCode(92) + 'n'); } catch { return false; } })()
     ? ' Replace literal escaped newlines outside strings with actual line breaks and rewrite this file.' : '';
   const syntaxHint = !check.ok && /\.mjs$/i.test(target.name) &&
     check.missing.some(x => x.startsWith('invalid JavaScript syntax')) &&
