@@ -25,12 +25,16 @@ param([string]$StateFile)
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 $form = New-Object System.Windows.Forms.Form
 $form.FormBorderStyle = 'None'; $form.ShowInTaskbar = $false; $form.TopMost = $true
-$form.TransparencyKey = [System.Drawing.Color]::Magenta
-$form.BackColor = [System.Drawing.Color]::Magenta
+# On a real interactive runner the layered TransparencyKey form can be
+# completely absent from CopyFromScreen even while its process keeps running.
+# Use a small, semi-opaque dark backing; the hot-pink circle remains visible.
+$form.BackColor = [System.Drawing.Color]::FromArgb(30,12,45)
+$form.Opacity = 0.94
 $form.Width = 220; $form.Height = 56
 $form.Location = [System.Drawing.Point]::new(100,100)
 $circle = New-Object System.Windows.Forms.Panel
-$circle.Width = 30; $circle.Height = 30; $circle.Location = New-Object System.Drawing.Point(2,13)
+$circle.Width = 30; $circle.Height = 30; $circle.Location = [System.Drawing.Point]::new(2,13)
+$circle.BackColor = [System.Drawing.Color]::FromArgb(30,12,45)
 $circle.Add_Paint({
   param($s,$e)
   $g = $e.Graphics; $g.SmoothingMode = 'AntiAlias'
@@ -69,6 +73,14 @@ $timer.Start()
 `;
 
 let overlayProc = null;
+export function overlayStatus() {
+  return {
+    pid: overlayProc?.pid || null,
+    alive: Boolean(overlayProc && overlayProc.exitCode == null && !overlayProc.killed),
+    exitCode: overlayProc?.exitCode ?? null,
+  };
+}
+
 
 export function cursorPaths(workspaceDir) {
   const dir = path.join(workspaceDir, 'cursor');
