@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { winControlTools } from '../../src/core/tools/wincontrol.js';
+import { netTools } from '../../src/core/tools/net.js';
 import { computerTools } from '../../src/core/tools/computer.js';
 import { Config, DEFAULTS, clone } from '../../src/core/config.js';
 import { cursor, cursorPaths, isWindowsDesktop, overlayStatus } from '../../src/core/pink-cursor.js';
@@ -28,7 +29,7 @@ const fixture = fileURLToPath(new URL('./owner-desktop-fixture.ps1', import.meta
 const evidenceFile = path.join(process.cwd(), 'qa-evidence', 'owner-desktop.json');
 const verdict = { schema:'majin-owner-desktop-live/1', syntheticWindow:false,
   controlList:false, controlType:false, controlRead:false, controlClick:false, computerUseVerified:false, computerUseCloudVerified:false,
-  verifiedSavedBytes:false, desktopPixelCanary:false, pinkVisible:false, pinkMoved:false, pinkHidden:false,
+  verifiedSavedBytes:false, mouseMoveVerified:false, screenCaptureVerified:false, desktopPixelCanary:false, pinkVisible:false, pinkMoved:false, pinkHidden:false,
   pinkStateLabel:false, screenshotsUploaded:false, status:'BLOCKED' };
 
 let app;
@@ -103,6 +104,36 @@ try {
   assert.ok(fileExists,'button click did not save the requested QA file');
   assert.equal(fs.readFileSync(savedFile,'utf8'),expected,'real button did not save verified text');
   verdict.verifiedSavedBytes=true;
+
+  // Move the ACTUAL mouse pointer and take a real small synthetic-frame PNG.
+  // The former pointer position is restored immediately; no private desktop
+  // region is uploaded and temporary screenshot bytes are destroyed at the end.
+  const mouse = byName('mouse.move');
+  const originalMouse = spawnSync('powershell.exe',['-NoProfile','-Command',
+    'Add-Type -AssemblyName System.Windows.Forms; $p=[System.Windows.Forms.Cursor]::Position; Write-Output ($p.X.ToString()+","+$p.Y.ToString())'],
+    {encoding:'utf8',timeout:9000,windowsHide:true});
+  assert.equal(originalMouse.status,0,'cannot read original mouse position');
+  const coords = String(originalMouse.stdout).trim().split(/\r?\n/).at(-1).split(',').map(Number);
+  assert.equal(coords.length,2);
+  const moved = await mouse.run({x:180,y:110});
+  try {
+    assert.equal(moved.ok,true,'mouse.move must act on the actual system pointer: '+JSON.stringify(moved.error||moved).slice(0,240));
+    assert.equal(moved.meta?.verified,true);
+    verdict.mouseMoveVerified=true;
+  } finally {
+    if(coords.every(Number.isSafeInteger)) await mouse.run({x:coords[0],y:coords[1]});
+  }
+  const capTool=netTools.find(t=>t.name==='screen.capture');
+  assert.ok(capTool,'missing screen.capture tool');
+  const grab=await capTool.run({path:'qa-frame.png',region:'100,100,120,40',then:'save'},
+    {cfg:{get:k=>k==='workspace'?workspace:undefined}});
+  assert.equal(grab.ok,true,'real screen.capture failed: '+JSON.stringify(grab.error||grab).slice(0,300));
+  assert.equal(grab.meta?.validatedPng,true);
+  const signature=fs.readFileSync(path.join(workspace,'qa-frame.png')).subarray(0,8);
+  assert.deepEqual([...signature],[137,80,78,71,13,10,26,10]);
+  verdict.screenCaptureVerified=true;
+  console.log('W11 WINDOWS ACTUAL POINTER + SCREEN CAPTURE PASS: restored cursor, PNG verified in isolated QA');
+
   console.log('W11 SYNTHETIC GUI PASS: MAJIN real control.list/type/read/click, and saved bytes match');
 
   // Exercise MAJIN's actual OBSERVE→PLAN→ACT→VERIFY engine against that SAME
