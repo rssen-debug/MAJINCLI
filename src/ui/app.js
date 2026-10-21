@@ -900,67 +900,133 @@ function listen() {
 
 /* ------------------------- hands-free voice -------------------------- */
 let recog=null, speechActive=false, voiceArmed=false;
-function voiceState(mode,label) {
-  document.body.dataset.voiceMode=mode;
-  if ($('mic-state')) $('mic-state').textContent=label;
-  $('mic')?.setAttribute('aria-pressed',String(Boolean(S.handsFree)));
-  const stage=$('voice-stage');
-  if(stage)stage.hidden=!S.handsFree;
-  const names={idle:'Ready to talk',listening:'Listening',thinking:'Thinking',speaking:'MAJIN speaking',paused:'Paused',error:'Voice unavailable'};
-  if($('voice-stage-label'))$('voice-stage-label').textContent=names[mode]||label||'Talk';
-  if($('voice-caption'))$('voice-caption').textContent=label||'Speak naturally';
+let voiceSilenceTimer=null, voiceSessionTimer=null, voiceTranscript='', voiceFinal='', voiceFinished=false;
+let voiceMeterStream=null, voiceMeterContext=null, voiceMeterFrame=null;
+function clearVoiceTimers(){
+  clearTimeout(voiceSilenceTimer);clearTimeout(voiceSessionTimer);
+  voiceSilenceTimer=voiceSessionTimer=null;
 }
-function stopMic() {
-  voiceArmed=false; S.listening=false;
+async function startVoiceMeter(){
+  if(!navigator.mediaDevices?.getUserMedia || voiceMeterStream)return;
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:{
+      echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1
+    }});
+    if(!S.handsFree){stream.getTracks().forEach(t=>t.stop());return;}
+    voiceMeterStream=stream;
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    voiceMeterContext=ctx;
+    const analyser=ctx.createAnalyser();analyser.fftSize=512;
+    ctx.createMediaStreamSource(stream).connect(analyser);
+    const data=new Uint8Array(analyser.fftSize);
+    function draw(){
+      if(!voiceMeterStream)return;
+      analyser.getByteTimeDomainData(data);
+      let sum=0;
+      for(const n of data){const d=(n-128)/128;sum+=d*d;}
+      const volume=Math.min(1,Math.sqrt(sum/data.length)*9);
+      document.documentElement.style.setProperty('--voice-energy',volume.toFixed(3));
+      voiceMeterFrame=requestAnimationFrame(draw);
+    }
+    draw();
+  }catch(e){
+    // Recognition may still work even when audio metering is denied.
+    voiceState('listening','Microphone level unavailable');
+  }
+}
+function stopVoiceMeter(){
+  if(voiceMeterFrame)cancelAnimationFrame(voiceMeterFrame);
+  voiceMeterFrame=null;
+  voiceMeterStream?.getTracks().forEach(t=>t.stop());voiceMeterStream=null;
+  voiceMeterContext?.close().catch(()=>{});voiceMeterContext=null;
+  document.documentElement.style.setProperty('--voice-energy','0');
+}
+function voiceState(mode,label){
+  document.body.dataset.voiceMode=mode;
+  if($('mic-state'))$('mic-state').textContent=label;
+  $('mic')?.setAttribute('aria-pressed',String(Boolean(S.handsFree)));
+  const stage=$('voice-stage');if(stage)stage.hidden=!S.handsFree;
+  const names={idle:'Ready',listening:'Listening',thinking:'Thinking',speaking:'Speaking',paused:'Paused',error:'Microphone error'};
+  if($('voice-stage-label'))$('voice-stage-label').textContent=names[mode]||'MAJIN';
+  if($('voice-caption'))$('voice-caption').textContent=label||'';
+}
+function stopMic(){
+  clearVoiceTimers();voiceArmed=false;S.listening=false;
   const r=recog;recog=null;
-  try {r?.abort();} catch{}
+  try{r?.abort();}catch{}
+  stopVoiceMeter();
   $('mic')?.classList.remove('on');
   voiceState('idle','Voice ready');
 }
-function startMic() {
+function dispatchVoiceTurn(r){
+  if(voiceFinished||recog!==r||!S.handsFree||S.busy)return;
+  let command=(voiceFinal||voiceTranscript).trim();
+  const wake=String(S.st?.config?.ui?.voice?.wakeWord||'').trim();
+  if(wake){
+    if(!command.toLowerCase().startsWith(wake.toLowerCase()))return;
+    command=command.slice(wake.length).trim();
+  }
+  if(!command)return;
+  voiceFinished=true;voiceArmed=false;S.listening=false;
+  clearVoiceTimers();recog=null;stopVoiceMeter();
+  try{r.abort();}catch{}
+  // Spoken text belongs in the chat transcript, but must not insert itself
+  // into the typed composer or start a second voice turn.
+  voiceState('thinking','Got it — working on your answer');
+  void send(command,{voiceTurn:true});
+}
+function startMic(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if (!SR) {voiceState('error','Speech recognition unavailable');return;}
-  if (speechActive||S.busy) return;
-  const r=new SR();recog=r;voiceArmed=true;S.listening=true;
+  if(!SR){voiceState('error','Speech recognition unavailable');return;}
+  if(speechActive||S.busy||!S.handsFree||recog)return;
+  const r=new SR();recog=r;voiceArmed=true;voiceFinished=false;
+  voiceTranscript='';voiceFinal='';S.listening=true;
   r.lang=S.st?.config?.ui?.voice?.lang||'sv-SE';
   r.continuous=false;r.interimResults=true;
-  r.onstart=()=>voiceState('listening','Listening…');
+  r.onstart=()=>{
+    voiceState('listening','Listening — speak near your microphone');
+    clearVoiceTimers();
+    // Never listen indefinitely when TV or other background speech continues.
+    voiceSessionTimer=setTimeout(()=>{
+      if(recog!==r)return;
+      if(voiceFinal.trim())dispatchVoiceTurn(r);
+      else {stopMic();S.handsFree=false;voiceState('paused','Tap the orb to speak again');}
+    },12000);
+  };
   r.onresult=e=>{
+    if(recog!==r||voiceFinished)return;
     let words='',complete='';
     for(let i=0;i<e.results.length;i++){
       const chunk=e.results[i][0]?.transcript||'';
       words+=chunk;
       if(e.results[i].isFinal)complete+=chunk;
     }
-    voiceState('listening',words.trim()||'Listening…');
-    if(!complete.trim()) return;
-    const wake=String(S.st?.config?.ui?.voice?.wakeWord||'').trim();
-    let command=complete.trim();
-    if(wake){
-      if(!command.toLowerCase().startsWith(wake.toLowerCase()))return;
-      command=command.slice(wake.length).trim();
-    }
-    if(!command)return;
-    voiceArmed=false;S.listening=false;recog=null;
-    try{r.stop();}catch{}
-    $('input').value=command;autoGrow();
-    voiceState('thinking','Working…');
-    send(command, { voiceTurn: true });
+    if(!words.trim())return;
+    voiceTranscript=words.trim();voiceFinal=complete.trim();
+    voiceState('listening',voiceTranscript);
+    clearTimeout(voiceSilenceTimer);
+    // Web Speech sometimes never sets isFinal in a noisy room. Commit the
+    // latest stable transcript after an endpoint pause instead of hanging.
+    voiceSilenceTimer=setTimeout(()=>dispatchVoiceTurn(r),voiceFinal?400:1100);
   };
   r.onerror=e=>{
+    if(recog!==r)return;
     if(e.error==='not-allowed'||e.error==='service-not-allowed'){
-      stopMic();voiceState('error','Allow microphone access');
+      S.handsFree=false;stopMic();voiceState('error','Allow microphone access');
     }else if(e.error!=='no-speech'&&e.error!=='aborted'){
-      stopMic();voiceState('error','Voice: '+e.error);
+      S.handsFree=false;stopMic();voiceState('error','Voice: '+e.error);
     }
   };
   r.onend=()=>{
     if(recog!==r)return;
-    S.listening=false;
-    if(voiceArmed&&!S.busy&&!speechActive){recog=null;startMic();}
+    if(voiceTranscript.trim()){dispatchVoiceTurn(r);return;}
+    recog=null;S.listening=false;clearVoiceTimers();
+    // No speech: stop gracefully. A TV should not create an infinite restart loop.
+    S.handsFree=false;stopVoiceMeter();voiceState('paused','Tap to talk again');
   };
-  try{r.start();$('mic').classList.add('on');}
-  catch(e){stopMic();voiceState('error',e.message);}
+  void startVoiceMeter();
+  try{r.start();$('mic')?.classList.add('on');}
+  catch(e){S.handsFree=false;stopMic();voiceState('error',e.message);}
 }
 function micToggle(){
   if(S.handsFree && !speechActive){
