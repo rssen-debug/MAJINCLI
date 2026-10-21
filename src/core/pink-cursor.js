@@ -103,7 +103,10 @@ export function ensureOverlayRunning(workspaceDir) {
   if (overlayProc && overlayProc.exitCode == null) return { started: false, reason: 'already-running' };
   const p = ensureOverlayFiles(workspaceDir);
   overlayProc = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', p.ps1, '-StateFile', p.state], {
-    stdio: 'ignore', detached: true, windowsHide: true,
+    // A detached Windows child exited immediately (code 0) on the REAL
+    // interactive runner, while a normal PowerShell WinForms child stayed
+    // alive. Unref the handle without DETACHED_PROCESS so the overlay can run.
+    stdio: 'ignore', detached: false, windowsHide: true,
   });
   overlayProc.unref();
   return { started: true, pid: overlayProc.pid };
