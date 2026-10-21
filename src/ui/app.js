@@ -441,6 +441,7 @@ async function send(text, options = {}) {
     S.busy = false;
     S.abort = null;
     syncSendButton();
+    if (S.handsFree && !speechActive && !S.listening) startMic();
     if (S.failed && !$('input').value) { $('input').value = input; autoGrow(); }
     setStatus(S.stopRequested ? 'Stopping task…' : S.failed ? 'Request failed · message preserved' : S.cancelled ? 'Stopped' : 'Ready');
     if (S.stopRequested && S.cur) { S.cur.b.classList.remove('caret'); if (S.cur.thinking) S.cur.thinking.remove(); }
@@ -974,8 +975,8 @@ function micToggle(){
     speechActive=false;
     S.handsFree=true;S.voice=true;S.voiceTurn=false;
     $('b-voice')?.classList.add('on');
-    voiceState('listening','Speak now');
-    startMic();
+    if (S.busy) voiceState('thinking','Finishing the current answer…');
+    else { voiceState('listening','Speak now'); startMic(); }
   }
 }
 let currentVoiceAudio=null, voiceRequest=null;
