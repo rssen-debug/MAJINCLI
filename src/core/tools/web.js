@@ -300,17 +300,40 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       };
       journal.guard(session, `browser.click:${selector || ref}`);
       const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
-      let sel;
+      let sel, identity = null;
       if (ref) {
         const cached = recallRef(session, ref);
         if (!cached) return { ok: false, error: { code: 'ref_unknown', message: `no element known for ref "${ref}" in this session — run browser.elements first to ground the page` } };
+        // Grounding refs are ephemeral. Lock to the observed element identity
+        // so a DOM rerender cannot silently reassign an old eN to another link.
+        identity = { tag: String(cached.tag||'').toLowerCase(),
+          id: String(cached.id||''), href: String(cached.href||''),
+          name: String(cached.name||''), text: String(cached.text||'').slice(0,70) };
         sel = JSON.stringify(`[data-majin-ref=${JSON.stringify(String(ref))}]`);
       } else {
         sel = JSON.stringify(String(selector));
       }
+      const expectedIdentity=JSON.stringify(identity);
       const hit = await b.eval(`(() => {
         const el = document.querySelector(${sel});
         if (!el) return { found: false };
+        const expected = ${expectedIdentity};
+        if (expected) {
+          const current = {tag: el.tagName.toLowerCase(),id:el.id||'',
+            href:el.href||'',name:el.name||'',
+            text:String(el.innerText || el.getAttribute('aria-label') ||
+              el.getAttribute('placeholder') || el.name || el.href || el.tagName)
+              .replace(/\\s+/g,' ').trim().slice(0,70)};
+          // Strong identity checks first; only compare text for anonymous
+          // controls where the original text is their sole grounding key.
+          const stableKey=expected.id || expected.href || expected.name;
+          if (expected.tag!==current.tag || expected.id!==current.id ||
+              expected.href!==current.href || expected.name!==current.name ||
+              (!stableKey && ['button','a','summary'].includes(current.tag) && expected.text!==current.text))
+            return {found:true,blocked:'ref_identity_changed',tag:current.tag,
+              text:'stale element reference'};
+        }
+        
         el.scrollIntoView({ block: 'center' });
         // NEVER echo input.value: it can contain passwords, tokens, email or
         // uploaded data. Use rendered label/accessible name for click evidence.
