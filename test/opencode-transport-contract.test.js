@@ -51,7 +51,7 @@ test('OpenCode Go stream assembles cloud tool calls without a network dependency
       'data: ' + JSON.stringify({choices:[{delta:{tool_calls:[{index:0,function:{arguments:',"content":"ok"}'}}]}}],finish_reason:'tool_calls'}]}),
       'data: [DONE]',
       '',
-    ].join('\\n') + '\\n';
+    ].join('\n') + '\n';
     return new Response(sse,{status:200,headers:{'content-type':'text/event-stream'}});
   };
   try {
