@@ -28,10 +28,10 @@ $form.FormBorderStyle = 'None'; $form.ShowInTaskbar = $false; $form.TopMost = $t
 $form.TransparencyKey = [System.Drawing.Color]::Magenta
 $form.BackColor = [System.Drawing.Color]::Magenta
 $form.Width = 220; $form.Height = 56
-$form.Location = New-Object System.Drawing.Point(100,100)
+$form.Location = [System.Drawing.Point]::new(100,100)
 $circle = New-Object System.Windows.Forms.Panel
 $circle.Width = 30; $circle.Height = 30; $circle.Location = New-Object System.Drawing.Point(2,13)
-$circle.Paint.Add({
+$circle.Add_Paint({
   param($s,$e)
   $g = $e.Graphics; $g.SmoothingMode = 'AntiAlias'
   $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(235, 255, 60, 165)); $g.FillEllipse($brush, 2,2,24,24)
@@ -41,7 +41,7 @@ $circle.Paint.Add({
 $lbl = New-Object System.Windows.Forms.Label
 $lbl.AutoSize = $false; $lbl.Width = 178; $lbl.Height = 40; $lbl.Location = New-Object System.Drawing.Point(38,8)
 $lbl.ForeColor = [System.Drawing.Color]::White; $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-$lbl.BackColor = [System.Drawing.Color]::FromArgb(160, 30, 12, 45)
+$lbl.BackColor = [System.Drawing.Color]::FromArgb(30, 12, 45)
 $lbl.Text = 'MAJIN'
 $form.Controls.Add($circle); $form.Controls.Add($lbl)
 $timer = New-Object System.Windows.Forms.Timer; $timer.Interval = 60
@@ -61,7 +61,7 @@ $timer.Add_Tick({
   if ($script:target) {
     $dx = ($script:target[0] - $form.Location.X) / 4; $dy = ($script:target[1] - $form.Location.Y) / 4
     if ([math]::Abs($dx) -lt 1 -and [math]::Abs($dy) -lt 1) { $script:target = $null }
-    else { $form.Location = New-Object System.Drawing.Point(($form.Location.X + [int]$dx), ($form.Location.Y + [int]$dy)) }
+    else { $form.Location = [System.Drawing.Point]::new([int]($form.Location.X + [int]$dx), [int]($form.Location.Y + [int]$dy)) }
   }
 })
 $timer.Start()
@@ -79,7 +79,9 @@ export function ensureOverlayFiles(workspaceDir) {
   const p = cursorPaths(workspaceDir);
   fs.mkdirSync(p.dir, { recursive: true });
   const tmp = p.ps1 + '.tmp';
-  fs.writeFileSync(tmp, OVERLAY_PS1);
+  // Include a UTF-8 BOM: Windows PowerShell 5.1 otherwise parses UTF-8 source
+  // as ANSI and can corrupt characters in labels and diagnostic text.
+  fs.writeFileSync(tmp, '\uFEFF' + OVERLAY_PS1);
   fs.renameSync(tmp, p.ps1);
   return p;
 }
