@@ -1,7 +1,7 @@
 name: MAJIN interactive desktop bridge preflight
 on:
   push:
-    branches: [qa/interactive-desktop-bridge-20261021, release/majin-v1.0.2-reliability-20261021, release/majin-v1.0.2-interactive-20261021]
+    branches: [qa/interactive-desktop-bridge-20261021, release/majin-v1.0.2-reliability-20261021, release/majin-v1.0.2-interactive-20261021, fix/icon-and-universal-win-qa-20261021]
   workflow_dispatch:
 permissions:
   contents: read
@@ -61,6 +61,18 @@ jobs:
         run: |
           node scripts/qa/owner-desktop-live.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Real Windows desktop QA failed; inspect owner-desktop evidence' }
+      - name: Validate real OpenCode Go, synthetic jobs and Blender (if installed) in isolated QA folder
+        shell: powershell
+        timeout-minutes: 15
+        env:
+          MAJIN_OWNER_QA: '1'
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          MAJIN_LLM_TIMEOUT: '45000'
+        run: |
+          node --check scripts/qa/universal-owner-windows.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'QA script syntax failed' }
+          node scripts/qa/universal-owner-windows.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Owner Windows universal QA has a genuine failing or untested required step' }
       - name: Upload non-sensitive preflight verdict
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,5 +81,6 @@ jobs:
           path: |
             ${{ runner.temp }}/majin-interactive-preflight.json
             qa-evidence/owner-desktop.json
+            qa-evidence/universal-owner.json
           retention-days: 7
           if-no-files-found: warn
