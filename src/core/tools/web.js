@@ -321,7 +321,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         if (expected) {
           const current = {tag: el.tagName.toLowerCase(),id:el.id||'',
             href:el.href||'',name:el.name||'',
-            text:String(el.innerText || el.value || el.getAttribute('aria-label') ||
+            text:String(el.innerText || el.getAttribute('aria-label') ||
               el.getAttribute('placeholder') || el.name || el.href || el.tagName)
               .replace(/\\s+/g,' ').trim().slice(0,70)};
           // Strong identity checks first; only compare text for anonymous
@@ -329,7 +329,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           const stableKey=expected.id || expected.href || expected.name;
           if (expected.tag!==current.tag || expected.id!==current.id ||
               expected.href!==current.href || expected.name!==current.name ||
-              (!stableKey && expected.text!==current.text))
+              (!stableKey && ['button','a','summary'].includes(current.tag) && expected.text!==current.text))
             return {found:true,blocked:'ref_identity_changed',tag:current.tag,
               text:'stale element reference'};
         }
