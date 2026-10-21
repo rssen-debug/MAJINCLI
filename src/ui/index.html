@@ -1,7 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" translate="no">
 <head>
 <meta charset="utf-8" />
+<meta name="google" content="notranslate" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>MAJIN</title>
 <link rel="icon" href="/logo.png" />
@@ -257,6 +258,14 @@ body.simple #c-cost{margin-left:auto}
 #imagine .step-icon{display:grid;place-items:center;flex:0 0 28px;height:27px;border-radius:7px;border:1px solid var(--line);color:var(--dim);font:600 9px/1 var(--sans);letter-spacing:.04em;background:var(--bg2)}
 #imagine .step-title{font-weight:550;letter-spacing:-.01em}
 #imagine .step-sub{font-size:11px;opacity:.8}
+
+/* Voice interaction states: readable, subtle, reduced-motion accessible. */
+#mic{min-width:52px;border-radius:999px;transition:box-shadow .2s ease,transform .2s}
+body[data-voice-mode="listening"] #mic{box-shadow:0 0 0 4px rgba(255,143,208,.18);animation:majin-orb 1.4s ease-in-out infinite}
+body[data-voice-mode="speaking"] #mic{box-shadow:0 0 0 4px rgba(124,224,182,.17);animation:majin-orb .85s ease-in-out infinite}
+#mic-state{font-size:11px;color:var(--dim);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@keyframes majin-orb{50%{transform:scale(1.06);box-shadow:0 0 0 8px rgba(255,143,208,.06)}}
+@media(prefers-reduced-motion:reduce){body[data-voice-mode] #mic{animation:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
@@ -288,7 +297,7 @@ body.simple #c-cost{margin-left:auto}
   <button id="b-expert" title="Advanced settings and tools" aria-label="Advanced settings">⚙</button> <button id="b-panel" class="on" title="Side panel">⌗</button> <button id="b-quit" title="Quit MAJIN — stops the agent, closes everything (your keys and memory stay)">⏻</button>
   <button id="b-rail" title="Sidebar" aria-label="Toggle sidebar">☰</button>
   <button id="b-theme" title="Light / dark">◐</button>
-  <button id="b-voice" title="Read answers aloud">🔊</button>
+  <button id="b-voice" title="Speak responses" aria-label="Toggle spoken responses">Voice</button>
   <button id="b-test" title="Run self-test">◎</button>
   <button id="b-stop" class="danger" title="Emergency stop — abort the running task">■</button>
   <span id="v-tag" title="the version this window is actually running — never guess again"></span>
@@ -311,7 +320,7 @@ body.simple #c-cost{margin-left:auto}
     <button id="send" type="button" aria-label="Send message" title="Send message" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path class="send-arrow" d="M12 19V5m-6 6 6-6 6 6"/><rect class="send-stop" x="6" y="6" width="12" height="12" rx="2"/></svg></button>
   </div>
   <div class="crow">
-    <button id="mic" title="Voice input">🎙</button><span id="mic-state"></span>
+    <button id="mic" title="Start hands-free voice conversation" aria-pressed="false">Talk</button><span id="mic-state"></span>
     <span class="grow" id="status" role="status" aria-live="polite">Ready</span>
     <span id="drop" class="drop">drop a file → RE analysis</span>
   </div>

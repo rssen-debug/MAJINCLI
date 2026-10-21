@@ -326,6 +326,9 @@ try {
     await page.screenshot({ path: path.join(output, 'aurora-live-catalog.png') });
     await page.keyboard.press('Escape');
   }
+  // The header update control is intentionally hidden on narrow mobile layouts.
+  // Assert its desktop behavior in desktop viewport, then keep the safe fixture.
+  await page.setViewportSize({ width: 1440, height: 900 });
   // Update controls use a fixture acknowledgment; never install over this machine.
   const updateFixture = { latest: '99.0.0', available: true, status: 'available', notice: 'New release' };
   await page.evaluate(upd => paintHeader({ ...S.st, update: upd }), updateFixture);

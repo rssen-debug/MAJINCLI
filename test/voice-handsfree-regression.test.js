@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+test('speech recognition arms, sends actual user transcript and suspends while assistant speaks',()=>{
+  const src=fs.readFileSync('src/ui/app.js','utf8');
+  assert.match(src,/window\.SpeechRecognition\s*\|\|\s*window\.webkitSpeechRecognition/);
+  assert.match(src,/r\.interimResults=true/);
+  assert.match(src,/if\(!complete\.trim\(\)\) return/);
+  assert.match(src,/send\(command\)/);
+  assert.match(src,/S\.handsFree=true/);
+  assert.match(src,/if\(S\.handsFree&&!S\.busy\)startMic\(\)/);
+  assert.match(src,/speechSynthesis\.cancel\(\);speechSynthesis\.speak\(u\)/);
+  assert.match(src,/u\.onerror=done/);
+});
+test('UI indicates states, can stop listening and respects reduced motion',()=>{
+  const html=fs.readFileSync('src/ui/index.html','utf8');
+  assert.match(html,/<html lang="en" translate="no">/);
+  assert.match(html,/name="google" content="notranslate"/);
+  assert.match(html,/aria-pressed="false">Talk/);
+  assert.match(html,/data-voice-mode="listening"/);
+  assert.match(html,/prefers-reduced-motion/);
+});
+test('release version is consistent across all packaging paths',()=>{
+  for (const p of ['package.json','package-lock.json']) {
+    const v=JSON.parse(fs.readFileSync(p,'utf8'));assert.equal(v.version,'1.0.5');
+  }
+  assert.equal(JSON.parse(fs.readFileSync('package-lock.json','utf8')).packages[''].version,'1.0.5');
+  for(const p of ['src/core/version.js','installer/majin.iss','scripts/publish.ps1']){
+    const text=fs.readFileSync(p,'utf8');assert.match(text,/1\.0\.5/);
+  }
+});
