@@ -4,7 +4,7 @@
 
 > Ärlighetsregel: ingen % utan reproducerbart bevis. Gamla COMPLETION_MATRIX.md (100/100 på papper) motsägs av uppmätta artefakter och ersätts av DENNA fil som sanning.
 
-## Total ekvivalent status: **95/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
+## Total ekvivalent status: **96/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
 
 ## Per-våg (VERIFIED kräver artefakt, INTE bara att koden finns)
 
@@ -17,7 +17,7 @@
 | W5 Event flows | **VERIFIED-CORE** | flows.* ×6 motorn implementerad: file (chokidar-reel direktetdbesyst), webhook (HTTP intake), github-poll (dedupe), manual (renderTemplate), manual/schedule triggers; dedupe+rate-limit+bounded-retries+approval-gate bevisade; 8/8 tester + full 591/575/0/16 |
 | W6 Power Transfer | **MISSING** | är beroende av W1 |
 | W7 Mission loop | **VERIFIED-CORE (recovery)** | kontrakt+verify→repair→replan fanns; checkpoint-persistens + crash-recovery tillagd: resumed missions fortsatter utan att sidoeffekter upprepas (bevisat med raknare); 3 nya tester + full 583/565/0/18 |
-| W8 Channel expansion | **PARTIAL** | telegram.js + whatsapp.js finns (parity med v1.0.0); Discord/Slack/Matrix/Email saknas; send/receive-verifiering per kanal saknas |
+| W8 Channel expansion | **VERIFIED-CORE (send+receive bevisat offline) / LIVE-PENDING** | OUTBOUND discord/slack/matrix/email/webhook fanns (channel.send, tool-testad); INBOUND discord/slack/matrix BYGGD nulld-peer REST-poll shape av telegram-adaptern, samma Channels-buss: sessioner, approvals-routing, deliver, status. Mönster fran absorb-scan matrix-js-sdk (Apache-2.0) + node-slack-sdk (MIT) — ingen av dem dependency. 7/7 per-channel receive-verifiering (tail-baseline, dedupe, cursor-persistens, loop-guard, allowlist, reply-vajningslat ut, not_in_channel/Encrypted-honesty); live cred-gated (bot-tokens). Evidens: docs/evidence/w8-inbound-channels-2026-10-21.md + full 787/0/17 |
 | W9 Memory sync | **MISSING** | ingen sync-modul |
 | W10 Learning loop | **MISSING** | ingen skills/learning-modul (tools/meta.js är introspection, inte learning) |
 | W11 Windows desktop vision | **PARTIAL-VERIFIED-DEL** | ✅ c01/c02 uppmätta; wincontrol.js-brygga i PR #94; agent-c04 run-dialog → Notepad kedjan var bevisad med skärmdumpar i tidigare iteration. Saknas: screenshot/vision-agent/UFO-evaluering + full uppgifts-e2e |

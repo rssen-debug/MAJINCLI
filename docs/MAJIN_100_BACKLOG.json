@@ -348,7 +348,19 @@
       ],
       "evidence": "docs/evidence/w13-recovery-matrix-2026-10-21.json; npm test 774/0/17",
       "verdict": "95/100"
+    },
+    {
+      "round": 32,
+      "focus": "W8: receive-paritet discord/slack/matrix i befintlig Channels-buss — absorb forst (matrix-js-sdk, slack-sdk, egen telegram-shape), noll nya dependencies",
+      "done": [
+        "tre nya adapters src/core/channels/{discord,slack,matrix}.js: REST-poll, per-channel cursor persistan till workspace, tail-baseline (aldrig backlog-flood), loop-guard (egen/bot), allowlist, honest status-diagnoser (Message Content intent, not_in_channel, skippedEncrypted)",
+        "Channels-buss integration: start/stop/status/deliver/toApproval/sessions parity for de tre kanalerna session-prefix: discord/slack/matrix:",
+        "test/channels-inbound.test.js 7/7 — per-channel receive-verifiering (exakt vad STATUS saknade); tre debug-learnings dokumenterade (import-time dirs-pollution, mock-ok-lju, sendMatrix-cfg-kontrakt)",
+        "STATUS-rad korrigerad faktiskt: OUTBOUND-funktionalitet fanns redan (tidigare \"saknas\" var gammal)"
+      ],
+      "evidence": "docs/evidence/w8-inbound-channels-2026-10-21.md; full npm test 787/0/17",
+      "verdict": "96/100"
     }
   ],
-  "percent": 95
+  "percent": 96
 }

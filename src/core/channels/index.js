@@ -5,6 +5,10 @@
  */
 import { Telegram } from './telegram.js';
 import { WhatsApp } from './whatsapp.js';
+import { DiscordChannel } from './discord.js';
+import { SlackChannel } from './slack.js';
+import { MatrixChannel } from './matrix.js';
+import { sendDiscord, sendSlack, sendMatrix } from './send.js';
 import { approvals } from '../guard.js';
 import { bus as globalBus } from '../log.js';
 import { readHistory } from '../context.js';
@@ -21,6 +25,11 @@ export class Channels {
     this.queue = Promise.resolve();
     this.telegram = new Telegram(cfg, { onMessage: (m) => this.enqueue(m), bus });
     this.whatsapp = new WhatsApp(cfg, { onMessage: (m) => this.enqueue(m), bus });
+    /* W8 receive-parity: samma samtalsyta (channel:chatId-sessioner) med
+       samma queue/approval-routing som telegram/whatsapp. */
+    this.discord = new DiscordChannel(cfg, { onMessage: (m) => this.enqueue(m), bus });
+    this.slack = new SlackChannel(cfg, { onMessage: (m) => this.enqueue(m), bus });
+    this.matrix = new MatrixChannel(cfg, { onMessage: (m) => this.enqueue(m), bus });
     this.telegram.onControl = (what, m) => {
       if (what === 'stop') agent?.stop(`${'telegram'}:${m.chat}`);
     };
@@ -31,19 +40,25 @@ export class Channels {
   async start() {
     const tg = this.cfg.get('channels.telegram.enabled') ? await this.telegram.start().catch((e) => (this.bus.warn('telegram.start', { error: e.message }), false)) : false;
     const wa = this.cfg.get('channels.whatsapp.enabled') ? await this.whatsapp.start().catch((e) => (this.bus.warn('whatsapp.start', { error: e.message }), false)) : false;
+    const dc = this.cfg.get('channels.discord.enabled') ? await this.discord.start().catch((e) => (this.bus.warn('discord.start', { error: e.message }), false)) : false;
+    const sl = this.cfg.get('channels.slack.enabled') ? await this.slack.start().catch((e) => (this.bus.warn('slack.start', { error: e.message }), false)) : false;
+    const mx = this.cfg.get('channels.matrix.enabled') ? await this.matrix.start().catch((e) => (this.bus.warn('matrix.start', { error: e.message }), false)) : false;
     this.off = this.bus.on('approval:request', (ev) => this.toApproval(ev));
-    this.bus.info('channels.start', { telegram: tg, whatsapp: wa });
-    return { telegram: tg, whatsapp: wa };
+    this.bus.info('channels.start', { telegram: tg, whatsapp: wa, discord: dc, slack: sl, matrix: mx });
+    return { telegram: tg, whatsapp: wa, discord: dc, slack: sl, matrix: mx };
   }
 
   stop() {
     this.off?.();
     this.telegram.stop();
     this.whatsapp.stop().catch(() => {});
+    this.discord.stop();
+    this.slack.stop();
+    this.matrix.stop();
   }
 
   status() {
-    return { telegram: this.telegram.status(), whatsapp: this.whatsapp.status(), busy: [...this.active.values()].length };
+    return { telegram: this.telegram.status(), whatsapp: this.whatsapp.status(), discord: this.discord.status(), slack: this.slack.status(), matrix: this.matrix.status(), busy: [...this.active.values()].length };
   }
 
   /** Väntande godkännande i rätt chat. */
@@ -61,6 +76,9 @@ export class Channels {
       .join('\n');
     if (channel === 'telegram') this.telegram.send(Number(chatId), text).catch(() => {});
     if (channel === 'whatsapp') this.whatsapp.cloudSend(chatId, text).catch(() => {});
+    if (channel === 'discord') sendDiscord(this.cfg, { channelId: chatId, text }).catch(() => {});
+    if (channel === 'slack') sendSlack(this.cfg, { channel: chatId, text }).catch(() => {});
+    if (channel === 'matrix') sendMatrix(this.cfg, { room: chatId, text }).catch(() => {});
   }
 
   enqueue(msg) {
@@ -168,6 +186,9 @@ export class Channels {
     if (!chatId) return false;
     if (channel === 'telegram') return (await this.telegram.send(Number(chatId), text)).ok;
     if (channel === 'whatsapp') return (await this.whatsapp.cloudSend(chatId, text)).ok !== false;
+    if (channel === 'discord') return (await sendDiscord(this.cfg, { channelId: chatId, text })).ok;
+    if (channel === 'slack') return (await sendSlack(this.cfg, { channel: chatId, text })).ok;
+    if (channel === 'matrix') return (await sendMatrix(this.cfg, { room: chatId, text })).ok;
     return false;
   }
 
@@ -175,6 +196,9 @@ export class Channels {
     const out = [];
     for (const id of this.cfg.get('channels.telegram.allowedChatIds') || []) out.push({ channel: 'telegram', chatId: id, session: `telegram:${id}`, last: readHistory(`telegram:${id}`, 1).at(-1)?.content?.slice(0, 80) || '' });
     for (const id of this.cfg.get('channels.whatsapp.allowedJids') || []) out.push({ channel: 'whatsapp', chatId: id, session: `whatsapp:${id}`, last: readHistory(`whatsapp:${id}`, 1).at(-1)?.content?.slice(0, 80) || '' });
+    for (const id of (this.cfg.get('channels.discord.channelIds') || [])) out.push({ channel: 'discord', chatId: id, session: `discord:${id}`, last: readHistory(`discord:${id}`, 1).at(-1)?.content?.slice(0, 80) || '' });
+    for (const id of (this.cfg.get('channels.slack.channelIds') || [])) out.push({ channel: 'slack', chatId: id, session: `slack:${id}`, last: readHistory(`slack:${id}`, 1).at(-1)?.content?.slice(0, 80) || '' });
+    for (const id of (this.cfg.get('channels.matrix.roomIds') || [])) out.push({ channel: 'matrix', chatId: id, session: `matrix:${id}`, last: readHistory(`matrix:${id}`, 1).at(-1)?.content?.slice(0, 80) || '' });
     return out;
   }
 
