@@ -17,49 +17,87 @@ async function paintHeader(st) {
   $('c-wa').title = 'whatsapp: ' + (wa.state || '?') + (wa.transport ? ' · ' + wa.transport : '') + (wa.lastError ? ' · ' + wa.lastError : '');
   const cu = $('c-update');
   if (cu) {
-    const upd = st.update || null;
-    const show = Boolean(upd && !upd.error && upd.status !== 'up_to_date' && (upd.available || upd.notice));
-    cu.hidden = !show;
-    if (!show) { cu.dataset.arm = ''; cu.dataset.target = ''; cu.onclick = null; }
-    if (show && !cu.dataset.installing) {
-      if (cu.dataset.target !== upd.latest) { cu.dataset.arm = ''; cu.dataset.target = upd.latest; }
+    const configUpdate = st.config?.updates || {};
+    const enabled = configUpdate.check !== false;
+    // The CLI and the UI share persisted version metadata, but the old UI
+    // ignored this cache until its delayed background check completed.
+    const semver = (value) => /^\d+\.\d+\.\d+$/.test(String(value || '')) ? String(value).split('.').map(Number) : null;
+    const isNewer = (latest, installed) => {
+      const a = semver(latest), b = semver(installed);
+      if (!a || !b) return false;
+      for (let i = 0; i < 3; i++) {
+        if (a[i] !== b[i]) return a[i] > b[i];
+      }
+      return false;
+    };
+    const state = st.update || {};
+    const latest = String(state.latest || configUpdate.latest || '').replace(/^v/, '');
+    const available = enabled && isNewer(latest, st.version);
+    const releaseUrl = String(state.url || configUpdate.url || 'https://github.com/rssen-debug/MAJINCLI/releases/latest');
+    // A permanently visible Check updates action avoids a catch-22 where
+    // people must leave the app for CMD because a check was slow/offline.
+    cu.hidden = !enabled;
+    if (!enabled) {
+      cu.onclick = null;
+      cu.dataset.arm = '';
+    } else if (!cu.dataset.installing) {
+      const target = available ? latest : '';
+      if (cu.dataset.target !== target) {
+        cu.dataset.arm = '';
+        cu.dataset.target = target;
+      }
       cu.disabled = false;
-      cu.innerHTML = 'update <b>' + String(upd.latest || '?').replace(/[<>&]/g, '') + '</b>';
-      cu.title = (upd.notice || '') + (upd.url ? ' · ' + upd.url : '') + ' · click to update in place';
-      if (cu.dataset.arm) cu.innerHTML = 'install <b>' + String(upd.latest).replace(/[<>&]/g, '') + '</b>?';
-      cu.style.cursor = 'pointer';
+      cu.innerHTML = available
+        ? (cu.dataset.arm ? 'Install <b>' + latest + '</b>?' : 'Update <b>' + latest + '</b>')
+        : 'Check updates';
+      cu.title = available
+        ? 'MAJIN ' + latest + ' is available. Click twice to confirm installation.'
+        : (state.error ? 'Last check failed: ' + state.error + '. Click to retry.' : 'Check for MAJIN updates now');
+      cu.setAttribute('aria-label', available ? 'Update MAJIN to ' + latest : 'Check for MAJIN updates');
       cu.onclick = async () => {
         if (cu.dataset.installing) return;
+        if (!available) {
+          cu.disabled = true;
+          cu.textContent = 'Checking…';
+          try {
+            const reply = await api('/update', { method: 'POST', body: { action: 'check', force: true } });
+            if (reply?.error) throw new Error(typeof reply.error === 'object' ? reply.error.message : reply.error);
+          } catch (error) {
+            note('Could not check for updates: ' + String(error?.message || error).slice(0, 140));
+          } finally {
+            cu.disabled = false;
+            await window.refresh?.(true);
+          }
+          return;
+        }
         if (!cu.dataset.arm) {
           cu.dataset.arm = '1';
-          cu.innerHTML = 'install <b>' + String(upd.latest || '?').replace(/[<>&]/g, '') + '</b>?';
-          cu.title = 'click again: MAJIN downloads the installer, closes, updates itself and comes back. Your keys and memory stay.';
+          cu.innerHTML = 'Install <b>' + latest + '</b>?';
+          cu.title = 'Click again to confirm: MAJIN will install the verified Windows update and restart.';
           return;
         }
         cu.dataset.arm = '';
-        cu.dataset.installing = '1'; cu.disabled = true;
-        cu.innerHTML = 'update <b>installing…</b>';
+        cu.dataset.installing = '1';
+        cu.disabled = true;
+        cu.innerHTML = 'Installing <b>' + latest + '</b>…';
         try {
-          const r = await api('/update', { method: 'POST', body: { action: 'install' } });
-          if (r && r.ok) {
-            note('updating now — MAJIN installs the new version and restarts itself. Keys, memory and settings carry over.');
-            cu.innerHTML = 'update <b>restarting…</b>';
-          } else if (r && r.error === 'windows_only') {
-            /* linux/mac: en Windows-EXE i Downloads-mappen hjalper ingen — oppna releasesidan */
-            const page = (r.releaseUrl) || (upd && upd.url) || 'https://github.com/rssen-debug/MAJINCLI/releases';
-            try { window.open(page, '_blank', 'noopener'); } catch { /* pop-up blocker — note below has the URL */ }
-            note('one-click install is Windows-only — the release page just opened: ' + page);
-            cu.dataset.installing = ''; cu.disabled = false;
-            cu.innerHTML = 'update <b>page opened</b>';
+          const reply = await api('/update', { method: 'POST', body: { action: 'install' } });
+          if (reply?.ok) {
+            note('Installing MAJIN ' + latest + '. The app will restart; your data remains in its existing location.');
+            cu.innerHTML = 'Restarting…';
+          } else if (reply?.error === 'windows_only') {
+            window.open(reply.releaseUrl || releaseUrl, '_blank', 'noopener');
+            note('The installer is Windows-only. Opened the release page.');
+            cu.dataset.installing = '';
+            cu.disabled = false;
           } else {
-            const failure = r && r.error;
-            throw new Error((typeof failure === 'object' ? failure?.message : failure) || 'Installer could not start');
+            throw new Error(typeof reply?.error === 'object' ? reply.error.message : (reply?.error || 'Installer could not start'));
           }
-        } catch (e) {
-          cu.dataset.installing = ''; cu.disabled = false;
-          cu.innerHTML = 'update <b>failed</b>';
-          const releasePage = (upd && /^https:\/\/github\.com\/rssen-debug\/MAJINCLI\/releases\//.test(upd.url || '')) ? upd.url : 'https://github.com/rssen-debug/MAJINCLI/releases/latest';
-          note('Update could not finish: ' + e.message + '. Your current version is unchanged. [Download the verified Windows installer](' + releasePage + ') to repair a broken older updater.');
+        } catch (error) {
+          cu.dataset.installing = '';
+          cu.disabled = false;
+          cu.textContent = 'Update failed · Retry';
+          note('Update failed: ' + String(error?.message || error).slice(0, 140) + '. Download the installer from ' + releaseUrl);
         }
       };
     }
