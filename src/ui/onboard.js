@@ -89,14 +89,15 @@
     const select = el('select', 'ob-input');
     select.id = 'ob-choice';
     const presets = (OB.st && OB.st.presets || []).filter((p) => p.name !== 'mock');
-    const order = ['deepseek', 'openrouter', 'openai', 'gemini', 'anthropic', 'groq', 'kilocode', 'nous', 'ollama', 'lmstudio'];
+    const order = ['opencode', 'openrouter', 'deepseek', 'openai', 'gemini', 'anthropic', 'groq', 'kilocode', 'nous', 'opencodezen', 'ollama', 'lmstudio'];
     const sorted = [...presets].sort((a, b) => (order.indexOf(a.name) < 0 ? 100 : order.indexOf(a.name)) - (order.indexOf(b.name) < 0 ? 100 : order.indexOf(b.name)));
     for (const p of sorted) {
       const option = el('option', '', p.label + (status(p.name)?.ready ? ' · connected' : ''));
       option.value = p.name;
       select.append(option);
     }
-    select.value = existing ? existing.name : 'deepseek';
+    // Cloud-first onboarding: suggest OpenCode Go when available, without changing saved choices.
+    select.value = existing ? existing.name : (presets.some((p) => p.name === 'opencode') ? 'opencode' : sorted[0]?.name || '');
     if (!select.value && sorted.length) select.value = sorted[0].name;
     label.append(select);
     box.append(label);
@@ -328,7 +329,11 @@
     close.onclick = closePicker;
     head.append(title, close);
     const st = OB.st || window.S?.st;
-    const providers = (st?.providers || []).filter((p) => p.kind !== 'mock');
+    const providers = (st?.providers || []).filter((p) => p.kind !== 'mock').sort((a, b) => {
+      // Keep Go easy to find; never silently replace the currently active model.
+      const priority = (p) => p.name === 'opencode' ? 0 : p.name === 'opencodezen' ? 90 : 10;
+      return priority(a) - priority(b);
+    });
     const active = st?.routes?.find((r) => r.job === 'chat')?.provider;
     const provider = el('select', 'ob-input');
     provider.setAttribute('aria-label', 'Provider');
