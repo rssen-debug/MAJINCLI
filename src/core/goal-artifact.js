@@ -309,13 +309,19 @@ export function verifySingleExactTextCreation(goal, workspace, tool, args, toolO
  * BLOCKED. Avoid that extra inference only after real authorized writes and
  * independent bounded filesystem evidence.
  */
+export function isLocalTokenDemoGoal(goal) {
+  const input = String(goal || '');
+  return /\blocal\s+QA\s+demo\s+ONLY\b/i.test(input) &&
+    /\bNO\s+live\s+chain\b/i.test(input) &&
+    /\bNO\s+real\s+funds\b/i.test(input) &&
+    /\bSave\s+both\s+files\b/i.test(input) &&
+    /\bcreate\s+[\w-]+\.sol\b/i.test(input) &&
+    /\bWrite\s+[\w-]+\.md\b/i.test(input);
+}
+
 export function verifyLocalTokenDemoFiles(goal, workspace, results) {
   const input = String(goal || '');
-  if (!/\blocal\s+QA\s+demo\s+ONLY\b/i.test(input) ||
-      !/\bNO\s+live\s+chain\b/i.test(input) ||
-      !/\bNO\s+real\s+funds\b/i.test(input) ||
-      !/\bSave\s+both\s+files\b/i.test(input) ||
-      !Array.isArray(results)) return null;
+  if (!isLocalTokenDemoGoal(input) || !Array.isArray(results)) return null;
   const sol = [...new Set([...input.matchAll(/(?<![/\\\w.-])([\w-]+\.sol)\b/gi)].map(m=>m[1]))];
   const notes = [...new Set([...input.matchAll(/(?<![/\\\w.-])([\w-]+\.md)\b/gi)].map(m=>m[1]))];
   if (sol.length !== 1 || notes.length !== 1) return null;
