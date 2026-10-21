@@ -420,7 +420,19 @@
       list.textContent = '';
       const hits = filterCatalog(models, { query: search.value, free: freeOnly, sort: sort.value, ...capabilityState });
       msg.textContent = hits.length + ' of ' + models.length + ' models' + (freeOnly ? ' · zero catalog charges' : unverified ? ' · unverified suggestions' : '');
-      if (!hits.length) list.append(el('p', 'explorer-empty', freeOnly ? 'No verified free models here. Try another provider or turn off Free only.' : 'No models match. Try another search or provider.'));
+      if (!hits.length) {
+        const notice = el('div', 'explorer-empty');
+        notice.append(el('p', '', freeOnly
+          ? 'No models with independently verified zero per-token pricing for this provider. OpenCode Go may offer models through a plan, but that is not the same as a free API model.'
+          : 'No models match these filters.'));
+        if (freeOnly) {
+          const showAll = el('button', 'explorer-show-all', 'Show OpenCode Go models');
+          showAll.type = 'button';
+          showAll.onclick = () => { freeOnly = false; free.setAttribute('aria-pressed', 'false'); limit = 60; paint(); };
+          notice.append(showAll);
+        }
+        list.append(notice);
+      }
       for (const m of hits.slice(0, limit)) {
         const row = el('button', 'ob-model' + (provider.value + '/' + m.id === PICKER.current ? ' on' : ''));
         row.type = 'button';
