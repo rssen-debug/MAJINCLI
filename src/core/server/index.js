@@ -419,7 +419,16 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     }
     if (p === '/api/file') {
       const want = url.searchParams.get('path') || '';
-      const abs = path.isAbsolute(want) ? path.resolve(want) : path.resolve(cfg.get('workspace'), want);
+      const configuredWorkspace = path.resolve(cfg.get('workspace'));
+      const normalPath = want.replace(/\\\\/g, '/');
+      // File tools sometimes report \"workspace/project/index.html\" while
+      // their actual write root is already the \"workspace\" directory.
+      const prefix = path.basename(configuredWorkspace).toLowerCase() + '/';
+      const relative = normalPath.toLowerCase().startsWith(prefix)
+        ? normalPath.slice(prefix.length) : normalPath;
+      const original = path.isAbsolute(want) ? path.resolve(want) : path.resolve(configuredWorkspace, normalPath);
+      const prefixed = path.isAbsolute(want) ? original : path.resolve(configuredWorkspace, relative);
+      const abs = !fs.existsSync(original) && fs.existsSync(prefixed) ? prefixed : original;
       // Agent fs.write resolves relative paths against the configured workspace.
       // The directory created at startup (dirs.workspace) may differ when the
       // user changes workspace in Settings. Honour both, but never escape them.
