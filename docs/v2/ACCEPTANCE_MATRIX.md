@@ -20,3 +20,6 @@
 | Command preflight tiers (ok/hold/no + bypass vectors) | VERIFIED | test/v2-safety-recovery.test.js 8/8 incl. flag-reorder, bash -c unwrap, interpreter payload, scoped destructive -> hold |
 | Consent/session layers 53-58 | VERIFIED | same file: exact-scope match, one-time use counts, ttl expiry, revocation, no self-consent, audit events |
 | Recovery advisor (bounded per-class plans) | VERIFIED | same file: all 19 classes bounded, budget exhaustion exact, USER_ACTION_REQUIRED never loops |
+| Executor: chain-aware whitelist 49-52 | VERIFIED | test/v2-exec.test.js: normalization, persistence, chain bypass (GHSA lesson) caught |
+| Executor: approval modes 36-39 | VERIFIED | same file: full tier x mode matrix incl. no-tier blocked in EVERY mode |
+| Executor: sandboxed exec pipeline | VERIFIED | same file: real harmless process runs; rm-rf-root never spawns; HOLD waits for consent then executes; cwd-escape denied |
