@@ -26,7 +26,7 @@ const fixture = fileURLToPath(new URL('./owner-desktop-fixture.ps1', import.meta
 const evidenceFile = path.join(process.cwd(), 'qa-evidence', 'owner-desktop.json');
 const verdict = { schema:'majin-owner-desktop-live/1', syntheticWindow:false,
   controlList:false, controlType:false, controlRead:false, controlClick:false,
-  verifiedSavedBytes:false, pinkVisible:false, pinkMoved:false, pinkHidden:false,
+  verifiedSavedBytes:false, desktopPixelCanary:false, pinkVisible:false, pinkMoved:false, pinkHidden:false,
   pinkStateLabel:false, screenshotsUploaded:false, status:'BLOCKED' };
 
 let app;
@@ -102,6 +102,14 @@ try {
   assert.equal(fs.readFileSync(savedFile,'utf8'),expected,'real button did not save verified text');
   verdict.verifiedSavedBytes=true;
   console.log('W11 SYNTHETIC GUI PASS: MAJIN real control.list/type/read/click, and saved bytes match');
+  // Independent negative control: an unprivileged topmost QA form has a
+  // synthetic hot-pink background. If this is invisible to CopyFromScreen,
+  // a locked/disconnected virtual desktop cannot prove ANY overlay pixel.
+  const pixelCanary=colorCount(180,105);
+  assert.ok(pixelCanary>=12, 'Desktop pixel capture is unavailable even for the synthetic QA window ('+pixelCanary+' pink samples); interactive process != visible unlocked display');
+  verdict.desktopPixelCanary=true;
+  console.log('REAL SCREEN PIXEL CANARY PASS: verified synthetic QA window pixels only');
+
 
   const dimsScript = 'Add-Type -AssemblyName System.Windows.Forms; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; Write-Output ($b.Width.ToString()+","+$b.Height.ToString())';
   const dims=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',dimsScript],{encoding:'utf8',timeout:12000,windowsHide:true});
