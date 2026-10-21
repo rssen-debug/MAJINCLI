@@ -22,7 +22,11 @@ function setup() {
 
 test('W3 E2E local: real command runs, exit measured, stdout actually captured into durable artifacts', async () => {
   const { ctx } = setup();
-  const started = await tools('exec.start').run({ backend: 'local', command: 'echo w3-e2e-marker-252 && exit 0', timeoutSec: 30 }, ctx);
+  // Windows uses Windows PowerShell 5.1, which does NOT support Bash/PS7 &&.
+  const cmd = process.platform === 'win32'
+    ? "Write-Output 'w3-e2e-marker-252'; exit 0"
+    : 'echo w3-e2e-marker-252 && exit 0';
+  const started = await tools('exec.start').run({ backend: 'local', command: cmd, timeoutSec: 30 }, ctx);
   assert.equal(started.ok, true, JSON.stringify(started));
   assert.match(started.meta.id, /^ex-/);
   assert.ok(started.meta.metaDir && fs.existsSync(started.meta.metaDir), 'metaDir must exist immediately: ' + started.meta.metaDir);
