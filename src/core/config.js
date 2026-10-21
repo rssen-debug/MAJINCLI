@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { dirs, expand } from './paths.js';
-import { PRESETS, presetNames, splitModel, chatUrl } from './presets.js';
+import { PRESETS, presetNames, splitModel, chatUrl, goDialect } from './presets.js';
 
 /** Model routing table keys. A "job" is any of these; a route is provider/model. */
 export const JOBS = [
@@ -466,6 +466,7 @@ export class Config {
     const name = parsed.provider;
     const provider = { label: name, kind: 'openai', baseUrl: '', apiKey: '', ...(this.data.providers[name] || {}) };
     const pricing = this.data.pricing?.[`${name}/${parsed.model}`] || null;
+    const kind = name === 'opencode' ? goDialect(parsed.model) : (provider.kind || PRESETS[provider.preset]?.kind || 'openai');
     return {
       ref: `${name}/${parsed.model}`,
       providerName: name,
@@ -473,9 +474,9 @@ export class Config {
       // leverantoren pa samma sat som mannen kan lasa den i panelen
       label: provider.label || name,
       model: provider.kind === 'gemini' ? parsed.model.replace(/^models\//, '') : parsed.model,
-      kind: provider.kind || PRESETS[provider.preset]?.kind || 'openai',
+      kind,
       baseUrl: provider.baseUrl,
-      endpoint: provider.endpoint || chatUrl({ kind: provider.kind || PRESETS[provider.preset]?.kind || 'openai', baseUrl: provider.baseUrl }),
+      endpoint: provider.endpoint || chatUrl({ kind, baseUrl: provider.baseUrl }),
       // Environment keys remain in the process, never copied to config or UI.
       apiKey: provider.apiKey || (provider.keyEnv && process.env[provider.keyEnv]) || '',
       extraHeaders: provider.headers || {},
