@@ -58,3 +58,16 @@ test('contradictory absence and checkbox/text expectations fail before interacti
   assert.equal(verificationCriteria({selector:'.item',present:'false',text:'Hi'}).ok,false);
   assert.equal(verificationCriteria({selector:'#agree',present:'false',checked:'true'}).ok,false);
 });
+
+test('click can assert post-action effects in one bounded browser call',async()=>{
+  const fs=await import('node:fs');
+  const src=fs.readFileSync('src/core/tools/web.js','utf8');
+  assert.match(src,/name: 'browser\.click'/);
+  assert.match(src,/expectSelector: 'string optional/);
+  assert.match(src,/expectUrl: 'string optional/);
+  assert.match(src,/verificationCriteria\(\{/);
+  assert.match(src,/code:'post_click_assertion_failed'/);
+  assert.match(src,/Math\.min\(4000,Math\.max\(0/);
+  assert.match(src,/verified: proof\?\.ok/);
+  assert.match(src,/if\(requiresVerification && !expected\.ok\)/);
+});
