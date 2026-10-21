@@ -85,7 +85,7 @@ async function send(route, payload, { signal }) {
   try {
     return await fetch(route.endpoint || `${String(route.baseUrl).replace(/\/+$/, '')}/messages`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': route.apiKey, 'anthropic-version': '2023-06-01' },
+      headers: { 'content-type': 'application/json', 'x-api-key': route.apiKey, 'anthropic-version': '2023-06-01', ...(route.extraHeaders || {}) },
       body: JSON.stringify(payload),
       signal: ctrl.signal,
     });

@@ -2,13 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** Paketets syntm ä + honesty-registry: den färre minne * visa vila att live-körningen
  *  sparkproducerar bevis, inte historier. Off-line deterministisk — aldrig ett PS1-kör. */
 
-const PS1 = path.resolve(new URL('../scripts/windows/live-acceptance-run.ps1', import.meta.url).pathname);
-const GUIDE = path.resolve(new URL('../docs/LIVE-RUN-GUIDE.md', import.meta.url).pathname);
-const SETUP = path.resolve(new URL('../scripts/windows/desktop-eval-setup.ps1', import.meta.url).pathname);
+const PS1 = fileURLToPath(new URL('../scripts/windows/live-acceptance-run.ps1', import.meta.url));
+const GUIDE = fileURLToPath(new URL('../docs/LIVE-RUN-GUIDE.md', import.meta.url));
+const SETUP = fileURLToPath(new URL('../scripts/windows/desktop-eval-setup.ps1', import.meta.url));
 
 test('live-run package: all three package files exist on disk', () => {
   for (const p of [PS1, GUIDE, SETUP]) assert.ok(fs.existsSync(p), `saknas: ${p}`);

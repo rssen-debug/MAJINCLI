@@ -25,4 +25,4 @@ jobs:
       - name: Check source syntax
         run: npm run check
       - name: Verify cloud routing and isolated CLI proof (no API keys)
-        run: node --test test/verified-cli-completion.test.js test/opencode-route-pin.test.js test/opencode-transport-contract.test.js
+        run: node --test test/verified-cli-completion.test.js test/opencode-route-pin.test.js test/opencode-transport-contract.test.js test/opencode-go-dialects.test.js test/commonjs-echo-cli-repair.test.js

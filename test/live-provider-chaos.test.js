@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildLiveRows, runLiveChaos, classifyHttp, LIVE_CHAOS_VERSION } from '../src/core/live-provider-chaos.js';
 
 /** Offline engine-kontrakt: radfabrikens domar är bevisbara mot simulerade OpenAI-form-svar.
@@ -77,7 +78,7 @@ test('W13-live http-klassificeraren är tydlig mot varje statusspann', () => {
 
 /* ---------- evidential audit av de committade LIVE-artifactsen ---------- */
 
-const LIVE = path.resolve(new URL('../docs/evidence/live-provider-chaos-2026-10-21.json', import.meta.url).pathname);
+const LIVE = fileURLToPath(new URL('../docs/evidence/live-provider-chaos-2026-10-21.json', import.meta.url));
 
 test('W13-live evidential audit: committad live-evidens existerar, alla rader avgjorda, noll stuck, noll nyckelläckage', () => {
   assert.ok(fs.existsSync(LIVE), 'live-artifact saknas — lane claims utan receipts');

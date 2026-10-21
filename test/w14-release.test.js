@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import { recordInstalled, planRollback, executeRollback, rollbackLedger, RollbackError, ROLLBACK_VERSION } from '../src/core/update-rollback.js';
 import { manifestHash, reproducibilityProof, trackedFiles } from '../src/core/reproducible.js';
@@ -79,7 +80,7 @@ test('W14 rollback execute happy path: restorer kallas med VERIFIERAD fil, ledge
 /* ------------------------------ reproducible ------------------------------ */
 
 test('W14 reproducible: manifest hash är stabil run-för-run, trackerar riktiga regler', () => {
-  const root = path.resolve(new URL('..', import.meta.url).pathname);
+  const root = fileURLToPath(new URL('..', import.meta.url));
   const proof = reproducibilityProof(root);
   assert.equal(proof.identical, true);
   assert.match(proof.hashA, /^[0-9a-f]{64}$/);
@@ -99,7 +100,7 @@ test('W14 reproducible: manifest hash är stabil run-för-run, trackerar riktiga
 /* ------------------------------ competitive bench ------------------------------ */
 
 test('W14 competitive-bench: repots egen native task-svit passerar kontraktet 3/3', { timeout: 60_000 }, async () => {
-  const root = path.resolve(new URL('..', import.meta.url).pathname);
+  const root = fileURLToPath(new URL('..', import.meta.url));
   const tasks = loadTasks(path.join(root, 'benchmark', 'tasks'));
   assert.equal(tasks.length, 3);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'w14-bench-'));

@@ -47,7 +47,7 @@ export const PRESETS = {
     baseUrl: 'https://opencode.ai/zen/go/v1',
     /* Go-gatewayen vagrant utan session-header (400 MissingSessionID) — MAJIN
        bärgr den at dig, liksom nyckelhanteringen: bara klistra in nyckeln. */
-    headers: { 'x-opencode-session': 'majin' },
+    headers: { 'x-opencode-session': 'majin', 'user-agent': 'MAJIN-coding-agent/1.0' },
     keyEnv: 'OPENCODE_API_KEY',
     apiKey: null,
     models: ['glm-5.3-flash', 'qwen3.8-flash', 'deepseek-v4.1-flash', 'mimo-v2.6-flash', 'beam-free', 'longcat-2.5-preview-free', 'kimi-k2.6', 'grok-4.6'],
@@ -193,10 +193,24 @@ export function splitModel(ref, cfg) {
   return { provider: def, model: s };
 }
 
+/**
+ * The Go model catalog mixes THREE incompatible HTTP protocols. Treating
+ * every model as Chat Completions makes Qwen/Grok appear broken even with a
+ * valid subscription. These families follow the published Go endpoint table;
+ * unknown/new model IDs remain on the original compatible path until listed.
+ */
+export function goDialect(model) {
+  const id = String(model || '').toLowerCase();
+  if (/^(?:qwen3(?:[.-]|$)|minimax-|claude-)/.test(id)) return 'anthropic';
+  if (/^(?:grok-|gpt-|muse-spark-)/.test(id)) return 'responses';
+  return 'openai';
+}
+
 /** OpenAI-compatible chat endpoint for a provider. */
 export function chatUrl(provider) {
   const base = String(provider.baseUrl || '').replace(/\/+$/, '');
   if (provider.kind === 'anthropic') return `${base}/messages`;
+  if (provider.kind === 'responses') return `${base}/responses`;
   if (provider.kind === 'gemini') return `${base.replace(/\/openai$/, '')}/openai/chat/completions`;
   return `${base}/chat/completions`;
 }
