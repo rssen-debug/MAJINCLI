@@ -350,6 +350,18 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress-timer{font-variant-numeric:tabular-nums;min-width:3ch;text-align:right;opacity:.65}
 @keyframes majin-progress-glide{from{transform:translateX(-110%)}to{transform:translateX(420%)}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress::after{animation:none;left:auto;right:0;opacity:.4}}
+/* This round: a single responsive activity ember INSIDE the chat composer.
+   Browser outcome verification is violet; recovery is coral; regular work pink. */
+#composer #work-progress{--ember:#ff86ce;--halo:rgba(255,134,206,.22);transition:color .25s ease,border-color .25s ease;overflow:hidden}
+#composer #work-progress .pulse{flex:none;width:9px;height:9px;position:relative;border:0;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,var(--ember) 55%,transparent 88%);box-shadow:0 0 9px var(--ember),0 0 18px var(--halo);animation:majin-ember 1.6s ease-in-out infinite}
+#composer #work-progress .pulse::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:1px solid var(--ember);opacity:.4;animation:majin-ember-ring 2.2s ease-out infinite}
+#composer #work-progress[data-phase="verify"]{--ember:#c5a2ff;--halo:rgba(197,162,255,.25)}
+#composer #work-progress[data-phase="problem"]{--ember:#ff968d;--halo:rgba(255,150,141,.24)}
+#composer #work-progress[data-phase="problem"] .pulse{animation-duration:2.8s}
+#composer #work-progress-label{letter-spacing:.01em}
+@keyframes majin-ember{0%,100%{transform:scale(.88);opacity:.66}50%{transform:scale(1.16);opacity:1}}
+@keyframes majin-ember-ring{0%{transform:scale(.7);opacity:.5}100%{transform:scale(1.5);opacity:0}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress .pulse,#composer #work-progress .pulse::after{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
