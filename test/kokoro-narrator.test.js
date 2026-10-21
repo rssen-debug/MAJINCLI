@@ -25,5 +25,5 @@ test('narrator UI mode and setup exist without model download on app launch',()=
 test('v1.0.7 release identifiers align',()=>{
  for(const f of ['package.json','package-lock.json'])assert.equal(JSON.parse(fs.readFileSync(f,'utf8')).version,'1.0.7');
  assert.equal(JSON.parse(fs.readFileSync('package-lock.json','utf8')).packages[''].version,'1.0.7');
- for(const f of ['src/core/version.js','installer/majin.iss','scripts/publish.ps1'])assert.match(fs.readFileSync(f,'utf8'),/1\.0\.6/);
+ for(const f of ['src/core/version.js','installer/majin.iss','scripts/publish.ps1'])assert.match(fs.readFileSync(f,'utf8'),/1\.0\.7/);
 });
