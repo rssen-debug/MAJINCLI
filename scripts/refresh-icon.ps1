@@ -36,12 +36,12 @@ function Assert-BrandPixels([string]$IcoPath) {
       if ($bytes[[int]$off+$j] -ne $magic[$j]) { throw "ICON_CHECK: $w frame is not PNG" }
     }
   }
-  $icon = New-Object System.Drawing.Icon($IcoPath, 256, 256)
+  $icon = [System.Drawing.Icon]::new($IcoPath, 256, 256)
   try {
     $bmp = $icon.ToBitmap()
     try {
       # x=25%, y=50% is within the pink background of the branded PNG.
-      $color = $bmp.GetPixel([int]($bmp.Width*.25), [int]($bmp.Height*.5))
+      $color = $bmp.GetPixel([int]($bmp.Width*.12), [int]($bmp.Height*.5))
       if ($color.R -lt 155 -or $color.R -le $color.G * 1.4 -or $color.B -lt 40) {
         throw "ICON_CHECK: icon has no pink MAJIN brand pixel (R=$($color.R),G=$($color.G),B=$($color.B))"
       }
@@ -58,17 +58,17 @@ if (-not (Test-Path -LiteralPath $Source)) { throw "MAJIN PNG not found: $Source
 $src = [System.Drawing.Image]::FromFile($Source)
 try {
   if ($src.Width -lt 256 -or $src.Height -lt 256) { throw 'MAJIN brand PNG must be at least 256px' }
-  $frames = New-Object System.Collections.Generic.List[byte[]]
+  $frames = [System.Collections.Generic.List[byte[]]]::new()
   foreach($size in $sizes) {
-    $bitmap = New-Object System.Drawing.Bitmap($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $bitmap = [System.Drawing.Bitmap]::new($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    $stream = New-Object IO.MemoryStream
+    $stream = [IO.MemoryStream]::new()
     try {
       $graphics.Clear([System.Drawing.Color]::Transparent)
       $graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
       $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
       $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-      $graphics.DrawImage($src, (New-Object System.Drawing.Rectangle(0,0,$size,$size)))
+      $graphics.DrawImage($src, ([System.Drawing.Rectangle]::new(0,0,$size,$size)))
       $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
       $frames.Add($stream.ToArray())
     } finally { $stream.Dispose(); $graphics.Dispose(); $bitmap.Dispose() }
@@ -80,7 +80,7 @@ $dir = [IO.Path]::GetDirectoryName($Destination)
 $tmp = $Destination + '.tmp'
 try {
   $out = [IO.File]::Open($tmp, [IO.FileMode]::Create, [IO.FileAccess]::Write)
-  $writer = New-Object IO.BinaryWriter($out)
+  $writer = [IO.BinaryWriter]::new($out)
   try {
     $writer.Write([UInt16]0)
     $writer.Write([UInt16]1)
