@@ -109,3 +109,133 @@ test('W7: dead mission never claims completion — final state blocked with reas
   assert.ok(st.nodes.some((n) => n.status === 'failed' || n.status === 'blocked'));
   assert.ok((st.limitsHit || []).length >= 1, 'limit marker (retry/replan) recorded: ' + JSON.stringify(st.limitsHit));
 });
+
+
+for (const sabotage of ['deleted', 'content-changed']) {
+  test('W7 checkpoint revalidation: ' + sabotage + ' verified artifact is re-executed, not falsely carried', async () => {
+    const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mrec-stale-'));
+    const goal = makeMissionGoal();
+    const firstCalls = {};
+    await runMission({
+      cfg: stubCfg(wsDir), registry: null, session: 'stale', input: goal,
+      modelCall: async () => compileGraph(),
+      workerOverride: workerFactory(wsDir, { a: 'ok', b: 'crash' }, firstCalls),
+    });
+    const cpDir = checkpointDir(wsDir, canonicalMissionId(goal));
+    const firstState = readState(cpDir);
+    assert.equal(firstState.nodes.find((n) => n.id === 'a').status, 'verified');
+    assert.equal(firstCalls.a, 1);
+
+    const alpha = path.join(wsDir, 'alpha.txt');
+    if (sabotage === 'deleted') fs.unlinkSync(alpha);
+    else fs.appendFileSync(alpha, '\nUNAUTHORIZED CHANGE');
+    const nextCalls = {};
+    const events = [];
+    const resumed = await runMission({
+      cfg: stubCfg(wsDir), registry: null, session: 'stale', input: goal,
+      modelCall: async () => compileGraph(),
+      workerOverride: workerFactory(wsDir, { a: 'ok', b: 'ok' }, nextCalls),
+      emit: (event) => events.push(event),
+    });
+    assert.equal(nextCalls.a, 1, 'changed evidence must force a real new execution');
+    assert.equal(nextCalls.b, 1);
+    assert.ok(events.some((event) => event.type === 'mission_carry_invalid' && event.id === 'a'),
+      'must report why checkpoint carry was rejected');
+    assert.equal(resumed.carriedCount, 0, 'invalidated result must not count as carried');
+    assert.equal(fs.readFileSync(alpha, 'utf8'), 'HELLO-ALPHA');
+    assert.equal(readState(cpDir).status, 'complete');
+  });
+}
+
+test('W7 checkpoint revalidation: intact verified artifact is carried without repeating side effects', async () => {
+  const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mrec-intact-'));
+  const goal = makeMissionGoal();
+  await runMission({
+    cfg: stubCfg(wsDir), registry: null, session: 'intact', input: goal,
+    modelCall: async () => compileGraph(),
+    workerOverride: workerFactory(wsDir, { a: 'ok', b: 'crash' }, {}),
+  });
+  const nextCalls = {};
+  const events = [];
+  const resumed = await runMission({
+    cfg: stubCfg(wsDir), registry: null, session: 'intact', input: goal,
+    modelCall: async () => compileGraph(),
+    workerOverride: workerFactory(wsDir, { a: 'ok', b: 'ok' }, nextCalls),
+    emit: (event) => events.push(event),
+  });
+  assert.equal(nextCalls.a, undefined, 'intact verified artifact must not be rewritten');
+  assert.equal(nextCalls.b, 1);
+  assert.equal(resumed.carriedCount, 1);
+  assert.ok(events.some((event) => event.type === 'mission_carried' && event.id === 'a' && event.reverified === true));
+  assert.equal(readState(checkpointDir(wsDir, canonicalMissionId(goal))).status, 'complete');
+});
+
+
+test('W7 checkpoint identity: a recompiled task cannot reuse another task with the same node ID', async () => {
+  const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mrec-identity-'));
+  const goal = makeMissionGoal();
+  await runMission({
+    cfg: stubCfg(wsDir), registry: null, session: 'identity', input: goal,
+    modelCall: async () => compileGraph(),
+    workerOverride: workerFactory(wsDir, { a: 'ok', b: 'crash' }, {}),
+  });
+  const changedGraph = JSON.parse(compileGraph());
+  changedGraph.nodes[0].input += ' Also satisfy this NEW requirement, not present in the prior run.';
+  const nextCalls = {};
+  const events = [];
+  const resumed = await runMission({
+    cfg: stubCfg(wsDir), registry: null, session: 'identity', input: goal,
+    modelCall: async () => JSON.stringify(changedGraph),
+    workerOverride: workerFactory(wsDir, { a: 'ok', b: 'ok' }, nextCalls),
+    emit: (event) => events.push(event),
+  });
+  assert.equal(nextCalls.a, 1, 'the old matching file alone cannot prove the new task is done');
+  assert.equal(nextCalls.b, 1);
+  assert.equal(resumed.carriedCount, 0);
+  assert.ok(events.some((event) => event.type === 'mission_carry_invalid' && event.id === 'a' &&
+    /node changed|identity/.test(event.reason)));
+  const checkpoint = readState(checkpointDir(wsDir, canonicalMissionId(goal)));
+  assert.equal(checkpoint.status, 'complete');
+  assert.equal(checkpoint.nodes[0].input, changedGraph.nodes[0].input);
+});
+
+
+for (const instruction of [
+  'send an external email and charge a customer',
+  'make command "node --version" exits 0',
+]) {
+  test('W7 unsafe resume: uncheckable previous side effects require review instead of replay: ' + instruction, async () => {
+    const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mrec-unsafe-'));
+    const goal = '1) ' + instruction + '\n2) create beta.txt containing the exact word "HELLO-BETA"';
+    const graph = { nodes: [
+      { id: 'a', input: instruction, deps: [], estMs: 10 },
+      { id: 'b', input: 'create beta.txt containing the exact word "HELLO-BETA"', deps: [], estMs: 10 },
+    ] };
+    writeState(checkpointDir(wsDir, canonicalMissionId(goal)), {
+      id: canonicalMissionId(goal), status: 'blocked', nodeIds: ['a', 'b'],
+      nodes: [
+        { id: 'a', input: graph.nodes[0].input, deps: [], status: 'verified', text: 'previously claimed done', verifiedSummary: 'old claim' },
+        { id: 'b', input: graph.nodes[1].input, deps: [], status: 'failed', error: 'temporary failure' },
+      ],
+    });
+    const events = [];
+    const calls = {};
+    const m = await runMission({
+      cfg: stubCfg(wsDir), registry: null, session: 'unsafe', input: goal,
+      modelCall: async () => JSON.stringify(graph),
+      workerOverride: async (node) => {
+        calls[node.id] = (calls[node.id] || 0) + 1;
+        if (node.id === 'a') throw Error('dangerous repeated action!');
+        fs.writeFileSync(path.join(wsDir, 'beta.txt'), 'HELLO-BETA');
+        return { text: 'wrote beta.txt' };
+      },
+      emit: (event) => events.push(event),
+    });
+    assert.equal(calls.a, undefined, 'unknown prior side effect must never be retried automatically');
+    assert.equal(calls.b, 1);
+    assert.equal(m.failCount, 1);
+    assert.match(m.textSummary.join('\n'), /REQUIRES_REVIEW/);
+    assert.ok(events.some((e) => e.type === 'mission_carry_unverifiable' && e.id === 'a'));
+    assert.equal(readState(checkpointDir(wsDir, canonicalMissionId(goal))).status, 'blocked');
+  });
+}
