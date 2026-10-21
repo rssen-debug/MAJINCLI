@@ -29,7 +29,17 @@ export const GROUND_JS = `(() => {
     el.setAttribute('data-majin-ref', ref);
     const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
     const tag = el.tagName.toLowerCase();
-    const text = String(el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.name || el.href || tag).replace(/\\s+/g, ' ').trim().slice(0, 70);
+    const type = String(el.getAttribute('type') || el.type || '').toLowerCase();
+    // Model grounding must NEVER expose values typed into form controls.
+    const sensitive = ['password', 'hidden', 'file'].includes(type) ||
+      el.getAttribute('autocomplete') === 'one-time-code';
+    const label = el.labels?.[0]?.textContent || el.getAttribute('aria-label') ||
+      (el.getAttribute('aria-labelledby') && document.getElementById(el.getAttribute('aria-labelledby'))?.textContent) ||
+      el.getAttribute('placeholder') || el.getAttribute('title') || el.name || '';
+    const text = String((tag === 'input' || tag === 'textarea' || tag === 'select') ?
+      (label || (sensitive ? '[sensitive field]' : tag)) :
+      (el.innerText || label || el.href || tag))
+      .replace(/\s+/g, ' ').trim().slice(0, 70);
     const mark = document.createElement('div');
     mark.className = 'majin-mark';
     mark.textContent = ref.replace('e', '');

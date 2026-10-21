@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RecoveryBudget, recoveryHint } from '../src/core/strategy-recovery.js';
+import { RecoveryBudget, recoveryHint, browserRecoveryPlan } from '../src/core/strategy-recovery.js';
 import { loop } from '../src/core/loop.js';
 
 test('strategy recovery emits actionable alternatives without claiming work happened',()=>{
@@ -56,4 +56,14 @@ test('second identical call after recovery is hard-blocked without execution',as
   assert.equal(clicks,2);
   assert.equal(out.stopReason,'repeat_block');
   assert.equal(out.toolLog.length,4);
+});
+
+test('recovery guidance uses observed accessibility state, not repeat clicks',()=>{
+  assert.match(browserRecoveryPlan('ref_stale: detached node'),/NEW browser\.elements ref/);
+  assert.match(browserRecoveryPlan('selector not found'),/not guessed nth-child/);
+  assert.match(browserRecoveryPlan('navigation timeout'),/current URL/);
+  assert.match(browserRecoveryPlan('403 forbidden'),/Do not bypass CAPTCHA/);
+  assert.match(browserRecoveryPlan('click intercepted by overlay'),/modal, overlay/);
+  assert.match(recoveryHint('browser.click','ref_stale'),/discard the old reference/);
+  assert.doesNotMatch(browserRecoveryPlan('403 forbidden'),/try another account|disable security/i);
 });
