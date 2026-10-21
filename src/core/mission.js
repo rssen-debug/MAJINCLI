@@ -52,11 +52,11 @@ export function shouldMission(input) {
   // A source JSON -> ONE Markdown shortlist is a single data transformation,
   // not four independent tasks. Real Qwen3B QA produced four subagents,
   // lost the source and never wrote the target. Keep read/write together.
-  const jsonFiles = [...t.matchAll(/(?<![\\w.\\/\\-])([\\w.-]+\\.json)\\b/gi)];
-  const mdFiles = [...t.matchAll(/(?<![\\w.\\/\\-])([\\w.-]+\\.md)\\b/gi)];
+  const jsonFiles = [...t.matchAll(/(?<![\w.\/\-])([\w.-]+\.json)\b/gi)];
+  const mdFiles = [...t.matchAll(/(?<![\w.\/\-])([\w.-]+\.md)\b/gi)];
   if (jsonFiles.length === 1 && mdFiles.length === 1 &&
-      /\\b(?:read|läs)\\b/i.test(t) && /\\b(?:create|write|save|skapa|skriv|spara)\\b/i.test(t) &&
-      /\\ball\\s+(?:three\\s+|two\\s+|\\d+\\s+)?job\\s+ids?\\b/i.test(t)) {
+      /\b(?:read|läs)\b/i.test(t) && /\b(?:create|write|save|skapa|skriv|spara)\b/i.test(t) &&
+      /\ball\s+(?:three\s+|two\s+|\d+\s+)?job\s+ids?\b/i.test(t)) {
     return { mission: false, reason: 'atomic JSON to job shortlist transformation' };
   }
   const list = t.match(LIST_RE) || [];
