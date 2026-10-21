@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import { loadDesktopTasks, contractDesktopLane, aggregateDesktop, materialize, VERSION } from '../src/core/desktop-eval.js';
 
 const ws = () => fs.mkdtempSync(path.join(os.tmpdir(), 'w11-eval-'));
-const REPO_TASKS = path.resolve(new URL('../benchmark/desktop-tasks', import.meta.url).pathname);
+const REPO_TASKS = fileURLToPath(new URL('../benchmark/desktop-tasks', import.meta.url));
 
 test('W11 desktop-eval: repots desktop-svit laddas (2 simulerade + 1 windows-real)', () => {
   const tasks = loadDesktopTasks(REPO_TASKS);
