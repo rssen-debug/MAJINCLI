@@ -296,7 +296,8 @@ function closeAnswer(ev) {
     const secs = ((Date.now() - S.t0) / 1000).toFixed(1);
     foot.textContent = [meta.job && 'job ' + meta.job, meta.steps && meta.steps + ' steps', meta.tools && meta.tools + ' tools', meta.usage && (meta.usage.input + '→' + meta.usage.output + ' tok'), meta.usage && meta.usage.costUsd ? '$' + meta.usage.costUsd.toFixed(4) : null, secs + 's'].filter(Boolean).join(' · ');
     a.m.append(foot);
-    if (S.voice && ev.text) speak(ev.text);
+    const audibleReply = String(ev.text || S.curBody || '').trim();
+    if (S.voice && !S.cancelled && audibleReply) void speak(audibleReply);
   }
   S.cur = null;
   S.tools = null;
