@@ -280,7 +280,7 @@
     const prov = (st.providers || []).find((p) => p.name === chat?.provider);
     /* spec B: the chip states provider · model — never an ambiguous model name
        alone (OpenCode Go must not read as plain glm-x.x, never silently Zen). */
-    const provName = prov?.displayName || prov?.preset || chat?.provider || '';
+    const provName = prov?.label || prov?.displayName || prov?.preset || chat?.provider || '';
     chip.textContent = (PICKER.current
       ? `${provName} · ${shortModel(PICKER.current)}${configured ? '' : ' · Connect'}`
       : 'Choose a model') + ' ▾';
