@@ -55,7 +55,7 @@ function Shot($name) {
 
 $interactive = [Environment]::UserInteractive
 if (-not $interactive) {
-  $results.Add([ordered]@{ step = 'A0', title = 'interactive desktop session', status = 'NOT TESTED', evidence = 'non-interactive session (service/ssh without desktop) — cursor overlay and UIA probes need a logged-in desktop; rerun interactively', artifact = $null })
+  $results.Add([ordered]@{ step = 'A0'; title = 'interactive desktop session'; status = 'NOT TESTED'; evidence = 'non-interactive session (service/ssh without desktop) — cursor overlay and UIA probes need a logged-in desktop; rerun interactively'; artifact = $null })
 }
 
 # A1 pink cursor overlay
