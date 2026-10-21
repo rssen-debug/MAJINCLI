@@ -118,6 +118,23 @@ try {
   pinkStarted=true;
   await sleep(2400);
   const first=colorCount(x1,y1);
+  if (first < 12) {
+    // Diagnose a real PowerShell overlay startup failure while retaining NO
+    // screenshots. A direct second launch exposes parser/runtime diagnostics
+    // that the normal detached, stdio-ignored overlay process cannot report.
+    const psFile=cursorPaths(workspace).ps1;
+    const stateFile=cursorPaths(workspace).state;
+    let output='', err='';
+    const diag=spawn('powershell.exe',['-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',psFile,'-StateFile',stateFile],
+      {windowsHide:true,stdio:['ignore','pipe','pipe']});
+    diag.stdout?.on('data',d=>{output+=String(d).slice(0,1500);});
+    diag.stderr?.on('data',d=>{err+=String(d).slice(0,1500);});
+    await sleep(1100);
+    const stopped=diag.exitCode;
+    try{diag.kill();}catch{}
+    const diagnostic=(err||output).replace(/C:\\\\Users\\\\[^\\\\]+/gi,'C:Users:[redacted]').slice(0,600);
+    throw new Error('W12 overlay no screen pixels ('+first+'); direct PS exit='+String(stopped)+'; diagnostic='+diagnostic);
+  }
   assert.ok(first>=12,'W12 overlay not visible at first target ('+first+' pink samples)');
   verdict.pinkVisible=true;
 
