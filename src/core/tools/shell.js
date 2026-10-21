@@ -127,7 +127,12 @@ export const shellTools = [
       const out = `${r.stdout || ''}${r.stderr ? `\n-- stderr --\n${r.stderr}` : ''}`.trim();
       const status = r.ok ? 'ok' : `exit ${r.exitCode}${r.killed ? ' (killed after timeout)' : ''}`;
       return {
-        ok: true,
+        // An exited program with non-zero code must NOT be reported as tool success.
+        // Otherwise the agent can claim it rendered a Blender file / ran a script
+        // even after Blender or the command failed.
+        ok: r.ok,
+        ...(r.ok ? {} : { error: { code: r.killed ? 'shell_timeout' : 'shell_exit_nonzero',
+          message: `Command exited ${r.exitCode}${r.killed ? ' after timeout' : ''}. ${String(r.stderr || r.stdout || '').slice(0, 260)}` } }),
         result: `$ ${command}\n[${status} · ${r.ms}ms · ${r.shell}${out.length ? ` · ${out.length} tecken` : ''}]\n${out || '(ingen output)'}`,
         meta: { exitCode: r.exitCode, ms: r.ms, killed: r.killed, cwd: dir, outChars: out.length },
         summary: `${path.basename(command.split(/\s+/)[0] || 'shell')} → ${status}`,

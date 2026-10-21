@@ -52,12 +52,14 @@ async function paintHeader(st) {
             cu.dataset.installing = ''; cu.disabled = false;
             cu.innerHTML = 'update <b>page opened</b>';
           } else {
-            throw new Error((r && r.error) || 'install failed');
+            const failure = r && r.error;
+            throw new Error((typeof failure === 'object' ? failure?.message : failure) || 'Installer could not start');
           }
         } catch (e) {
           cu.dataset.installing = ''; cu.disabled = false;
           cu.innerHTML = 'update <b>failed</b>';
-          note('the update did not work: ' + e.message + ' — the release page has it: ' + ((upd && upd.url) || 'github'));
+          const releasePage = (upd && /^https:\/\/github\.com\/rssen-debug\/MAJINCLI\/releases\//.test(upd.url || '')) ? upd.url : 'https://github.com/rssen-debug/MAJINCLI/releases/latest';
+          note('Update could not finish: ' + e.message + '. Your current version is unchanged. [Download the verified Windows installer](' + releasePage + ') to repair a broken older updater.');
         }
       };
     }

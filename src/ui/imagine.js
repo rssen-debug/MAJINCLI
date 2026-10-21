@@ -13,23 +13,26 @@
 (function () {
   'use strict';
 
+  // Quiet, readable activity rather than decorative emoji on every tool call.
   const ICONS = [
-    [/search|web|crawl|scrape/i, '🔍'],
-    [/browser|page|tab|click|navigate/i, '🌐'],
-    [/computer|screen|mouse|keyboard|window|desktop/i, '🖥️'],
-    [/image|draw|paint|photo|art/i, '🎨'],
-    [/file|fs_|read|write|folder/i, '📄'],
-    [/shell|terminal|cmd|powershell|exec/i, '💻'],
-    [/schedule|cron|remind/i, '🗓️'],
-    [/memory|remember|note/i, '🧠'],
-    [/telegram|whatsapp|message|send/i, '✉️'],
-    [/calc|math/i, '🔢'],
+    [/search|web|crawl|scrape/i, 'SR'], [/browser|page|navigate/i, 'BR'],
+    [/computer|screen|mouse|keyboard|window|desktop|control/i, 'PC'],
+    [/image|draw|paint|photo|art/i, 'IM'], [/file|fs[._]|read|write|folder/i, 'FL'],
+    [/shell|terminal|cmd|powershell|exec/i, 'TM'], [/schedule|cron/i, 'TM'],
+    [/memory|remember|note/i, 'ME'], [/channel|message|send/i, 'MS'],
   ];
-  const iconFor = (name) => {
-    for (const [re, icon] of ICONS) if (re.test(name || '')) return icon;
-    return '🔧';
-  };
-
+  const iconFor = (name) => ICONS.find(([re]) => re.test(name || ''))?.[1] || 'AI';
+  const toolTitle = (name) => ({
+    'fs.write': 'Created a file', 'fs.read': 'Read a file',
+    'fs.patch': 'Updated a file', 'fs.list': 'Checked files',
+    'shell.run': 'Ran a command', 'screen.capture': 'Captured the screen',
+    'control.list_windows': 'Checked open windows', 'control.type': 'Entered text',
+    'control.read': 'Read window content', 'control.click_button': 'Pressed a button',
+    'mouse.move': 'Moved the mouse pointer', 'cursor.overlay': 'Showed an activity marker',
+    'jobs.search': 'Searched job listings', 'jobs.match': 'Matched jobs to CV',
+    'jobs.prepare': 'Prepared an application', 'jobs.send': 'Submitted an application'
+  })[name] || String(name || 'Working').replace(/[._]/g,' ');
+ 
   // core states: idle | thinking | working | waiting | done | error
   let core = 'idle';
   let root = null, orb = null, coreLabel = null, list = null, empty = null;
@@ -136,7 +139,7 @@
 
   function previewHtml(path, size, row) {
     if (!/\.html?$/i.test(path) || (Number(size) || 0) > PREVIEW_LIMIT) return;
-    const btn = el('button', 'preview-action', '👁 Preview HTML');
+    const btn = el('button', 'preview-action', 'Preview HTML');
     btn.type = 'button';
     btn.title = 'Preview a local HTML file without running scripts';
     btn.onclick = async () => {
@@ -177,7 +180,7 @@
         btn.textContent = String(error.message || error);
       } finally {
         btn.disabled = false;
-        if (btn.textContent === 'Loading preview…') btn.textContent = '👁 Preview HTML';
+        if (btn.textContent === 'Loading preview…') btn.textContent = 'Preview HTML';
       }
     };
     row.append(btn);
@@ -200,7 +203,7 @@
         // those rows and attach call IDs once the loop starts the real calls.
         setCore('working');
         const name = String(ev.name || 'tool');
-        const row = stepRow(iconFor(name), name, 'running…');
+        const row = stepRow(iconFor(name), toolTitle(name), 'In progress');
         row.classList.add('running');
         addStep(row);
         track(name, row, ev.callId);
@@ -236,7 +239,7 @@
         row.classList.add(ev.ok ? 'ok' : 'fail');
         const sub = row.querySelector('.step-sub');
         const errText = typeof ev.error === 'string' ? ev.error : (ev.error && ev.error.message) || 'unknown';
-        if (sub) sub.textContent = ev.ok ? (ev.summary || 'done') : 'error: ' + errText;
+        if (sub) sub.textContent = ev.ok ? (ev.summary || 'Completed') : 'Failed: ' + errText;
         row.append(detailEl({ tool: ev.tool, ok: ev.ok, summary: ev.summary, error: ev.error, meta: ev.meta }));
         if (ev.callId) pendingById.delete(String(ev.callId));
         if (ev.ok && ev.meta && typeof ev.meta.path === 'string') {

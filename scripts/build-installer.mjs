@@ -32,7 +32,7 @@ function fail(m, code = 1) {
 }
 
 const exe = path.join(root, 'dist', 'majin-win-x64.exe');
-const ico = path.join(root, 'assets', 'majin.ico');
+const ico = path.join(root, 'dist', 'assets', 'majin.ico');
 
 // 1) stage: the three files the .iss reads from its own folder
 const cmd = [
@@ -56,7 +56,7 @@ if (!fs.existsSync(exe)) {
       '  or let CI do it:       gh workflow run build-exe.yml',
   );
 }
-if (!fs.existsSync(ico)) fail('assets/majin.ico is missing -- the installer would have no icon');
+if (!fs.existsSync(ico)) fail('dist/assets/majin.ico is missing -- build the Windows EXE first so icon generation uses the current brand PNG');
 
 fs.mkdirSync(outDir, { recursive: true });
 fs.copyFileSync(exe, path.join(inst, 'majin-win-x64.exe'));

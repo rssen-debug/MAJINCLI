@@ -9,18 +9,19 @@ import { CHANNELS_OUT } from '../channels/send.js';
 export const channelTools = [
   def({
     name: 'channel.send',
+    required: ['channel', 'text'], // url/subject/to/embeds/blocks depend on the selected channel
     group: 'channels',
     risk: 'exec',
     desc: 'Send a message to a configured outbound channel (discord/slack/matrix/email/webhook). Missing credentials NEVER pretend: you get a not_configured diagnosis instead. Configure under channels.<name>.* in majin config.',
     params: {
       channel: 'string which channel — discord|slack|matrix|email|webhook',
-      to: 'string target — discord channel-id / slack channel (# eller C…" / matrix room-id (!…:server) / email-adress [email|slack|matrix|discord]',
-      url: 'string webhook URL (only for channel="webhook")',
-      subject: 'string email subject',
+      to: 'string target — Discord channel ID, Slack channel, Matrix room or email address (optional, may be configured)',
+      url: 'string webhook URL (only for channel="webhook", optional for all other channels)',
+      subject: 'string email subject (optional)',
       text: 'string the message body (required)',
       embeds: 'object: discord embeds array (optional, passed through)',
       blocks: 'string: JSON-encoded slack blocks (optional)',
-      dryRun: 'string "true" = build and return the exact outgoing request body without sending [true|false]',
+      dryRun: 'string "true" = build and return the exact outgoing request body without sending [true|false] (optional)',
     },
     examples: ['channel.send({channel:"discord", to:"1234567890123456", text:"build complete", dryRun:"true"})'],
     async run({ channel, to, url, subject = '', text = '', embeds, blocks, dryRun }, ctx) {

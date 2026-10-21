@@ -11,7 +11,7 @@ import { encodeControlRequest } from '../src/core/tools/wincontrol.js';
  */
 test('wincontrol: control lane is a shipped product surface', () => {
   const names = ALL_TOOLS.filter((t) => t.group === 'control').map((t) => t.name).sort();
-  assert.deepEqual(names, ['control.click_button', 'control.list_windows', 'control.read', 'control.type']);
+  assert.deepEqual(names, ['control.click_button', 'control.list_windows', 'control.read', 'control.type', 'mouse.move']);
   for (const t of ALL_TOOLS.filter((t) => t.group === 'control')) {
     assert.ok(['read', 'exec'].includes(t.risk), `${t.name} risk must be declared`);
     if (/type|click/.test(t.name)) assert.equal(t.risk, 'exec', `${t.name} drives other windows — must be exec-gated`);
@@ -34,6 +34,7 @@ test('wincontrol: schemas deterministic and required sets honest', () => {
   assert.deepEqual(by['control.read'], ['window']);
   assert.deepEqual(by['control.list_windows'], []);
   assert.deepEqual(by['control.click_button'], ['window', 'caption']);
+  assert.deepEqual(by['mouse.move'], ['x','y']);
 });
 
 test('wincontrol: untrusted window strings are payload, never executable PowerShell syntax', () => {

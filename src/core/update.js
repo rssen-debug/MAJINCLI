@@ -24,6 +24,7 @@ const TIMEOUT_MS = 8000;
 export const SETUP_ASSET = ASSET;
 
 import crypto from 'node:crypto';
+import { spawn as spawnProcess } from 'node:child_process';
 
 /** sha256 of a file, lowercase hex — never trusts, always computes. */
 export async function sha256File(abs) {
@@ -243,7 +244,7 @@ export async function installSetup(o = {}) {
   }
   const dl = await downloadSetup(o);
   if (!dl.ok) return dl;
-  const spawn = o.spawnImpl || (await import('node:child_process')).spawn;
+  const spawn = o.spawnImpl || spawnProcess;
   let child;
   try {
     child = spawn(dl.file, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'], { detached: true, stdio: 'ignore', windowsHide: true });
@@ -337,8 +338,7 @@ export async function downloadSetup(o = {}) {
 }
 
 async function sha256Of(buf) {
-  const { createHash } = await import('node:crypto');
-  return createHash('sha256').update(buf).digest('hex');
+  return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
 /**

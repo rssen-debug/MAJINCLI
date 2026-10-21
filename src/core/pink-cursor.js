@@ -47,10 +47,18 @@ $form.FormBorderStyle = 'None'; $form.ShowInTaskbar = $false; $form.TopMost = $t
 # Use a small, semi-opaque dark backing; the hot-pink circle remains visible.
 $form.BackColor = [System.Drawing.Color]::FromArgb(30,12,45)
 $form.Opacity = 0.94
-$form.Width = 220; $form.Height = 56
+$form.Width = 180; $form.Height = 46
+# Clipped pill avoids the ugly large rectangular debug window.
+$rounded = [System.Drawing.Drawing2D.GraphicsPath]::new()
+$rounded.AddArc(0,0,24,24,180,90)
+$rounded.AddArc(156,0,24,24,270,90)
+$rounded.AddArc(156,22,24,24,0,90)
+$rounded.AddArc(0,22,24,24,90,90)
+$rounded.CloseFigure()
+$form.Region = [System.Drawing.Region]::new($rounded)
 $form.Location = [System.Drawing.Point]::new(100,100)
 $circle = New-Object System.Windows.Forms.Panel
-$circle.Width = 30; $circle.Height = 30; $circle.Location = [System.Drawing.Point]::new(2,13)
+$circle.Width = 30; $circle.Height = 30; $circle.Location = [System.Drawing.Point]::new(2,9)
 $circle.BackColor = [System.Drawing.Color]::FromArgb(30,12,45)
 $circle.Add_Paint({
   param($s,$e)
@@ -60,7 +68,7 @@ $circle.Add_Paint({
   $g.DrawEllipse($glowPen, 0,0,26,26)
 })
 $lbl = New-Object System.Windows.Forms.Label
-$lbl.AutoSize = $false; $lbl.Width = 178; $lbl.Height = 40; $lbl.Location = New-Object System.Drawing.Point(38,8)
+$lbl.AutoSize = $false; $lbl.Width = 132; $lbl.Height = 34; $lbl.Location = New-Object System.Drawing.Point(38,6)
 $lbl.ForeColor = [System.Drawing.Color]::White; $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $lbl.BackColor = [System.Drawing.Color]::FromArgb(30, 12, 45)
 $lbl.Text = 'MAJIN'
@@ -69,7 +77,7 @@ $timer = New-Object System.Windows.Forms.Timer; $timer.Interval = 60
 $script:target = $null
 $timer.Add_Tick({
   if (Test-Path $StateFile) {
-    try { $cmd = Get-Content $StateFile -Raw -ErrorAction Stop | ConvertFrom-Json } catch { $cmd = $null }
+    try { $cmd = Get-Content $StateFile -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json } catch { $cmd = $null }
     if ($cmd -ne $null -and $cmd.op -eq 'quit') { $form.Close(); return }
     if ($cmd -ne $null -and $cmd.op -eq 'hide') { $form.Hide(); return }
     if ($cmd -ne $null -and $cmd.op -eq 'show') { $form.Show() }

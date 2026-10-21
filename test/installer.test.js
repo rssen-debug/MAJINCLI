@@ -193,3 +193,20 @@ test('iss: the installer never lets a stale process outlive an upgrade', () => {
   assert.match(iss, /PrepareToInstall/, 'a PrepareToInstall hook exists');
   assert.match(iss, /taskkill\.exe[^\n]*\/F \/IM/, 'the running app is closed before files are replaced');
 });
+
+
+
+test('installed MAJIN shortcuts and embedded EXE use one freshly generated icon', () => {
+  const entry = 'majin.ico';
+  const backslash = String.fromCharCode(92);
+  assert.ok(iss.includes('Source: "' + entry + '"; DestDir: "{app}"; Flags: ignoreversion'));
+  assert.ok(iss.includes('UninstallDisplayIcon={app}' + backslash + entry));
+  const shortcuts = iss.split(/\r?\n/).filter(x => x.includes('IconFilename:'));
+  assert.equal(shortcuts.length, 2, 'start menu and desktop shortcuts both use the branded icon');
+  for (const line of shortcuts) assert.ok(line.includes('IconFilename: "{app}' + backslash + entry), line);
+  const exe = read('scripts/build-exe.mjs');
+  assert.ok(exe.includes('refresh-icon.ps1'), 'the multi-size .ico is regenerated at build time');
+  assert.ok(exe.includes("path.join(dist, 'assets', 'majin.ico')"));
+  const installer = read('scripts/build-installer.mjs');
+  assert.ok(installer.includes("'dist', 'assets', 'majin.ico'"));
+});

@@ -34,6 +34,8 @@ const execFileAsync = promisify(execFile);
 const PS = String.raw`
 # MAJIN control bridge — inlined by src/core/tools/wincontrol.js (ps1 template)
 param([string]$Action, [string]$Window = '', [string]$Text = '', [string]$Caption = '')
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [Console]::OutputEncoding
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms | Out-Null
 $src = @'
@@ -195,7 +197,51 @@ function unsupported() {
   return { ok: false, error: { code: 'unsupported_platform', message: 'control tools drive REAL Windows windows — this lane is Windows-only (Win32 SendMessage). On Linux/macOS the honest answer is no, not a pretend click.', hint: 'run MAJIN on Windows for computer control' } };
 }
 
+
+/* Actual OS mouse pointer movement, NOT the pink instructional overlay.
+   The command is constant and the coordinates come through environment data.
+   There is no mouse.click or global keystroke injection in this tool. */
+async function moveWindowsMouse(x,y) {
+  if (!IS_WIN) return unsupported();
+  const ix=Number(x), iy=Number(y);
+  if (!Number.isSafeInteger(ix)||!Number.isSafeInteger(iy)||
+      ix < -32768 || iy < -32768 || ix > 32767 || iy > 32767)
+    return {ok:false,error:{code:'bad_coordinate',message:'x/y must be integer Windows screen coordinates'}};
+  const ps = [
+    'Add-Type -AssemblyName System.Windows.Forms',
+    '$v = [System.Windows.Forms.SystemInformation]::VirtualScreen',
+    '$x = [int]$env:MAJIN_MOUSE_X; $y = [int]$env:MAJIN_MOUSE_Y',
+    'if ($x -lt $v.Left -or $x -ge $v.Right -or $y -lt $v.Top -or $y -ge $v.Bottom) { throw "coordinates outside virtual screen" }',
+    '[System.Windows.Forms.Cursor]::Position = [System.Drawing.Point]::new($x,$y)',
+    'Start-Sleep -Milliseconds 100',
+    '$p = [System.Windows.Forms.Cursor]::Position',
+    'if ($p.X -ne $x -or $p.Y -ne $y) { throw "cursor movement not confirmed" }',
+    'Write-Output ("MAJIN_POINTER_VERIFIED:"+$p.X+","+$p.Y)'
+  ].join('; ');
+  const cmd=Buffer.from(ps,'utf16le').toString('base64');
+  try {
+    const run=await execFileAsync('powershell.exe', ['-NoProfile','-NonInteractive','-STA','-EncodedCommand',cmd],
+      {timeout:12000,windowsHide:true,env:{...process.env,MAJIN_MOUSE_X:String(ix),MAJIN_MOUSE_Y:String(iy)}});
+    if(!String(run.stdout).includes('MAJIN_POINTER_VERIFIED:'+ix+','+iy))
+      throw new Error('no verified pointer position; a disconnected desktop cannot claim success');
+    return {ok:true,result:'Real Windows mouse pointer moved and independently read back at '+ix+','+iy,
+      meta:{x:ix,y:iy,verified:true,kind:'real_system_cursor'},summary:'mouse position verified'};
+  } catch(e) {
+    return {ok:false,error:{code:'mouse_move_failed',message:String(e.stderr||e.message||e).slice(0,300)}};
+  }
+}
+
 export const winControlTools = [
+  def({
+    name: 'mouse.move',
+    group: 'control',
+    risk: 'exec',
+    desc: 'Move the ACTUAL Windows system mouse pointer to specified screen coordinates and verify its position. Requires a real interactive desktop. Does not click, and is separate from cursor.overlay.',
+    params: {x:'number: absolute virtual screen X coordinate', y:'number: absolute virtual screen Y coordinate'},
+    required: ['x','y'],
+    async run({x,y}) { return moveWindowsMouse(x,y); },
+  }),
+
   def({
     name: 'control.list_windows',
     group: 'control',

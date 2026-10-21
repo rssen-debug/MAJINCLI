@@ -3,10 +3,12 @@
  * Forensics-snabbt: vad lyssnar, vad körs, vad startar, vad ser användaren.
  */
 import os from 'node:os';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import { def } from './registry.js';
 import { runShell, IS_WIN } from './shell.js';
 import { resolveIn } from './files.js';
+import { analyzeImage } from '../vision.js';
 
 const CSV = 'ConvertTo-Csv -NoTypeInformation';
 
@@ -194,9 +196,10 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
     params: { path: 'string: target file (default: screenshot-<time>.png)', region: 'string: x,y,width,height (optional)', then: 'string: describe | save [describe|save] (optional)' },
     async run({ path: p, region, then = 'save' }, ctx) {
       const out = resolveIn(ctx, p || `skarmbild-${Date.now()}.png`);
-      const fsSync = await import('node:fs');
+      // Static import: pkg's vm context has no dynamic import callback.
       /* capture to a UNIQUE temp first — a reader must never pick up a half-written
          frame, and a stale successful-looking file must never pass as a fresh one (P2) */
+      fsSync.mkdirSync(path.dirname(out.abs), { recursive: true });
       const tmp = `${out.abs}.cap-${process.pid}-${Date.now()}.part`;
       const qTmp = JSON.stringify(tmp); // safe double-quoted form for POSIX shells
       const ltrb = region ? ltrbFromRegion(region) : null;
@@ -207,7 +210,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
         /* P2: the UI says x,y,width,height — FromLTRB takes left,top,RIGHT,BOTTOM.
            Feeding w,h straight in captured the wrong rectangle whenever x,y != 0,0. */
         const size = ltrb ? `[Drawing.Rectangle]::FromLTRB(${ltrb.join(',')})` : '[System.Windows.Forms.SystemInformation]::VirtualScreen';
-        const cmd = `Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $b=${size}; $bmp=New-Object Drawing.Bitmap($b.Width,$b.Height); $g=[Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location,[Drawing.Point]::Empty,$b.Size); $bmp.Save(${psQuote(tmp)}); 'saved'`;
+        const cmd = `Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $b=${size}; $bmp=[Drawing.Bitmap]::new($b.Width,$b.Height); $g=[Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location,[Drawing.Point]::Empty,$b.Size); $bmp.Save(${psQuote(tmp)},[Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose(); 'saved'`;
         const r = await runShell(cmd, { timeoutSec: 30 });
         if (!/saved/.test(r.stdout || '')) return { ok: false, error: { code: 'screenshot_failed', message: (r.stderr || 'unknown error').slice(0, 300), hint: 'fungerar bara i en interaktiv session' } };
       } else if (process.platform === 'darwin') {
@@ -228,7 +231,6 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
       fsSync.renameSync(tmp, out.abs); /* atomic on same volume: no half frames, no stale receipts */
       const size = fsSync.statSync(out.abs).size;
       if (then === 'describe') {
-        const { analyzeImage } = await import('../vision.js');
         const d = await analyzeImage({ cfg: ctx.cfg, imagePath: out.abs, question: 'What is on screen? Describe windows, text, errors and what may need fixing.' });
         return { result: `${out.abs} (${size} byte)\n\n${d}`, meta: { path: out.abs, validatedPng: true, bytes: size }, summary: 'screenshot + description' };
       }
@@ -243,7 +245,7 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
     desc: 'Read what is in the clipboard (text/file). Handy after the user selected something in a binary.',
     params: {},
     async run() {
-      const cmd = IS_WIN ? '(Get-Clipboard -Raw) 2>$null; "---"; (Get-Clipboard -Format FileDropList).Path 2>$null' : 'xclip -selection clipboard -o 2>/dev/null || pbpaste 2>/dev/null';
+      const cmd = IS_WIN ? '[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); (Get-Clipboard -Raw) 2>$null; (Get-Clipboard -Format FileDropList).Path 2>$null' : 'xclip -selection clipboard -o 2>/dev/null || pbpaste 2>/dev/null';
       const r = await runShell(cmd, { timeoutSec: 15, maxChars: 20000 });
       const text = clean(r.stdout).join('\n');
       return { result: text || '(the clipboard is empty)', summary: text ? `clipboard ${text.length} chars` : 'empty clipboard' };

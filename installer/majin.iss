@@ -19,7 +19,7 @@
 #define MyAppName "MAJIN"
 ; the build passes /DMyAppVersion=<package.json version>; keep a fallback for hand runs
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.3"
+  #define MyAppVersion "1.0.4"
 #endif
 #define MyAppPublisher "rssen-debug"
 #define MyAppURL "https://github.com/rssen-debug/MAJINCLI"
@@ -42,7 +42,7 @@ UsePreviousTasks=no
 OutputDir=..\dist\installer
 OutputBaseFilename=MAJIN-Setup
 SetupIconFile=majin.ico
-UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayIcon={app}\majin.ico
 UninstallDisplayName={#MyAppName}
 Compression=lzma2/max
 SolidCompression=yes
@@ -64,15 +64,16 @@ Name: "cmdline"; Description: "Add the {#MyAppName} command to my user PATH"; Gr
 Source: "majin-win-x64.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "majin.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "MAJIN.vbs"; DestDir: "{app}"; Flags: ignoreversion
+Source: "majin.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 ; The window itself is opened by the program (its own app window, not a browser
 ; tab), so the icon only has to start it.
-Name: "{group}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\MAJIN.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Comment: "MAJIN — your own agent, no console attached"
+Name: "{group}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\MAJIN.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\majin.ico"; Comment: "MAJIN — your own agent, no console attached"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\MAJIN.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\MAJIN.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\majin.ico"; Tasks: desktopicon
 
 [Registry]
 ; Only ever the per-user PATH, and only the bin folder: no file associations, no
