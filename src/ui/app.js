@@ -231,7 +231,14 @@ function onEvent(ev) {
     if (ev.type === 'route') workPulse('Choosing the best model');
     else if (ev.type === 'step') workPulse('Step '+ev.step+'/'+ev.of+' · '+(ev.model||'model'));
     else if (ev.type === 'tool' || ev.type === 'tool_begin') workPulse('Using '+(ev.name||ev.tool||'a tool'));
-    else if (ev.type === 'tool_result') workPulse(ev.ok?'Tool finished · checking result':'Tool failed · adjusting approach');
+    else if (ev.type === 'tool_result') {
+      if(ev.tool==='browser.verify' && ev.ok){
+        workPulse('Browser result verified');
+        const bar=$('work-progress');if(bar)bar.dataset.phase='verified';
+      } else if(ev.tool==='browser.click' && !ev.ok && ev.error?.code==='click_blocked') {
+        workPulse('Click blocked · checking page overlay');
+      } else workPulse(ev.ok?'Tool finished · checking result':'Tool failed · adjusting approach');
+    }
     else if (ev.type === 'verify' || ev.type === 'verification') workPulse('Verifying the real result');
     else if (ev.type === 'thinking') workPulse('Thinking through the next step');
     else if (ev.type === 'delta') workPulse('Writing the response');
