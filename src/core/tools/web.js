@@ -319,11 +319,36 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         const type = String(el.getAttribute('type') || '').toLowerCase();
         const isCheckbox = el.tagName === 'INPUT' && type === 'checkbox';
         const before = isCheckbox ? Boolean(el.checked) : null;
+        // Inspired by Stagehand's observe-before-act contract: DOM .click()
+        // succeeds even when a modal covers the button. Reject that false
+        // success with actionable evidence rather than clicking blindly.
+        const style = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        if(style.display==='none' || style.visibility==='hidden' || Number(style.opacity)===0 ||
+           rect.width<1 || rect.height<1) return {found:true,blocked:'hidden',tag:el.tagName.toLowerCase(),text:t};
+        if(el.matches(':disabled,[aria-disabled="true"]') || el.closest('[inert]'))
+          return {found:true,blocked:'disabled',tag:el.tagName.toLowerCase(),text:t};
+        const x=Math.min(innerWidth-1,Math.max(0,rect.left+rect.width/2));
+        const y=Math.min(innerHeight-1,Math.max(0,rect.top+rect.height/2));
+        if(x<0 || y<0 || x>=innerWidth || y>=innerHeight)
+          return {found:true,blocked:'outside_viewport',tag:el.tagName.toLowerCase(),text:t};
+        const over=document.elementFromPoint(x,y);
+        const associatedLabel=over?.closest?.('label');
+        if(over && over!==el && !el.contains(over) && associatedLabel?.control!==el)
+          return {found:true,blocked:'occluded',tag:el.tagName.toLowerCase(),text:t,
+            coveringTag:String(over.tagName||'').toLowerCase()};
         el.click();
         return { found: true, tag: String(el.tagName).toLowerCase(), text: t,
           checked: isCheckbox ? Boolean(el.checked) : null,
           changed: isCheckbox ? Boolean(el.checked) !== before : null };
       })()`);
+      if (hit.found && hit.blocked) {
+        return {ok:false,error:{code:'click_blocked',
+          message:'Browser click was NOT attempted: '+hit.blocked+' ('+hit.text+'). Re-observe the current page and resolve the overlay or disabled state before retrying.',
+          reason:hit.blocked,coveringTag:hit.coveringTag||null},
+          meta:{blocked:hit.blocked,tag:hit.tag,text:hit.text},
+          summary:'click blocked: '+hit.blocked};
+      }
       if (!hit.found) {
         const code = ref ? 'ref_stale' : 'no_such_element';
         // Small free LLMs tend to retry guessed selectors such as
