@@ -902,6 +902,7 @@ function listen() {
 let recog=null, speechActive=false, voiceArmed=false;
 let voiceSilenceTimer=null, voiceSessionTimer=null, voiceTranscript='', voiceFinal='', voiceFinished=false;
 let voiceMeterStream=null, voiceMeterContext=null, voiceMeterFrame=null;
+let voiceGate=null, voiceGateReady=false;
 function clearVoiceTimers(){
   clearTimeout(voiceSilenceTimer);clearTimeout(voiceSessionTimer);
   voiceSilenceTimer=voiceSessionTimer=null;
@@ -914,6 +915,8 @@ async function startVoiceMeter(){
     }});
     if(!S.handsFree){stream.getTracks().forEach(t=>t.stop());return;}
     voiceMeterStream=stream;
+    voiceGate=window.MAJINForegroundVoiceGate ? new window.MAJINForegroundVoiceGate() : null;
+    voiceGateReady=Boolean(voiceGate);
     const ctx=new (window.AudioContext||window.webkitAudioContext)();
     voiceMeterContext=ctx;
     const analyser=ctx.createAnalyser();analyser.fftSize=512;
@@ -924,7 +927,9 @@ async function startVoiceMeter(){
       analyser.getByteTimeDomainData(data);
       let sum=0;
       for(const n of data){const d=(n-128)/128;sum+=d*d;}
-      const volume=Math.min(1,Math.sqrt(sum/data.length)*9);
+      const rms=Math.sqrt(sum/data.length);
+      if(voiceGate)voiceGate.observe(rms);
+      const volume=Math.min(1,rms*9);
       document.documentElement.style.setProperty('--voice-energy',volume.toFixed(3));
       voiceMeterFrame=requestAnimationFrame(draw);
     }
@@ -939,6 +944,7 @@ function stopVoiceMeter(){
   voiceMeterFrame=null;
   voiceMeterStream?.getTracks().forEach(t=>t.stop());voiceMeterStream=null;
   voiceMeterContext?.close().catch(()=>{});voiceMeterContext=null;
+  voiceGate=null;voiceGateReady=false;
   document.documentElement.style.setProperty('--voice-energy','0');
 }
 function voiceState(mode,label){
@@ -963,10 +969,25 @@ function dispatchVoiceTurn(r){
   let command=(voiceFinal||voiceTranscript).trim();
   const wake=String(S.st?.config?.ui?.voice?.wakeWord||'').trim();
   if(wake){
-    if(!command.toLowerCase().startsWith(wake.toLowerCase()))return;
+    if(!command.toLowerCase().startsWith(wake.toLowerCase())){
+      // A mismatched wake phrase must not strand the recognizer indefinitely.
+      voiceFinished=true;S.handsFree=false;stopMic();
+      voiceState('paused','Ignored — wake phrase not detected');
+      return;
+    }
     command=command.slice(wake.length).trim();
   }
   if(!command)return;
+  // Noisy TV chatter can produce a valid browser transcript. Only permit the
+  // turn if near-mic activity was observed. This is NOT biometric speaker ID.
+  const gated = S.st?.config?.ui?.voice?.foregroundGate !== false;
+  if(gated && voiceGateReady && voiceGate &&
+     (!voiceGate.lastSpeech || Date.now()-voiceGate.lastSpeech>4500)){
+    S.handsFree=false;
+    stopMic();
+    voiceState('paused','Background sound ignored — tap to speak closer to your microphone');
+    return;
+  }
   voiceFinished=true;voiceArmed=false;S.listening=false;
   clearVoiceTimers();recog=null;stopVoiceMeter();
   try{r.abort();}catch{}
