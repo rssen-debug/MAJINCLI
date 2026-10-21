@@ -9,7 +9,7 @@ test('speech recognition arms, sends actual user transcript and suspends while a
   assert.match(src,/send\(command\)/);
   assert.match(src,/S\.handsFree=true/);
   assert.match(src,/if\(S\.handsFree&&!S\.busy\)startMic\(\)/);
-  assert.match(src,/speechSynthesis\.cancel\(\);speechSynthesis\.speak\(u\)/);
+  assert.match(src,/engine\.cancel\(\);engine\.resume\(\);engine\.speak\(u\)/);
   assert.match(src,/u\.onerror=resolve/);
   assert.match(src,/audio\.onerror=/);
 });
