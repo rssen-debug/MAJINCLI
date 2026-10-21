@@ -25,6 +25,17 @@ try {
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(`http://127.0.0.1:${port}/?t=${token}`);
   await page.waitForFunction(() => window.MAJIN_ONBOARD && document.querySelector('#home'));
+  // Regression for the real Windows titlebar/taskbar icon mismatch: Chromium
+  // --app uses the page favicon, not the icon embedded in MAJIN-Setup.exe.
+  const iconUrl = await page.locator('link[rel="icon"]').getAttribute('href');
+  assert.match(iconUrl, /^\/logo\.png\?v=\d+\.\d+\.\d+$/, 'versioned favicon defeats stale Edge taskbar cache');
+  const logoResponse = await page.request.get(`http://127.0.0.1:${port}/logo.png?t=${token}`);
+  assert.equal(logoResponse.status(), 200, 'pink MAJIN logo served to the app window');
+  assert.equal(logoResponse.headers()['content-type'], 'image/png');
+  assert.deepEqual(await logoResponse.body(), fs.readFileSync(path.resolve('assets/majin.png')),
+    'the actual browser/favicon bytes must match the Windows installer icon source');
+  assert.equal(await page.locator('header img.logo').getAttribute('src'), '/logo.png',
+    'in-app header and Windows taskbar both request the same canonical image');
   const rejectedApproval = await page.evaluate(async () => {
     const box = approvalCard({ id: 'audit-expired-approval', tool: 'audit.no-execution', reason: 'test rejected acknowledgment' });
     await respond('audit-expired-approval', true, box);
