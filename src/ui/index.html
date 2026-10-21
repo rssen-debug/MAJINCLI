@@ -389,6 +389,30 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 @keyframes majin-activity-thread{from{background-position:200% 0}to{background-position:0 0}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress::after{animation:none;background-position:50% 0}}
 
+
+/* MAJIN proof pulse: the existing tiny work indicator becomes a check after
+   an observed browser assertion; no new dashboard, card or floating panel. */
+#composer #work-progress .pulse{position:relative;transition:background .32s ease,box-shadow .32s ease,transform .32s ease}
+#composer #work-progress[data-phase="verified"] .pulse{
+  width:15px;height:15px;border-radius:50%;background:rgba(108,241,184,.2);
+  border:1px solid rgba(144,255,202,.55);box-shadow:0 0 15px rgba(111,255,186,.23);
+  transform:scale(1.08)
+}
+#composer #work-progress[data-phase="verified"] .pulse::before{
+  content:"";position:absolute;left:4px;top:3px;width:5px;height:7px;
+  border-right:2px solid #aafad1;border-bottom:2px solid #aafad1;
+  transform:rotate(42deg);animation:majin-proof-appear .28s ease-out both
+}
+#composer #work-progress[data-phase="problem"] .pulse::before{
+  content:"";position:absolute;inset:-5px;border:1px solid rgba(255,176,132,.28);
+  border-radius:50%;animation:majin-proof-warning 2.5s ease-in-out infinite
+}
+@keyframes majin-proof-appear{from{opacity:0;transform:scale(.55) rotate(42deg)}to{opacity:1;transform:scale(1) rotate(42deg)}}
+@keyframes majin-proof-warning{50%{opacity:.22;transform:scale(1.5)}}
+@media(prefers-reduced-motion:reduce){
+  #composer #work-progress[data-phase="verified"] .pulse::before,
+  #composer #work-progress[data-phase="problem"] .pulse::before{animation:none}
+}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
