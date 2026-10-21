@@ -51,7 +51,7 @@ function md(t) {
   s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
   // Plain URLs should be clickable too. Input is already HTML-escaped;
   // this runs after markdown links and never matches inside href="...".
-  s = s.replace(/(^|[\\s>(])(https?:\\/\\/[^\\s<>"']+)/gm, (_m, prefix, raw) => {
+  s = s.replace(/(^|[\s>(])(https?:\/\/[^\s<>"']+)/gm, (_m, prefix, raw) => {
     const url = raw.replace(/[.,!?;:]+$/, '');
     const tail = raw.slice(url.length);
     return prefix + '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>' + tail;
