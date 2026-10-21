@@ -34,6 +34,8 @@ test('release version is consistent across all packaging paths',()=>{
 test('speech output reports playback failure and never strands hands-free listening',()=>{
   const src=fs.readFileSync('src/ui/app.js','utf8');
   assert.match(src,/Speech playback timed out/);
+  assert.match(src,/ev\.text \|\| S\.curBody/);
+  assert.match(src,/!S\.cancelled && audibleReply/);
   assert.match(src,/Speech playback failed/);
   assert.match(src,/Voice output failed/);
   assert.match(src,/finally\s*\{\s*speechActive=false;/);
