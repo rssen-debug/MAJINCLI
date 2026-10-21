@@ -510,6 +510,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       checked: 'string optional true|false expected checkbox checked state',
       enabled: 'string optional true|false expected element enabled state (includes aria-disabled and inert)',
       waitMs: 'string optional: wait up to 0–5000ms for the expected DOM outcome (default 0)',
+      stableMs: 'string optional 0–1500: require expected DOM state to stay true for this duration (default 0)',
     },
     examples: ['browser.verify({selector:"#success",text:"Saved"})', 'browser.verify({url:"/dashboard"})','browser.verify({selector:"input[name=consent]",checked:"true"})', 'browser.verify({selector:"#submit",enabled:"true"})'],
     async run(input, ctx) {
@@ -521,16 +522,27 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const b=await openFor({session,cfgGet:k=>ctx.cfg.get(k)});
       const script=VERIFY_JS.replace('__MAJIN_ARGS__',JSON.stringify(criteria));
       const waitMs=Math.min(5000,Math.max(0,Math.trunc(Number(input?.waitMs)||0)));
-      const deadline=Date.now()+waitMs;
-      let observed,verdict;
-      // Stagehand-style observe→verify with bounded wait for asynchronous DOM
-      // updates. Every poll rechecks LIVE state, never replays the click.
+      // React/Vue apps may briefly show a success node and immediately replace
+      // it. Require sustained evidence when requested; don't report a flicker
+      // as proof and never repeat the user's actual click.
+      const stableMs=Math.min(1500,Math.max(0,Math.trunc(Number(input?.stableMs)||0)));
+      const deadline=Date.now()+Math.max(waitMs,stableMs);
+      let observed,verdict,firstPassingAt=null;
       for(;;){
         try { observed=await b.eval(script); }
         catch(e){ return {ok:false,error:{code:'browser_verify_error',message:String(e?.message||e)}}; }
+        const now=Date.now();
         verdict=verifyObserved(criteria,observed);
-        if(verdict.ok || Date.now()>=deadline)break;
-        await new Promise(resolve=>setTimeout(resolve,Math.min(250,Math.max(1,deadline-Date.now()))));
+        if(verdict.ok){
+          if(firstPassingAt===null)firstPassingAt=now;
+          if(now-firstPassingAt>=stableMs)break;
+        } else firstPassingAt=null;
+        if(now>=deadline) {
+          if(verdict.ok && stableMs>0) verdict={...verdict,ok:false,
+            failures:[{name:'stable_duration',expected:stableMs,actual:firstPassingAt===null?0:now-firstPassingAt}]};
+          break;
+        }
+        await new Promise(resolve=>setTimeout(resolve,Math.min(120,Math.max(1,deadline-now))));
       }
       if(!verdict.ok){
         return {ok:false,error:{code:'assertion_failed',
