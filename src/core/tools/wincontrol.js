@@ -167,10 +167,12 @@ async function runBridge(action, { window = '', text = '', caption = '' } = {}) 
     const psErrors = [...stderr.matchAll(/<S S="Error">([\s\S]*?)<\/S>/g)]
       .map(m => m[1].replace(/_x000D_|_x000A_/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>'))
       .join(' ').slice(-480);
-    const detail = psErrors || stderr.replace(/#< CLIXML[\s\S]{0,300}/,'').slice(-480).trim() ||
-      String(failure?.message || '').slice(0,180) || 'no JSON output';
+    const plain = stderr.replace(/<[^>]*>/g,' ').replace(/_x000D_|_x000A_/g,' ').replace(/\s+/g,' ').trim();
+    const exit = failure ? ('exit=' + String(failure.code ?? '?') + ' signal=' + String(failure.signal ?? '-')) : 'exit=0';
+    const detail = psErrors || plain.slice(-620) || String(failure?.message || '').slice(0,180) || 'no JSON output';
     return { ok:false, error: { code:failure?'bridge_exit':'bridge_parse',
-      message:'Win32 control bridge did not return JSON: '+detail } };
+      message:'Win32 control bridge ' + exit + ', stdout_bytes=' + stdout.length +
+        ', stderr_bytes=' + stderr.length + ': ' + detail } };
   }
   if (j.ok === false) return { ok: false, error: { code: j.error?.code || 'control_failed', message: j.error?.message || 'control op failed', hint: j.error?.hint || null }, meta: j };
   return { ok: true, report: j, meta: j };
