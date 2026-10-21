@@ -9,7 +9,7 @@ import { def } from './registry.js';
 import { resolveIn } from './files.js';
 import { bus } from '../log.js';
 import { openFor, closeFor, isOpen, journal } from '../browser.js';
-import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, VERSION as GROUND_V } from '../browser-ground.js';
+import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, findGroundedControls, VERSION as GROUND_V } from '../browser-ground.js';
 import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
 import { VERIFY_JS, verificationCriteria, verifyObserved } from '../browser-evidence.js';
 
@@ -486,9 +486,9 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     group: 'web',
     risk: 'read',
     desc: 'W6 Set-of-Marks grounding: number every interactive element on the open page, draw the matching pink marks on screen, and return the references so browser.click({ref:"eN"}) hits deterministically instead of guessing. Refs are of-the-moment evidence; a re-rendered DOM makes them stale (browser.click then says ref_stale honestly).',
-    params: { refresh: 'string: "true" = re-walk the DOM now and replace the cached refs (optional, default: false)' },
-    examples: ['browser.elements({})'],
-    async run({ refresh }, ctx) {
+    params: { refresh: 'string: "true" = re-walk the DOM now and replace the cached refs (optional, default: false)', query: 'string optional search for a specific control by name, role, or label; returns only matches to reduce model tokens' },
+    examples: ['browser.elements({})', 'browser.elements({query:"submit button"})'],
+    async run({ refresh, query = '' }, ctx) {
       const session = ctx.session || 'default';
       journal.guard(session, 'browser.elements');
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
@@ -497,11 +497,16 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const payload = await b.eval(GROUND_JS).catch((e) => ({ error: String(e?.message || e) }));
       if (payload?.error) return { ok: false, error: { code: 'ground_eval', message: 'page walk failed: ' + payload.error } };
       rememberRefs(session, payload.elements || []);
+      const needle=String(query||'').trim();
+      const matches=needle ? findGroundedControls(payload.elements||[],needle) : null;
+      const visible=matches ? {...payload,elements:matches} : payload;
       return {
         ok: true,
-        result: renderElementsText(payload),
-        meta: { version: GROUND_V, count: payload.count, url: payload.url, title: payload.title },
-        summary: `${payload.count} elements grounded on this page`,
+        result: needle && !matches.length
+          ? `No grounded controls match "${needle.slice(0,100)}" on ${payload.url}. Refresh or try broader terms.`
+          : renderElementsText(visible, {cap:needle?12:60}),
+        meta: { version: GROUND_V, count: payload.count, matched:matches?.length ?? null, url: payload.url, title: payload.title },
+        summary: needle ? `${matches.length} matching controls among ${payload.count}` : `${payload.count} elements grounded on this page`,
       };
     },
   }),
