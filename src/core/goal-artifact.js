@@ -69,7 +69,14 @@ export function inspectRequestedArtifact(input, workspace) {
         env: { ...process.env, NODE_OPTIONS: '' },
       });
       if (syntax.error || syntax.status !== 0) {
-        missing.push('invalid JavaScript syntax (node --check failed; repair this file before claiming done)');
+        // stderr contains the MODEL's source code and absolute paths; echo
+        // only Node's bounded diagnostic line, never the surrounding lines.
+        const diagnostic = String(syntax.stderr || '')
+          .split(/\r?\n/).map(x => x.trim())
+          .find(x => /^(?:SyntaxError|Error):\s*/.test(x));
+        missing.push('invalid JavaScript syntax (node --check failed' +
+          (diagnostic ? ': ' + diagnostic.slice(0, 180) : '') +
+          '; fix this file before claiming done)');
       }
     }
     if (/\.mjs$/i.test(target.name)) {
@@ -78,6 +85,16 @@ export function inspectRequestedArtifact(input, workspace) {
         /\bexport\s+function\s+respond/i.test(input);
       const asksCLI = /\bCLI\b|command.line\s+(?:entrypoint|interface)/i.test(input);
       const asksArgs = /\b(?:different|argument|process\.argv|QA_PING)\b/i.test(input);
+      // Node treats .mjs as ES MODULES, regardless of package.json.
+      // Qwen2.5:3b generated 'module.exports = {...}' four times in the
+      // real CLI QA and could not run it. Syntax-only 'node --check' cannot
+      // catch that CJS runtime failure.
+      if (/^\s*(?:module\.exports|exports\.[A-Za-z_$][\w$]*)\s*=/m.test(data)) {
+        missing.push('CommonJS module.exports/exports is not usable in .mjs; use ES-module export function respond(message) instead');
+      }
+      if (/^\s*(?:const|let|var)\s+\w+\s*=\s*require\s*\(/m.test(data)) {
+        missing.push('CommonJS require(...) is not usable in .mjs without special setup; use ES-module import syntax');
+      }
       if (asksRespond && !/(?:function\s+respond\s*\(|(?:const|let)\s+respond\s*=)/i.test(data)) {
         missing.push('requested respond(message) implementation');
       }
@@ -151,11 +168,20 @@ export function feedbackForJavaScriptWrite(goal, workspace, tool, args, writtenO
   if (actual !== target.path) return null;
   const check = inspectRequestedArtifact(goal, workspace);
   if (!check) return null;
+  const wantsResponder = /\.mjs$/i.test(target.name) &&
+    /\brespond\s*\(\s*message\s*\)/i.test(goal) &&
+    /\bCLI\b|command.line/i.test(goal);
+  const guidance = wantsResponder && !check.ok
+    ? '\\nES MODULE CLI PATTERN (adapt the response text to the task): ' +
+      "export function respond(message) { return 'Reply: ' + message; } " +
+      "console.log(respond(process.argv[2] || ''));" +
+      '\\nIMPORTANT: .mjs cannot use module.exports. Do not repeat the same invalid code.'
+    : '';
   return check.ok
     ? { ok: true, target: target.name,
         text: 'ARTIFACT WRITE CHECK: requested JavaScript file passed syntax and static contract checks (not yet execution-tested).' }
     : { ok: false, target: target.name,
         text: 'ARTIFACT WRITE CHECK FAILED for ' + target.name + ': ' +
           check.missing.join('; ').slice(0, 650) +
-          '. Repair THIS SAME file using fs.write; do not claim done yet.' };
+          '. Repair THIS SAME file using fs.write; do not claim done yet.' + guidance };
 }
