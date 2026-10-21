@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { winControlTools } from '../../src/core/tools/wincontrol.js';
+import { computerTools } from '../../src/core/tools/computer.js';
 import { cursor, cursorPaths, isWindowsDesktop, overlayStatus } from '../../src/core/pink-cursor.js';
 
 if (process.platform !== 'win32' || !isWindowsDesktop()) {
@@ -25,7 +26,7 @@ const savedFile = path.join(workspace, 'qa-saved.txt');
 const fixture = fileURLToPath(new URL('./owner-desktop-fixture.ps1', import.meta.url));
 const evidenceFile = path.join(process.cwd(), 'qa-evidence', 'owner-desktop.json');
 const verdict = { schema:'majin-owner-desktop-live/1', syntheticWindow:false,
-  controlList:false, controlType:false, controlRead:false, controlClick:false,
+  controlList:false, controlType:false, controlRead:false, controlClick:false, computerUseVerified:false,
   verifiedSavedBytes:false, desktopPixelCanary:false, pinkVisible:false, pinkMoved:false, pinkHidden:false,
   pinkStateLabel:false, screenshotsUploaded:false, status:'BLOCKED' };
 
@@ -102,6 +103,39 @@ try {
   assert.equal(fs.readFileSync(savedFile,'utf8'),expected,'real button did not save verified text');
   verdict.verifiedSavedBytes=true;
   console.log('W11 SYNTHETIC GUI PASS: MAJIN real control.list/type/read/click, and saved bytes match');
+
+  // Exercise MAJIN's actual OBSERVE→PLAN→ACT→VERIFY engine against that SAME
+  // visible QA window. The trusted deterministic planner is injected only by
+  // the harness; production always uses a configured cloud provider.
+  const controlledRegistry = { exec: async (name, args) => {
+    if (name === 'screen.capture') return {ok:false,error:{code:'qa_privacy',message:'Never capture unrelated desktop screenshots in this test'}};
+    const t=winControlTools.find(v=>v.name===name);
+    if (!t) return {ok:false,error:{code:'not_allowlisted',message:'QA only allows Win32 control tools'}};
+    return t.run(args||{});
+  }};
+  const agentText='MAJIN_AGENT_GUI_'+nonce;
+  const plans=[
+    {action:'type',window:title,text:agentText,verify:{type:'read_contains',window:title,text:agentText}},
+    {action:'click_button',window:title,caption:'Save QA',verify:{type:'read_contains',window:title,text:agentText}},
+    {action:'done',verify:{type:'read_contains',window:title,text:agentText}},
+  ];
+  let planIndex=0;
+  const computer = computerTools.find(t=>t.name==='computer.use');
+  assert.ok(computer,'computer.use must be an actual registered tool');
+  const goal='In the disposable '+title+' QA form, replace text with '+agentText+' and click Save QA. Independently verify text.';
+  const completed=await computer.run({goal,maxSteps:'5'},{session:'majin-owner-qa',
+    cfg:{get:key=>key==='workspace'?workspace:undefined},
+    registry:controlledRegistry,
+    desktopModelCall:async()=>plans[planIndex++] || {action:'blocked',reason:'QA plan exhausted'},
+    emit:()=>{},
+  });
+  assert.equal(completed.ok,true,JSON.stringify(completed.error||completed).slice(0,400));
+  assert.equal(completed.meta?.verified,true);
+  assert.equal(planIndex,3,'all three agent actions must have executed');
+  assert.equal(fs.readFileSync(savedFile,'utf8'),agentText,'computer.use agent click must persist verified GUI bytes');
+  verdict.computerUseVerified=true;
+  console.log('W11 COMPUTER.USE LIVE ENGINE PASS: observe -> Win32 type -> click -> verified completion and saved bytes');
+
   // Independent negative control: an unprivileged topmost QA form has a
   // synthetic hot-pink background. If this is invisible to CopyFromScreen,
   // a locked/disconnected virtual desktop cannot prove ANY overlay pixel.
