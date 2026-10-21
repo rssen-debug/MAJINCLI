@@ -439,6 +439,19 @@
       ],
       "evidence": "docs/evidence/live-provider-chaos-2026-10-21.{json,md} + docs/evidence/w13-live-provider-chaos-2026-10-21.md; npm test 870/0/17",
       "verdict": "99/100 — CAP oförändrad: W11-live + W12-interactive på användarens maskin återstår som hårdvaru-portar. Sandbox klar nu av alla cred-gates som den kan räcka."
+    },
+    {
+      "round": 39,
+      "focus": "STATUS-städning (W12-dublett + förlegade gap-lister) + förenat live-run-paket: gränsen mellan vad som kan/bevisas från sandlådan expliciterad och kodad",
+      "done": [
+        "STATUS: rad-dublett W12 Pink AI cursor/MISSING borttagen (modulen finns — 7/7 offline + win-CI dry-plan med artifact); datum 2026-10-21 med svit 870/0/17; \"Största gap till 100\"-listan (var förlegad och påstod W1/W2/W3/W5/W6/W9/W10/W12 saknade modul — alla VERIFIED-CORE nu) ersatt av dag-justerad lista; \"Nästa konkreta action\" pekade på redan-stängt W1 → ersatt med live-run-kommandon",
+        "scripts/windows/live-acceptance-run.ps1 (NY): tre loramer A=W11-live (setup+manual-reference-rename+rvf + desktop-bench resparat på win32), B=W2 DDG/Bing (majin research via registry med web.search/web.fetch i full egress), C=W12-scaffold (förfylld checklista + steg, alliaga receipts till docs/evidence/live-run-<datum>/); read-back-disciplin på RUN-SUMMARY; anti-fabrication-markerad",
+        "docs/LIVE-RUN-GUIDE.md (NY): vägen 99→100 - clone→ci→1-kommando→5min interaktiv obs→commit; agent-credit/manual-reference-split explicit; exakt commit-path tillstånd; fabrication-regeln marknad (\"a checked box without observed evidence is fabrication — CAP stannar på 99 BY DESIGN\")",
+        "test/live-run-package.test.js 5/5 (offline-deterministisk paketstäd: tre lan-texter, read-back, anti-fabrication-markerad, ingen nyckel-literal, guide completeness)",
+        "Regression 870 -> 875/0/17"
+      ],
+      "evidence": "scripts/windows/live-acceptance-run.ps1 + docs/LIVE-RUN-GUIDE.md + test/live-run-package.test.js; npm test 875/0/17",
+      "verdict": "99/100 — detta är CAP: en kada framtanter för användaren att sluta SEPARAT; inga fler sandlåde-läppar att svals. Vägen till 100 = användarens maskin-körning committad."
     }
   ],
   "percent": 99

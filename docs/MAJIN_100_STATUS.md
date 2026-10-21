@@ -1,6 +1,6 @@
 # MAJIN 100/100 — STATUS (mätt, inte påstått)
 
-**Datum:** 2026-10-20 · **Branch:** fix/realworld-repairs @ senaste tip · **Källor:** qa-artifacts/QA-MATRIX-v4-2026-10-20.md, npm test (560 tester), live-mätningar på MAJIN-INTERACTIVE-01.
+**Datum:** 2026-10-21 · **Branch:** fix/realworld-repairs @ tip · **Källor:** testsviten 870 pass/0 fail/17 skip vid 908a255; live-körningar: W6 real swarm, W2 github-lane, W13 opencode zen/go (×2), W14 rollback/bench/reproducible.
 
 > Ärlighetsregel: ingen % utan reproducerbart bevis. Gamla COMPLETION_MATRIX.md (100/100 på papper) motsägs av uppmätta artefakter och ersätts av DENNA fil som sanning.
 
@@ -23,8 +23,7 @@
 | W9 Memory sync | **VERIFIED-CORE** | src/core/memory-sync.js fanns redan (rowkanon var forlegat): bidiri delta-sync med persistent spawnId, innehall-idempotent replay, tombstone-regel, dryRun skriver noll; tool memory.sync registrerad; provenance i bundle. Bevis: test/memory-sync.test.js 6/6 (converge i exakt en sync, idempotent, dryRun noll, tombstone-peers, clone-refusal, provenance) |
 | W10 Learning loop | **VERIFIED-CORE** | src/core/learn.js fanns redan: anti-placebo loop — ny lektion fods UNVERIFIED; verify kriver mAtbevis-strang; ater-forekomst efter verify DEMOTERAR med bevarad bevins-historik; stats lyfter oppet arbete forst; durable JSONL + torn-line-tolerans. Tools ma.learn/ma.verify_lesson/ma.lessons registrerade (som tool-schema-contract-kommenten noterade). Bevis: test/learn.test.js 7/7 |
 | W11 Windows desktop vision | **VERIFIED-CORE** | ✅ c01/c02 + wincontrol-legacy kvar. NYTT: src/core/desktop-vision.js (captureFn/analyzeFn injicerade — refusal utan; bytes+sha256-evidens; strikt [{label,x,y}]-groundning, prosa=refusal; accept()-verifiering; live lane bara win32) · src/core/desktop-eval.js (diskrimineringskontrakt; windows-real DEFERRED på icke-Windows, aldrig fabrikerad; aggregate räknar deferred separat) · 3 egna tasks (notepad-write-save, window-title-observe, rename-file-dialog-win + setup-PS1 för live %TEMP%-mätning). tester 13/13 + regression 859/0/17; LIVE screenshot/UFO-eval-körning = pending-hardware på användarens maskin (deklarerad); evidens: docs/evidence/w11-desktop-vision-2026-10-21.md + desktop-bench-2026-10-21.* |
-| W12-CU-drivs kopplat (ny): computer-use.js loop + pink-cursor.js overlay pa befintlig control.* lane | **IMPLEMENTED-ENGINE / VERIFIED-OFFLINE / WIN-CI-AUTOMATED** | 7/7 offline; STANDING Windows-CI: A5 dry-plan PASS pa riktig windows-latest Node 22 (Actions run 39527628978, artifact win-acceptance-d2f2b72...) med hard gate; A0/A1 ãrligt NOT TESTED i service-session — full gate vantar pa interaktiv-evidens; 6 CI-rundor rotorsaksfixade (PS5.1-semi, BOM, param-scoping)
-W12 Pink AI cursor | **MISSING** | inget overlay/cursor-spår; tillåts inhemskt, separat från src/ui |
+| W12 Pink AI cursor | **IMPLEMENTED-ENGINE / VERIFIED-OFFLINE / WIN-CI-AUTOMATED / INTERAKTIV ACCEPTANCE PENDING (brukarmaskin)** | computer-use.js loop + pink-cursor.js overlay ovanpå befintlig control.*-lane: 7/7 offline-tester ✓; STÄNDIG Windows-CI: A5 dry-plan PASS på riktig windows-latest Node 22 (Actions run 39527628978, artifact win-acceptance-d2f2b72...) med hard gate; A0/A1 ärligt NOT TESTED i service-session — full gate = interaktiv-evidens från användarens maskin; 6 CI-rundor rotorsaksfixade (PS5.1-semi, BOM, param-scoping). (Rad-dubletten "W12 Pink AI cursor / MISSING" var förlegad och är avlägsnad — modulen existerar.) |
 | W13 Never-stuck engine | **VERIFIED-CORE + LIVE-AGENT-SIDE VERIFIED (opencode zen/go)** / GLM-QA pending | recovery-metrics 100% (15 rader) kvar + NYTT r38: src/core/live-provider-chaos.js — samma chaostoolkit-disciplin mot RIKTIG provider: 7 rader (baseline real-answer 201 tokens ✓, 400ms-deadline-abort, mid-flight-abort, bad-key/plain-refusal, bogus-model refusal, burst-of-5 alla oks, empty-messages guard) — **rate 100%, stuck=0, unhandled=0 vid TVÅ körningar**; nyckelhygien auditerad (I5: nyckeln aldrig i artifacts); adaptern offline-kontraktstestbar 6/6; endpoint-läxa: oc_sk_=service-account, zen/go/v1-ytan, x-opencode-session obligatorisk. Evidens: docs/evidence/live-provider-chaos-2026-10-21.{json,md} + w13-live-provider-chaos-2026-10-21.md + test/live-provider-chaos.test.js + full 870/0/17 |
 | W14 Release & benchmark | **VERIFIED-CORE** | ✅ installer-pipeline kvar (SHA-256==installer, silent, real-GitHub update check). NYTT: src/core/update-rollback.js (manifest+isolerade backup-kopior+sha256-gate+ledger; execute KRÄVER injicerad plattforms-restorer — refusal utan hook; väljer senaste TIDIGARE version) · src/core/reproducible.js (git-ls-files manifest-hash, live identical ✓ 494 filer; untracked påverkar aldrig; exe bit-exact=NOT TESTED deklarerat) · src/core/competitive-bench.js (terminal-bench-layout reuse, EGET task-innehåll — canary respekterad; 3 native tasks med omberäknande sanningsverifierare; kontrakt good-pass+bad-fail annars FLAGGED med cheat-vs-broken-distinktion; agentLanesLive=pending-credentials). test/w14-release.test.js 10/10 + regression 846/0/17; evidens: docs/evidence/w14-release-2026-10-21.md + competitive-bench-2026-10-21.* + reproducible-2026-10-21.json |
 
@@ -36,12 +35,12 @@ W12 Pink AI cursor | **MISSING** | inget overlay/cursor-spår; tillåts inhemskt
 - 20/33 real-world-verified på CI (mechanics), 11 ärligt SKIP-klassade för modell — väntomät mot GLM/OpenCode-nän bootstrappad interaktiv.
 - MAJIN-INTERACTIVE-01 self-hosted runner ONLINE (Windows-PC med desktop) — acceptance-exekvering.
 
-## Största gap till 100
-1. Multiple hela vågor saknar modul (W1, W2, W3, W5, W6, W9, W10, W12).
-2. Desktop vision (W11) har primitiver men inte task-e2e-loppet.
-3. Modellberoende real-world-svit (11 scenarier) väntar på GLM/OpenCode-lane (utvalt av ägaren, levereras av annan agent — vi krockar inte).
+## Största gap till 100 (dag-justerad lista 2026-10-21)
+1. **Hårdvaru-deferred, ärligt:** W11-live screenshot/UFO-eval + W12 interaktiv acceptance → användarens maskin via `scripts/windows/live-acceptance-run.ps1` (r39-paketet, producerar bevisfiler redo att committa).
+2. **Env-blocked:** W2 DDG/Bing-egress (github-lanen bevisade pipelinen; ddg/bing-verifiering i full egress återstår).
+3. **Externa cred-gates:** W8 bot-tokens (discord/slack/matrix), GLM-QA 25→33-axel (parallell agents spår).
 
 ## Nästa konkreta action
-1. (Pågår) Windows-GLM-acceptance kör av parallell agent pollad till slut + sluttabel 33+12.
-2. Implementera **W1 Absorb** (cli-kommando + capability-map-generator + fixture-distrikt + motoren-verifiering) — eras första hepetsteg som inte kräver Windows-resurses.
-3. Lite totillasd spår keep-on-file: `docs/MAJIN_100_BACKLOG.json` priority-orderad.
+1. **Användarens maskin (vägen till 100):** `git clone <repo>` (branch fix/realworld-repairs) → `npm ci` → `powershell -File scripts/windows/live-acceptance-run.ps1`. Paketet producerar bevisfiler i docs/evidence/live-run-<datum>/ + W12-checklistan (roterad-record). Committa → percent 100.
+2. **W8 (valfritt):** skapa discord/slack/matrix-bot-token, kör inbound-live-lanen.
+3. **W2 (valfritt):** kör research-lanen mot DDG/Bing i full egress (evidence-fil-kvar).
