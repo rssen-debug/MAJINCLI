@@ -904,7 +904,10 @@ function startMic() {
   try{r.start();$('mic').classList.add('on');}
   catch(e){stopMic();voiceState('error',e.message);}
 }
-function micToggle(){if(S.listening)stopMic();else startMic();}
+function micToggle(){
+  if(S.handsFree){S.handsFree=false;stopMic();speechSynthesis?.cancel();}
+  else {S.handsFree=true;S.voice=true;$('b-voice')?.classList.add('on');startMic();}
+}
 function speak(t){
   if(!S.voice||!('speechSynthesis' in window))return;
   const clean=String(t).replace(/[*_#]/g,'').slice(0,700).trim();
@@ -916,7 +919,7 @@ function speak(t){
   const choices=speechSynthesis.getVoices().filter(x=>x.lang?.slice(0,2).toLowerCase()===lang.slice(0,2).toLowerCase());
   u.voice=choices.find(x=>/natural|neural/i.test(x.name))||choices[0]||null;
   u.onstart=()=>{speechActive=true;voiceState('speaking','MAJIN speaking…');};
-  const done=()=>{speechActive=false;voiceState('idle','Voice ready');};
+  const done=()=>{speechActive=false;voiceState('idle','Voice ready');if(S.handsFree&&!S.busy)startMic();};
   u.onend=done;u.onerror=done;
   speechSynthesis.cancel();speechSynthesis.speak(u);
 }
@@ -1171,7 +1174,7 @@ $('b-panel').onclick = () => {
 $('b-voice').onclick = () => {
   S.voice = !S.voice;
   $('b-voice').classList.toggle('on', S.voice);
-  if (!S.voice) speechSynthesis?.cancel();
+  if (!S.voice) {S.handsFree=false;stopMic();speechSynthesis?.cancel();}
 };
 $('b-test').onclick = async () => {
   setStatus('selftest…');
