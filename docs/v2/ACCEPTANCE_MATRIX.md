@@ -12,3 +12,6 @@
 | Compiler/DAG/scheduler | NOT_IMPLEMENTED | snapshot docs/v2/ARCHITECTURE.md sec.3 |
 | Verifier registry (file/http/pixel + dom-capability) | VERIFIED | test/v2-verifiers-events.test.js 8/8; pixel proof uses real PNG fixtures written via pngjs; dom degrades honestly |
 | Typed event bus (brief 108) | VERIFIED | ring-buffer audit + listener isolation asserted; node:events zero-dep decision |
+| MAJIN GAUNTLET (deterministic scenarios G1-G5) | VERIFIED | 5/5 pass local + in CI step; verified 100%, false success 0; blocking scenario ends FAILED with deploy never executed |
+| Memory store (8 kinds, retention, search, export/clear) | VERIFIED | test/v2-memory-context.test.js 7/7; sensitive-refusal enforced |
+| Context engine (budget packing, essentials survive, honest truncation) | VERIFIED | same file; 4-char/token estimator documented as conservative |
