@@ -15,3 +15,5 @@
 | MAJIN GAUNTLET (deterministic scenarios G1-G5) | VERIFIED | 5/5 pass local + in CI step; verified 100%, false success 0; blocking scenario ends FAILED with deploy never executed |
 | Memory store (8 kinds, retention, search, export/clear) | VERIFIED | test/v2-memory-context.test.js 7/7; sensitive-refusal enforced |
 | Context engine (budget packing, essentials survive, honest truncation) | VERIFIED | same file; 4-char/token estimator documented as conservative |
+| Goal compiler (deterministic + model-adapter, zod-guarded) | VERIFIED | test/v2-compiler-supervisor.test.js 6/6 incl. inference flags + fuzzed model output rejection; never silent-repairs intent |
+| Supervisor (goal -> role-tagged DAG) | VERIFIED | same file: dependency gating + parallel-build spawn + verifier-per-acceptance + end-to-end completion refusal until proof |
