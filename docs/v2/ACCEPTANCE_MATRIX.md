@@ -17,3 +17,6 @@
 | Context engine (budget packing, essentials survive, honest truncation) | VERIFIED | same file; 4-char/token estimator documented as conservative |
 | Goal compiler (deterministic + model-adapter, zod-guarded) | VERIFIED | test/v2-compiler-supervisor.test.js 6/6 incl. inference flags + fuzzed model output rejection; never silent-repairs intent |
 | Supervisor (goal -> role-tagged DAG) | VERIFIED | same file: dependency gating + parallel-build spawn + verifier-per-acceptance + end-to-end completion refusal until proof |
+| Command preflight tiers (ok/hold/no + bypass vectors) | VERIFIED | test/v2-safety-recovery.test.js 8/8 incl. flag-reorder, bash -c unwrap, interpreter payload, scoped destructive -> hold |
+| Consent/session layers 53-58 | VERIFIED | same file: exact-scope match, one-time use counts, ttl expiry, revocation, no self-consent, audit events |
+| Recovery advisor (bounded per-class plans) | VERIFIED | same file: all 19 classes bounded, budget exhaustion exact, USER_ACTION_REQUIRED never loops |

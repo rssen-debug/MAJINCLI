@@ -24,6 +24,7 @@ Repo philosophy measured: ONE runtime dep today (chokidar). Every new dep must e
 | LLM-agent eval harness (model benchmarks only) | **promptfoo** | MIT | Deferred to model-benchmarking milestone (brief section 84): ~25.7k stars, Node-native, red-teaming. Acquisition risk noted (OpenAI acquired it March 2026; stays open source on record). NOT for GAUNTLET: it grades model outputs, while MAJIN GAUNTLET must prove end-to-end execution evidence on this repo's own kernel. |
 | Prompt evaluation (legacy) | openai/evals | MIT | REJECT: hosted product is being shut down (announced June 2026, fully off Nov 30 2026). |
 | Structured-output validation (goal compiler, tool schemas) | **zod** @4.6.7 | MIT | 44k stars, ~290M weekly downloads, zero dependencies, ~89 KB min+gzip, actively maintained (v4.6.7 days old). Replaces hand-rolled shape checks precisely where model output must parse-or-die (brief 4.2 + 112). | +1 dep |
+| Shell-command safety preflight | **hand-rolled procedural scanner** (builder-owned) | n/a | Options evaluated 2026-10-22: sh-guard (GPLv3 + no prebuilt npm binaries -> incompatible for vendoring), cc-safety-net (promising 0.6.0, tiny adoption, cc-specific), pi-safe-shell (0 dependents), safecmd (python CLI), safeexec (interactive tty gate, not a library). Decision: hand-write the tier classifier, borrow the documented bypass-vector lessons (flag-reorder normalization, shell-wrapper unwrapping, interpreter one-liners). +0 deps |
 
 ## Policy from here
 
