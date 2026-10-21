@@ -72,3 +72,27 @@ export function verifyObserved(criteria, observed) {
     observed:{url:String(observed.url||'').slice(0,500),title:String(observed.title||'').slice(0,200),
       matchCount:Number.isInteger(observed.matchCount) ? observed.matchCount : null}};
 }
+
+/**
+ * Bounded, deterministic recovery suggestions for observed DOM assertions.
+ * Inspired by the evidence-first retry patterns in ReliableAgent / pi-reflect:
+ * errors should explain the next DIFFERENT observation, never blindly retry.
+ */
+export function browserRecoveryAdvice(failures = []) {
+  const names = new Set((Array.isArray(failures) ? failures : []).map(x => String(x?.name || '')));
+  if (names.has('element_unique')) return {code:'ambiguous_selector',
+    next:'The selector matched multiple elements. Use browser.elements, choose a unique visible ref or more specific selector, then verify again.'};
+  if (names.has('element_present')) return {code:'element_missing',
+    next:'The expected element is absent. Read the current page and URL, then find the element actually shown; do not repeat the same click.'};
+  if (names.has('element_visible')) return {code:'element_hidden',
+    next:'Element exists but is hidden. Inspect overlays, tabs and expanded sections before a different action.'};
+  if (names.has('checkbox_checked') || names.has('element_enabled')) return {code:'state_mismatch',
+    next:'The control state does not match. Re-observe its live state and any validation or consent prerequisites.'};
+  if (names.has('url_contains') || names.has('title_contains')) return {code:'navigation_mismatch',
+    next:'The browser is on a different page than expected. Read URL/title, check redirect or new tab, and update navigation strategy.'};
+  if (names.has('element_text_contains')) return {code:'content_mismatch',
+    next:'The element is present but its visible text differs. Read that element to diagnose missing save, loading state, or actual error.'};
+  if (names.has('stable_duration')) return {code:'transient_success',
+    next:'Success was visible only briefly. Inspect the page after rerender before claiming the task succeeded.'};
+  return {code:'unverified_result',next:'Re-observe the current page and choose a different evidence-based step.'};
+}
