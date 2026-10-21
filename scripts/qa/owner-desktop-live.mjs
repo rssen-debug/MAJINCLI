@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { winControlTools } from '../../src/core/tools/wincontrol.js';
-import { cursor, cursorPaths, isWindowsDesktop } from '../../src/core/pink-cursor.js';
+import { cursor, cursorPaths, isWindowsDesktop, overlayStatus } from '../../src/core/pink-cursor.js';
 
 if (process.platform !== 'win32' || !isWindowsDesktop()) {
   throw new Error('BLOCKED: real, interactive Windows session required');
@@ -147,7 +147,7 @@ try {
     const stopped=diag.exitCode;
     try{diag.kill();}catch{}
     const diagnostic=(err||output).replace(/C:\\\\Users\\\\[^\\\\]+/gi,'C:Users:[redacted]').slice(0,600);
-    throw new Error('W12 overlay no screen pixels ('+first+'), initial position pink='+initial+'; direct PS exit='+String(stopped)+'; diagnostic='+diagnostic);
+    throw new Error('W12 overlay no screen pixels ('+first+'), initial position pink='+initial+'; process='+JSON.stringify(overlayStatus())+'; direct PS exit='+String(stopped)+'; diagnostic='+diagnostic);
   }
   assert.ok(first>=12,'W12 overlay not visible at first target ('+first+' pink samples)');
   verdict.pinkVisible=true;
