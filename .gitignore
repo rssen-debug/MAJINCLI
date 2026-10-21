@@ -12,6 +12,8 @@ dist/
 
 .pkg-cache/
 memory/
+!src/v2/memory/
+# src/v2/memory/ is V2 kernel source, not app-runtime data (guard: CI failed once when this dir was silently ignored)
 skills/
 majin.config.json
 
