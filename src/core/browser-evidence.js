@@ -5,9 +5,15 @@
  */
 export const VERIFY_JS = String.raw`((args) => {
   const selector = args.selector || '';
-  let el = null;
-  try { if (selector) el = document.querySelector(selector); }
-  catch { return { valid: false, reason: 'invalid_selector' }; }
+  let el = null, count = 0;
+  try {
+    if (selector) {
+      const matches = document.querySelectorAll(selector);
+      count = matches.length;
+      // A non-unique selector cannot prove which element the agent observed.
+      if (count === 1) el = matches[0];
+    }
+  } catch { return { valid: false, reason: 'invalid_selector' }; }
   const visible = (node) => {
     if (!node) return false;
     const style = getComputedStyle(node);
@@ -18,7 +24,8 @@ export const VERIFY_JS = String.raw`((args) => {
   // No inputs, password values, page HTML, cookies or tokens are returned.
   const text = el ? String(el.innerText || el.textContent || '') : '';
   const state = { valid: true, url: location.href, title: document.title,
-    exists: selector ? !!el : null, visible: selector ? visible(el) : null,
+    exists: selector ? count > 0 : null, unique: selector ? count === 1 : null,
+    matchCount: selector ? Math.min(count, 1000) : null, visible: selector ? visible(el) : null,
     checked: el?.matches?.('input[type="checkbox"],input[type="radio"]') ? !!el.checked : null,
     textMatch: args.text ? text.toLowerCase().includes(args.text.toLowerCase()) : null,
     urlMatch: args.url ? location.href.includes(args.url) : null,
@@ -37,6 +44,8 @@ export function verificationCriteria(input = {}) {
   if (!selector && !url && !title) return { ok:false, reason:'Specify a selector, URL fragment or title fragment to verify' };
   if ((text || present !== null || checked !== null) && !selector) return {ok:false, reason:'Element text, presence and checkbox checks require selector'};
   if (checked !== null && !selector) return {ok:false, reason:'Checkbox assertion requires selector'};
+  if (present === false && (text || checked !== null))
+    return {ok:false, reason:'An absent element cannot also have matching text or checkbox state'};
   return { ok:true, selector, text, url, title, present, checked };
 }
 
@@ -47,6 +56,7 @@ export function verifyObserved(criteria, observed) {
   if (criteria.selector) {
     assertions.push({name:'element_present', expected:criteria.present ?? true, actual:observed.exists === true});
     if (criteria.present !== false) {
+      assertions.push({name:'element_unique',expected:true,actual:observed.unique === true});
       assertions.push({name:'element_visible',expected:true,actual:observed.visible === true});
       if (criteria.text) assertions.push({name:'element_text_contains',expected:true,actual:observed.textMatch === true});
       if (criteria.checked !== null) assertions.push({name:'checkbox_checked',expected:criteria.checked,actual:observed.checked});
@@ -56,5 +66,6 @@ export function verifyObserved(criteria, observed) {
   if (criteria.title) assertions.push({name:'title_contains',expected:true,actual:observed.titleMatch === true});
   const failures = assertions.filter(x=>x.expected!==x.actual);
   return {ok:failures.length===0,assertions,failures,
-    observed:{url:String(observed.url||'').slice(0,500),title:String(observed.title||'').slice(0,200)}};
+    observed:{url:String(observed.url||'').slice(0,500),title:String(observed.title||'').slice(0,200),
+      matchCount:Number.isInteger(observed.matchCount) ? observed.matchCount : null}};
 }
