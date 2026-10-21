@@ -420,7 +420,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     if (p === '/api/file') {
       const want = url.searchParams.get('path') || '';
       const configuredWorkspace = path.resolve(cfg.get('workspace'));
-      const normalPath = want.replace(/\\\\/g, '/');
+      const normalPath = want.replace(/\\/g, '/');
       // File tools sometimes report \"workspace/project/index.html\" while
       // their actual write root is already the \"workspace\" directory.
       const prefix = path.basename(configuredWorkspace).toLowerCase() + '/';
