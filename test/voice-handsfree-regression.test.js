@@ -45,7 +45,8 @@ test('speech output reports playback failure and never strands hands-free listen
 test('keyboard turns do not trigger Talk; spoken turns stay hands-free',()=>{
   const src=fs.readFileSync('src/ui/app.js','utf8');
   assert.match(src,/async function send\(text, options = \{\}\)/);
-  assert.match(src,/if \(!options\.voiceTurn && S\.handsFree\)/);
+  assert.match(src,/if \(!options\.voiceTurn\) \{/);
+  assert.match(src,/if \(S\.handsFree\) \{ S\.handsFree = false; stopMic\(\); \}/);
   assert.match(src,/S\.voiceTurn = Boolean\(options\.voiceTurn\)/);
   assert.match(src,/send\(command, \{ voiceTurn: true \}\)/);
   assert.match(src,/S\.voice && S\.voiceTurn && !S\.cancelled/);
