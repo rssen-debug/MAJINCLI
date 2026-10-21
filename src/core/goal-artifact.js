@@ -242,3 +242,57 @@ export function feedbackForExactContentWrite(goal, workspace, tool, args, writte
        text:'EXACT CONTENT WRITE CHECK FAILED for '+target.name+': '+proof.missing.join('; ').slice(0,220)+
          '. Overwrite THIS SAME file with the precise requested content using fs.write. Do not claim done or repeat an incorrect fs.patch.'};
 }
+
+
+/**
+ * Strictly scoped one-file TEXT creation only: "Create x.txt containing EXACTLY
+ * TOKEN" means the precise literal token, not TOKEN + punctuation invented by
+ * the model. This is NOT used for free-form writing, edit workflows, code,
+ * multiple artifacts, or requests with additional actions.
+ *
+ * Never grants tool permission. The caller runs an ordinary guarded fs.write.
+ */
+export function exactSingleTextCreation(goal, workspace) {
+  const request = String(goal || '').trim();
+  if (!/^(?:actually\s+use\s+fs\.write\s+to\s+)?(?:create|write|save|skapa|skriv|spara)\b/i.test(request)) return null;
+  if (/\b(?:then|afterwards|also|sedan|därefter|också|and\s+(?:send|delete|edit|open|run|execute))\b/i.test(request)) return null;
+  const target = explicitTarget(request, workspace);
+  if (!target || !/\.txt$/i.test(target.name)) return null;
+  const match = /\b(?:containing|with\s+(?:the\s+)?content|innehållande)\s+EXACTLY\s+([A-Za-z0-9_-]{3,150})\b/i.exec(request);
+  if (!match) return null;
+  return { target, expected: match[1] };
+}
+
+export function pinSingleExactTextWrite(goal, workspace, tool, args) {
+  if (tool !== 'fs.write' || !args || typeof args.path !== 'string' || typeof args.content !== 'string') return null;
+  const contract = exactSingleTextCreation(goal, workspace);
+  if (!contract || path.resolve(contract.target.workspace, args.path) !== contract.target.path) return null;
+  if (args.content === contract.expected) return null;
+  return {
+    corrected: true,
+    args: { ...args, content: contract.expected },
+    target: contract.target.name,
+    reason: 'Explicit EXACTLY token is authoritative; discard model-added punctuation',
+  };
+}
+
+/**
+ * A file write counts as finished only after a SUCCESSFUL permitted tool call
+ * in THIS turn and strict independent byte comparison on disk. This avoids
+ * calling an LLM again after an already fulfilled atomic action.
+ */
+export function verifySingleExactTextCreation(goal, workspace, tool, args, toolOk) {
+  if (tool !== 'fs.write' || !toolOk || typeof args?.path !== 'string') return null;
+  const contract = exactSingleTextCreation(goal, workspace);
+  if (!contract || path.resolve(contract.target.workspace, args.path) !== contract.target.path) return null;
+  try {
+    const bytes = fs.readFileSync(contract.target.path);
+    const valid = bytes.equals(Buffer.from(contract.expected, 'utf8'));
+    return valid ? {
+      ok: true, target: contract.target.name,
+      text: 'Created ' + contract.target.name + ' with the exact user-requested text; verified on disk.',
+    } : { ok: false, target: contract.target.name };
+  } catch {
+    return { ok: false, target: contract.target.name };
+  }
+}
