@@ -1,7 +1,7 @@
 name: MAJIN Windows acceptance script parser and JSON contract
 on:
   push:
-    branches: [fix/windows-acceptance-powershell-parser-20261021]
+    branches: [fix/windows-acceptance-contract-rebased-20261021]
   workflow_dispatch:
 permissions:
   contents: read
