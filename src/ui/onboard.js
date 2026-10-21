@@ -89,14 +89,15 @@
     const select = el('select', 'ob-input');
     select.id = 'ob-choice';
     const presets = (OB.st && OB.st.presets || []).filter((p) => p.name !== 'mock');
-    const order = ['deepseek', 'openrouter', 'openai', 'gemini', 'anthropic', 'groq', 'kilocode', 'nous', 'ollama', 'lmstudio'];
+    const order = ['opencode', 'openrouter', 'deepseek', 'openai', 'gemini', 'anthropic', 'groq', 'kilocode', 'nous', 'opencodezen', 'ollama', 'lmstudio'];
     const sorted = [...presets].sort((a, b) => (order.indexOf(a.name) < 0 ? 100 : order.indexOf(a.name)) - (order.indexOf(b.name) < 0 ? 100 : order.indexOf(b.name)));
     for (const p of sorted) {
       const option = el('option', '', p.label + (status(p.name)?.ready ? ' · connected' : ''));
       option.value = p.name;
       select.append(option);
     }
-    select.value = existing ? existing.name : 'deepseek';
+    // Cloud-first onboarding: suggest OpenCode Go when available, without changing saved choices.
+    select.value = existing ? existing.name : (presets.some((p) => p.name === 'opencode') ? 'opencode' : sorted[0]?.name || '');
     if (!select.value && sorted.length) select.value = sorted[0].name;
     label.append(select);
     box.append(label);
@@ -277,8 +278,14 @@
     const chat = (st.routes || []).find((r) => r.job === 'chat');
     PICKER.current = chat ? chat.ref : '';
     const configured = (st.providers || []).find(p => p.name === chat?.provider)?.ready;
-    chip.textContent = (PICKER.current && configured ? shortModel(PICKER.current) : 'Choose a model') + ' ▾';
-    chip.title = PICKER.current || 'no model set';
+    const prov = (st.providers || []).find((p) => p.name === chat?.provider);
+    /* spec B: the chip states provider · model — never an ambiguous model name
+       alone (OpenCode Go must not read as plain glm-x.x, never silently Zen). */
+    const provName = prov?.label || prov?.displayName || prov?.preset || chat?.provider || '';
+    chip.textContent = (PICKER.current
+      ? `${provName} · ${shortModel(PICKER.current)}${configured ? '' : ' · Connect'}`
+      : 'Choose a model') + ' ▾';
+    chip.title = `${provName || 'provider'} — ${PICKER.current || 'no model set'}${configured ? '' : ' (connection required)'}`;
     chip.hidden = false;
     chip.setAttribute('aria-haspopup', 'dialog');
     chip.setAttribute('aria-expanded', String(PICKER.openFlag));
@@ -295,6 +302,8 @@
     pane.textContent = '';
     pane.tabIndex = -1;
     pane.setAttribute('aria-modal', 'true');
+    // u08 (measured twice, windows-latest Aurora lane): an open dialog MUST honor Escape.
+    pane.onkeydown = (e) => { if (e.key === 'Escape') { e.preventDefault(); closePicker(); } };
     pane.focus();
     fillPicker(pane, ticket);
   }
@@ -320,7 +329,11 @@
     close.onclick = closePicker;
     head.append(title, close);
     const st = OB.st || window.S?.st;
-    const providers = (st?.providers || []).filter((p) => p.kind !== 'mock');
+    const providers = (st?.providers || []).filter((p) => p.kind !== 'mock').sort((a, b) => {
+      // Keep Go easy to find; never silently replace the currently active model.
+      const priority = (p) => p.name === 'opencode' ? 0 : p.name === 'opencodezen' ? 90 : 10;
+      return priority(a) - priority(b);
+    });
     const active = st?.routes?.find((r) => r.job === 'chat')?.provider;
     const provider = el('select', 'ob-input');
     provider.setAttribute('aria-label', 'Provider');
@@ -368,13 +381,39 @@
     browser.append(provider, search, filters, capabilities, msg, list, more, manual, manage);
     pane.append(head, browser);
     let models = [], freeOnly = false, limit = 60, generation = 0, unverified = false;
+    let selecting = false;
     const accept = async (id) => {
-      msg.textContent = 'Selecting model…';
+      if (selecting) return;
+      selecting = true;
+      msg.textContent = 'Saving and verifying model…';
       const name = provider.value;
       const routes = Object.fromEntries(ROUTE_JOBS.map((j) => [j, name + '/' + id]));
-      const r = await apiLocal('/config', { method: 'PATCH', body: { models: { provider: name, routes }, moa: { policy: 'off' } } }).catch(() => null);
-      if (r?.ok) { closePicker(); if (typeof window.refresh === 'function') window.refresh(); }
-      else msg.textContent = tellErr(r, 'Could not save this model. Try again.');
+      try {
+        const r = await apiLocal('/config', { method: 'PATCH', body: { models: { provider: name, routes }, moa: { policy: 'off' } } });
+        if (!r?.ok) {
+          msg.textContent = tellErr(r, 'Could not save this model. Try again.');
+          return;
+        }
+        // A PATCH success only proves that one request was accepted. Read back
+        // the actual ACTIVE routes before closing; another process or a stale
+        // UI state may still be using a different provider/model.
+        const fresh = await apiLocal('/state?tools=0');
+        const { confirmSelectedModel } = await import('/model-confirm.js');
+        const proof = confirmSelectedModel(fresh, name, id, ROUTE_JOBS);
+        if (!proof.ok) {
+          msg.textContent = proof.reason + (proof.missing.length ? ': ' + proof.missing.join(', ') : '') + '. Refresh or try again.';
+          return;
+        }
+        OB.st = fresh;
+        if (window.S) window.S.st = fresh;
+        await paintChip();
+        closePicker();
+        if (typeof window.refresh === 'function') void window.refresh();
+      } catch {
+        msg.textContent = 'Model save was sent but could not be verified. Check the connection and retry.';
+      } finally {
+        selecting = false;
+      }
     };
     manualGo.onclick = () => { const id = manualInput.value.trim(); if (id) accept(id); };
     function paint() {

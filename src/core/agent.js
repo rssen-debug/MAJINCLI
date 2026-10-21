@@ -317,6 +317,10 @@ export class Agent {
         if (disk.length) history = disk.map((m) => ({ role: m.role, content: m.content }));
       }
       if (!Array.isArray(history)) history = [];
+      /* R4 (s16/s23 real-world audit 2026-10-20): the user line lands on disk
+         IMMEDIATELY — not after a successful turn. An aborted/timed-out turn
+         used to leave ZERO history, so a graceful restart looked like data loss. */
+      appendHistory(session, { role: 'user', content: input, source });
       /* handoff/checkpoint injiceras en gång: ny modell får mål+plan+framsteg */
       const handoffData = handoff && handoff.plan ? { goal: handoff.goal || null, plan: handoff.plan, from: handoff.from || null, to: handoff.to || null } : this.consumeHandoff(session);
       const topBlock = this.handoffBlock(handoffData);
@@ -347,7 +351,7 @@ export class Agent {
             ]
               .filter(Boolean)
               .join('\n');
-            appendHistory(session, { role: 'user', content: input, source });
+            /* user line already journaled at turn start (R4) */
             appendHistory(session, { role: 'assistant', content: text, fastPath: true });
             this.memory?.event?.('config', { summary: intent.notes.join(', ') });
             emit({ type: 'answer', text, fastPath: true });
@@ -398,7 +402,7 @@ export class Agent {
          trillar tillbaka till normal turn — GENESIS ZERO garanterar att ett svar alltid landar. */
       if (!readOnly) {
         const { shouldMission, runMission } = await import('./mission.js');
-        if (shouldMission(input).mission) {
+        if (shouldMission(input, { atomicFileTransform: true }).mission) {
           try {
             const m = await runMission({
               cfg,
@@ -410,18 +414,21 @@ export class Agent {
             });
             if (m.kind === 'mission') {
               emit({ type: 'mission', nodes: m.nodes, workers: m.workers, okCount: m.okCount, failCount: m.failCount, blockedCount: m.blockedCount, verifiedCount: m.verifiedCount, repairedCount: m.repairedCount });
+              const allMissionOk = m.failCount === 0 && m.blockedCount === 0 && m.okCount === m.nodes;
               const text = [
-                `Mission done — ${m.okCount}/${m.nodes} parts ok` + (m.failCount ? `, ${m.failCount} failed` : '') + (m.blockedCount ? `, ${m.blockedCount} blocked` : '') + (m.verifiedCount ? ` (${m.verifiedCount} verified in the workspace${m.repairedCount ? `, ${m.repairedCount} after repair` : ''})` : '') + `. ${m.workers} workers decided by the analyzer (code, not the model).`,
+                `${allMissionOk ? 'Mission completed' : 'Mission incomplete'} — ${m.okCount}/${m.nodes} parts ok` + (m.failCount ? `, ${m.failCount} failed` : '') + (m.blockedCount ? `, ${m.blockedCount} blocked` : '') + (m.verifiedCount ? ` (${m.verifiedCount} verified in the workspace${m.repairedCount ? `, ${m.repairedCount} after repair` : ''})` : '') + `. ${m.workers} workers decided by the analyzer (code, not the model).`,
                 '',
                 ...m.textSummary,
               ].join('\n');
-              appendHistory(session, { role: 'user', content: input, source });
+              /* user line already journaled at turn start (R4) */
               appendHistory(session, { role: 'assistant', content: text, mission: true });
               this.memory?.event?.('mission', { summary: `${m.okCount}/${m.nodes}: ${String(input).slice(0, 140)}` });
               emit({ type: 'answer', text, mission: true });
               return {
                 text,
                 mission: { nodes: m.nodes, workers: m.workers, okCount: m.okCount, failCount: m.failCount, blockedCount: m.blockedCount, wallMs: m.result.wallMs, analysis: m.analysis },
+                incomplete: !allMissionOk,
+                stopReason: allMissionOk ? 'mission_done' : 'mission_incomplete',
                 steps: 0,
                 tools: [],
                 usage: { input: 0, output: 0, costUsd: 0 },
@@ -483,7 +490,7 @@ export class Agent {
       const trivial = decision.job === 'chat' && !toolsUsed && (res.text || '').length < 200;
       let finalText = res.text;
       let moaInfo = null;
-      if (turnPlan.moa.enabled && !res.aborted && !trivial) {
+      if (turnPlan.moa.enabled && !res.aborted && !res.incomplete && !res.blocked && !res.error && !res.fatal && !trivial) {
         const evidence = summarizeRun(res, messages);
         const moaRes = await moaRun({
           cfg,
@@ -501,14 +508,16 @@ export class Agent {
       }
 
       /* 5) historik, minne, färdighet */
-      appendHistory(session, { role: 'user', content: input, source, job: decision.job });
+      /* user line already journaled at turn start (R4) */
       appendHistory(session, { role: 'assistant', content: finalText, steps: res.steps, tools: res.toolLog.length });
       if (cfg.get('memory.auto') && toolsUsed) {
-        this.memory?.event?.('turn', { summary: firstLine(input), tools: [...new Set(res.toolLog.map((t) => t.tool))].slice(0, 8).join(','), ok: !res.error });
-        const facts = res.toolLog.filter((t) => t.ok).length >= 4 ? await this.harvestFacts(input, res, messages) : [];
+        this.memory?.event?.('turn', { summary: firstLine(input), tools: [...new Set(res.toolLog.map((t) => t.tool))].slice(0, 8).join(','), ok: !res.error && !res.incomplete && !res.blocked && !res.aborted && !res.fatal });
+        const facts = !res.error && !res.incomplete && !res.blocked && !res.aborted && !res.fatal && res.toolLog.filter((t) => t.ok).length >= 4 ? await this.harvestFacts(input, res, messages) : [];
         for (const f of facts) this.memory?.remember?.(f, [decision.job]);
       }
-      if (cfg.get('skills.auto') && res.steps >= 5 && !res.error) {
+      if (cfg.get('skills.auto') && res.steps >= 5 && !res.error && !res.fatal &&
+          !res.incomplete && !res.blocked && !res.aborted &&
+          res.toolLog?.some((t) => t.ok) && res.toolLog.every((t) => t.ok)) {
         const skill = suggestSkill(input, res);
         if (skill) {
           const saved = this.skills.save(skill);
@@ -526,7 +535,9 @@ export class Agent {
         route: turnPlan.route,
         moa: moaInfo,
         escalated: res.escalated,
-        incomplete: res.incomplete,
+        incomplete: Boolean(res.incomplete || res.blocked || res.fatal),
+        blocked: res.blocked || null,
+        stopReason: res.stopReason || (res.incomplete ? 'step_limit' : null),
         error: res.error,
         errorKind: res.errorKind,
         errorHint: res.errorHint,

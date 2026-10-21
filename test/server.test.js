@@ -275,8 +275,8 @@ test('/api/state and /api/config: right shape and redacted keys', async () => {
   const st = JSON.parse((await get(`/api/state?t=${TOKEN}`)).body);
   assert.equal(st.version, JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version, 'the app must report the version it was released as');
   assert.equal(st.name, 'MAJIN');
-  assert.equal(st.tools.length, 104, 'state must list every tool');
-  assert.equal(JSON.parse((await get(`/api/state?tools=0&t=${TOKEN}`)).body).tools.count, 104);
+  assert.equal(st.tools.length, 138, 'state must list every tool');
+  assert.equal(JSON.parse((await get(`/api/state?tools=0&t=${TOKEN}`)).body).tools.count, 138);
   assert.ok(st.groups.reverse.length >= 20, 'groups for the UI');
   assert.equal(st.guard.mode, 'confirm', 'the default mode is confirm');
   assert.ok(Array.isArray(st.routes) && st.routes.some((r) => r.job === 'tasks' && r.ref), 'the route table must exist');
@@ -512,4 +512,22 @@ test('/api/models discovers every Anthropic page and preserves the last good lis
   assert.equal(failed.models, undefined);
   const afterFailure = JSON.parse((await get(`/api/config?t=${TOKEN}`)).body).config;
   assert.equal(afterFailure.providers['catalog-fixture'].models.length, 651);
+});
+
+test('/api/tools exposes live JSON Schema contracts, not only parameter names', async () => {
+  const r = await get(`/api/tools?t=${TOKEN}`);
+  assert.equal(r.status, 200);
+  const j = JSON.parse(r.body);
+  assert.equal(j.ok, true);
+  for (const [name, required] of Object.entries({
+    'shell.run': ['command'],
+    'browser.open': ['url'],
+    'fs.write': ['path', 'content'],
+    'sys.ps': [],
+  })) {
+    const t = j.tools.find((tool) => tool.name === name);
+    assert.ok(t, `${name} present in installed registry`);
+    assert.deepEqual(t.parameters.required, required, `${name} exact required keys`);
+    assert.equal(t.parameters.type, 'object');
+  }
 });

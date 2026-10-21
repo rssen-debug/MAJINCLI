@@ -35,5 +35,7 @@ export async function run({ cfg, task, job = 'tasks', maxSteps = 10, registry, s
     providerErrorCap,
     providerRetries,
   });
-  return { text: res.text, steps: res.steps, tools: res.toolLog.map((t) => t.tool), usage: res.usage, error: res.error };
+  return { text: res.text, steps: res.steps, tools: res.toolLog.map((t) => t.tool), usage: res.usage,
+    error: res.error, errorKind: res.errorKind, incomplete: Boolean(res.incomplete || res.blocked || res.aborted || res.fatal),
+    blocked: res.blocked || null, stopReason: res.stopReason || (res.incomplete ? 'step_limit' : null) };
 }

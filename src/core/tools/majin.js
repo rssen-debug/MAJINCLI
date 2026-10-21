@@ -27,10 +27,10 @@ export const majinTools = [
     risk: 'write',
     desc: 'Change MAJIN own configuration (routes, moa, providers, channels, guard, agent, tools, ui, budget, persona). A validated JSON patch; an invalid patch is rejected with a reason. Use intent for natural language.',
     params: {
-      patch: 'object: JSON patch of the config tree, e.g. {"models":{"routes":{"code":"deepseek/deepseek-v4-pro"}}}',
-      intent: 'string: an instruction in plain language that is translated into a patch, e.g. "use deepseek pro for code always"',
-      dry: 'boolean: show the diff without saving',
-      note: 'string: why the change is made (goes into the log)',
+      patch: 'object: JSON patch of the config tree, e.g. {"models":{"routes":{"code":"deepseek/deepseek-v4-pro"}}} (optional)',
+      intent: 'string: an instruction in plain language that is translated into a patch, e.g. "use deepseek pro for code always" (optional)',
+      dry: 'boolean: show the diff without saving (optional)',
+      note: 'string: why the change is made (goes into the log) (optional)',
     },
     examples: ['majin.configure({intent:"use deepseek flash for tasks always"})', 'majin.configure({patch:{moa:{policy:"hard"}}})'],
     async run({ patch = null, intent = '', dry = false, note = '' }, ctx) {
@@ -69,11 +69,11 @@ export const majinTools = [
     risk: 'write',
     desc: 'Model routing: show, set or test the jobs (chat, tasks, tools, code, re, research, plan, analysis, final, summarize, aggregator, router, vision).',
     params: {
-      action: 'string: show | set | test | show_all [show|set|test|show_all]',
-      job: 'string: which job (required for set)',
-      model: 'string: "provider/model" (required for set)',
-      all: 'boolean: set the same model for every job',
-      note: 'string: why',
+      action: 'string: show | set | test | show_all [show|set|test|show_all] (optional)',
+      job: 'string: which job (required for set) (optional)',
+      model: 'string: "provider/model" (required for set) (optional)',
+      all: 'boolean: set the same model for every job (optional)',
+      note: 'string: why (optional)',
     },
     examples: ['majin.routes({action:"set",job:"code",model:"deepseek/deepseek-v4-pro"})'],
     async run({ action = 'show', job = '', model = '', all = false, note = '' }, ctx) {
@@ -116,14 +116,14 @@ export const majinTools = [
     risk: 'write',
     desc: 'Manage providers: list | add | remove | test | models (list available models from /models).',
     params: {
-      action: 'string: list | add | remove | test | models [list|add|remove|test|models]',
-      name: 'string: provider name (the key in config)',
-      preset: 'string: use a preset (deepseek, openrouter, groq, openai, anthropic, nous, ollama, lmstudio, mock)',
-      baseUrl: 'string: https://…',
-      apiKey: 'string: sk-…  (stored in the config on disk)',
-      env: 'string: instead of a key — store as {env:VAR}',
-      models: 'string: comma separated model names',
-      kind: 'string: openai | anthropic | mock [openai|anthropic|mock]',
+      action: 'string: list | add | remove | test | models [list|add|remove|test|models] (optional)',
+      name: 'string: provider name (the key in config) (optional)',
+      preset: 'string: use a preset (deepseek, openrouter, groq, openai, anthropic, nous, ollama, lmstudio, mock) (optional)',
+      baseUrl: 'string: https://… (optional)',
+      apiKey: 'string: sk-…  (stored in the config on disk) (optional)',
+      env: 'string: instead of a key — store as {env:VAR} (optional)',
+      models: 'string: comma separated model names (optional)',
+      kind: 'string: openai | anthropic | mock [openai|anthropic|mock] (optional)',
     },
     examples: ['majin.provider({action:"add",name:"deepseek",apiKey:"sk-…"})'],
     async run({ action = 'list', name = '', preset = '', baseUrl = '', apiKey = '', env = '', models = null, kind = '' }, ctx) {
@@ -245,10 +245,10 @@ export const majinTools = [
     risk: 'write',
     desc: 'Mixture-of-Agents: show | on | off | hard (only hard jobs) | set (references/aggregator/width). On by default.',
     params: {
-      action: 'string: show | on | off | hard | set [show|on|off|hard|set]',
-      references: 'array: [{"model":"provider/model","temperature":0.3}]',
-      aggregator: 'string: provider/model that aggregates',
-      width: 'number: how many references to run',
+      action: 'string: show | on | off | hard | set [show|on|off|hard|set] (optional)',
+      references: 'array: [{"model":"provider/model","temperature":0.3}] (optional)',
+      aggregator: 'string: provider/model that aggregates (optional)',
+      width: 'number: how many references to run (optional)',
     },
     async run({ action = 'show', references = null, aggregator = '', width = 0 }, ctx) {
       const m = ctx.cfg.get('moa');
@@ -271,7 +271,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'write',
     desc: 'The safety glass: status | mode(confirm|strict|off) | allow(tool) | disallow. The agent can NOT approve its own dangerous actions — a human always does that.',
-    params: { action: 'string: status | mode | allow | disallow [status|mode|allow|disallow]', mode: 'string: confirm | strict | off', tool: 'string: verktygsnamn' },
+    params: { action: 'string: status | mode | allow | disallow [status|mode|allow|disallow] (optional)', mode: 'string: confirm | strict | off (optional)', tool: 'string: verktygsnamn (optional)' },
     async run({ action = 'status', mode = '', tool = '' }, ctx) {
       const g = ctx.cfg.get('guard');
       if (action === 'status') {
@@ -302,7 +302,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'write',
     desc: 'Long-term memory: remember(text) | recall(query) | forget(query) | list | clear. The agent stores preferences, projects and solutions here.',
-    params: { action: 'string: remember | recall | forget | list | clear [remember|recall|forget|list|clear]', text: 'string: vad som ska minnas', query: 'string: vad du letar efter', tags: 'array: taggar' },
+    params: { action: 'string: remember | recall | forget | list | clear [remember|recall|forget|list|clear] (optional)', text: 'string: vad som ska minnas (optional)', query: 'string: vad du letar efter (optional)', tags: 'array: taggar (optional)' },
     async run({ action = 'list', text = '', query = '', tags = [] }, ctx) {
       const m = ctx.memory;
       if (action === 'remember') {
@@ -329,7 +329,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'write',
     desc: 'Learned skills (markdown in data/skills): list | save | read | delete | match. A skill is how a kind of task is done, step by step.',
-    params: { action: 'string: list | save | read | delete | match | report | enable [list|save|read|delete|match|report|enable]', name: 'string: name', when: 'string: when to use it', steps: 'string: the steps (markdown)', tools: 'array: tools it uses', query: 'string: for match', ok: 'boolean: did the skill work (report)', why: 'string: why it failed (report)' },
+    params: { action: 'string: list | save | read | delete | match | report | enable [list|save|read|delete|match|report|enable] (optional)', name: 'string: name (optional)', when: 'string: when to use it (optional)', steps: 'string: the steps (markdown) (optional)', tools: 'array: tools it uses (optional)', query: 'string: for match (optional)', ok: 'boolean: did the skill work (report) (optional)', why: 'string: why it failed (report) (optional)' },
     async run({ action = 'list', name = '', when = '', steps = '', tools = '', query = '', ok = null, why = '' }, ctx) {
       const s = ctx.skills;
       if (action === 'report') {
@@ -380,12 +380,12 @@ export const majinTools = [
     risk: 'write',
     desc: 'Scheduled work: add | list | remove | run | pause | resume. Requests like "every morning 07:30: do X and send it to telegram" belong here.',
     params: {
-      action: 'string: add | list | remove | run | pause | resume [add|list|remove|run|pause|resume]',
-      id: 'string: job id (for remove/pause/run)',
-      when: 'string: "07:30 daily" | "every 30m" | "*/15 * * * *" | "2026-01-01T09:00"',
-      task: 'string: what to run (the whole prompt)',
-      readOnly: 'boolean: the job may only read; every tool that changes state is refused',
-      deliver: 'string: telegram | whatsapp | silent (where the answer goes)',
+      action: 'string: add | list | remove | run | pause | resume [add|list|remove|run|pause|resume] (optional)',
+      id: 'string: job id (for remove/pause/run) (optional)',
+      when: 'string: "07:30 daily" | "every 30m" | "*/15 * * * *" | "2026-01-01T09:00" (optional)',
+      task: 'string: what to run (the whole prompt) (optional)',
+      readOnly: 'boolean: the job may only read; every tool that changes state is refused (optional)',
+      deliver: 'string: telegram | whatsapp | silent (where the answer goes) (optional)',
       model: 'string: optional route for the job',
     },
     examples: ['majin.schedule({action:"add",when:"07:30 daily",task:"Short morning report: weather, my tickets, new security advisories. Deliver to telegram"})'],
@@ -418,16 +418,16 @@ export const majinTools = [
     risk: 'write',
     desc: 'Channels: status | telegram | whatsapp | send | pair. Sets bot keys, links devices and sends messages.',
     params: {
-      action: 'string: status | telegram | whatsapp | send | pair | unpair [status|telegram|whatsapp|send|pair|unpair]',
-      token: 'string: Telegram bot-token (123456:ABC…)',
-      transport: 'string: baileys | cloud (WhatsApp) [baileys|cloud]',
-      phoneNumberId: 'string: WhatsApp Cloud API phone-number-id',
-      accessToken: 'string: WhatsApp Cloud API token',
+      action: 'string: status | telegram | whatsapp | send | pair | unpair [status|telegram|whatsapp|send|pair|unpair] (optional)',
+      token: 'string: Telegram bot-token (123456:ABC…) (optional)',
+      transport: 'string: baileys | cloud (WhatsApp) [baileys|cloud] (optional)',
+      phoneNumberId: 'string: WhatsApp Cloud API phone-number-id (optional)',
+      accessToken: 'string: WhatsApp Cloud API token (optional)',
       verifyToken: 'string: optional secret for webhook verification',
-      to: 'string: dit (chat-id eller telefonnummer)',
-      text: 'string: the message body',
-      channel: 'string: telegram | whatsapp',
-      enable: 'boolean: start/stop the channel',
+      to: 'string: dit (chat-id eller telefonnummer) (optional)',
+      text: 'string: the message body (optional)',
+      channel: 'string: telegram | whatsapp (optional)',
+      enable: 'boolean: start/stop the channel (optional)',
     },
     examples: ['majin.channel({action:"telegram",token:"123:ABC",enable:true})'],
     async run({ action = 'status', token = '', transport = '', phoneNumberId = '', accessToken = '', verifyToken = '', to = '', text = '', channel = '', enable = null }, ctx) {
@@ -489,7 +489,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'read',
     desc: 'Full status: config, routes, MOA, channels, external RE tools, budget, memory, skills, jobs, log path. Use it when the user asks "how are you doing?".',
-    params: { verbose: 'boolean: med allt' },
+    params: { verbose: 'boolean: med allt (optional)' },
     async run({ verbose = false }, ctx) {
       const cfg = ctx.cfg;
       const re = await detectRe({}).catch(() => ({}));
@@ -572,7 +572,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'read',
     desc: 'Diagnostics: provider keys, one real minimal call per provider, the tool registry, an RE check on its own binary, channel status, port, writability. Run this when something behaves oddly.',
-    params: { level: 'string: quick | full [quick|full]' },
+    params: { level: 'string: quick | full [quick|full] (optional)' },
     async run({ level = 'quick' }, ctx) {
       const out = [];
       // ok=null betyder "kan inte testa / inte konfigurerad" — inte ett fel, så en ny
@@ -649,7 +649,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'read',
     desc: 'List every tool with its description and risk level. All of them are always on — there is no off switch.',
-    params: { group: 'string: filter by group', describe: 'string: tool name for the full description' },
+    params: { group: 'string: filter by group (optional)', describe: 'string: tool name for the full description (optional)' },
     async run({ group = '', describe = '' }, ctx) {
       if (describe) {
         const t = ctx.registry.byName.get(describe);
@@ -670,7 +670,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'write',
     desc: 'Export/import everything MAJIN knows (config, memory, skills, schedules) as a tar.gz in workspace/backups.',
-    params: { action: 'string: export | list | restore [export|list|restore]', file: 'string: archive to restore' },
+    params: { action: 'string: export | list | restore [export|list|restore] (optional)', file: 'string: archive to restore (optional)' },
     async run({ action = 'list', file }, ctx) {
       const dir = path.join(ctx.cfg.get('workspace'), 'backups');
       await fsp.mkdir(dir, { recursive: true });
@@ -700,7 +700,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'read',
     desc: 'Open the UI: on Windows a dedicated Edge/Chrome app window. action=open | theme | voice.',
-    params: { action: 'string: open | theme | voice | wake [open|theme|voice|wake]', theme: 'string: jarvis | arc | minimal', voice: 'boolean: tts on/off', wake: 'boolean: wake word on/off' },
+    params: { action: 'string: open | theme | voice | wake [open|theme|voice|wake] (optional)', theme: 'string: jarvis | arc | minimal (optional)', voice: 'boolean: tts on/off (optional)', wake: 'boolean: wake word on/off (optional)' },
     async run({ action = 'open', theme = '', voice = null, wake = '' }, ctx) {
       if (action !== 'open') {
         const ui = { ...(ctx.cfg.get('ui') || {}) };
@@ -735,7 +735,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'write',
     desc: 'Control the agent itself: restart | stop | pause | resume | clear (session) | sessions | history.',
-    params: { action: 'string: restart | stop | pause | resume | clear | sessions | history [restart|stop|pause|resume|clear|sessions|history]', session: 'string: session (default active)', limit: 'number: lines for history' },
+    params: { action: 'string: restart | stop | pause | resume | clear | sessions | history [restart|stop|pause|resume|clear|sessions|history] (optional)', session: 'string: session (default active) (optional)', limit: 'number: lines for history (optional)' },
     async run({ action = 'sessions', session = 'desktop', limit = 40 }, ctx) {
       if (action === 'sessions') {
         const list = await fsp.readdir(dirs.sessions).catch(() => []);
@@ -782,13 +782,13 @@ export const majinTools = [
       'Local trajectory recording used to make MAJIN better. OFF by default, redacted on write, stored next to the config, '
     + 'and never uploaded — exporting is a deliberate command you run.',
     params: {
-      action: 'string: status | on | off | stats | list | export | purge | rate',
-      query: 'string: which turn to rate (empty = the newest)',
-      score: 'number: 1 or -1 for rate',
-      id: 'string: record id for purge',
-      before: 'string: purge everything older than this ISO date',
-      clean: 'boolean: export metadata only, no question or answer text',
-      limit: 'number: how many records to list (default 8)',
+      action: 'string: status | on | off | stats | list | export | purge | rate (optional)',
+      query: 'string: which turn to rate (empty = the newest) (optional)',
+      score: 'number: 1 or -1 for rate (optional)',
+      id: 'string: record id for purge (optional)',
+      before: 'string: purge everything older than this ISO date (optional)',
+      clean: 'boolean: export metadata only, no question or answer text (optional)',
+      limit: 'number: how many records to list (default 8) (optional)',
     },
     examples: ['majin.dataset({action:"stats"})', 'majin.dataset({action:"export",clean:true})', 'majin.dataset({action:"on"})'],
     async run({ action = 'status', query = '', score = 1, id = null, before = null, clean = false, limit = 8 }, ctx) {
@@ -849,8 +849,8 @@ export const majinTools = [
       action: 'string: validate | create | list | remove | call | enable',
       spec: 'object: {name, kind:"http-json", baseUrl, permission, headers, mapping, timeoutMs, rate:{maxPerHour}}',
       name: 'string: adapter name (for remove | call | enable)',
-      params: 'object: request payload for call (params for GET, json body for POST) [call only]',
-      approved: 'boolean: only ever true after the HUMAN said yes — required for external-write/external-post [call only]',
+      params: 'object: request payload for call (params for GET, json body for POST). optional [call only]',
+      approved: 'boolean: only ever true after the HUMAN said yes — required for external-write/external-post. optional [call only]',
     },
     async run({ action = 'list', spec = null, name = '', params = {}, approved = false }, ctx) {
       const a = ctx.adapters;

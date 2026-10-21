@@ -37,9 +37,9 @@ export const marketingTools = [
     params: {
       site: 'string: public store website URL or hostname (optional)',
       totalBudget: 'number: TOTAL maximum ad-spend budget, NOT daily (required, can be 0)',
-      currency: 'string: 3-letter currency of the budget and item costs (default configured currency or SEK)',
+      currency: 'string: 3-letter currency of the budget and item costs (default: configured currency or SEK)',
       product: 'object: optional {name,price,cogs,shipping,fees,refundRate,targetProfit} actual unit economics',
-      trackingReady: 'boolean: whether user reports purchase tracking configured (not verified)',
+      trackingReady: 'boolean: whether user reports purchase tracking configured. optional (not verified)',
       reportedPastOrders: 'number: user-reported historical real orders (optional)',
       historicalCpa: 'number: user-reported past acquisition cost per buyer in SAME currency (optional)',
     },

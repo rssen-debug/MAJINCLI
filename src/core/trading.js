@@ -123,6 +123,10 @@ export async function tradingResearch({budget,currency='USD',symbol,date=''}={},
   if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||Number.isNaN(Date.parse(day))||new Date(day+'T00:00:00Z').toISOString().slice(0,10)!==day||day>today())throw new Error('Choose a valid, non-future analysis date.');
   const chosen=researchProvider(cfg);
   const python=process.env.MAJIN_TRADING_PYTHON||(process.platform==='win32'?'python':'python3');
+  // The QA bridge uses a REAL spawned Node process as a portable fixture.
+  // Windows cannot execute a Unix shebang-only "fake-python" file. This
+  // explicit test-only flag cannot activate during ordinary user workflows.
+  const qaNodeBridge=process.env.MAJIN_TRADING_QA_STUB==='1' && /\.m?js$/i.test(python);
   const crypto=/^(BTC|ETH|SOL|DOGE|XRP|ADA|LTC|AVAX)-USD$/.test(ticker);
   const keys=['PATH','HOME','USERPROFILE','APPDATA','LOCALAPPDATA','TEMP','TMP','SYSTEMROOT','SystemRoot','WINDIR','SSL_CERT_FILE','REQUESTS_CA_BUNDLE','VIRTUAL_ENV'];
   const env=Object.fromEntries(keys.filter(k=>process.env[k]).map(k=>[k,process.env[k]]));
@@ -133,7 +137,9 @@ export async function tradingResearch({budget,currency='USD',symbol,date=''}={},
     let finished=false,output='',timedOut=false,overflow=false,child;
     let timer;
     const done=r=>{if(finished)return;finished=true;clearTimeout(timer);resolve(r)};
-    try{child=spawnImpl(python,['-E','-c',PYTHON_BRIDGE,ticker,day,crypto?'crypto':'stock'],{env,cwd:os.tmpdir(),stdio:['ignore','pipe','pipe'],windowsHide:true});}
+    try{child=spawnImpl(qaNodeBridge?process.execPath:python,
+      qaNodeBridge?[python]:['-E','-c',PYTHON_BRIDGE,ticker,day,crypto?'crypto':'stock'],
+      {env,cwd:os.tmpdir(),stdio:['ignore','pipe','pipe'],windowsHide:true});}
     catch{return done({ok:false,error:'Python 3.11+ interpreter unavailable. Install the optional TradingAgents package only if desired.'})}
     timer=setTimeout(()=>{timedOut=true;child.kill?.('SIGKILL')},Math.min(120_000,Math.max(1000,timeoutMs)));
     timer.unref?.();

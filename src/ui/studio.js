@@ -225,7 +225,10 @@
     $('b-studio').onclick = () => $('studio').hidden ? open() : close();
     $('studio-close').onclick = close;
     $('run-details').onclick = () => open('activity');
-    $('chat-search').oninput = filterChats;
+    $('chat-search').oninput = (e) => {
+      filterChats();
+      if (window.MAJIN_CHATS) window.MAJIN_CHATS.setSearch(e.target.value); /* P0: server-side index also searches titles/history/archive */
+    };
     for (const tab of TABS) {
       $('tab-' + tab).onclick = () => selectTab(tab);
       $('tab-' + tab).onkeydown = e => {

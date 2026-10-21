@@ -9,6 +9,7 @@
  *   majin pair telegram|whatsapp
  *   majin send "text"        one question, answer on stdout
  *   majin re <fil> [--json]  RE-analys direkt i terminalen
+ *   majin absorb <repo|sökväg>   W1 capability radar (static, never executed)
  *   majin test               testsvit
  *   majin version
  */
@@ -23,6 +24,7 @@ import { bus } from '../core/log.js';
 import { logoArt, tagline } from './banner.js';
 import { shortcutAction, shortcutFile } from '../core/shortcut.js';
 import { VERSION, createRuntime } from '../core/runtime.js';
+import { absorb as absorbCore } from '../core/absorb.js';
 
 const SELF_DIR = (() => {
   try {
@@ -84,6 +86,10 @@ async function main() {
     case 're':
     case 'analyze':
       return re();
+    case 'absorb':
+      return absorb();
+    case 'research':
+      return research_();
     case 'dataset':
       return dataset();
     case 'update':
@@ -269,7 +275,7 @@ async function doctor() {
   const ready = st.providers.filter((p) => p.ready);
   put(ready.length > 0, 'providers', ready.length ? ready.map((p) => `${p.name}(${p.models.length})`).join(' ') : 'no key — demo mode');
   put(st.routes.filter((r) => r.ready).length > 0 || rt.cfg.needsSetup, 'routes', `ready ${st.routes.filter((r) => r.ready).length}/${st.routes.length}${rt.cfg.needsSetup ? ' (no key yet)' : ''}`);
-  put(st.moa.policy !== 'off', 'MOA', `${st.moa.policy} · width ${st.moa.width} → ${String(st.moa.aggregator).split('/').pop()}`);
+  put(true, 'MOA (optional)', `${st.moa.policy} · width ${st.moa.width} → ${String(st.moa.aggregator).split('/').pop()}`);
   put(rt.registry.list().length > 60, 'tools', `${rt.registry.list().length} registered, none disabled`);
   put(st.guard.mode !== undefined, 'guard', `${st.guard.mode} · ${st.guard.pending} waiting`);
   const { detect } = await import('../core/binary/external.js');
@@ -477,6 +483,40 @@ async function re() {
   await rt.shutdown();
   if (json()) return process.stdout.write(JSON.stringify(out.meta || out, null, 2) + '\n');
   if (!out.ok) return process.stderr.write((out.error?.message || 'failed') + '\n');
+  process.stdout.write(String(out.result) + '\n');
+}
+
+/* --------------------------- absorb (W1 capability radar) ------------------ */
+
+async function absorb() {
+  const target = argv.shift();
+  if (!target) return process.stderr.write('usage: majin absorb <github-url|org/repo|local-path> [--json]\n');
+  const t0 = Date.now();
+  const res = await absorbCore(target, { workspace: dirs.workspace || process.cwd() });
+  if (json()) return process.stdout.write(JSON.stringify({ ms: Date.now() - t0, ...res }, null, 2) + '\n');
+  if (!res.ok) {
+    process.stderr.write(`absorb failed: ${res.error.message}\n${res.error.hint || ''}\n`.trim() + '\n');
+    process.exitCode = 1;
+    return;
+  }
+  process.stdout.write(
+    `[absorb] ${res.summary.files} files · license=${res.summary.license}\n` +
+    `module heat: ${JSON.stringify(res.summary.moduleStrength)}\n` +
+    `capability map: ${res.artifacts.capabilityJson}\n` +
+    `report:         ${res.artifacts.reportMd}\n`
+  );
+}
+
+/* --------------------------- research (W2) ------------------------------- */
+
+async function research_() {
+  const question = argv.filter((a) => a !== '--json').join(' ');
+  if (!question) return process.stderr.write('usage: majin research <question>\n');
+  const rt = await createRuntime({ channels: false, scheduler: false });
+  const out = await rt.registry.exec('research.run', { question }, { ...rt.ctx, session: 'cli', step: 1 });
+  await rt.shutdown();
+  if (json()) return process.stdout.write(JSON.stringify(out.meta || out, null, 2) + '\n');
+  if (!out.ok) { process.stderr.write('research failed: ' + (out.error?.message || 'unknown') + '\n'); process.exitCode = 1; return; }
   process.stdout.write(String(out.result) + '\n');
 }
 

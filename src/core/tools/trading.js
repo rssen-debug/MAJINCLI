@@ -14,7 +14,7 @@ export const tradingTools = [
     desc:'For "I have $50/$100 to trade" compute a conservative hypothetical cash allocation in the stated currency. No assumed live quote, broker, or fees. Ask for the asset and missing evidence; always abstain if no ticker/price/fees. No LLM calls, network requests or real/paper trades.',
     params:{
       budget:'number: money available as trading capital, NOT an AI fee limit',
-      currency:'string: USD/SEK/EUR code (default USD)',
+      currency:'string: USD/SEK/EUR code (default: USD)',
       symbol:'string: optional asset ticker (e.g. AAPL or BTC-USD)',
       price:'number: optional confirmed user-provided market quote (NOT fetched)',
       feePerOrder:'number: optional broker/exchange fee per order in currency',
@@ -38,7 +38,7 @@ export const tradingTools = [
     params:{
       symbol:'string: selected ticker, e.g. AAPL or BTC-USD (required)',
       budget:'number: the user capital in stated currency (required, not LLM cost)',
-      currency:'string: code like USD, default USD',
+      currency:'string: code like USD (default: USD)',
       date:'string: optional historical analysis date YYYY-MM-DD, default today',
     },
     required:['symbol','budget'],

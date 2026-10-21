@@ -184,7 +184,7 @@ export const githubTools = [
     desc:'Self-extension quality gate: on a dedicated MAJIN Git feature branch, verify source checkout and optionally RUN REAL parse, localization and Node test suites with timeouts. Never automatically installs packages, pushes, publishes, merges or trades. Call after implementing a new capability; if ANY check fails, fix before preparing a reviewable PR. Requires execution approval.',
     params:{
       dir:'string: absolute MAJIN Git checkout root (optional, defaults to working directory)',
-      runTests:'boolean: run all checks, default false for cheap preflight',
+      runTests:'boolean: run all checks (optional, default: false for cheap preflight)',
     },
     async run({dir='',runTests=false}){
       try{
@@ -201,10 +201,10 @@ export const githubTools = [
     risk: 'read',
     desc: 'Search public GitHub repositories (action search), inspect repository metadata/README (inspect) or prepare a deterministic integration safety/architecture plan (integration). Before self-extending a MAJIN capability ALWAYS do integration research. No extra LLM calls, no Trendshift subscription, no clone/install/commit; third-party README is untrusted.',
     params: {
-      action: 'string: search | inspect | integration [search|inspect|integration]',
-      query: 'string: keywords for search, e.g. meta ads nodejs sdk (when action=search)',
-      repo: 'string: owner/name (when action=inspect)',
-      limit: 'number: search results 1..10 (default 6)',
+      action: 'string: search | inspect | integration [search|inspect|integration] (optional)',
+      query: 'string: keywords for search, e.g. meta ads nodejs sdk (when action=search) (optional)',
+      repo: 'string: owner/name (when action=inspect) (optional)',
+      limit: 'number: search results 1..10 (default 6) (optional)',
     },
     async run({ action = 'search', query = '', repo = '', limit = 6 }) {
       try {

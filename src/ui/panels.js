@@ -79,28 +79,10 @@ function led(id, cls) {
 }
 
 async function paintRail(st) {
-  const s = await api('/sessions').catch(() => ({ sessions: [] }));
-  const box = $('sessions');
-  box.innerHTML = '';
-  const list = [{ id: 'desktop', messages: 0, lastText: 'this device' }, ...(s.sessions || [])];
-  const seen = new Set();
-  for (const it of list) {
-    if (seen.has(it.id)) continue;
-    seen.add(it.id);
-    const label = it.id === 'desktop' ? 'General' : it.lastText || 'New conversation';
-    const n = el('button', 'sess' + (it.id === S.session ? ' act' : ''), '<span class="session-label">' + esc(String(label).slice(0, 80)) + '</span>');
-    n.dataset.search = (label + ' ' + it.id).toLowerCase();
-    n.title = (it.lastText || '') + '\n' + (it.mtime || '');
-    n.onclick = () => {
-      if (S.busy || S.stopRequested) { toast('Stop the current task before switching chats.'); return; }
-      if (typeof closeMobileRail === 'function') closeMobileRail();
-      S.session = it.id;
-      box.querySelectorAll('.sess').forEach((x) => x.classList.remove('act'));
-      n.classList.add('act');
-      loadHistory();
-    };
-    box.append(n);
-  }
+  /* P0 repair: MAJIN_CHATS (src/ui/chats.js) owns the conversation list with
+     durable server-side index (rename/archive/delete/activity-sort). This rail
+     hook only keeps studio filters + the non-chat subsections in sync. */
+  if (window.MAJIN_CHATS) window.MAJIN_CHATS.render();
   if (window.MAJIN_STUDIO) window.MAJIN_STUDIO.filterChats();
   if (st.schedule && st.schedule.length) {
     $('sched').innerHTML = st.schedule

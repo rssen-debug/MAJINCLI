@@ -1,6 +1,11 @@
 /* MAJIN — UI. No framework, no CDN. One document, two scripts. */
 const TOKEN = (window.__MAJIN_TOKEN__ || 'demo');
 const S = { session: 'desktop', busy: false, st: null, voice: false, cur: null, curBody: '', tools: null, gauge: null, t0: 0 };
+/* labels "const" in classic scripts do NOT get sticky on window — the chat
+   list module (chats.js) reads window.S, so expose the ONE source-of-truth
+   state explicitly. Without this, clicks update a ghost object while the
+   real session never moves (caught by gate P0.6b). */
+window.S = S;
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, html) => {
   const n = document.createElement(tag);
@@ -297,6 +302,9 @@ async function send(text) {
   S.taskId = null; S.deferredStopEvent = null;
   S.failed = false; S.lastInput = input; S.completed = false; S.readingHistory = false;
   addMsg('user', 'You', input);
+  /* P0 repair: this chat moves to the top IMMEDIATELY (optimistic), reconciles
+     with the server's durable index at completion/error without flicker. */
+  if (window.MAJIN_CHATS) window.MAJIN_CHATS.bumpActive(S.session, input);
   $('input').value = '';
   autoGrow();
   S.busy = true;
@@ -336,13 +344,20 @@ async function send(text) {
         if (ev.type === 'done') {
           S.completed = true;
           if (ev.ok === false && !S.failed) onEvent({ type: 'error', message: 'The provider could not complete this request.' });
+          if (window.MAJIN_CHATS) window.MAJIN_CHATS.refresh(); /* server truth: durable index updated by the accepted send */
           continue;
         }
         onEvent(ev);
       }
     }
     if (!S.completed && !S.failed && !S.stopRequested) err('The response stream ended before completion.');
-    if (S.cur && !S.failed && !S.stopRequested) closeAnswer({ text: S.curBody, meta: {} });
+    /* u03 (real-world audit 2026-10-20): a completed stream with an EMPTY body
+       must never silently remove the spinner — say the truth instead. */
+    if (S.cur && !S.failed && !S.stopRequested) {
+      if (!String(S.curBody || '').trim()) {
+        err('The model finished without saying anything (empty reply). Test the provider in the Providers card, then try again.');
+      } else closeAnswer({ text: S.curBody, meta: {} });
+    }
   } catch (e) {
     if (e.name !== 'AbortError') err('connection lost: ' + e.message);
     else {
@@ -1071,13 +1086,16 @@ function closeMobileRail() {
     $('b-rail').setAttribute('aria-expanded', 'false');
   }
 }
-$('new-chat').onclick = async () => {
+async function newChat() {
   if (S.busy || S.stopRequested) { toast('Stop the current task before starting a new chat.'); return; }
   closeMobileRail();
   S.session = 'chat-' + Date.now().toString(36);
   $('input').value = ''; autoGrow();
+  if (window.MAJIN_CHATS) window.MAJIN_CHATS.bumpActive(S.session, null); /* pending empty chat visible while active, durable only once materialized by a real send */
   await loadHistory(); $('input').focus();
-};
+}
+$('new-chat').onclick = newChat;
+/* Ctrl+N lives in studio.js (bubbles through to this handler). */
 $('browse-models').onclick = () => { closeMobileRail(); window.MAJIN_ONBOARD.togglePicker(); };
 $('manage-providers').onclick = () => { closeMobileRail(); window.MAJIN_ONBOARD.reopen(); };
 $('input').addEventListener('keydown', (e) => {
