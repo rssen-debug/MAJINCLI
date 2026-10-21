@@ -59,3 +59,22 @@ test('workspace preview is persistent between tasks and reloads after HTML write
   assert.match(studio,/previewedPath = path/);
   assert.match(studio,/void previewFile\(ev\.meta\.path\)/);
 });
+
+test('Talk shows a distinct conversation stage and supports interruption',()=>{
+  const h=fs.readFileSync('src/ui/index.html','utf8');
+  const a=fs.readFileSync('src/ui/app.js','utf8');
+  assert.match(h,/id="voice-stage"/);
+  assert.match(h,/id="voice-stage-label"/);
+  assert.match(h,/id="voice-stage-stop"/);
+  assert.match(a,/function voiceState\(mode,label\)/);
+  assert.match(a,/speechActive=false;/);
+  assert.match(a,/Barge-in: tapping Talk while MAJIN is speaking/);
+});
+test('working status exposes current agent phase and long silence',()=>{
+  const h=fs.readFileSync('src/ui/index.html','utf8');
+  const a=fs.readFileSync('src/ui/app.js','utf8');
+  assert.match(h,/id="work-progress"/);
+  assert.match(a,/workPulse\('Using '/);
+  assert.match(a,/silent>=18/);
+  assert.match(a,/still waiting for the current operation/);
+});

@@ -295,10 +295,16 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
 
   /* flat-mode attach: protocol messages carry the sessionId on the same
      websocket — the modern CDP layout, no nested sendMessageToTarget */
-  const { targetId } = await cdp('Target.createTarget', { url: 'about:blank' });
+  // Edge starts with an empty tab. Reuse it instead of creating a second
+  // about:blank tab/window. A fallback target is needed for locked-down
+  // policies and mocked browsers without an initial page.
+  const { targetInfos: initialTabs = [] } = await cdp('Target.getTargets');
+  const startupTab = initialTabs.find(t => t.type === 'page' && t.url === 'about:blank' && !t.attached);
+  const targetId = startupTab?.targetId ||
+    (await cdp('Target.createTarget', { url: 'about:blank' })).targetId;
   const { sessionId } = await cdp('Target.attachToTarget', { targetId, flatten: true });
-  /* remember every tab alive AT BIRTH — headless keeps an initial about:blank
-     tab around forever, and it is NOT ours to follow later (CI, twice). */
+  // Keep the original tab IDs pinned so followNewTarget never switches back
+  // to an unrelated stale page after clicks.
   const { targetInfos: bornTabs = [] } = await cdp('Target.getTargets');
   const close = () => {
     if (b.closed) return b.closed;

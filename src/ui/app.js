@@ -49,6 +49,13 @@ function md(t) {
   s = s.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
   s = s.replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?]|$)/gm, '$1<i>$2</i>');
   s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  // Plain URLs should be clickable too. Input is already HTML-escaped;
+  // this runs after markdown links and never matches inside href="...".
+  s = s.replace(/(^|[\s>(])(https?:\/\/[^\s<>"']+)/gm, (_m, prefix, raw) => {
+    const url = raw.replace(/[.,!?;:]+$/, '');
+    const tail = raw.slice(url.length);
+    return prefix + '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>' + tail;
+  });
   s = s.replace(/(?:^|\n)(#{1,6})\s*(.+)$/gm, (_m, h, txt) => `\n<span style="color:var(--cy);letter-spacing:.08em">${txt}</span>\n`);
   s = s.replace(/\u0000(\d+)\u0000/g, (_m, i) => blocks[Number(i)]);
   // Workspace files mentioned in a completed answer should be OPENABLE, not
@@ -189,8 +196,39 @@ function moaGauge(ev) {
   scroll();
 }
 
+/* Work pulse: honest current phase and time since last server event.
+   Never claim success while the model is idle or a tool is stuck. */
+let workLastEvent=0,workPhase='Starting';
+function workPulse(phase){
+  if(!S.busy)return;
+  if(phase)workPhase=String(phase).slice(0,130);
+  workLastEvent=Date.now();
+  const bar=$('work-progress');if(bar)bar.hidden=false;
+}
+setInterval(()=>{
+  const bar=$('work-progress');if(!bar)return;
+  bar.hidden=!S.busy;
+  if(!S.busy)return;
+  const total=Math.floor((Date.now()-S.t0)/1000);
+  const silent=Math.floor((Date.now()-(workLastEvent||S.t0))/1000);
+  const stalled=silent>=18;
+  if($('work-progress-label'))$('work-progress-label').textContent=
+    stalled ? workPhase+' · No update for '+silent+'s — still waiting for the current operation' : workPhase;
+  if($('work-progress-timer'))$('work-progress-timer').textContent=total+'s';
+},1000);
+
 /* ------------------------------ event pump ------------------------------ */
 function onEvent(ev) {
+  if (S.busy) {
+    if (ev.type === 'route') workPulse('Choosing the best model');
+    else if (ev.type === 'step') workPulse('Step '+ev.step+'/'+ev.of+' · '+(ev.model||'model'));
+    else if (ev.type === 'tool' || ev.type === 'tool_begin') workPulse('Using '+(ev.name||ev.tool||'a tool'));
+    else if (ev.type === 'tool_result') workPulse(ev.ok?'Tool finished · reviewing results':'Tool failed · adjusting approach');
+    else if (ev.type === 'thinking') workPulse('Thinking through the next step');
+    else if (ev.type === 'delta') workPulse('Writing the response');
+    else if (ev.type === 'escalate') workPulse('Switching models');
+    else if (ev.type === 'compact') workPulse('Organizing context');
+  }
   if (ev.type === 'task') S.taskId = ev.task;
   if (S.stopRequested && ['error', 'answer'].includes(ev.type)) {
     if (!S.deferredStopEvent || (ev.type === 'error' && S.deferredStopEvent.type !== 'error')) S.deferredStopEvent = ev;
@@ -342,6 +380,7 @@ async function send(text, options = {}) {
   autoGrow();
   S.busy = true;
   S.t0 = Date.now();
+  workPulse('Connecting to MAJIN');
   syncSendButton();
   setStatus('working…');
   const ac = new AbortController();
@@ -402,6 +441,7 @@ async function send(text, options = {}) {
     S.busy = false;
     S.abort = null;
     syncSendButton();
+    if (S.handsFree && !speechActive && !S.listening) startMic();
     if (S.failed && !$('input').value) { $('input').value = input; autoGrow(); }
     setStatus(S.stopRequested ? 'Stopping task…' : S.failed ? 'Request failed · message preserved' : S.cancelled ? 'Stopped' : 'Ready');
     if (S.stopRequested && S.cur) { S.cur.b.classList.remove('caret'); if (S.cur.thinking) S.cur.thinking.remove(); }
@@ -863,7 +903,12 @@ let recog=null, speechActive=false, voiceArmed=false;
 function voiceState(mode,label) {
   document.body.dataset.voiceMode=mode;
   if ($('mic-state')) $('mic-state').textContent=label;
-  $('mic')?.setAttribute('aria-pressed',String(mode==='listening'));
+  $('mic')?.setAttribute('aria-pressed',String(Boolean(S.handsFree)));
+  const stage=$('voice-stage');
+  if(stage)stage.hidden=!S.handsFree;
+  const names={idle:'Ready to talk',listening:'Listening',thinking:'Thinking',speaking:'MAJIN speaking',paused:'Paused',error:'Voice unavailable'};
+  if($('voice-stage-label'))$('voice-stage-label').textContent=names[mode]||label||'Talk';
+  if($('voice-caption'))$('voice-caption').textContent=label||'Speak naturally';
 }
 function stopMic() {
   voiceArmed=false; S.listening=false;
@@ -918,8 +963,21 @@ function startMic() {
   catch(e){stopMic();voiceState('error',e.message);}
 }
 function micToggle(){
-  if(S.handsFree){S.handsFree=false;S.voiceTurn=false;stopMic();window.speechSynthesis?.cancel();}
-  else {S.handsFree=true;S.voice=true;S.voiceTurn=false;$('b-voice')?.classList.add('on');startMic();}
+  if(S.handsFree && !speechActive){
+    S.handsFree=false;S.voiceTurn=false;stopMic();
+    window.speechSynthesis?.cancel();
+    try{voiceRequest?.abort();currentVoiceAudio?.pause();}catch{}
+    voiceState('idle','Voice ready');
+  } else {
+    // Barge-in: tapping Talk while MAJIN is speaking interrupts playback.
+    window.speechSynthesis?.cancel();
+    try{voiceRequest?.abort();currentVoiceAudio?.pause();}catch{}
+    speechActive=false;
+    S.handsFree=true;S.voice=true;S.voiceTurn=false;
+    $('b-voice')?.classList.add('on');
+    if (S.busy) voiceState('thinking','Finishing the current answer…');
+    else { voiceState('listening','Speak now'); startMic(); }
+  }
 }
 let currentVoiceAudio=null, voiceRequest=null;
 async function neuralNarrator(text){
@@ -1273,6 +1331,13 @@ $('b-test').onclick = async () => {
   setStatus('ready');
 };
 $('mic').onclick = micToggle;
+if ($('voice-stage-stop')) $('voice-stage-stop').onclick = () => {
+  S.handsFree=false;S.voiceTurn=false;
+  stopMic();
+  try { window.speechSynthesis?.cancel();voiceRequest?.abort();currentVoiceAudio?.pause(); } catch {}
+  speechActive=false;
+  voiceState('idle','Voice ready');
+};
 $('b-theme').onclick = () => {
   document.body.classList.add('theme-changing');
   requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('theme-changing')));

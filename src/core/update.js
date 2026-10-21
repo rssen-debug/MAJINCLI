@@ -288,7 +288,7 @@ export function relaunchScript(installerPid, executable = DEFAULT_INSTALLED_EXE)
     'Start-Sleep -Seconds 2',
     "Get-Process -Name 'majin-win-x64' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue",
     'Start-Sleep -Seconds 2',
-    "if (Test-Path $exe) { Start-Process -WindowStyle Hidden -FilePath $exe -ArgumentList 'start','--no-window'; 'relaunched ' + $exe | Out-File $log -Append } else { 'MISSING ' + $exe + ' - relaunch skipped' | Out-File $log -Append; exit 1 }",
+    "if (Test-Path $exe) { Start-Process -FilePath $exe -ArgumentList 'start'; 'relaunched ' + $exe | Out-File $log -Append } else { 'MISSING ' + $exe + ' - relaunch skipped' | Out-File $log -Append; exit 1 }",
   ].join('; ');
 }
 

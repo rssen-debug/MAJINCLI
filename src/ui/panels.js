@@ -3,6 +3,13 @@ async function paintHeader(st) {
   const ui = st.config.ui || {};
   document.title = (ui.title || st.name || 'MAJIN') + ' · agent';
   $('brand').textContent = (ui.title || st.name || 'MAJIN').toUpperCase();
+  // Always show the version reported by the running backend, not the
+  // requested download version. Useful after an interrupted update.
+  const versionBadge = $('v-tag');
+  if (versionBadge) {
+    versionBadge.textContent = st.version ? 'v' + String(st.version).replace(/^v/, '') : 'Version unknown';
+    versionBadge.title = 'Installed and running MAJIN version: ' + (st.version || 'unknown');
+  }
   $('tagline').textContent = ui.tagline || '';
   $('c-tools').innerHTML = 'tools <b>' + (st.tools.count || (st.tools || []).length) + '</b>';
   $('c-moa').innerHTML = 'MOA <b>' + (st.moa.policy === 'off' ? 'off' : st.moa.width + '→' + String(st.moa.aggregator || '').split('/').pop()) + '</b>';

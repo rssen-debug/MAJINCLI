@@ -287,7 +287,8 @@ test('the silent-update relaunch is a real watchdog script, byte-verified', () =
   assert.match(script, /AddMinutes\(15\)/, 'a give-up deadline so it never lingers');
   assert.match(script, /Stop-Process -Force/, 'leftover exes are cleaned before start');
   assert.match(script, /majin-win-x64\.exe/, 'it targets the installed exe');
-  assert.match(script, /'start','--no-window'/, 'it starts the new build the same way the launcher does');
+  assert.match(script, /-ArgumentList 'start'/, 'the relaunched app opens its visible user window');
+  assert.doesNotMatch(script, /--no-window/, 'update must not silently relaunch headless');
   assert.match(script, /update-relaunch\.log/, 'every step is logged — a failed relaunch must be debuggable');
 });
 

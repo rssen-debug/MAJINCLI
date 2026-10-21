@@ -152,3 +152,11 @@ test('followNewTarget never follows the stale initial tab (the about:blank wire)
   browser.targetId = 'our-popup'; browser.knownTabs.add('our-popup');
   assert.equal(isChildTarget({ type: 'page', targetId: 'nested-popup', openerId: 'our-popup' }, browser), true, 'following a tab updates the opener for subsequent clicks');
 });
+
+
+test('visible Edge browser uses the startup blank tab rather than spawning two pages', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../src/core/browser.js', import.meta.url), 'utf8');
+  assert.match(src, /initialTabs\.find\(t => t\.type === 'page' && t\.url === 'about:blank' && !t\.attached\)/);
+  assert.match(src, /startupTab\?\.targetId \|\|/);
+  assert.match(src, /Target\.createTarget/, 'fallback still works if no startup tab exists');
+});
