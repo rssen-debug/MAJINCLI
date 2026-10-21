@@ -217,6 +217,9 @@ setInterval(()=>{
   const total=Math.floor((Date.now()-S.t0)/1000);
   const silent=Math.floor((Date.now()-(workLastEvent||S.t0))/1000);
   const stalled=silent>=18;
+  // The existing inline spirit ember changes colour only when event
+  // evidence has gone quiet; it does not claim the operation has failed.
+  if(stalled && bar.dataset.phase!=='problem')bar.dataset.phase='stalled';
   if($('work-progress-label'))$('work-progress-label').textContent=
     stalled ? workPhase+' · No update for '+silent+'s — still waiting for the current operation' : workPhase;
   if($('work-progress-timer'))$('work-progress-timer').textContent=total+'s';
