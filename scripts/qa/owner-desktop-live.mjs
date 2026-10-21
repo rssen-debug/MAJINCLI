@@ -13,6 +13,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { winControlTools } from '../../src/core/tools/wincontrol.js';
 import { computerTools } from '../../src/core/tools/computer.js';
+import { Config, DEFAULTS, clone } from '../../src/core/config.js';
 import { cursor, cursorPaths, isWindowsDesktop, overlayStatus } from '../../src/core/pink-cursor.js';
 
 if (process.platform !== 'win32' || !isWindowsDesktop()) {
@@ -26,7 +27,7 @@ const savedFile = path.join(workspace, 'qa-saved.txt');
 const fixture = fileURLToPath(new URL('./owner-desktop-fixture.ps1', import.meta.url));
 const evidenceFile = path.join(process.cwd(), 'qa-evidence', 'owner-desktop.json');
 const verdict = { schema:'majin-owner-desktop-live/1', syntheticWindow:false,
-  controlList:false, controlType:false, controlRead:false, controlClick:false, computerUseVerified:false,
+  controlList:false, controlType:false, controlRead:false, controlClick:false, computerUseVerified:false, computerUseCloudVerified:false,
   verifiedSavedBytes:false, desktopPixelCanary:false, pinkVisible:false, pinkMoved:false, pinkHidden:false,
   pinkStateLabel:false, screenshotsUploaded:false, status:'BLOCKED' };
 
@@ -111,6 +112,15 @@ try {
     if (name === 'screen.capture') return {ok:false,error:{code:'qa_privacy',message:'Never capture unrelated desktop screenshots in this test'}};
     const t=winControlTools.find(v=>v.name===name);
     if (!t) return {ok:false,error:{code:'not_allowlisted',message:'QA only allows Win32 control tools'}};
+    if (name === 'control.list_windows') {
+      // Do not send private window titles to the cloud: only expose the one
+      // newly created synthetic QA window, even when the PC has other apps.
+      const r=await t.run({});
+      if (!r.ok) return r;
+      const windows=(r.meta?.windows || []).filter(w=>w.title===title);
+      return {ok:true,meta:{windows},result:windows.length+' synthetic QA window'};
+    }
+    if (args?.window !== title) return {ok:false,error:{code:'qa_out_of_scope',message:'ONLY the synthetic MAJIN QA window may be controlled'}};
     return t.run(args||{});
   }};
   const agentText='MAJIN_AGENT_GUI_'+nonce;
@@ -135,6 +145,34 @@ try {
   assert.equal(fs.readFileSync(savedFile,'utf8'),agentText,'computer.use agent click must persist verified GUI bytes');
   verdict.computerUseVerified=true;
   console.log('W11 COMPUTER.USE LIVE ENGINE PASS: observe -> Win32 type -> click -> verified completion and saved bytes');
+
+  // Finally: real OpenCode Go inference, but model-visible perception is ONLY
+  // this synthetic test form. Neither other window titles nor screenshots
+  // reach the cloud; every selected action is again target-restricted.
+  const goKey=String(process.env.OPENCODE_API_KEY || '');
+  if (goKey) {
+    const cfgData=clone(DEFAULTS);
+    cfgData.workspace=workspace;
+    cfgData.providers.opencode.apiKey=goKey;
+    cfgData.models.routes.tools='opencode/glm-5.3-flash';
+    const cloudText='MAJIN_REAL_GO_GUI_'+nonce;
+    const cloudGoal='In the ONLY available synthetic window "'+title+'", type EXACTLY "'+cloudText+
+      '" in its text box, then CLICK the button labeled "Save QA", then verify the text field contains the exact value. '+
+      'Do not touch any other application. Do not say done until both typing AND clicking were performed.';
+    const timeout=AbortSignal.timeout(110000);
+    const cloud=await computer.run({goal:cloudGoal,maxSteps:'7'},{session:'owner-majin-go-'+nonce,
+      cfg:new Config(cfgData),registry:controlledRegistry,emit:()=>{},signal:timeout,
+    });
+    assert.equal(cloud.ok,true,'Real OpenCode Go desktop planner failed: '+JSON.stringify(cloud.error||cloud).slice(0,350));
+    assert.equal(fs.readFileSync(savedFile,'utf8'),cloudText,
+      'Go planner did not actually click Save QA after entering the chosen text');
+    verdict.computerUseCloudVerified=true;
+    console.log('W11 REAL GO COMPUTER.USE PASS: OpenCode Go planned actual Win32 actions, verified typed text AND saved bytes');
+  } else {
+    verdict.computerUseCloudCoverage='NOT_VERIFIED_NO_GITHUB_SECRET';
+    console.log('W11 GO MODEL NOT VERIFIED: OPENCODE_API_KEY not configured on runner');
+  }
+
 
   // Independent negative control: an unprivileged topmost QA form has a
   // synthetic hot-pink background. If this is invisible to CopyFromScreen,
