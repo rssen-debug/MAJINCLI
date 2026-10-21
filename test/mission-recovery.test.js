@@ -198,3 +198,44 @@ test('W7 checkpoint identity: a recompiled task cannot reuse another task with t
   assert.equal(checkpoint.status, 'complete');
   assert.equal(checkpoint.nodes[0].input, changedGraph.nodes[0].input);
 });
+
+
+for (const instruction of [
+  'send an external email and charge a customer',
+  'make command "node --version" exits 0',
+]) {
+  test('W7 unsafe resume: uncheckable previous side effects require review instead of replay: ' + instruction, async () => {
+    const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mrec-unsafe-'));
+    const goal = '1) ' + instruction + '\n2) create beta.txt containing the exact word "HELLO-BETA"';
+    const graph = { nodes: [
+      { id: 'a', input: instruction, deps: [], estMs: 10 },
+      { id: 'b', input: 'create beta.txt containing the exact word "HELLO-BETA"', deps: [], estMs: 10 },
+    ] };
+    writeState(checkpointDir(wsDir, canonicalMissionId(goal)), {
+      id: canonicalMissionId(goal), status: 'blocked', nodeIds: ['a', 'b'],
+      nodes: [
+        { id: 'a', input: graph.nodes[0].input, deps: [], status: 'verified', text: 'previously claimed done', verifiedSummary: 'old claim' },
+        { id: 'b', input: graph.nodes[1].input, deps: [], status: 'failed', error: 'temporary failure' },
+      ],
+    });
+    const events = [];
+    const calls = {};
+    const m = await runMission({
+      cfg: stubCfg(wsDir), registry: null, session: 'unsafe', input: goal,
+      modelCall: async () => JSON.stringify(graph),
+      workerOverride: async (node) => {
+        calls[node.id] = (calls[node.id] || 0) + 1;
+        if (node.id === 'a') throw Error('dangerous repeated action!');
+        fs.writeFileSync(path.join(wsDir, 'beta.txt'), 'HELLO-BETA');
+        return { text: 'wrote beta.txt' };
+      },
+      emit: (event) => events.push(event),
+    });
+    assert.equal(calls.a, undefined, 'unknown prior side effect must never be retried automatically');
+    assert.equal(calls.b, 1);
+    assert.equal(m.failCount, 1);
+    assert.match(m.textSummary.join('\n'), /REQUIRES_REVIEW/);
+    assert.ok(events.some((e) => e.type === 'mission_carry_unverifiable' && e.id === 'a'));
+    assert.equal(readState(checkpointDir(wsDir, canonicalMissionId(goal))).status, 'blocked');
+  });
+}
