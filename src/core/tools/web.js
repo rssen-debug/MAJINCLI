@@ -10,6 +10,7 @@ import { resolveIn } from './files.js';
 import { bus } from '../log.js';
 import { openFor, closeFor, isOpen, journal } from '../browser.js';
 import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, VERSION as GROUND_V } from '../browser-ground.js';
+import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
 
 const followedSafe = (fol) => (fol && fol.followed === true ? true : false);
 
@@ -230,9 +231,10 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       try {
         const b = await openFor({ session, url: String(url), headless, cfgGet: (k) => ctx.cfg.get(k) });
         const meta = await b.eval('(() => ({ url: location.href, title: document.title }))()');
+        const controls = await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
         return {
           ok: true,
-          result: `opened — page says: "${meta.title}" at ${meta.url}`,
+          result: `opened — page says: "${meta.title}" at ${meta.url}` + formatControlHints(controls),
           meta: { url: meta.url, title: meta.title },
           summary: `opened ${meta.title || meta.url}`,
         };
@@ -262,7 +264,10 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const r = await b.eval(expr);
       journal.guard(session, `browser.read:${selector}`);
       if (!r.ok && selector) return { ok: false, error: { code: 'no_such_element', message: `no element matches ${selector}` } };
-      return { ok: true, result: r.text || '(page is empty)', meta: { url: r.url, title: r.title, chars: (r.text || '').length }, summary: `${(r.text || '').length} chars from ${r.title || r.url}` };
+      const controls = selector ? [] : await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
+      return { ok: true, result: (r.text || '(page is empty)') + formatControlHints(controls),
+        meta: { url: r.url, title: r.title, chars: (r.text || '').length, groundedControls: Array.isArray(controls) ? controls.length : 0 },
+        summary: `${(r.text || '').length} chars from ${r.title || r.url}` };
     },
   }),
 
