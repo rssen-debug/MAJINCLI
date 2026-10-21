@@ -54,7 +54,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'computer-use contract regression failed' }
       - name: Verify actual GUI tool operations and W12 pink pixels
         shell: powershell
-        timeout-minutes: 6
+        timeout-minutes: 8
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          MAJIN_LLM_TIMEOUT: '45000'
         run: |
           node scripts/qa/owner-desktop-live.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Real Windows desktop QA failed; inspect owner-desktop evidence' }
