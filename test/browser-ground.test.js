@@ -75,3 +75,11 @@ test('browser.elements accepts a focused query and preserves complete reference 
   assert.match(src,/findGroundedControls\(payload\.elements/);
   assert.match(src,/rememberRefs\(session, payload\.elements \|\| \[\]\)/);
 });
+
+test('each round keeps working feedback in a single accessible composer row',()=>{
+  const fs=requireFixture();
+  assert.match(fs,/id="work-progress" role="status"/);
+  assert.match(fs,/@keyframes majin-progress-glide/);
+  assert.match(fs,/prefers-reduced-motion:reduce/);
+});
+function requireFixture(){ return readFileSync('src/ui/index.html','utf8'); }
