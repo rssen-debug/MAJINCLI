@@ -21,6 +21,9 @@ Repo philosophy measured: ONE runtime dep today (chokidar). Every new dep must e
 | Graph topology helpers | toposort & friends | REJECT | topo order + cycle detection is ~40 tested lines maintained internally (dag.js); external microlibs add supply-chain surface without meaning. |
 | State machines full | xstate v5 | REJECT (stage) | Powerful but heavyweight for what brief 3.4 requires (12 states, explicit transition table already exists and is 60 lines, tested). Revisit if UI-side visual editing of flows becomes a requirement. |
 
+| LLM-agent eval harness (model benchmarks only) | **promptfoo** | MIT | Deferred to model-benchmarking milestone (brief section 84): ~25.7k stars, Node-native, red-teaming. Acquisition risk noted (OpenAI acquired it March 2026; stays open source on record). NOT for GAUNTLET: it grades model outputs, while MAJIN GAUNTLET must prove end-to-end execution evidence on this repo's own kernel. |
+| Prompt evaluation (legacy) | openai/evals | MIT | REJECT: hosted product is being shut down (announced June 2026, fully off Nov 30 2026). |
+
 ## Policy from here
 
 - Pin every adopted dep in package-lock.json (CI npm ci enforces). One dep reviewed at a time.
