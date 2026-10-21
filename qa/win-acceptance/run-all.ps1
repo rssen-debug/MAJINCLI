@@ -53,9 +53,21 @@ function Shot($name) {
   $b.Save($path); $g.Dispose(); $b.Dispose(); return $path
 }
 
-$interactive = [Environment]::UserInteractive
+# Github-hosted Windows Actions runs as a service with no usable desktop,
+# even when UserInteractive unexpectedly reports true. Keep self-hosted
+# interactive desktop runs eligible for genuine screenshot evidence.
+$interactive = [Environment]::UserInteractive -and ($env:RUNNER_ENVIRONMENT -ne 'github-hosted')
 if (-not $interactive) {
-  $results.Add([ordered]@{ step = 'A0'; title = 'interactive desktop session'; status = 'NOT TESTED'; evidence = 'non-interactive session (service/ssh without desktop) — cursor overlay and UIA probes need a logged-in desktop; rerun interactively'; artifact = $null })
+  # PowerShell ordered hashtables use semicolons/newlines, not commas.
+  # A1 is mandatory to the JSON validator even when no desktop exists.
+  $results.Add([ordered]@{
+    step = 'A0'; title = 'interactive desktop session'; status = 'NOT TESTED'
+    evidence = 'Non-interactive Windows CI session; GUI and cursor cannot be validated here'; artifact = $null
+  })
+  $results.Add([ordered]@{
+    step = 'A1'; title = 'pink cursor overlay visible + drawn on screen'; status = 'NOT TESTED'
+    evidence = 'No interactive desktop for a real screenshot; NOT TESTED on this runner'; artifact = $null
+  })
 }
 
 # A1 pink cursor overlay
@@ -64,18 +76,20 @@ if ($interactive) {
     $proc = Get-Process | Where-Object { $_.Name -match 'pink|majin' } | Select-Object -First 1
     if (-not $proc) { $results.Add([ordered]@{ step = 'A1'; title = 'pink cursor overlay visible + drawn on screen'; status = 'FAIL'; evidence = 'no MAJIN/pink-cursor process found — start the app first'; artifact = $null }); return }
     $shot = Shot 'A1-pink-cursor'
-    $a1_status = if ($found) { 'PASS' } else { 'FAIL' }
     $found = Select-BitmapColor -Path $shot -Hex 'FF3CA5'
-    $results.Add([ordered]@{ step = 'A1'; title = 'pink cursor overlay visible + drawn on screen'; status = $a1_status; evidence = "canvas scan for #ff3ca5: $found"; artifact = $shot })
+    $results.Add([ordered]@{ step = 'A1'; title = 'pink cursor overlay visible + drawn on screen'; status = ($(if ($found) { 'PASS' } else { 'FAIL' })); evidence = "canvas scan for #ff3ca5: $found"; artifact = $shot })
   }
 }
 
-# A5 computer.use lane smoke
-Add-Step 'A5' 'computer.use lane smoke' {
-  $exit = & node (Join-Path $Repo 'src\cli\majin.js') --help 2>&1
-  $a5_status = if ($ok) { 'PASS' } else { 'FAIL' }
-  $ok = $LASTEXITCODE -eq 0
-  $results.Add([ordered]@{ step = 'A5'; title = 'computer.use lane smoke'; status = $a5_status; evidence = "exit=$LASTEXITCODE tail=$($exit[-3..-1] -join ' | ')"; artifact = $null })
+# A5 checks only ACTUAL computer.use dry-plan tool wiring.
+# Never infer live desktop-control success from this non-interactive probe.
+Add-Step 'A5' 'computer.use dry-plan wiring smoke (NO live desktop action)' {
+  $probe = Join-Path $Repo 'qa\win-acceptance\computer-use-smoke.mjs'
+  $output = & node $probe 2>&1
+  $code = $LASTEXITCODE
+  $ok = $code -eq 0
+  $tail = (@($output) | Select-Object -Last 3) -join ' | '
+  $results.Add([ordered]@{ step = 'A5'; title = 'computer.use dry-plan wiring smoke (NO live desktop action)'; status = ($(if ($ok) { 'PASS' } else { 'FAIL' })); evidence = "exit=$code dry-plan ONLY; no real mouse or GUI assertion; $tail"; artifact = $null })
 }
 
 
@@ -87,6 +101,9 @@ $summary = [ordered]@{
   interactive = $interactive
   steps = $results.ToArray()
 }
-$summary | ConvertTo-Json -Depth 6 | Out-File -Encoding utf8 $Out
+# Windows PowerShell 5.1 Out-File -Encoding utf8 prepends a BOM.
+# Emit UTF-8 WITHOUT BOM so the Node.js JSON verifier can parse the artifact.
+$json = $summary | ConvertTo-Json -Depth 6
+[System.IO.File]::WriteAllText($Out, $json, (New-Object System.Text.UTF8Encoding($false)))
 $summary.steps | ForEach-Object { "{0}  {1}  {2}" -f $_.step, $_.status, $_.title } | Write-Host
 Write-Host "evidence: $Out"
