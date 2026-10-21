@@ -57,7 +57,7 @@ if (process.argv[1] && process.argv[1].endsWith('verify-win-acceptance.mjs')) {
   const file = process.argv[2];
   if (!file) { console.error('usage: node scripts/verify-win-acceptance.mjs <out.json> [--gate]'); process.exit(2); }
   let doc;
-  try { doc = JSON.parse(fs.readFileSync(path.resolve(file), 'utf8')); } catch (e) { console.error('cannot read evidence file: ' + e.message); process.exit(2); }
+  try { doc = JSON.parse(fs.readFileSync(path.resolve(file), 'utf8').replace(/^\uFEFF/, '')); } catch (e) { console.error('cannot read evidence file: ' + e.message); process.exit(2); }
   const problems = validateAcceptance(doc, { requireAllPass: process.argv.includes('--gate') });
   console.log(`verdict: ${verdict(doc)}`);
   for (const s of doc.steps || []) console.log(`  ${s.step}  ${s.status.padEnd(10)} ${s.title}`);

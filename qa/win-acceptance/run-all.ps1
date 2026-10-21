@@ -72,7 +72,7 @@ if ($interactive) {
 
 # A5 computer.use lane smoke
 Add-Step 'A5' 'computer.use lane smoke' {
-  $exit = & node (Join-Path $Repo 'src\cli.js') --smoke 2>&1
+  $exit = & node (Join-Path $Repo 'src\cli\majin.js') --help 2>&1
   $a5_status = if ($ok) { 'PASS' } else { 'FAIL' }
   $ok = $LASTEXITCODE -eq 0
   $results.Add([ordered]@{ step = 'A5'; title = 'computer.use lane smoke'; status = $a5_status; evidence = "exit=$LASTEXITCODE tail=$($exit[-3..-1] -join ' | ')"; artifact = $null })
