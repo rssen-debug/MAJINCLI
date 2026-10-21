@@ -66,6 +66,27 @@ function elementsLine(el) {
   return `[${el.ref}] ${el.tag}${el.role !== el.tag ? '/' + el.role : ''} "${el.text}"${el.href ? ' → ' + el.href.slice(0, 60) : ''}${el.name ? ' name=' + el.name : ''}${d}`;
 }
 
+/**
+ * Compact DOM-find inspired by Playwright MCP's browser_find.
+ * Filter only grounded control metadata, never inspect hidden input values.
+ * Element refs remain attached to the complete fresh snapshot/cache.
+ */
+export function findGroundedControls(elements, query, { cap = 12 } = {}) {
+  const q = String(query || '').trim().toLocaleLowerCase().slice(0, 100);
+  if (!q) return [];
+  const words=q.split(/\s+/).filter(Boolean);
+  const scored=[];
+  for (const el of Array.isArray(elements) ? elements : []) {
+    const name=[el.text,el.role,el.tag,el.name,el.id].filter(Boolean).join(' ').toLocaleLowerCase();
+    const hits=words.filter(word=>name.includes(word)).length;
+    if(!hits)continue;
+    const exact=String(el.text||'').toLocaleLowerCase()===q;
+    scored.push({el,score:(exact?100:0)+hits*10+(name.startsWith(q)?3:0)});
+  }
+  scored.sort((a,b)=>b.score-a.score);
+  return scored.slice(0,Math.max(1,Math.min(30,Math.floor(Number(cap)||12)))).map(x=>x.el);
+}
+
 export function renderElementsText(payload, { cap = 60 } = {}) {
   const els = (payload.elements || []).slice(0, cap);
   const more = (payload.elements || []).length > cap ? `\n… +${payload.elements.length - cap} more (cap ${cap})` : '';
