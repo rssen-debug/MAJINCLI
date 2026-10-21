@@ -420,10 +420,25 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     if (p === '/api/file') {
       const want = url.searchParams.get('path') || '';
       const abs = path.isAbsolute(want) ? path.resolve(want) : path.resolve(cfg.get('workspace'), want);
-      const roots = [dirs.workspace, dirs.out, dirs.uploads, dirs.cache, dirs.memory, dirs.sessions, dirs.rules];
-      const allowed = roots.some((root) => abs.startsWith(path.resolve(root) + path.sep) || abs === path.resolve(root));
-      if (!allowed || !fs.existsSync(abs)) return json(res, 403, { ok: false, error: 'path not allowed', hint: 'the server only serves workspace, out, uploads and memory' });
-      const st = fs.statSync(abs);
+      // Agent fs.write resolves relative paths against the configured workspace.
+      // The directory created at startup (dirs.workspace) may differ when the
+      // user changes workspace in Settings. Honour both, but never escape them.
+      const roots = [cfg.get('workspace'), dirs.workspace, dirs.out, dirs.uploads, dirs.cache, dirs.memory, dirs.sessions, dirs.rules]
+        .filter((root) => typeof root === 'string' && root.trim());
+      const within = (file, root) => file === root || file.startsWith(root + path.sep);
+      const allowed = roots.some((root) => within(abs, path.resolve(root)));
+      if (!allowed) return json(res, 403, { ok: false, error: 'path not allowed' });
+      if (!fs.existsSync(abs)) return json(res, 404, { ok: false, error: 'file not found' });
+      // A symlink inside the workspace must not expose files outside it.
+      let real;
+      try { real = fs.realpathSync(abs); }
+      catch { return json(res, 404, { ok: false, error: 'file not found' }); }
+      const safe = roots.some((root) => {
+        try { return within(real, fs.realpathSync(root)); }
+        catch { return false; }
+      });
+      if (!safe || !fs.statSync(real).isFile()) return json(res, 403, { ok: false, error: 'path not allowed' });
+      const st = fs.statSync(real);
       res.writeHead(200, { 'content-type': MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream', 'content-length': st.size, 'content-disposition': `attachment; filename="${path.basename(abs)}"` });
       return fs.createReadStream(abs).pipe(res);
     }
