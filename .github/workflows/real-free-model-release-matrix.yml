@@ -1,0 +1,136 @@
+name: MAJIN real free Qwen all 11 release scenarios
+on:
+  push:
+    branches: [qa/release-sharded-eleven-free-qwen3b-20261021]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: real-qwen-release-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-agent:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: file-create-edit-delete
+            cases: '01,02,03'
+            expected: 3
+            browser: false
+            docker: false
+          - label: html-and-executable-agent
+            cases: '04,05'
+            expected: 2
+            browser: false
+            docker: true
+          - label: jobs-and-same-session-memory
+            cases: '06,07'
+            expected: 2
+            browser: false
+            docker: false
+          - label: research-and-sandbox-crypto
+            cases: '08,11'
+            expected: 2
+            browser: false
+            docker: false
+          - label: browser-png-and-fake-form-post
+            cases: '09,10'
+            expected: 2
+            browser: true
+            docker: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CI: 'true'
+      MAJIN_QA_SANDBOX: '1'
+      QA_MODEL: qwen2.5:3b
+      QA_ONLY: ${{ matrix.cases }}
+      QA_EXPECTED: ${{ matrix.expected }}
+      MAJIN_LLM_LOCAL_TIMEOUT: '75000'
+      MAJIN_LLM_TIMEOUT: '75000'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install MAJIN
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --no-fund --no-audit
+          node --check scripts/qa/prompt-battery.mjs
+      - name: Install real Chromium only for browser scenarios
+        if: ${{ matrix.browser }}
+        run: npx playwright install --with-deps chromium
+      - name: Install no-network Docker CLI fixture only for executable-agent scenarios
+        if: ${{ matrix.docker }}
+        run: docker pull node:22-alpine
+      - name: Start and download actual free local Qwen 3B
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://ollama.com/install.sh | sh
+          nohup ollama serve >/tmp/majin-ollama.log 2>&1 &
+          for i in $(seq 1 50); do
+            if curl -fs http://127.0.0.1:11434/api/tags >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -fs http://127.0.0.1:11434/api/tags >/dev/null
+          ollama pull "$QA_MODEL"
+          echo "MAJIN_HOME=$(mktemp -d /tmp/majin-release.XXXXXXXX)" >> "$GITHUB_ENV"
+          echo "QA_EVID=$GITHUB_WORKSPACE/qa-evidence" >> "$GITHUB_ENV"
+      - name: Run real MAJIN Agent.turn (never mock inference or touch real accounts)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/qa/prompt-battery.mjs 2>&1 | tee real-agent.log
+      - name: Fail closed on missing or falsified results
+        if: always()
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const f='qa-evidence/prompt-battery.json',ids=process.env.QA_ONLY.split(','),expected=Number(process.env.QA_EXPECTED);
+          let r=null,issues=[];
+          try{r=JSON.parse(fs.readFileSync(f,'utf8'));}catch(e){issues.push('Missing or invalid result JSON: '+e.message);}
+          if(r){
+            if(r.schema!=='majin.prompt-battery.v1'||r.model!=='ollama/qwen2.5:3b')issues.push('Wrong schema/model');
+            if(!Array.isArray(r.cases)||r.cases.length!==expected)issues.push('Incomplete case count');
+            for(const id of ids){
+              const c=r.cases?.find(x=>x.id===id);
+              if(!c)issues.push('NOT TESTED '+id);
+              else if(c.status!=='PASS')issues.push(id+' '+c.status+': '+c.reason);
+            }
+            if(r.cleanup?.ok!==true)issues.push('Fixture cleanup not proven clean');
+          }
+          let md='## Qwen 3B REAL tasks: '+ids.join(', ')+'\n\n| Task | Result | Evidence |\n|---|---|---|\n';
+          for(const c of r?.cases||[])md+='| '+c.id+' '+c.category+' | '+c.status+' | '+String(c.reason||'').replace(/[\r\n|]/g,' ').slice(0,160)+' |\n';
+          md+='\n**Strict outcome:** '+(issues.length?'FAIL/BLOCKED':'PASS')+'\n';
+          if(issues.length)md+='\n'+issues.map(i=>'- '+i.slice(0,200)).join('\n');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,md);
+          if(issues.length){console.error(issues.join('\n'));process.exitCode=1;}
+          NODE
+      - name: Preserve actual isolated artifacts
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${MAJIN_HOME:-}" ] && [ -d "$MAJIN_HOME/workspace" ]; then
+            mkdir -p sandbox-workspace
+            cp -r "$MAJIN_HOME/workspace/." sandbox-workspace/ || true
+          fi
+      - name: Upload all task JSON traces and screenshots even when FAIL
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-qwen-${{ matrix.label }}
+          path: |
+            qa-evidence/
+            sandbox-workspace/
+            real-agent.log
+          retention-days: 30
+          if-no-files-found: warn
