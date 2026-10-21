@@ -12,7 +12,7 @@ import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
 import { inspectRequestedArtifact, pinSingleFileWrite } from './goal-artifact.js';
-import { verifyJobIdLineage } from './mission-data-evidence.js';
+import { verifyJobIdLineage, pinJobShortlistWrite } from './mission-data-evidence.js';
 import { verifyFollowupJobSelection } from './mission-data-evidence.js';
 
 /*
@@ -293,7 +293,8 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     const runOne = async (c) => {
       const suppliedArgs = safeParse(c.argsJson);
       const pin = actionGoal && !ctx?.readOnly
-        ? pinSingleFileWrite(initialGoal, cfg.get('workspace'), c.name, suppliedArgs) : null;
+        ? (pinSingleFileWrite(initialGoal, cfg.get('workspace'), c.name, suppliedArgs) ||
+           pinJobShortlistWrite(initialGoal, cfg.get('workspace'), c.name, suppliedArgs)) : null;
       const args = pin?.args || suppliedArgs;
       if (pin?.corrected) {
         onEvent({ type: 'artifact_path_corrected', label, step: steps, tool: c.name,
