@@ -393,9 +393,23 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
       if (prev.nodeIds && prev.nodeIds.join(',') === nodeIdsNow) {
         const revived = carryFromState(prev);
         if (revived) {
-          carry = revived;
-          emit({ type: 'mission_resumed', id: mId, carriedNodes: Object.keys(revived).length });
-          journalEvent(cpDir, { event: 'resumed', carriedNodes: Object.keys(revived).length });
+          // Model recompilation can reuse node IDs with DIFFERENT instructions.
+          // Checkpoint provenance must bind to the full node task, not its ID.
+          const previousById = new Map((prev.nodes || []).map((n) => [n.id, n]));
+          for (const node of compiled.nodes) {
+            if (!revived[node.id]) continue;
+            const before = previousById.get(node.id);
+            if (typeof before?.input !== 'string' || before.input !== node.input ||
+                JSON.stringify(before.deps || []) !== JSON.stringify(node.deps || [])) {
+              delete revived[node.id];
+              emit({ type: 'mission_carry_invalid', id: node.id, reason: 'compiled node changed or legacy checkpoint lacks node identity' });
+            }
+          }
+          if (Object.keys(revived).length) {
+            carry = revived;
+            emit({ type: 'mission_resumed', id: mId, carriedNodes: Object.keys(revived).length });
+            journalEvent(cpDir, { event: 'resumed', carriedNodes: Object.keys(revived).length });
+          }
         }
       }
     }
