@@ -34,6 +34,8 @@ const execFileAsync = promisify(execFile);
 const PS = String.raw`
 # MAJIN control bridge — inlined by src/core/tools/wincontrol.js (ps1 template)
 param([string]$Action, [string]$Window = '', [string]$Text = '', [string]$Caption = '')
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [Console]::OutputEncoding
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms | Out-Null
 $src = @'
