@@ -54,6 +54,9 @@ for (const f of fs.readdirSync(dist)) {
 copyDir(path.join(root, 'src', 'ui'), path.join(dist, 'ui'));
 copyDir(path.join(root, 'rules'), path.join(dist, 'rules'));
 copyDir(path.join(root, 'assets'), path.join(dist, 'assets'));
+// Browser --app window/taskbar favicon and the embedded EXE/installer ICO must
+// use the same exact pixels. Never ship the old hand-maintained UI PNG.
+fs.copyFileSync(path.join(root, 'assets', 'majin.png'), path.join(dist, 'ui', 'logo.png'));
 if (process.platform === 'win32' && !noPkg && process.env.MAJIN_NO_ICON !== '1') {
   run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
     '-File', path.join(root, 'scripts', 'refresh-icon.ps1'),
