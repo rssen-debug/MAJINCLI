@@ -1,7 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" translate="no">
 <head>
 <meta charset="utf-8" />
+<meta name="google" content="notranslate" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>MAJIN</title>
 <link rel="icon" href="/logo.png" />
@@ -257,6 +258,19 @@ body.simple #c-cost{margin-left:auto}
 #imagine .step-icon{display:grid;place-items:center;flex:0 0 28px;height:27px;border-radius:7px;border:1px solid var(--line);color:var(--dim);font:600 9px/1 var(--sans);letter-spacing:.04em;background:var(--bg2)}
 #imagine .step-title{font-weight:550;letter-spacing:-.01em}
 #imagine .step-sub{font-size:11px;opacity:.8}
+
+#mic{display:grid;place-items:center;height:36px;width:38px;border:1px solid var(--line);border-radius:11px;background:transparent}
+#mic.on{background:var(--cysoft);border-color:var(--cy)}
+.voice-mic-icon{height:17px;width:17px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round}
+#voice-stage{display:flex;align-items:center;gap:3px;height:31px;width:118px;padding:4px 9px;background:var(--bg2);border-radius:10px}
+#voice-stage[hidden]{display:none}
+.voice-bar{height:22px;flex:1;border-radius:5px;background:var(--cy);transform:scaleY(.15);transition:transform 90ms linear}
+#voice-stage[data-state="speaking"] .voice-bar{animation:majin-voice 660ms ease-in-out infinite alternate}
+#voice-stage[data-state="speaking"] .voice-bar:nth-child(3n){animation-delay:280ms}
+#voice-stage[data-state="working"] .voice-bar{opacity:.25}
+#mic-state{font-size:12px;color:var(--dim)}
+@keyframes majin-voice{from{transform:scaleY(.16)}to{transform:scaleY(.88)}}
+@media(prefers-reduced-motion:reduce){.voice-bar{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
@@ -311,7 +325,7 @@ body.simple #c-cost{margin-left:auto}
     <button id="send" type="button" aria-label="Send message" title="Send message" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path class="send-arrow" d="M12 19V5m-6 6 6-6 6 6"/><rect class="send-stop" x="6" y="6" width="12" height="12" rx="2"/></svg></button>
   </div>
   <div class="crow">
-    <button id="mic" title="Voice input">🎙</button><span id="mic-state"></span>
+    <button id="mic" title="Hands-free voice" aria-label="Toggle microphone" aria-pressed="false"><svg viewBox="0 0 24 24" class="voice-mic-icon" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8"/></svg></button><div id="voice-stage" data-state="off" hidden aria-label="Live microphone level"><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span><span class="voice-bar"></span></div><span id="mic-state" role="status" aria-live="polite"></span>
     <span class="grow" id="status" role="status" aria-live="polite">Ready</span>
     <span id="drop" class="drop">drop a file → RE analysis</span>
   </div>
