@@ -446,111 +446,15 @@ export function repairLiteralEscapedNewlineEchoCliWrite(goal, workspace, tool, a
       !/\brespond\s*\(\s*message\s*\)/i.test(request) ||
       !/\bprocess\.argv\b/i.test(request)) return null;
   const tick = String.fromCharCode(96);
+  const dollar = String.fromCharCode(36);
   const bad = 'export function respond(message) { return ' +
-    tick + 'Received: 
-  if (tool !== 'fs.write' || !args || typeof args.path !== 'string' ||
-      typeof args.content !== 'string') return null;
-  const target = explicitTarget(goal, workspace);
-  const request = String(goal || '');
-  if (!target || !/\.mjs$/i.test(target.name) ||
-      path.resolve(target.workspace, args.path) !== target.path ||
-      !/\bno\s+external\s+dependencies\b/i.test(request) ||
-      !/\bCLI\b/i.test(request) ||
-      !/\brespond\s*\(\s*message\s*\)/i.test(request) ||
-      !/\bprocess\.argv\b/i.test(request)) return null;
-  const src = args.content.trim();
-  if (src.length > 1000) return null;
-  // Only the EXACT known simple program shape, not general CommonJS.
-  const known = /^\s*module\.exports\s*=\s*\{\s*respond\s*:\s*\(\s*message\s*\)\s*=>\s*\{\s*return\s+message\s*;\s*\}\s*\}\s*;?\s*const\s+args\s*=\s*process\.argv\.slice\s*\(\s*2\s*\)\s*;\s*module\.exports\.entrypoint\s*=\s*\(\s*\)\s*=>\s*\{\s*console\.log\s*\(\s*module\.exports\.respond\s*\(\s*args\.join\s*\(\s*['"]\s['"]\s*\)\s*\)\s*\)\s*;?\s*\}\s*;?\s*$/;
-  if (!known.test(src)) return null;
-  const content = 'export function respond(message) { return message; }\n' +
-    'console.log(respond(process.argv.slice(2).join(" ")));\n';
-  return { corrected: true, target: target.name, args: { ...args, content },
-    reason: 'converted the exact observed CommonJS-only echo CLI to valid ESM while preserving behavior' };
-}
-
-export function repairSimpleCommanderCliWrite(goal, workspace, tool, args) {
-  if (tool !== 'fs.write' || !args || typeof args.path !== 'string' ||
-      typeof args.content !== 'string') return null;
-  const target = explicitTarget(goal, workspace);
-  const request = String(goal || '');
-  if (!target || !/\.mjs$/i.test(target.name) ||
-      path.resolve(target.workspace, args.path) !== target.path ||
-      !/\bno\s+external\s+dependencies\b/i.test(request) ||
-      !/\bCLI\b/i.test(request) ||
-      !/\brespond\s*\(\s*message\s*\)/i.test(request)) return null;
-  const src = args.content;
-  if ((src.match(/\brequire\s*\(/g) || []).length !== 1 ||
-      /\bmodule\.exports\b|\bexports\./.test(src)) return null;
-  const legacy = /\b(?:const|let)\s+cli\s*=\s*require\s*\(\s*(['"])commander\1\s*\)\s*;\s*cli\.parse\s*\(\s*process\.argv\s*\)\s*;\s*(?:const|let)\s+args\s*=\s*cli\.args\s*;/;
-  if (!legacy.test(src) || /\bcli\./.test(src.replace(legacy,''))) return null;
-  const content = src.replace(legacy, 'const args = process.argv.slice(2);');
-  return content === src ? null : {
-    corrected: true, target: target.name, args: { ...args, content },
-    reason: 'replaced single no-options CommonJS commander CLI with built-in Node process.argv',
-  };
-}
-
-
-/**
- * Independent completion only for an explicit LOCAL QA token-demo task
- * requesting two NAMED workspace files: one Solidity source and one testnet
- * note. This is NOT proof of ERC20 correctness, safety, actual compilation,
- * deployment, token issuance or financial success.
- *
- * A real Qwen 3B run created both valid demo files on step 1, but the next
- * Ollama call stalled; the loop incorrectly marked the finished FILE task
- * BLOCKED. Avoid that extra inference only after real authorized writes and
- * independent bounded filesystem evidence.
- */
-export function isLocalTokenDemoGoal(goal) {
-  const input = String(goal || '');
-  return /\blocal\s+QA\s+demo\s+ONLY\b/i.test(input) &&
-    /\bNO\s+live\s+chain\b/i.test(input) &&
-    /\bNO\s+real\s+funds\b/i.test(input) &&
-    /\bSave\s+both\s+files\b/i.test(input) &&
-    /\bcreate\s+[\w-]+\.sol\b/i.test(input) &&
-    /\bWrite\s+[\w-]+\.md\b/i.test(input);
-}
-
-export function verifyLocalTokenDemoFiles(goal, workspace, results) {
-  const input = String(goal || '');
-  if (!isLocalTokenDemoGoal(input) || !Array.isArray(results)) return null;
-  const sol = [...new Set([...input.matchAll(/(?<![/\\\w.-])([\w-]+\.sol)\b/gi)].map(m=>m[1]))];
-  const notes = [...new Set([...input.matchAll(/(?<![/\\\w.-])([\w-]+\.md)\b/gi)].map(m=>m[1]))];
-  if (sol.length !== 1 || notes.length !== 1) return null;
-  const root = path.resolve(workspace || '.');
-  const names = [sol[0], notes[0]];
-  const paths = names.map(n=>path.resolve(root,n));
-  if (paths.some(p=>path.dirname(p)!==root)) return null;
-  const wrote = new Set(results.filter(r=>r?.name==='fs.write' && r.out?.ok!==false)
-    .map(r=>typeof r.args?.path==='string'?path.resolve(root,r.args.path):null));
-  if (paths.some(p=>!wrote.has(p))) return null;
-  const load = p => {
-    try {
-      const stat = fs.lstatSync(p);
-      if (!stat.isFile() || stat.size <= 0 || stat.size > 65536) return '';
-      return fs.readFileSync(p,'utf8');
-    } catch { return ''; }
-  };
-  const source = load(paths[0]), text = load(paths[1]);
-  const ok = /\bcontract\s+ExampleToken\b/.test(source) &&
-    /\btotalSupply\b/.test(source) &&
-    /\bfunction\s+transfer\s*\(/.test(source) &&
-    /\btestnet\b/i.test(text);
-  if (!ok) return { ok:false, files:names, reason:'source or notes lack required local demo markers' };
-  return { ok:true, files:names,
-    text:'Created the local ExampleToken demo source ('+names[0]+') and testnet notes ('+names[1]+
-      ') in MAJIN workspace. Both files verified on disk. NO deployment performed; contract NOT audited.' };
-}
- + '{message}' + tick +
+    tick + 'Received: ' + dollar + '{message}' + tick +
     '; }' + '\\n' +
     'console.log(respond(process.argv[2] || ""));';
   if (args.content.trim() !== bad) return null;
   const corrected = bad.replace('}\\nconsole.log', '}\nconsole.log') + '\n';
-  return { corrected: true, target: target.name,
-    args: { ...args, content: corrected },
-    reason: 'replaced the exact observed literal escaped line break between two ESM statements' };
+  return { corrected: true, target: target.name, args: { ...args, content: corrected },
+    reason: 'replaced the exact observed escaped source line break between two ESM statements' };
 }
 
 export function repairSimpleCommonJsEchoCliWrite(goal, workspace, tool, args) {
