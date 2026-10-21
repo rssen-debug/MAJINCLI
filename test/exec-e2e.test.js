@@ -43,7 +43,7 @@ test('W3 E2E local: real command runs, exit measured, stdout actually captured i
 
 test('W3 E2E cancel: sleeper becomes ' + "'cancelled (explicit-actor)'" + ' — no silent zombie', async () => {
   const { ctx } = setup();
-  const started = await tools('exec.start').run({ backend: 'local', command: process.platform === 'win32' ? 'timeout /t 30 /nobreak' : 'sleep 30', timeoutSec: 120 }, ctx);
+  const started = await tools('exec.start').run({ backend: 'local', command: process.platform === 'win32' ? 'Start-Sleep -Seconds 30' : 'sleep 30', timeoutSec: 120 }, ctx);
   assert.equal(started.ok, true, JSON.stringify(started));
   await new Promise((r) => setTimeout(r, 400));
   const cancelled = await tools('exec.cancel').run({ id: started.meta.id, reason: 'e2e-because-we-prove-it' }, ctx);

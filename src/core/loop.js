@@ -316,7 +316,9 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       // (och trådhistoriken kan inte återskapa *varför* verktyget kördes).
       return { id: c.id, name: c.name, args, out };
     };
-    const results = allowTools && cfg.get('agent.parallel') !== false ? await Promise.all(calls.map(runOne)) : await sequential(calls, runOne);
+    const results = await runToolCalls(calls, runOne, {
+      parallel: allowTools && cfg.get('agent.parallel') !== false
+    });
 
     for (const r of results) {
       if (r.name === 'tools.search' && r.out?.ok !== false && Array.isArray(ctx?.toolSubsetNames)) {
@@ -369,6 +371,29 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     escalated,
     incomplete: true,
   };
+}
+
+/**
+ * Browser sessions, interactive shells and dependent filesystem operations are
+ * ordered state machines. An LLM may emit browser.open, browser.read, shot in
+ * ONE response; Promise.all made read/shot race with open, producing fake
+ * "no browser is open" failures. Independent tools remain concurrent.
+ */
+export function requiresOrderedToolCalls(calls) {
+  if (!Array.isArray(calls) || calls.length <= 1) return false;
+  const names = calls.map(c => String(c?.name || ''));
+  if (names.some(n => n.startsWith('browser.') || n.startsWith('exec.'))) return true;
+  if (names.includes('fs.delete')) return true;
+  if (names.includes('fs.write') && names.includes('fs.read')) return true;
+  return false;
+}
+
+export async function runToolCalls(calls, runOne, { parallel = true } = {}) {
+  if (!Array.isArray(calls)) throw new TypeError('calls must be an array');
+  if (typeof runOne !== 'function') throw new TypeError('runOne must be a function');
+  return parallel && !requiresOrderedToolCalls(calls)
+    ? Promise.all(calls.map(runOne))
+    : sequential(calls, runOne);
 }
 
 async function sequential(calls, runOne) {
