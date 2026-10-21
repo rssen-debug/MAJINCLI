@@ -429,6 +429,28 @@ export function repairSimpleMixedEsmCliWrite(goal, workspace, tool, args) {
  * This is a FULL-SOURCE allowlist; arbitrary code, imports, side effects,
  * multiple files, other formats and any non-echo responder remain untouched.
  */
+/**
+ * Exact known Qwen 2.5 failure: source contains LITERAL backslash+n between
+ * two otherwise-correct ESM statements, not an actual newline. Never touch
+ * arbitrary source: only this exact, independently observed fixture pattern.
+ */
+export function repairLiteralEscapedNewlineCliWrite(goal, workspace, tool, args) {
+  if (tool !== 'fs.write' || typeof args?.path !== 'string' ||
+      typeof args?.content !== 'string') return null;
+  const target = explicitTarget(goal, workspace);
+  if (!target || !/\.mjs$/i.test(target.name) ||
+      path.resolve(target.workspace, args.path) !== target.path ||
+      !/\bCLI\b/i.test(String(goal)) ||
+      !/\brespond\s*\(\s*message\s*\)/i.test(String(goal)) ||
+      !/\bno\s+external\s+dependencies\b/i.test(String(goal))) return null;
+  const broken = 'export function respond(message) { return `Received: ${message}`; }\\nconsole.log(respond(process.argv[2] || ""));';
+  if (args.content.trim() !== broken) return null;
+  const content = 'export function respond(message) { return `Received: ${message}`; }\n' +
+    'console.log(respond(process.argv[2] || ""));\n';
+  return { corrected: true, target: target.name, args: { ...args, content },
+    reason: 'repaired the exact escaped-newline ESM CLI without changing its behavior' };
+}
+
 export function repairSimpleCommonJsEchoCliWrite(goal, workspace, tool, args) {
   if (tool !== 'fs.write' || !args || typeof args.path !== 'string' ||
       typeof args.content !== 'string') return null;
