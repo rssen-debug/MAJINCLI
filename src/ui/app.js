@@ -49,6 +49,13 @@ function md(t) {
   s = s.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
   s = s.replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?]|$)/gm, '$1<i>$2</i>');
   s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  // Plain URLs should be clickable too. Input is already HTML-escaped;
+  // this runs after markdown links and never matches inside href="...".
+  s = s.replace(/(^|[\\s>(])(https?:\\/\\/[^\\s<>"']+)/gm, (_m, prefix, raw) => {
+    const url = raw.replace(/[.,!?;:]+$/, '');
+    const tail = raw.slice(url.length);
+    return prefix + '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>' + tail;
+  });
   s = s.replace(/(?:^|\n)(#{1,6})\s*(.+)$/gm, (_m, h, txt) => `\n<span style="color:var(--cy);letter-spacing:.08em">${txt}</span>\n`);
   s = s.replace(/\u0000(\d+)\u0000/g, (_m, i) => blocks[Number(i)]);
   // Workspace files mentioned in a completed answer should be OPENABLE, not
