@@ -195,3 +195,15 @@ test('resolveIn + globToRe + hexdump', () => {
   assert.match(hx, /^0{8} /m, 'hexdump starts at offset 0');
   assert.match(hx, /4d 5a/);
 });
+
+
+test('shell.run reports real command failure rather than pretending Blender or scripts succeeded', async (t) => {
+  const { registry } = make(t);
+  const ok = await registry.exec('shell.run', { command: 'node -e "process.exit(0)"' }, { session: 'shell-ok' });
+  assert.equal(ok.ok, true, JSON.stringify(ok.error));
+  assert.equal(ok.meta.exitCode, 0);
+  const failed = await registry.exec('shell.run', { command: 'node -e "process.exit(7)"' }, { session: 'shell-fail' });
+  assert.equal(failed.ok, false, 'a failed external app must never look like a successful MAJIN action');
+  assert.equal(failed.meta.exitCode, 7);
+  assert.equal(failed.error.code, 'shell_exit_nonzero');
+});
