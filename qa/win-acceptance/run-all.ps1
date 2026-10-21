@@ -14,10 +14,18 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Repo = "$PSScriptRoot\..\..",
-  [string]$Out = "$PSScriptRoot\out-win-acceptance.json",
+  # NOTE: $PSScriptRoot is EMPTY while PS 5.1 evaluates param-block defaults
+  # (measured on real windows-latest runner: a default like
+  # "$PSScriptRoot\..\.." collapsed to "\..\..", GetFullPath => D:\qa\...
+  # and node reported MODULE_NOT_FOUND). Compute paths in the body instead.
+  [string]$Repo = '',
+  [string]$Out = '',
   [switch]$SkipUiLaunch
 )
+
+if (-not $Repo) { $Repo = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')) }
+if (-not $Out)  { $Out  = (Join-Path $PSScriptRoot 'out-win-acceptance.json') }
+$Repo = [System.IO.Path]::GetFullPath($Repo)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
