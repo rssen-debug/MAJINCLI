@@ -8,6 +8,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const TARGET = /(?<![\/\\\w.-])([\w-]+\.(?:txt|md|json|js|mjs|jsx|ts|tsx|html|css|py|csv|sol))\b/gi;
 
@@ -54,6 +55,21 @@ export function inspectRequestedArtifact(input, workspace) {
           !/<button\b[^>]*\bstyle\s*=/i.test(data) &&
           !/(?:\bbutton(?:\.[\w-]+)?|\.cta|\.btn)\s*(?::[\w-]+)?\s*\{/i.test(data)) {
         missing.push('requested styled CTA button (missing button CSS rule or inline style)');
+      }
+    }
+    // A regex match for "export respond" can never prove a working JS file:
+    // real Qwen3B CI produced syntactically invalid CLI output but MAJIN
+    // classified it as successful. Node's --check PARSES without executing
+    // generated code. Never execute untrusted user code as proof here.
+    if (/\.(?:mjs|js)$/i.test(target.name)) {
+      const syntax = spawnSync(process.execPath, ['--check', target.path], {
+        cwd: target.workspace, stdio: ['ignore', 'ignore', 'pipe'],
+        encoding: 'utf8', timeout: 3000, maxBuffer: 128 * 1024,
+        windowsHide: true,
+        env: { ...process.env, NODE_OPTIONS: '' },
+      });
+      if (syntax.error || syntax.status !== 0) {
+        missing.push('invalid JavaScript syntax (node --check failed; repair this file before claiming done)');
       }
     }
     if (/\.mjs$/i.test(target.name)) {
