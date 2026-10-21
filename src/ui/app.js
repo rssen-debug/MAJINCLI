@@ -845,64 +845,80 @@ function listen() {
   };
 }
 
-/* --------------------------------- voice -------------------------------- */
-let recog = null;
-function micToggle() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    toast('this browser has no speech recognition');
-    return;
-  }
-  if (S.listening) {
-    recog?.stop();
-    S.listening = false;
-    $('mic').classList.remove('on');
-    $('mic-state').textContent = '';
-    return;
-  }
-  recog = new SR();
-  recog.lang = 'sv-SE';
-  recog.continuous = true;
-  recog.interimResults = true;
-  let base = $('input').value;
-  recog.onresult = (e) => {
-    let txt = '';
-    for (let i = e.resultIndex; i < e.results.length; i += 1) txt += e.results[i][0].transcript;
-    $('input').value = (base ? base + ' ' : '') + txt;
-    autoGrow();
-    if (e.results[e.results.length - 1].isFinal) {
-      const wake = (S.st?.config?.ui?.voice?.wakeWord || '').toLowerCase();
-      const v = $('input').value.trim();
-      if (wake && v.toLowerCase().startsWith(wake)) send(v.slice(wake.length).trim() || v);
-    }
-  };
-  recog.onend = () => {
-    if (S.listening) {
-      try {
-        recog.start();
-      } catch {
-        S.listening = false;
-        $('mic').classList.remove('on');
-      }
-    }
-  };
-  recog.onerror = (e) => {
-    $('mic-state').textContent = e.error === 'not-allowed' ? 'allow microphone' : '';
-    if (e.error === 'not-allowed') S.listening = false;
-  };
-  recog.start();
-  S.listening = true;
-  $('mic').classList.add('on');
-  $('mic-state').textContent = 'listening';
+/* ------------------------- hands-free voice -------------------------- */
+let recog=null, speechActive=false, voiceArmed=false;
+function voiceState(mode,label) {
+  document.body.dataset.voiceMode=mode;
+  if ($('mic-state')) $('mic-state').textContent=label;
+  $('mic')?.setAttribute('aria-pressed',String(mode==='listening'));
 }
-function speak(t) {
-  if (!('speechSynthesis' in window)) return;
-  const clean = String(t).replace(/```[\s\S]*?```/g, ' [kod] ').replace(/[*_`#]/g, '').slice(0, 900);
-  const u = new SpeechSynthesisUtterance(clean);
-  u.lang = S.st?.config?.ui?.voice?.lang || 'sv-SE';
-  u.rate = S.st?.config?.ui?.voice?.rate || 1.05;
-  speechSynthesis.cancel();
-  speechSynthesis.speak(u);
+function stopMic() {
+  voiceArmed=false; S.listening=false;
+  const r=recog;recog=null;
+  try {r?.abort();} catch{}
+  $('mic')?.classList.remove('on');
+  voiceState('idle','Voice ready');
+}
+function startMic() {
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if (!SR) {voiceState('error','Speech recognition unavailable');return;}
+  if (speechActive||S.busy) return;
+  const r=new SR();recog=r;voiceArmed=true;S.listening=true;
+  r.lang=S.st?.config?.ui?.voice?.lang||'sv-SE';
+  r.continuous=false;r.interimResults=true;
+  r.onstart=()=>voiceState('listening','Listening…');
+  r.onresult=e=>{
+    let words='',complete='';
+    for(let i=0;i<e.results.length;i++){
+      const chunk=e.results[i][0]?.transcript||'';
+      words+=chunk;
+      if(e.results[i].isFinal)complete+=chunk;
+    }
+    voiceState('listening',words.trim()||'Listening…');
+    if(!complete.trim()) return;
+    const wake=String(S.st?.config?.ui?.voice?.wakeWord||'').trim();
+    let command=complete.trim();
+    if(wake){
+      if(!command.toLowerCase().startsWith(wake.toLowerCase()))return;
+      command=command.slice(wake.length).trim();
+    }
+    if(!command)return;
+    voiceArmed=false;S.listening=false;recog=null;
+    try{r.stop();}catch{}
+    $('input').value=command;autoGrow();
+    voiceState('thinking','Working…');
+    send(command);
+  };
+  r.onerror=e=>{
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
+      stopMic();voiceState('error','Allow microphone access');
+    }else if(e.error!=='no-speech'&&e.error!=='aborted'){
+      stopMic();voiceState('error','Voice: '+e.error);
+    }
+  };
+  r.onend=()=>{
+    if(recog!==r)return;
+    S.listening=false;
+    if(voiceArmed&&!S.busy&&!speechActive){recog=null;startMic();}
+  };
+  try{r.start();$('mic').classList.add('on');}
+  catch(e){stopMic();voiceState('error',e.message);}
+}
+function micToggle(){if(S.listening)stopMic();else startMic();}
+function speak(t){
+  if(!S.voice||!('speechSynthesis' in window))return;
+  const clean=String(t).replace(/[*_#]/g,'').slice(0,700).trim();
+  if(!clean)return;
+  stopMic();
+  const u=new SpeechSynthesisUtterance(clean);
+  const lang=S.st?.config?.ui?.voice?.lang||'sv-SE';
+  u.lang=lang;u.rate=S.st?.config?.ui?.voice?.rate||1.04;
+  const choices=speechSynthesis.getVoices().filter(x=>x.lang?.slice(0,2).toLowerCase()===lang.slice(0,2).toLowerCase());
+  u.voice=choices.find(x=>/natural|neural/i.test(x.name))||choices[0]||null;
+  u.onstart=()=>{speechActive=true;voiceState('speaking','MAJIN speaking…');};
+  const done=()=>{speechActive=false;voiceState('idle','Voice ready');};
+  u.onend=done;u.onerror=done;
+  speechSynthesis.cancel();speechSynthesis.speak(u);
 }
 
 /* ------------------------------- composer ------------------------------- */
