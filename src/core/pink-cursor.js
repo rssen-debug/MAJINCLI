@@ -23,7 +23,24 @@ const OVERLAY_PS1 = String.raw`
 # MAJIN pink cursor overlay (WinForms) — spawned by src/core/pink-cursor.js
 param([string]$StateFile)
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-$form = New-Object System.Windows.Forms.Form
+# A topmost visual helper must NEVER capture user clicks or keyboard focus.
+# WinForms opacity/backdrop by itself DOES NOT make a window click-through.
+# Give the overlay a native transparent+no-activate extended style.
+$overlayType = @'
+using System;
+using System.Windows.Forms;
+public sealed class MajinVisualOverlay : Form {
+  protected override CreateParams CreateParams {
+    get {
+      CreateParams cp = base.CreateParams;
+      cp.ExStyle |= 0x00000020 | 0x08000000 | 0x00000080;
+      return cp;
+    }
+  }
+}
+'@
+Add-Type -TypeDefinition $overlayType -ReferencedAssemblies System.Windows.Forms,System.Drawing
+$form = New-Object MajinVisualOverlay
 $form.FormBorderStyle = 'None'; $form.ShowInTaskbar = $false; $form.TopMost = $true
 # On a real interactive runner the layered TransparencyKey form can be
 # completely absent from CopyFromScreen even while its process keeps running.
