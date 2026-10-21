@@ -251,11 +251,24 @@ await caseRun('11', 'real-public-web-research',
     reason: 'public web search resulted in an independently saved official documentation URL'
   }));
 clearInterval(approvalPoll);
-await new Promise(resolve => server.close(resolve));
-try { await rt.shutdown?.(); } catch {}
+// Close every browser session BEFORE the HTTP fixture, otherwise chromium's
+// persistent socket can hold server.close open and the final verdict is lost.
+const { closeFor } = await import('../../src/core/browser.js');
+const { closeQaFixture } = await import('./fixture-teardown.mjs');
+report.cleanup = await closeQaFixture({
+  browserSessions: [...allowedBrowserSessions],
+  closeBrowser: closeFor,
+  server,
+  runtime: rt,
+});
 report.finished = new Date().toISOString();
 for (const status of ['PASS','FAIL','BLOCKED','NOT_TESTED']) report.summary[status] = report.cases.filter(c=>c.status===status).length;
 report.summary.total = report.cases.length;
 fs.writeFileSync(path.join(evidence,'prompt-battery.json'), JSON.stringify(report,null,2));
 console.log('FINAL ' + JSON.stringify(report.summary));
-process.exitCode = report.summary.FAIL || report.summary.BLOCKED ? 1 : 0;
+console.log('CLEANUP ' + JSON.stringify(report.cleanup));
+const code = report.summary.FAIL || report.summary.BLOCKED || !report.cleanup.ok ? 1 : 0;
+// This process is a one-shot, isolated CI fixture. Persist verdicts before
+// exiting, even if Chromium/Ollama left auxiliary handles running.
+await new Promise(resolve => process.stdout.write('QA_EXIT ' + code + '\\n', resolve));
+process.exit(code);
