@@ -23,7 +23,7 @@ $button.Width=110
 $button.Location = New-Object System.Drawing.Point(18,64)
 $button.Add_Click({
   # OutFile points exclusively into the runner's newly created temp test dir.
-  [System.IO.File]::WriteAllText($OutFile,$edit.Text,[System.Text.Encoding]::UTF8)
+  [System.IO.File]::WriteAllText($OutFile,$edit.Text,[System.Text.UTF8Encoding]::new($false))
 })
 $form.Controls.Add($edit)
 $form.Controls.Add($button)
