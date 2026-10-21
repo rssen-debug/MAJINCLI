@@ -13,10 +13,13 @@ import { tradingTools } from '../src/core/tools/trading.js';
 
 const research = tradingTools.find((t) => t.name === 'trading.research');
 const plan = tradingTools.find((t) => t.name === 'trading.plan');
+/* Portable real subprocess stub: execute the .js fixture with the installed
+   Node binary on Windows (no Bash shebang required). Never ships to users. */
+process.env.MAJIN_TRADING_QA_STUB = '1';
 
 function mkStub(body, { sleepMs = 0 } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'w6-stub'));
-  const file = path.join(dir, 'fake-python');
+  const file = path.join(dir, 'fake-python.js');
   const js = `console.log(${JSON.stringify(JSON.stringify(body))});`;
   fs.writeFileSync(file, `#!/usr/bin/env node\nsetTimeout(()=>{${js}\nprocess.exit(0)},${sleepMs});\n`);
   fs.chmodSync(file, 0o755);
@@ -26,7 +29,7 @@ function mkStub(body, { sleepMs = 0 } = {}) {
 /* prints RAW text, NOT a JSON-quoted string — corrupted-bridge simulation */
 function mkRaw(text) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'w6-raw'));
-  const file = path.join(dir, 'fake-python');
+  const file = path.join(dir, 'fake-python.js');
   fs.writeFileSync(file, `#!/usr/bin/env node\nconsole.log(${JSON.stringify(String(text))});\n`);
   fs.chmodSync(file, 0o755);
   return { dir, file };
