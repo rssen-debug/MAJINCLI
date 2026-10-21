@@ -77,6 +77,29 @@ export function crossCheck(claimsBySource) {
     }
   }
   const clusters = [];
+  const flaggedSentences = new Set();
+  /* numeric-divergence pass over ALL claims (round-24): the anchor-bucket
+     keying is a clustering convenience and must NOT be allowed to hide a
+     genuine conflict — proven measured: 'processed 1,240' and 'handled 340'
+     live in two different buckets because one buyer 'handle' and the other
+     does not. Conflict detection runs globally with a shared-anchor rule. */
+  {
+    const allClaims = [];
+    for (const [srcId, claims] of Object.entries(claimsBySource)) {
+      for (const c of claims) allClaims.push({ ...c, sourceId: srcId });
+    }
+    for (let i = 0; i < allClaims.length; i++) {
+      for (let j = i + 1; j < allClaims.length; j++) {
+        if (allClaims[i].sourceId === allClaims[j].sourceId) continue;
+        const shared = (allClaims[i].anchors || []).filter((a) => (allClaims[j].anchors || []).includes(a));
+        if (shared.length < 2) continue;
+        const nA = significantNumbers(allClaims[i].sentence);
+        const nB = significantNumbers(allClaims[j].sentence);
+        if (!nA.length || !nB.length) continue;
+        if (materiallyDifferent(nA, nB)) { flaggedSentences.add(allClaims[i].sentence); flaggedSentences.add(allClaims[j].sentence); }
+      }
+    }
+  }
   for (const group of buckets.values()) {
     const seen = new Set();
     const merged = [];
@@ -93,10 +116,35 @@ export function crossCheck(claimsBySource) {
       const hasPos = texts.some((t) => pos.test(t));
       if (hasNeg && hasPos) for (const m of merged) m.conflicts = true;
     }
+    for (const m of merged) if (flaggedSentences.has(m.sentence) || [...flaggedSentences].some((f) => sim(f, m.sentence) > 0.55)) m.conflicts = true;
     clusters.push(...merged);
   }
   return { clusters, claimsRaw };
 }
+/* figures that matter for conflict detection: skip year-looking tokens,
+   single-emphasis zeros; normalize thousands separators */
+function significantNumbers(sentence) {
+  const out = [];
+  for (const m of String(sentence).matchAll(/[0-9][0-9,.\u00A0]*/g)) {
+    const v = Number(m[0].replace(/[,.\u00A0]/g, ''));
+    if (!Number.isFinite(v)) continue;
+    if (v >= 1900 && v <= 2100) continue; /* years are context, not quantity */
+    if (v === 0) continue;
+    out.push(v);
+  }
+  return out;
+}
+function materiallyDifferent(a, b) {
+  /* every figure on A differs from every on B by >10% — comparable topics,
+     no comparable magnitude */
+  for (const x of a) {
+    for (const y of b) {
+      if (Math.max(x, y) / Math.max(1, Math.min(x, y)) <= 1.10) return false;
+    }
+  }
+  return true;
+}
+
 function sim(a, b) {
   const A = new Set(TERMS(a)), B = new Set(TERMS(b));
   const inter = [...A].filter((x) => B.has(x)).length;
@@ -149,7 +197,7 @@ export function verify(report, { clusters }) {
   const conflicted = clusters.filter((c) => c.conflicts).length;
   return {
     ok: findings >= 3, findings, unsupported, conflicted,
-    verdict: unsupported === 0 ? 'all claims sourced' : `${unsupported} claims dropped (no support)`,
+    verdict: (unsupported === 0 ? 'all claims sourced' : `${unsupported} claims dropped (no support)`) + (conflicted ? ` · ${conflicted} conflicted claim(s) flagged — read the flagged findings critically` : ''),
   };
 }
 

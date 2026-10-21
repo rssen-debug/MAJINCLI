@@ -25,7 +25,7 @@
       "wave": "W2",
       "desc": "PLAN→SEARCH→FETCH→EXTRACT→CROSS-CHECK→SYNTHESIZE→VERIFY + citation ledger, contradiction detection, reliability märkning.",
       "test": "test/research.test.js + real-topic fixture (offline-mocks for unit, real-net for integration)",
-      "status": "VERIFIED - end-to-end over REAL socket (test/research-e2e.test.js): PLAN->SEARCH->FETCH->EXTRACT->CROSS-CHECK->SYNTHESIZE->VERIFY pa http-loopback; measured: sources:2 aggregate + 404 RAKNAD som error (never hidden) + bada claims nadden report med citationer [1]/[2] + tre-artifacts contract (report.md/ledger.json/sources.jsonl) + 404-URL ar INTE i sources + zero-hits = ENGINE REFUSERAR (refusing to invent, med hits:0-progress) + plan() inspekterbar; honest limit-finding: verify.conflicted flaggar ej nummer-konflikter over kluster graining (backlog praise)"
+      "status": "VERIFIED - end-to-end over REAL socket (test/research-e2e.test.js): PLAN->SEARCH->FETCH->EXTRACT->CROSS-CHECK->SYNTHESIZE->VERIFY pa http-loopback; measured: sources:2 aggregate + 404 RAKNAD som error (never hidden) + bada claims nadden report med citationer [1]/[2] + tre-artifacts contract (report.md/ledger.json/sources.jsonl) + 404-URL ar INTE i sources + zero-hits = ENGINE REFUSERAR (refusing to invent, med hits:0-progress) + plan() inspekterbar; honest limit-finding: verify.conflicted flaggar ej nummer-konflikter over kluster graining (backlog praise) | LIMIT STANGD re: numeric-conflict: crossCheck flagetar nu numeriska-divergenskonflikter globalt (air-year-normalized, >10% magnitud, shared-anchors>=2, page-poilet-raw-claims utanfor buckets — bucket-keying var proven-att-dolja konflikten), verdict sager explicit \"N conflicted claim(s) flagged\"; 4/4 test-file research-numeric-conflict.test.js + befintlig e2e fort satt groned"
     },
     {
       "rank": 4,
@@ -283,6 +283,13 @@
       "done": "W8 transport-kontrakt klar graders offline: alla avsindare Karlegrade med faktiska request-captures pa fetch-seamen; e-post-test lekte fren: MIN egen antagna form (JSON) var fel mot sendEmail:s verkliga Mailgun-form-urlencoded + from-required-kontrakt — testet korrigerade mot moten, production untouched; full svit groned",
       "percent": 87,
       "next": "LIVE slack/discord-send med anvandardgivna creds (godkannande-krav), eller win-runner acceptance"
+    },
+    {
+      "round": 25,
+      "date": "2026-10-21",
+      "done": "research-numeric-conflict LIMIT-fIx: tre lager av sanning: (1) forst blev arg oneck-merjen doljde — fixad pa raw-claims-in-cluster; (2) sedan visade bucket-keyingen doljde konflikten bassapade pga ordval medan meningarna sa motsatande — fixad med GLOBAL pass over allClaims (sourceId-sdiff); (3) enhet test antog crude-2-klustret - justerat till RÄTT kontrakt mark-MERGED-cluster-med-conflicts:true; full svit",
+      "percent": 89,
+      "next": "win-runner acceptance eller live-channel med din pekade creds/godkannande"
     }
   ]
 }
