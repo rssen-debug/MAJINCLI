@@ -320,10 +320,14 @@ async function send(text, options = {}) {
   if (S.busy) return parallelTask(input);
   // Typing is not a voice command. Stop hands-free listening before sending,
   // otherwise microphone, keyboard and synthesized audio race each other.
-  if (!options.voiceTurn && S.handsFree) {
-    S.handsFree = false;
-    stopMic();
-    window.speechSynthesis?.cancel();
+  if (!options.voiceTurn) {
+    if (S.handsFree) { S.handsFree = false; stopMic(); }
+    // Typing takes priority over a previous spoken reply. Both browser TTS
+    // and the optional local audio path must stop before a typed response.
+    try { window.speechSynthesis?.cancel(); } catch {}
+    try { voiceRequest?.abort(); } catch {}
+    try { currentVoiceAudio?.pause(); } catch {}
+    if (speechActive) voiceState('idle', 'Voice ready');
   }
   S.voiceTurn = Boolean(options.voiceTurn);
   if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.reset(); // a new run gets a fresh canvas
