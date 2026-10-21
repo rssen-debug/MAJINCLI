@@ -27,6 +27,6 @@ test('release version is consistent across all packaging paths',()=>{
   }
   assert.equal(JSON.parse(fs.readFileSync('package-lock.json','utf8')).packages[''].version,'1.0.7');
   for(const p of ['src/core/version.js','installer/majin.iss','scripts/publish.ps1']){
-    const text=fs.readFileSync(p,'utf8');assert.match(text,/1\.0\.6/);
+    const text=fs.readFileSync(p,'utf8');assert.match(text,/1\.0\.7/);
   }
 });
