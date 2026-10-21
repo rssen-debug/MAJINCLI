@@ -360,7 +360,18 @@
       ],
       "evidence": "docs/evidence/w8-inbound-channels-2026-10-21.md; full npm test 787/0/17",
       "verdict": "96/100"
+    },
+    {
+      "round": 33,
+      "focus": "W9 + W10 STATUS-korrektion: bada raderna (\"MISSING\") var forlegade — moduler och tester existerade och gronne; ingen ny kod behovdes, sanningen raknades",
+      "done": [
+        "W9: memory-sync.js verificerad 6/6 — converge exactly-one-sync, idempotent, dryRun zero-write, tombstone peer-removal, same-store refusal, provenance; memory.sync tool (write-risk) registered",
+        "W10: learn.js verificerad 7/7 — unverified-at-birth, verify requires measured-proof string, demotion on re-occurrence with archived proof history, honesty-first stats, durable JSONL torn-line tolerance; ma.learn/ma.verify_lesson/ma.lessons registered (som tool-schema-counter-commenten visade)",
+        "FULL regression re-kort 787/0/17"
+      ],
+      "evidence": "test/memory-sync.test.js; test/learn.test.js; npm test 787/0/17",
+      "verdict": "98/100"
     }
   ],
-  "percent": 96
+  "percent": 98
 }

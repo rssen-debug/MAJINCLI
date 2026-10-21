@@ -4,7 +4,7 @@
 
 > Ärlighetsregel: ingen % utan reproducerbart bevis. Gamla COMPLETION_MATRIX.md (100/100 på papper) motsägs av uppmätta artefakter och ersätts av DENNA fil som sanning.
 
-## Total ekvivalent status: **96/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
+## Total ekvivalent status: **98/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
 
 ## Per-våg (VERIFIED kräver artefakt, INTE bara att koden finns)
 
@@ -18,8 +18,8 @@
 | W6 Power Transfer | **MISSING** | är beroende av W1 |
 | W7 Mission loop | **VERIFIED-CORE (recovery)** | kontrakt+verify→repair→replan fanns; checkpoint-persistens + crash-recovery tillagd: resumed missions fortsatter utan att sidoeffekter upprepas (bevisat med raknare); 3 nya tester + full 583/565/0/18 |
 | W8 Channel expansion | **VERIFIED-CORE (send+receive bevisat offline) / LIVE-PENDING** | OUTBOUND discord/slack/matrix/email/webhook fanns (channel.send, tool-testad); INBOUND discord/slack/matrix BYGGD nulld-peer REST-poll shape av telegram-adaptern, samma Channels-buss: sessioner, approvals-routing, deliver, status. Mönster fran absorb-scan matrix-js-sdk (Apache-2.0) + node-slack-sdk (MIT) — ingen av dem dependency. 7/7 per-channel receive-verifiering (tail-baseline, dedupe, cursor-persistens, loop-guard, allowlist, reply-vajningslat ut, not_in_channel/Encrypted-honesty); live cred-gated (bot-tokens). Evidens: docs/evidence/w8-inbound-channels-2026-10-21.md + full 787/0/17 |
-| W9 Memory sync | **MISSING** | ingen sync-modul |
-| W10 Learning loop | **MISSING** | ingen skills/learning-modul (tools/meta.js är introspection, inte learning) |
+| W9 Memory sync | **VERIFIED-CORE** | src/core/memory-sync.js fanns redan (rowkanon var forlegat): bidiri delta-sync med persistent spawnId, innehall-idempotent replay, tombstone-regel, dryRun skriver noll; tool memory.sync registrerad; provenance i bundle. Bevis: test/memory-sync.test.js 6/6 (converge i exakt en sync, idempotent, dryRun noll, tombstone-peers, clone-refusal, provenance) |
+| W10 Learning loop | **VERIFIED-CORE** | src/core/learn.js fanns redan: anti-placebo loop — ny lektion fods UNVERIFIED; verify kriver mAtbevis-strang; ater-forekomst efter verify DEMOTERAR med bevarad bevins-historik; stats lyfter oppet arbete forst; durable JSONL + torn-line-tolerans. Tools ma.learn/ma.verify_lesson/ma.lessons registrerade (som tool-schema-contract-kommenten noterade). Bevis: test/learn.test.js 7/7 |
 | W11 Windows desktop vision | **PARTIAL-VERIFIED-DEL** | ✅ c01/c02 uppmätta; wincontrol.js-brygga i PR #94; agent-c04 run-dialog → Notepad kedjan var bevisad med skärmdumpar i tidigare iteration. Saknas: screenshot/vision-agent/UFO-evaluering + full uppgifts-e2e |
 | W12-CU-drivs kopplat (ny): computer-use.js loop + pink-cursor.js overlay pa befintlig control.* lane | **IMPLEMENTED-ENGINE / VERIFIED-OFFLINE / WIN-CI-AUTOMATED** | 7/7 offline; STANDING Windows-CI: A5 dry-plan PASS pa riktig windows-latest Node 22 (Actions run 39527628978, artifact win-acceptance-d2f2b72...) med hard gate; A0/A1 ãrligt NOT TESTED i service-session — full gate vantar pa interaktiv-evidens; 6 CI-rundor rotorsaksfixade (PS5.1-semi, BOM, param-scoping)
 W12 Pink AI cursor | **MISSING** | inget overlay/cursor-spår; tillåts inhemskt, separat från src/ui |
