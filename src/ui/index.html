@@ -340,6 +340,17 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="active"] .pulse{background:#f39be3}
 @keyframes majin-pulse-hold{50%{opacity:.45;box-shadow:0 0 0 6px rgba(255,126,153,0)}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress .pulse{animation:none}}
+
+/* One calm pulse of progress INSIDE the existing composer, never another panel. */
+#composer #work-progress{isolation:isolate;min-height:29px;padding:7px 12px 8px;letter-spacing:.005em}
+#composer #work-progress::after{content:"";position:absolute;bottom:0;left:0;width:32%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(248,166,232,.85),transparent);
+  opacity:.7;animation:majin-progress-glide 2.6s cubic-bezier(.4,0,.2,1) infinite}
+#composer #work-progress[data-phase="verify"]::after{background:linear-gradient(90deg,transparent,rgba(211,175,255,.95),transparent)}
+#composer #work-progress[data-phase="problem"]::after{animation-play-state:paused;opacity:.35}
+#composer #work-progress-timer{font-variant-numeric:tabular-nums;min-width:3ch;text-align:right;opacity:.65}
+@keyframes majin-progress-glide{from{transform:translateX(-110%)}to{transform:translateX(420%)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress::after{animation:none;left:auto;right:0;opacity:.4}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
