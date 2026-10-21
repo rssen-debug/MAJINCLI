@@ -34,7 +34,7 @@ test('CLI proof needs two distinct live outputs from a restricted no-network con
     assert.ok(args.includes('--user=10001:10001'));
     assert.ok(args.includes('node:22-alpine'));
     const mount = args[args.indexOf('--mount') + 1];
-    assert.match(mount, /target=\\/work\\/agent\\.mjs,readonly$/);
+    assert.ok(mount.endsWith(',target=/work/agent.mjs,readonly'));
     assert.ok(mount.includes(path.join(workspace, filename)));
     assert.ok(!args.join(' ').includes(':' + workspace + ':/work'), 'must not mount entire workspace');
     assert.equal(options.timeout, 8000);
