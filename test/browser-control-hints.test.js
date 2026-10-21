@@ -15,10 +15,14 @@ function element({tag='INPUT',id='',name='',type='text',label='',visible=true,va
   };
 }
 function walk(nodes){
-  return vm.runInNewContext(VISIBLE_CONTROLS_JS,{
+  // vm.runInNewContext creates Array/Object prototypes from another realm.
+  // Compare serialized DOM evidence in this realm while preserving the exact
+  // selectors, labels and visibility checks from the real DOM walker.
+  const data = vm.runInNewContext(VISIBLE_CONTROLS_JS,{
     document:{querySelectorAll:()=>nodes},
     window:{getComputedStyle:()=>({display:'block',visibility:'visible'})}
   });
+  return JSON.parse(JSON.stringify(data));
 }
 
 test('live DOM walker returns the actual consent checkbox and submit button selectors',()=>{
