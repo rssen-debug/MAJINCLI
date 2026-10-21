@@ -10,7 +10,7 @@ test('speech recognition arms, sends actual user transcript and suspends while a
   assert.match(src,/S\.handsFree=true/);
   assert.match(src,/if\(S\.handsFree&&!S\.busy\)startMic\(\)/);
   assert.match(src,/engine\.cancel\(\);engine\.resume\(\);engine\.speak\(u\)/);
-  assert.match(src,/u\.onerror=resolve/);
+  assert.match(src,/u\.onerror=e=>finish\(new Error\('Speech playback failed:/);
   assert.match(src,/audio\.onerror=/);
 });
 test('UI indicates states, can stop listening and respects reduced motion',()=>{
