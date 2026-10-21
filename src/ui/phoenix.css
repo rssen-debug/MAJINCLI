@@ -246,6 +246,22 @@ body:not(.simple) #studio { position:fixed; right:0; top:64px; bottom:0; width:4
   body.simple #studio,body:not(.simple) #studio{top:60px}.studio-heading{padding:20px}.studio-view{padding:20px}
   #modeldrop{top:70px;padding:19px;max-height:calc(100dvh - 84px);gap:14px}.explorer-head{font-size:18px}.explorer-sort{font-size:10px}.filter-chip{padding:5px 10px;font-size:9px}.model-name{font-size:12px}.model-id{font-size:9px}.model-meta{font-size:9px}
 }
+/* On 390px phones the full desktop toolbar previously forced header/app to
+   408px and horizontal scrolling. Prioritize the actual controls a person
+   needs: model, workspace, sidebar, stop. Secondary badges and settings live
+   in the expandable workspace / navigation and must not steal mobile width. */
+@media(max-width:600px) {
+  html,body { width:100%; max-width:100%; min-width:0; }
+  #app,#main,footer { min-width:0; max-width:100%; }
+  header { width:100%; max-width:100%; min-width:0; gap:5px; overflow:hidden; }
+  header :is(#tagline,#c-route,#c-moa,#c-tools,#c-cost,#c-tg,#c-wa,
+    #b-mode,#b-panel,#b-quit,#b-theme,#b-voice,#b-test,#v-tag,#c-update) {
+    display:none!important;
+  }
+  header .spacer { flex:1 1 0; min-width:0; }
+  #c-model { min-width:0; max-width:34vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:0 1 auto; }
+  #b-studio,#b-rail,#b-expert,#b-stop { flex:0 0 auto; }
+}
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important} }
 
 #input:focus-visible{outline:none}#composer:has(#input:focus-visible){outline:1px solid #eaa0c34a;outline-offset:2px}

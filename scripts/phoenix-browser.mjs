@@ -250,7 +250,22 @@ try {
   assert.equal(await page.locator('#input').inputValue(), '', 'new chat clears prior failed draft');
   assert.equal(await page.locator('#status').textContent(), 'Ready', 'new chat clears stale failure status');
   await page.setViewportSize({ width: 390, height: 844 });
-  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'mobile has no horizontal overflow');
+  const mobileOverflow = await page.evaluate(() => {
+    const vw = innerWidth, actual = document.documentElement.scrollWidth;
+    const bad = [...document.querySelectorAll('*')].map(el => {
+      const st = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return { el, st, r };
+    }).filter(({ st, r }) => st.display !== 'none' && st.visibility !== 'hidden' &&
+      r.width > 0 && r.height > 0 && r.right > vw + 1)
+      .map(({ el, r }) => ({
+        tag: el.tagName.toLowerCase(), id: el.id, cls: String(el.className?.baseVal ?? el.className ?? '').slice(0,80),
+        x: Math.round(r.x), width: Math.round(r.width), right: Math.round(r.right),
+      })).sort((a,b)=>b.right-a.right).slice(0,20);
+    return { viewport: vw, scrollWidth: actual, offenders: bad };
+  });
+  console.log('MOBILE_OVERFLOW_EVIDENCE ' + JSON.stringify(mobileOverflow));
+  assert.equal(mobileOverflow.scrollWidth > mobileOverflow.viewport, false, 'mobile has no horizontal overflow');
   await page.screenshot({ path: path.join(output, 'phoenix-small.png') });
   await page.locator('#b-rail').click();
   assert.equal(await page.locator('#new-chat').isVisible(), true, 'mobile sidebar is reachable');
