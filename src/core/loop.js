@@ -338,8 +338,11 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       const pin = actionGoal && !ctx?.readOnly
         ? (pinSingleFileWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs) ||
            pinJobShortlistWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs)) : null;
-      const contentPin = actionGoal && !ctx?.readOnly
-        ? pinSingleExactTextWrite(initialGoal, cfg.get('workspace'), c.name, pin?.args || candidateArgs) : null;
+      // Do not combine two independent guesses (wrong target path AND wrong
+      // content). A wrong-path write may still be pinned by the existing
+      // contract, but must be repaired by the model if its bytes are wrong.
+      const contentPin = actionGoal && !ctx?.readOnly && !pin?.corrected
+        ? pinSingleExactTextWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs) : null;
       const args = contentPin?.args || pin?.args || candidateArgs;
       if (pin?.corrected) {
         onEvent({ type: 'artifact_path_corrected', label, step: steps, tool: c.name,
