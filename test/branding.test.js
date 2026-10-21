@@ -53,7 +53,14 @@ test('the workflow file is valid YAML, with the node pin and the release asset s
 test('ui: the header and the tab use the M image, not a second drawn shape to keep in sync', () => {
   const html = read('src/ui/index.html');
   assert.match(html, /<img class="logo" src="\/logo\.png"/, 'the header must use the same M as the icon');
-  assert.match(html, /rel="icon" href="\/logo\.png"/, 'and the tab favicon');
+  assert.match(html, /rel="icon" type="image\/png" href="\/logo\.png\?v=__MAJIN_FAVICON_VERSION__"/, 'favicon must be versioned to refresh Windows Edge app icon');
+  const server = read('src/core/server/index.js');
+  assert.match(server, /p === '\/logo\.png'/, 'server must serve one canonical favicon route');
+  assert.match(server, /assets\/majin\.png/, 'browser app icon must use the same pink source as Windows installer');
+  assert.match(server, /__MAJIN_FAVICON_VERSION__/, 'favicon cache key comes from actual running version');
+  const build = read('scripts/build-exe.mjs');
+  assert.match(build, /copyFileSync\(path\.join\(root, 'assets', 'majin\.png'\), path\.join\(dist, 'ui', 'logo\.png'\)\)/,
+    'packaged UI icon must be the exact same PNG bytes as Windows installer');
   assert.doesNotMatch(html, /<svg class="logo"/, 'no second logo to keep in sync');
 });
 
