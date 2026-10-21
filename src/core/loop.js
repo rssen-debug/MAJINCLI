@@ -11,7 +11,7 @@ import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
-import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, verifySingleFileDeletion } from './goal-artifact.js';
+import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion } from './goal-artifact.js';
 import { verifyJobIdLineage, pinJobShortlistWrite } from './mission-data-evidence.js';
 import { verifyFollowupJobSelection } from './mission-data-evidence.js';
 
@@ -64,7 +64,11 @@ export function requiresRealAction(input) {
   // "Gör ...", not always a bare English verb. Avoid silently disabling the
   // output contract on those explicit execution requests.
   const directToolRequest = /^(?:(?:please|actually|faktiskt|snälla)\s+)*(?:use|använd)\s+(?:fs\.write|fs\.patch|browser\.open|browser\.shot)\s+(?:to\s+)?(?:create|write|open|save|skapa|skriv|öppna|spara)\b/i;
-  return (request.test(t) || directToolRequest.test(t) || /^g[oö]r\b/i.test(t)) && artifact.test(t);
+  // Multi-verb action prompts often start with a READ and then request a
+  // destructive/overwrite mutation. "Read foo.txt, then modify it" used to
+  // bypass final content proof because the first word was not "edit".
+  const readThenWrite = /^(?:read|läs|open|öppna)\b[\s\S]{0,260}\b(?:then|and then|sedan|och sedan)\s+(?:modify|edit|update|rewrite|overwrite|change|ändra|redigera|skriv|spara)\b/i;
+  return (request.test(t) || directToolRequest.test(t) || readThenWrite.test(t) || /^g[oö]r\b/i.test(t)) && artifact.test(t);
 }
 
 /**
@@ -377,7 +381,10 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       /* Del 10C: outside data is scanned for override attempts. Clean
          results stay byte-identical (zero token tax); a hit is annotated in
          the very message the model reads AND surfaced as an event. */
-      const writeProof = actionGoal ? feedbackForJavaScriptWrite(initialGoal, cfg.get('workspace'), r.name, r.args, ok) : null;
+      const writeProof = actionGoal ? (
+        feedbackForJavaScriptWrite(initialGoal, cfg.get('workspace'), r.name, r.args, ok) ||
+        feedbackForExactContentWrite(initialGoal, cfg.get('workspace'), r.name, r.args, ok)
+      ) : null;
       if (writeProof) {
         onEvent({ type: 'artifact_write_verify', label, step: steps, target: writeProof.target, ok: writeProof.ok });
       }
