@@ -297,14 +297,14 @@ function closeAnswer(ev) {
     foot.textContent = [meta.job && 'job ' + meta.job, meta.steps && meta.steps + ' steps', meta.tools && meta.tools + ' tools', meta.usage && (meta.usage.input + '→' + meta.usage.output + ' tok'), meta.usage && meta.usage.costUsd ? '$' + meta.usage.costUsd.toFixed(4) : null, secs + 's'].filter(Boolean).join(' · ');
     a.m.append(foot);
     const audibleReply = String(ev.text || S.curBody || '').trim();
-    if (S.voice && !S.cancelled && audibleReply) void speak(audibleReply);
+    if (S.voice && S.voiceTurn && !S.cancelled && audibleReply) void speak(audibleReply);
   }
   S.cur = null;
   S.tools = null;
 }
 
 /* --------------------------------- send --------------------------------- */
-async function send(text) {
+async function send(text, options = {}) {
 
   const input = String(text || '').trim();
   if (!input) return false;
@@ -318,6 +318,14 @@ async function send(text) {
      must NEVER wait for the first one. The /stop command above still reaches
      the running task. */
   if (S.busy) return parallelTask(input);
+  // Typing is not a voice command. Stop hands-free listening before sending,
+  // otherwise microphone, keyboard and synthesized audio race each other.
+  if (!options.voiceTurn && S.handsFree) {
+    S.handsFree = false;
+    stopMic();
+    window.speechSynthesis?.cancel();
+  }
+  S.voiceTurn = Boolean(options.voiceTurn);
   if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.reset(); // a new run gets a fresh canvas
   if (window.MAJIN_STUDIO) window.MAJIN_STUDIO.setState('connecting');
   S.taskId = null; S.deferredStopEvent = null;
@@ -888,7 +896,7 @@ function startMic() {
     try{r.stop();}catch{}
     $('input').value=command;autoGrow();
     voiceState('thinking','Working…');
-    send(command);
+    send(command, { voiceTurn: true });
   };
   r.onerror=e=>{
     if(e.error==='not-allowed'||e.error==='service-not-allowed'){
@@ -906,8 +914,8 @@ function startMic() {
   catch(e){stopMic();voiceState('error',e.message);}
 }
 function micToggle(){
-  if(S.handsFree){S.handsFree=false;stopMic();window.speechSynthesis?.cancel();}
-  else {S.handsFree=true;S.voice=true;$('b-voice')?.classList.add('on');startMic();}
+  if(S.handsFree){S.handsFree=false;S.voiceTurn=false;stopMic();window.speechSynthesis?.cancel();}
+  else {S.handsFree=true;S.voice=true;S.voiceTurn=false;$('b-voice')?.classList.add('on');startMic();}
 }
 let currentVoiceAudio=null, voiceRequest=null;
 async function neuralNarrator(text){
