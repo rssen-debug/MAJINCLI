@@ -169,3 +169,32 @@ test('W7 checkpoint revalidation: intact verified artifact is carried without re
   assert.ok(events.some((event) => event.type === 'mission_carried' && event.id === 'a' && event.reverified === true));
   assert.equal(readState(checkpointDir(wsDir, canonicalMissionId(goal))).status, 'complete');
 });
+
+
+test('W7 checkpoint identity: a recompiled task cannot reuse another task with the same node ID', async () => {
+  const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mrec-identity-'));
+  const goal = makeMissionGoal();
+  await runMission({
+    cfg: stubCfg(wsDir), registry: null, session: 'identity', input: goal,
+    modelCall: async () => compileGraph(),
+    workerOverride: workerFactory(wsDir, { a: 'ok', b: 'crash' }, {}),
+  });
+  const changedGraph = JSON.parse(compileGraph());
+  changedGraph.nodes[0].input += ' Also satisfy this NEW requirement, not present in the prior run.';
+  const nextCalls = {};
+  const events = [];
+  const resumed = await runMission({
+    cfg: stubCfg(wsDir), registry: null, session: 'identity', input: goal,
+    modelCall: async () => JSON.stringify(changedGraph),
+    workerOverride: workerFactory(wsDir, { a: 'ok', b: 'ok' }, nextCalls),
+    emit: (event) => events.push(event),
+  });
+  assert.equal(nextCalls.a, 1, 'the old matching file alone cannot prove the new task is done');
+  assert.equal(nextCalls.b, 1);
+  assert.equal(resumed.carriedCount, 0);
+  assert.ok(events.some((event) => event.type === 'mission_carry_invalid' && event.id === 'a' &&
+    /node changed|identity/.test(event.reason)));
+  const checkpoint = readState(checkpointDir(wsDir, canonicalMissionId(goal)));
+  assert.equal(checkpoint.status, 'complete');
+  assert.equal(checkpoint.nodes[0].input, changedGraph.nodes[0].input);
+});
