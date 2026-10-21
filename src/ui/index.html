@@ -307,6 +307,29 @@ body[data-voice-mode="paused"] .voice-orb span{animation-play-state:paused;heigh
 body[data-voice-mode="listening"] #composer .composer-talk{color:var(--cy)}
 body[data-voice-mode="speaking"] #composer .composer-talk{color:var(--ok)}
 .crow #mic-state:empty{display:none}
+/* Single MAJIN spirit in composer: one surface, never a floating card. */
+#composer{direction:ltr;text-align:left;grid-template-columns:38px minmax(0,1fr) 44px}
+#composer #input{direction:ltr;text-align:left;unicode-bidi:plaintext;justify-self:stretch;width:100%;margin:0;padding:10px 4px;align-self:center}
+#composer #input::placeholder{direction:ltr;text-align:left}
+#composer #voice-stage{grid-column:1/-1;display:flex;flex-direction:column;justify-content:center;gap:5px;align-items:center;min-height:96px;border-top:0;margin:0;padding:0 10px 8px;overflow:visible}
+#composer .voice-orb{position:relative;isolation:isolate;width:58px;height:58px;flex-shrink:0;border:0;background:transparent;overflow:visible;filter:drop-shadow(0 0 12px rgba(232,90,228,.25));transition:transform .28s ease,filter .28s ease}
+#composer .voice-orb .orb-core{position:absolute;inset:11px;border:0;width:auto;height:auto;border-radius:50%;background:radial-gradient(circle at 43% 36%,#fff3ff 0 7%,#ffb4f0 11%,#ee56d0 27%,#823de0 54%,#180d2b 76%);box-shadow:0 0 19px #ea58d97a,0 0 35px #7043d75a;animation:orb-breathe 2.2s ease-in-out infinite}
+#composer .voice-orb .orb-halo{position:absolute;inset:4px;border-radius:50%;border:2px solid rgba(251,107,218,.68);box-shadow:0 0 11px #e054d9a1,inset 0 0 9px #7548eb66;transform:rotate(30deg) skew(15deg,-9deg);animation:orb-drift 3.5s linear infinite}
+#composer .voice-orb .orb-halo-b{inset:0;border-color:#9d88ff8a;transform:rotate(-50deg) skew(-14deg,11deg);animation-duration:4.7s;animation-direction:reverse}
+#composer .voice-orb .orb-spark{position:absolute;left:46%;top:41%;width:8px;height:8px;transform:rotate(45deg);background:#fff;box-shadow:0 0 10px white,0 0 22px #f79af3;clip-path:polygon(50% 0,65% 38%,100% 50%,65% 62%,50% 100%,35% 62%,0 50%,35% 38%);animation:orb-breathe 1.8s ease-in-out infinite}
+#composer .voice-orb span:not(.orb-core):not(.orb-halo):not(.orb-spark){display:none}
+#composer .voice-stage-copy{text-align:center;align-items:center;width:100%}
+#composer .voice-stage-copy strong{font-size:11px;font-weight:560}
+#composer .voice-stage-copy small{font-size:10px;max-width:min(95%,350px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#composer #voice-stage-stop{position:absolute;right:12px;bottom:14px;color:var(--dim)}
+body[data-voice-mode="listening"] #composer .voice-orb{transform:scale(calc(1 + var(--voice-energy,0)*.16));filter:drop-shadow(0 0 17px #e05aff9e)}
+body[data-voice-mode="speaking"] #composer .voice-orb{transform:scale(1.1);filter:drop-shadow(0 0 19px #ffc2f088)}
+body[data-voice-mode="thinking"] #composer .orb-halo{animation-duration:1.45s}
+#composer #input{transition:opacity .2s ease}
+body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinking"] #composer #input,body[data-voice-mode="speaking"] #composer #input{opacity:.22}
+@keyframes orb-breathe{50%{transform:scale(1.14);opacity:.75}}
+@keyframes orb-drift{50%{border-radius:43% 57% 54% 46%}}
+@media(prefers-reduced-motion:reduce){#composer .voice-orb *{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
@@ -362,7 +385,7 @@ body[data-voice-mode="speaking"] #composer .composer-talk{color:var(--ok)}
     <textarea id="input" placeholder="Message MAJIN" rows="1" aria-label="Message MAJIN"></textarea>
     <button id="send" type="button" aria-label="Send message" title="Send message" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path class="send-arrow" d="M12 19V5m-6 6 6-6 6 6"/><rect class="send-stop" x="6" y="6" width="12" height="12" rx="2"/></svg></button>
     <div id="voice-stage" role="region" aria-label="MAJIN voice conversation" hidden>
-      <div class="voice-orb" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="voice-orb" aria-hidden="true"><span class="orb-core"></span><span class="orb-halo orb-halo-a"></span><span class="orb-halo orb-halo-b"></span><span class="orb-spark"></span></div>
       <div class="voice-stage-copy"><strong id="voice-stage-label">Listening</strong><small id="voice-caption">Speak naturally</small></div>
       <button id="voice-stage-stop" type="button" aria-label="End voice conversation" title="End voice call">×</button>
     </div>

@@ -5,8 +5,8 @@ test('speech recognition arms, sends actual user transcript and suspends while a
   const src=fs.readFileSync('src/ui/app.js','utf8');
   assert.match(src,/window\.SpeechRecognition\s*\|\|\s*window\.webkitSpeechRecognition/);
   assert.match(src,/r\.interimResults=true/);
-  assert.match(src,/if\(!complete\.trim\(\)\) return/);
-  assert.match(src,/send\(command, \{ voiceTurn: true \}\)/);
+  assert.match(src,/if\(!words\.trim\(\)\)return/);
+  assert.match(src,/send\(command,\{voiceTurn:true\}\)/);
   assert.match(src,/S\.handsFree=true/);
   assert.match(src,/if\(S\.handsFree&&!S\.busy\)startMic\(\)/);
   assert.match(src,/engine\.cancel\(\);engine\.resume\(\);engine\.speak\(u\)/);
@@ -50,7 +50,7 @@ test('keyboard turns do not trigger Talk; spoken turns stay hands-free',()=>{
   assert.match(src,/if \(!options\.voiceTurn\) \{/);
   assert.match(src,/if \(S\.handsFree\) \{ S\.handsFree = false; stopMic\(\); \}/);
   assert.match(src,/S\.voiceTurn = Boolean\(options\.voiceTurn\)/);
-  assert.match(src,/send\(command, \{ voiceTurn: true \}\)/);
+  assert.match(src,/send\(command,\{voiceTurn:true\}\)/);
   assert.match(src,/S\.voice && S\.voiceTurn && !S\.cancelled/);
 });
 test('workspace preview is persistent between tasks and reloads after HTML writes',()=>{
@@ -79,4 +79,16 @@ test('working status exposes current agent phase and long silence',()=>{
   assert.match(a,/workPulse\('Using '/);
   assert.match(a,/silent>=18/);
   assert.match(a,/still waiting for the current operation/);
+});
+
+test('real turn endpoint stops infinite background listening and voice UI is a single orb',()=>{
+  const src=fs.readFileSync('src/ui/app.js','utf8');
+  const html=fs.readFileSync('src/ui/index.html','utf8');
+  assert.match(src,/voiceSilenceTimer=setTimeout\(\(\)=>dispatchVoiceTurn\(r\)/);
+  assert.match(src,/voiceSessionTimer=setTimeout/);
+  assert.match(src,/S\.handsFree=false;stopVoiceMeter\(\)/);
+  assert.match(src,/echoCancellation:true,noiseSuppression:true,autoGainControl:true/);
+  assert.match(html,/class="orb-core"/);
+  assert.match(html,/class="orb-halo orb-halo-a"/);
+  assert.match(html,/#composer #input\{direction:ltr;text-align:left/);
 });
