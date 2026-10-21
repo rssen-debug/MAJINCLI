@@ -195,14 +195,18 @@ test('iss: the installer never lets a stale process outlive an upgrade', () => {
 });
 
 
-test('installed MAJIN icon and both shortcuts reference the generated artwork, not a Windows host icon', () => {
-  assert.match(iss, /^Source: "majin\\.ico"; DestDir: "\\{app\\}"; Flags: ignoreversion$/m);
-  assert.match(iss, /^UninstallDisplayIcon=\\{app\\}\\\\majin\\.ico$/m);
-  assert.match(iss, /Name: "\\{group\\}\\\\\\{#MyAppName\\}"[^\\n]*IconFilename: "\\{app\\}\\\\majin\\.ico"/);
-  assert.match(iss, /Name: "\\{autodesktop\\}\\\\\\{#MyAppName\\}"[^\\n]*IconFilename: "\\{app\\}\\\\majin\\.ico"/);
+
+test('installed MAJIN shortcuts and embedded EXE use one freshly generated icon', () => {
+  const entry = 'majin.ico';
+  const backslash = String.fromCharCode(92);
+  assert.ok(iss.includes('Source: "' + entry + '"; DestDir: "{app}"; Flags: ignoreversion'));
+  assert.ok(iss.includes('UninstallDisplayIcon={app}' + backslash + entry));
+  const shortcuts = iss.split(/\r?\n/).filter(x => x.includes('IconFilename:'));
+  assert.equal(shortcuts.length, 2, 'start menu and desktop shortcuts both use the branded icon');
+  for (const line of shortcuts) assert.ok(line.includes('IconFilename: "{app}' + backslash + entry), line);
   const exe = read('scripts/build-exe.mjs');
-  assert.match(exe, /refresh-icon\\.ps1/);
-  assert.match(exe, /path\\.join\\(dist, 'assets', 'majin\\.ico'\\)/);
-  const build = read('scripts/build-installer.mjs');
-  assert.match(build, /'dist', 'assets', 'majin\\.ico'/);
+  assert.ok(exe.includes('refresh-icon.ps1'), 'the multi-size .ico is regenerated at build time');
+  assert.ok(exe.includes("path.join(dist, 'assets', 'majin.ico')"));
+  const installer = read('scripts/build-installer.mjs');
+  assert.ok(installer.includes("'dist', 'assets', 'majin.ico'"));
 });
