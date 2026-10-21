@@ -870,7 +870,12 @@ let recog=null, speechActive=false, voiceArmed=false;
 function voiceState(mode,label) {
   document.body.dataset.voiceMode=mode;
   if ($('mic-state')) $('mic-state').textContent=label;
-  $('mic')?.setAttribute('aria-pressed',String(mode==='listening'));
+  $('mic')?.setAttribute('aria-pressed',String(Boolean(S.handsFree)));
+  const stage=$('voice-stage');
+  if(stage)stage.hidden=!S.handsFree;
+  const names={idle:'Ready to talk',listening:'Listening',thinking:'Thinking',speaking:'MAJIN speaking',paused:'Paused',error:'Voice unavailable'};
+  if($('voice-stage-label'))$('voice-stage-label').textContent=names[mode]||label||'Talk';
+  if($('voice-caption'))$('voice-caption').textContent=label||'Speak naturally';
 }
 function stopMic() {
   voiceArmed=false; S.listening=false;
@@ -925,8 +930,21 @@ function startMic() {
   catch(e){stopMic();voiceState('error',e.message);}
 }
 function micToggle(){
-  if(S.handsFree){S.handsFree=false;S.voiceTurn=false;stopMic();window.speechSynthesis?.cancel();}
-  else {S.handsFree=true;S.voice=true;S.voiceTurn=false;$('b-voice')?.classList.add('on');startMic();}
+  if(S.handsFree && !speechActive){
+    S.handsFree=false;S.voiceTurn=false;stopMic();
+    window.speechSynthesis?.cancel();
+    try{voiceRequest?.abort();currentVoiceAudio?.pause();}catch{}
+    voiceState('idle','Voice ready');
+  } else {
+    // Barge-in: tapping Talk while MAJIN is speaking interrupts playback.
+    window.speechSynthesis?.cancel();
+    try{voiceRequest?.abort();currentVoiceAudio?.pause();}catch{}
+    speechActive=false;
+    S.handsFree=true;S.voice=true;S.voiceTurn=false;
+    $('b-voice')?.classList.add('on');
+    voiceState('listening','Speak now');
+    startMic();
+  }
 }
 let currentVoiceAudio=null, voiceRequest=null;
 async function neuralNarrator(text){
@@ -1280,6 +1298,13 @@ $('b-test').onclick = async () => {
   setStatus('ready');
 };
 $('mic').onclick = micToggle;
+if ($('voice-stage-stop')) $('voice-stage-stop').onclick = () => {
+  S.handsFree=false;S.voiceTurn=false;
+  stopMic();
+  try { window.speechSynthesis?.cancel();voiceRequest?.abort();currentVoiceAudio?.pause(); } catch {}
+  speechActive=false;
+  voiceState('idle','Voice ready');
+};
 $('b-theme').onclick = () => {
   document.body.classList.add('theme-changing');
   requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('theme-changing')));
