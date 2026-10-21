@@ -49,13 +49,13 @@ $form.BackColor = [System.Drawing.Color]::FromArgb(30,12,45)
 $form.Opacity = 0.94
 $form.Width = 180; $form.Height = 46
 # Clipped pill avoids the ugly large rectangular debug window.
-$rounded = New-Object System.Drawing.Drawing2D.GraphicsPath
+$rounded = [System.Drawing.Drawing2D.GraphicsPath]::new()
 $rounded.AddArc(0,0,24,24,180,90)
 $rounded.AddArc(156,0,24,24,270,90)
 $rounded.AddArc(156,22,24,24,0,90)
 $rounded.AddArc(0,22,24,24,90,90)
 $rounded.CloseFigure()
-$form.Region = New-Object System.Drawing.Region($rounded)
+$form.Region = [System.Drawing.Region]::new($rounded)
 $form.Location = [System.Drawing.Point]::new(100,100)
 $circle = New-Object System.Windows.Forms.Panel
 $circle.Width = 30; $circle.Height = 30; $circle.Location = [System.Drawing.Point]::new(2,9)
