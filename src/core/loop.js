@@ -11,7 +11,7 @@ import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
-import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion, pinSingleExactTextWrite, verifySingleExactTextCreation } from './goal-artifact.js';
+import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion, pinSingleExactTextWrite, verifySingleExactTextCreation, verifyLocalTokenDemoFiles } from './goal-artifact.js';
 import { verifyJobIdLineage, pinJobShortlistWrite } from './mission-data-evidence.js';
 import { verifyFollowupJobSelection } from './mission-data-evidence.js';
 
@@ -406,6 +406,19 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         tool_call_id: r.id,
         content: guarded.text,
       });
+    }
+
+    // Explicit isolated TWO-FILE testnet demo: both source and deployment
+    // NOTES are already persisted by real permitted tools. Do not call a
+    // potentially stalled model again just to restate the verified file outcome.
+    // Never treat this as live token deployment or security certification.
+    if (actionGoal && !ctx?.readOnly) {
+      const demo = verifyLocalTokenDemoFiles(initialGoal, cfg.get('workspace'), results);
+      if (demo?.ok) {
+        onEvent({ type: 'local_token_demo_verified', label, step: steps, files: demo.files });
+        return { text: demo.text, steps, toolLog, usage: tally, escalated,
+          stopReason: 'verified_local_token_demo_files' };
+      }
     }
 
     // Atomic "create x.txt containing EXACTLY TOKEN": independent byte proof
