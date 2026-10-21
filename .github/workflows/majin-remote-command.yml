@@ -48,6 +48,8 @@ jobs:
             'EXECUTION ERROR: ' + $_.Exception.Message | Tee-Object -Append $log
           }
           '--- OUTPUT END ---' | Tee-Object -Append $log
+          # PS 5.1 Tee-Object writes UTF-16; normalize so readers see plain text.
+          (Get-Content $log -Raw) | Out-File $log -Encoding utf8
       - name: Upload captured output
         if: always()
         uses: actions/upload-artifact@v4
