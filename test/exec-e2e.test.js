@@ -75,3 +75,24 @@ test('W3 E2E exec.backends exposes measured availability (for honest planning)',
   assert.match(text, /local/);
   assert.match(text, /docker|ssh/);
 }, 20000);
+
+
+test('W3 E2E completed-before-wait: quick command remains waitable with full durable output', async () => {
+  const { ctx } = setup();
+  const marker = 'qa-fast-finished-before-wait-123';
+  const started = await tools('exec.start').run({ backend: 'local',
+    command: 'echo '+marker, timeoutSec: 15 }, ctx);
+  assert.equal(started.ok, true, JSON.stringify(started));
+  // Deliberately let the process complete BEFORE calling exec.wait.
+  // Previously settled() attached the exit handler only at wait time.
+  await new Promise(resolve => setTimeout(resolve, 1800));
+  const waited = await tools('exec.wait').run({ id: started.meta.id }, ctx);
+  assert.equal(waited.ok, true, JSON.stringify(waited).slice(0, 700));
+  assert.equal(waited.meta.exitCode, 0);
+  assert.equal(waited.meta.status, 'completed');
+  assert.match(waited.meta.stdoutTail, /qa-fast-finished-before-wait-123/);
+  const again = await tools('exec.wait').run({ id: started.meta.id }, ctx);
+  assert.equal(again.ok, true, 'a second waiter must receive the cached settled promise');
+  assert.equal(again.meta.exitCode, 0);
+  assert.ok(fs.existsSync(path.join(waited.meta.paths.metaDir,'meta.json')));
+});
