@@ -32,7 +32,7 @@
       "id": "W3-execution-backends",
       "wave": "W3",
       "desc": "Gemensamt execution-interface: local host + docker + ssh + isolated; resource limits, cancellation, logs, artifacts; ärliga fel (aldrig silent-host-fallback).",
-      "status": "IMPLEMENTERAD + basverifierad: gemensamt interface (exec.start/wait/cancel/logs/backends), local-backend REAL (powershell/bash plattform-aware), docker/ssh med ärliga FORBIDDEN-fel (aldrig tyst host-fallback), timeout/cancel/output-caps/persisted logs 7/7 ✓; konfig-drivna backend-val (remote-kerna saknar host konfigurélat — registering pending W3-gateway)"
+      "status": "VERIFIED - end-to-end genom verktygsytan (test/exec-e2e.test.js): exec.start local RIKTIGT kommando + exec.wait exit=0 & stdout-tail + DURABLE artifacts (streams+meta.json pa disk, oberoende av verktygssvaret) + cancel: sleeper = cancelled-med-akan (e2e-because-we-prove-it reason survive till metadatan, ok=false med code=cancelled) + docker/ssh never-silent-fallback (refusals utan id/metaDir betyder ingen process spawnad) + exec.backends availability; 4/4 + full svit"
     },
     {
       "rank": 5,
@@ -255,6 +255,13 @@
       "done": "W2 VERIFIED via real-socket e2e 3/3; forsta assertions var byggd av antagen shapes (S1/[S]-formatet, ok:true-for-0-hits) mot RIKTIGA engine-contractet — engine svarade no_sources/refusing-to-invent, citation numbers [n]; assertions calibrerade mot moten-verklighet testet fangade darvid ingen regresjon men EN known-limit for backlog",
       "percent": 79,
       "next": "W3 execution-backends VERIFIED-delta, eller W6 continue-absorb, eller win-runner acceptance"
+    },
+    {
+      "round": 21,
+      "date": "2026-10-21",
+      "done": "W3 VERIFIED via tool-surface e2e 4/4; forsta forsok skrev jag en slarvig egen efterbevis-assert (echo-namn-i-tail var meninlo& fel) - tog bort den feat ersatte med en SKARPAR demostration: refused-backends har NOLL id/metaDir = process never spawnad (dollar no-fallback-by-measurement); full svit groned",
+      "percent": 81,
+      "next": "W1 absorb VERIFIED-delta eller W6 continue-absorb eller win-runner acceptance"
     }
   ]
 }
