@@ -36,6 +36,19 @@ const SELF_DIR = (() => {
 })();
 const UI_CANDIDATES = [path.resolve(SELF_DIR, 'ui'), path.resolve(SELF_DIR, '../../ui'), path.join(path.dirname(process.execPath), 'ui'), path.resolve(process.cwd(), 'src/ui')];
 const UI_DIR = UI_CANDIDATES.find((d) => fs.existsSync(path.join(d, 'index.html'))) || UI_CANDIDATES[0];
+/* The Edge/Chrome --app window gets its TITLE BAR and TASKBAR icon from the
+ * favicon served by this HTTP server, NOT from MAJIN-Setup.exe's icon.
+ * Older releases served src/ui/logo.png while the installer used a separate
+ * assets/majin.png -> .ico. That mismatch produced the white/black M shown in
+ * Windows even when MAJIN's header had the pink logo. Use one canonical PNG.
+ */
+const BRAND_ICON_CANDIDATES = [
+  path.resolve(UI_DIR, '../assets/majin.png'),       // dist/ui -> dist/assets
+  path.resolve(UI_DIR, '../../assets/majin.png'),    // src/ui -> assets
+  path.resolve(SELF_DIR, 'assets/majin.png'),
+  path.join(path.dirname(process.execPath), 'assets', 'majin.png'),
+];
+const BRAND_ICON = BRAND_ICON_CANDIDATES.find((f) => fs.existsSync(f)) || null;
 const MAX_BODY = 64 * 1024 * 1024;
 
 /* ------------------------- deterministic fleet commands ------------------ */
@@ -198,6 +211,13 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     }
 
     /* ---------- UI + statiska ---------- */
+    // A single image for the MAJIN header, Edge app-mode titlebar, taskbar,
+    // shortcuts and EXE. Never serve the old src/ui/logo.png at this URL.
+    if (p === '/logo.png') {
+      if (!BRAND_ICON) return json(res, 404, { ok: false, error: 'MAJIN brand icon missing' });
+      res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store, max-age=0' });
+      return fs.createReadStream(BRAND_ICON).pipe(res);
+    }
     if (wantsIndex(p)) {
       const file = path.join(UI_DIR, 'index.html');
       if (!fs.existsSync(file)) return html(res, 200, '<pre>UI missing — run: npm run ui</pre>');
