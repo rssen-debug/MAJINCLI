@@ -413,6 +413,18 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
   #composer #work-progress[data-phase="verified"] .pulse::before,
   #composer #work-progress[data-phase="problem"] .pulse::before{animation:none}
 }
+
+/* Round 2: one discreet failure glyph inside existing activity dot, no panels */
+#composer #work-progress[data-phase="problem"] .pulse{
+  width:15px;height:15px;position:relative;border-radius:50%;
+  border:1px solid rgba(255,174,182,.7);background:rgba(235,77,111,.15);
+  box-shadow:0 0 14px rgba(244,86,121,.18);animation:none
+}
+#composer #work-progress[data-phase="problem"] .pulse::after{
+  content:"!";position:absolute;inset:0;display:grid;place-items:center;
+  font:800 10px/1 system-ui;color:#ffd5db;opacity:1;
+}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="problem"] .pulse{transition:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
