@@ -25,9 +25,24 @@ test('REAL Qwen3B regression: syntax-valid CommonJS in .mjs is NOT verified',()=
   assert.match(st.reason,/CommonJS module\.exports\/exports is not usable in \.mjs/);
   const feedback=feedbackForJavaScriptWrite(goal,ws,'fs.write',{path:name},true);
   assert.equal(feedback.ok,false);
-  assert.match(feedback.text,/ES MODULE CLI PATTERN/);
+  assert.match(feedback.text,/CommonJS module\.exports is not an ES module export/);
   assert.match(feedback.text,/process\.argv\[2\]/);
-  assert.match(feedback.text,/Do not repeat the same invalid code/);
+  assert.match(feedback.text,/Remove module\.exports and exports\.respond entirely/);
+});
+
+test('REAL Qwen3B latest regression: ESM export plus require(commander) must fail IMMEDIATELY',()=>{
+  const bad="export function respond(message) { return 'Received: ' + message; } "+
+    "const cli = require('commander'); cli.parse(process.argv); "+
+    "console.log(respond(cli.args[0] || ''));";
+  fs.writeFileSync(path.join(ws,name),bad);
+  const check=inspectRequestedArtifact(goal,ws);
+  assert.equal(check.ok,false);
+  assert.match(check.reason,/CommonJS require\(\.\.\.\) is not available in \.mjs/);
+  const output=feedbackForJavaScriptWrite(goal,ws,'fs.write',{path:name},true);
+  assert.equal(output.ok,false);
+  assert.match(output.text,/Use NO external CLI parser/);
+  assert.match(output.text,/process\.argv\[2\]/);
+  assert.match(output.text,/Do not import or require commander/);
 });
 
 test('syntax failure reports bounded Node diagnostic not full arbitrary model source',()=>{
@@ -66,7 +81,7 @@ test('actual agent loop surfaces precise ESM repair hint BEFORE next Qwen-like t
     modelCall:async({step,messages})=>{
       if(step===2){
         const result=messages.filter(m=>m.role==='tool').at(-1)?.content || '';
-        assert.match(result,/ES MODULE CLI PATTERN/);
+        assert.match(result,/CommonJS module\.exports is not an ES module export/);
         assert.match(result,/module\.exports/);
         showed=true;
       }
