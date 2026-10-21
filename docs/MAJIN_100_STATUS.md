@@ -4,7 +4,7 @@
 
 > Ärlighetsregel: ingen % utan reproducerbart bevis. Gamla COMPLETION_MATRIX.md (100/100 på papper) motsägs av uppmätta artefakter och ersätts av DENNA fil som sanning.
 
-## Total ekvivalent status: **92/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
+## Total ekvivalent status: **93/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
 
 ## Per-våg (VERIFIED kräver artefakt, INTE bara att koden finns)
 
@@ -21,7 +21,7 @@
 | W9 Memory sync | **MISSING** | ingen sync-modul |
 | W10 Learning loop | **MISSING** | ingen skills/learning-modul (tools/meta.js är introspection, inte learning) |
 | W11 Windows desktop vision | **PARTIAL-VERIFIED-DEL** | ✅ c01/c02 uppmätta; wincontrol.js-brygga i PR #94; agent-c04 run-dialog → Notepad kedjan var bevisad med skärmdumpar i tidigare iteration. Saknas: screenshot/vision-agent/UFO-evaluering + full uppgifts-e2e |
-| W12-CU-drivs kopplat (ny): computer-use.js loop + pink-cursor.js overlay pa befintlig control.* lane | **IMPLEMENTED-ENGINE / VERIFIED-OFFLINE / WIN-RUNNER PENDING** | 7/7 offline + 620/602/0/18; interaktiv Windows-session acceptance kravs for full W12
+| W12-CU-drivs kopplat (ny): computer-use.js loop + pink-cursor.js overlay pa befintlig control.* lane | **IMPLEMENTED-ENGINE / VERIFIED-OFFLINE / WIN-CI-AUTOMATED** | 7/7 offline; STANDING Windows-CI: A5 dry-plan PASS pa riktig windows-latest Node 22 (Actions run 39527628978, artifact win-acceptance-d2f2b72...) med hard gate; A0/A1 ãrligt NOT TESTED i service-session — full gate vantar pa interaktiv-evidens; 6 CI-rundor rotorsaksfixade (PS5.1-semi, BOM, param-scoping)
 W12 Pink AI cursor | **MISSING** | inget overlay/cursor-spår; tillåts inhemskt, separat från src/ui |
 | W13 Never-stuck engine | **PARTIAL** | ❌under motivirovol recovery success rate: QA-engine klarar 25/33 på äkta miljö; injec-failure + metrics-svit saknas |
 | W14 Release & benchmark | **PARTIAL-VERIFIED-DEL** | ✅ installerera-pipeline (SHA-256==installer, silent install, update check real-GitHub — Allied CI-verifierade). Saknas: rollback, reproducible, rollback-gates, competitive benchmark |

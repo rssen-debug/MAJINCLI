@@ -312,6 +312,18 @@
       "done": "W12 CI-loop: acceptance-pack kors veckovis+per-push pa windows-latest, produceret mottaglig evidence artifacts alla ganger (continue-on-error: true), verifikation mot kontraktet (aldrig forced-green; interactive-gate kvar-anpassad); YAML-validerad (js-yaml load passes, 7 steg)",
       "percent": 92,
       "next": "interactive win-acceptance-koring pa er maskin for PASS-grade, alternativt nasta REUSE-absorbance"
+    },
+    {
+      "round": 29,
+      "focus": "win-acceptance CI loop fully closed on REAL runner evidence",
+      "done": [
+        "win-runner-acceptance workflow: contract validation + A5 gate (pure Node, needs no desktop) + interactive-only full gate; uploads evidence artifact (30d retention)",
+        "run-all.ps1 hardened through 6 measured CI rounds: PS5.1-legal hash separators/conditionals, BOM-free JSON emit, non-interactive => A0/A1 NOT TESTED (never luck-pass), probes under Continue preference, param-default $PSScriptRoot scoping bug fixed (paths computed in body)",
+        "A5 computer.use dry-plan now PASSES on real windows-latest Node 22 with the actual tool registry; the gate turns real wiring regressions red instead of green-with-silent-fail"
+      ],
+      "evidence": "GitHub Actions runs 39527628978 (green, A5 PASS) and 39527393552 (red, gate caught missing probe); artifacts win-acceptance-<sha> inspected directly",
+      "verdict": "93/100"
     }
-  ]
+  ],
+  "percent": 93
 }
