@@ -371,7 +371,19 @@
       ],
       "evidence": "test/memory-sync.test.js; test/learn.test.js; npm test 787/0/17",
       "verdict": "98/100"
+    },
+    {
+      "round": 34,
+      "focus": "W6 Power Transfer MISSING -> VERIFIED-CORE: pipeline DISCOVER->PROPOSE->APPROVE->INSTALL->VERIFY pa absorb (W1) + teams (W4) — riktig e2e mot openai/swarm, aldrig fixtur-pastaende",
+      "done": [
+        "src/core/power-transfer.js: extractor swarm-Agent() python-literal + crewAI agents.yaml (injected js-yaml load); transferPlan deterministisk planHash + license-risk map; ledger append-only; applyPlan gate (not_approved-refusal) + idempotent upsert + roster read-back-verify",
+        "tools: power.propose/approve/apply (135 -> 138 verktyg; copyleft krawer acceptCopyleftRisk-flagga inne i gesten)",
+        "REAL e2e: absorber om openai/swarm (278 filer MIT) -> plan 3abbfa82573f5964 -> 3 agent-definitioner (triage/sales/refunds) installerade i demoteam med provenance + blackboard audit trail, inget upstream-kode exekverat",
+        "test/power-transfer.test.js 6/6; yaml-export-form (js-yaml v5 named exports) matched mot VERKLIG modul istallet for gissad; member-id-sanitizer vs TeamStore regex (underscores) atgardad med hogre-doman-sanning (assert mot derived id)"
+      ],
+      "evidence": "docs/evidence/w6-power-transfer-2026-10-21.md; npm test 802/0/17",
+      "verdict": "99/100"
     }
   ],
-  "percent": 98
+  "percent": 99
 }
