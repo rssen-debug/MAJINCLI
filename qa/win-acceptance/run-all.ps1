@@ -55,7 +55,16 @@ function Shot($name) {
 
 $interactive = [Environment]::UserInteractive
 if (-not $interactive) {
-  $results.Add([ordered]@{ step = 'A0', title = 'interactive desktop session', status = 'NOT TESTED', evidence = 'non-interactive session (service/ssh without desktop) — cursor overlay and UIA probes need a logged-in desktop; rerun interactively', artifact = $null })
+  # PowerShell ordered hashtables use semicolons/newlines, not commas.
+  # A1 is mandatory to the JSON validator even when no desktop exists.
+  $results.Add([ordered]@{
+    step = 'A0'; title = 'interactive desktop session'; status = 'NOT TESTED'
+    evidence = 'Non-interactive Windows CI session; GUI and cursor cannot be validated here'; artifact = $null
+  })
+  $results.Add([ordered]@{
+    step = 'A1'; title = 'pink cursor overlay visible + drawn on screen'; status = 'NOT TESTED'
+    evidence = 'No interactive desktop for a real screenshot; NOT TESTED on this runner'; artifact = $null
+  })
 }
 
 # A1 pink cursor overlay
@@ -73,7 +82,8 @@ if ($interactive) {
 Add-Step 'A5' 'computer.use lane smoke' {
   $exit = & node (Join-Path $Repo 'src\cli.js') --smoke 2>&1
   $ok = $LASTEXITCODE -eq 0
-  $results.Add([ordered]@{ step = 'A5'; title = 'computer.use lane smoke'; status = ($(if $ok { 'PASS' } else { 'FAIL' })); evidence = "exit=$LASTEXITCODE tail=$($exit[-3..-1] -join ' | ')"; artifact = $null })
+  $tail = (@($exit) | Select-Object -Last 3) -join ' | '
+  $results.Add([ordered]@{ step = 'A5'; title = 'computer.use lane smoke'; status = ($(if $ok { 'PASS' } else { 'FAIL' })); evidence = "exit=$LASTEXITCODE tail=$tail"; artifact = $null })
 }
 
 
@@ -85,6 +95,9 @@ $summary = [ordered]@{
   interactive = $interactive
   steps = $results.ToArray()
 }
-$summary | ConvertTo-Json -Depth 6 | Out-File -Encoding utf8 $Out
+# Windows PowerShell 5.1 Out-File -Encoding utf8 prepends a BOM.
+# Emit UTF-8 WITHOUT BOM so the Node.js JSON verifier can parse the artifact.
+$json = $summary | ConvertTo-Json -Depth 6
+[System.IO.File]::WriteAllText($Out, $json, (New-Object System.Text.UTF8Encoding($false)))
 $summary.steps | ForEach-Object { "{0}  {1}  {2}" -f $_.step, $_.status, $_.title } | Write-Host
 Write-Host "evidence: $Out"
