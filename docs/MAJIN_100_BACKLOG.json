@@ -25,7 +25,7 @@
       "wave": "W2",
       "desc": "PLAN→SEARCH→FETCH→EXTRACT→CROSS-CHECK→SYNTHESIZE→VERIFY + citation ledger, contradiction detection, reliability märkning.",
       "test": "test/research.test.js + real-topic fixture (offline-mocks for unit, real-net for integration)",
-      "status": "IMPLEMENTERAD + basverifierad (8/8 fixtures ✓, plan→search→fetch→extract→cross-check→synthesize→verify + ledgers; integration-honesty bevisad: zero-source => honest refusal); sandbox-search-egress blockerar real-net smoke här (DuckDuckGo/Bing 0 results) — verifikation mot live-webb flyttas till acceptance-lane"
+      "status": "VERIFIED - end-to-end over REAL socket (test/research-e2e.test.js): PLAN->SEARCH->FETCH->EXTRACT->CROSS-CHECK->SYNTHESIZE->VERIFY pa http-loopback; measured: sources:2 aggregate + 404 RAKNAD som error (never hidden) + bada claims nadden report med citationer [1]/[2] + tre-artifacts contract (report.md/ledger.json/sources.jsonl) + 404-URL ar INTE i sources + zero-hits = ENGINE REFUSERAR (refusing to invent, med hits:0-progress) + plan() inspekterbar; honest limit-finding: verify.conflicted flaggar ej nummer-konflikter over kluster graining (backlog praise)"
     },
     {
       "rank": 4,
@@ -248,6 +248,13 @@
       "done": "W5 VERIFIED via E2E + warmup-swallow-buggen fixad; sandbox-inlarst: node_modules fallest ut ur snapshots mellan sessioner (npm install kravdes innan e2e); hela korvagen forklarades phase-for-phase",
       "percent": 77,
       "next": "VERIFIED-delta W2/W3, eller W6 continue-absorb, eller win-runner acceptance-korning"
+    },
+    {
+      "round": 20,
+      "date": "2026-10-21",
+      "done": "W2 VERIFIED via real-socket e2e 3/3; forsta assertions var byggd av antagen shapes (S1/[S]-formatet, ok:true-for-0-hits) mot RIKTIGA engine-contractet — engine svarade no_sources/refusing-to-invent, citation numbers [n]; assertions calibrerade mot moten-verklighet testet fangade darvid ingen regresjon men EN known-limit for backlog",
+      "percent": 79,
+      "next": "W3 execution-backends VERIFIED-delta, eller W6 continue-absorb, eller win-runner acceptance"
     }
   ]
 }
