@@ -379,6 +379,16 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="verified"] .pulse{background:#9be5c5;box-shadow:0 0 0 3px rgba(118,225,182,.12);animation:none}
 #composer #work-progress[data-phase="verified"]::after{background:linear-gradient(90deg,transparent,rgba(143,237,199,.85),transparent);animation-duration:1.6s}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verified"]::after{animation:none}}
+
+/* V1 clarity pass: a thin living thread below the existing composer status.
+   No new panels, fabricated percentages or distracting overlays. */
+#composer #work-progress{position:relative;isolation:isolate;padding-bottom:10px}
+#composer #work-progress::after{content:"";position:absolute;left:8px;right:8px;bottom:2px;height:2px;border-radius:3px;background:linear-gradient(90deg,transparent 0%,rgba(242,103,213,.16) 28%,rgba(255,173,230,.9) 50%,rgba(144,92,244,.22) 72%,transparent 100%);background-size:200% 100%;animation:majin-activity-thread 2.5s linear infinite;pointer-events:none}
+#composer #work-progress[data-phase="stalled"]::after,#composer #work-progress[data-phase="problem"]::after{animation-duration:6s;opacity:.4}
+#composer #work-progress[data-phase="verified"]::after{animation:none;background:linear-gradient(90deg,transparent,#a2e5bd,transparent)}
+@keyframes majin-activity-thread{from{background-position:200% 0}to{background-position:0 0}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress::after{animation:none;background-position:50% 0}}
+
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
