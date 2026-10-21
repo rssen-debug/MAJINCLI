@@ -39,7 +39,7 @@ test('rejects arbitrary executable code or altered CommonJS functions rather tha
     failedSource.replace('process.argv.slice(2)','[ "fixed" ]'),
     failedSource.replace('console.log','eval'),
     'module.exports={respond:(message)=>message};',
-    failedSource.replace('args.join(\\' \\')','args.join(\\'|\\')'),
+    failedSource.replace("args.join(' ')", "args.join('|')"),
   ];
   for(const content of variants){
     assert.equal(repairSimpleCommonJsEchoCliWrite(goal,workspace,'fs.write',{path:name,content}),null);
