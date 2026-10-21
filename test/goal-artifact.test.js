@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-artifact-contract-'));
 process.env.MAJIN_HOME = home;
-const { inspectRequestedArtifact, explicitTarget } = await import('../src/core/goal-artifact.js');
+const { inspectRequestedArtifact, explicitTarget, repairSimpleFileWritingEchoCliWrite } = await import('../src/core/goal-artifact.js');
 const { createRuntime } = await import('../src/core/runtime.js');
 const { loop, requiresRealAction } = await import('../src/core/loop.js');
 const workspace = path.join(home, 'workspace');
@@ -81,4 +82,47 @@ test('explicit tool usage in real model prompts still activates artifact verific
   assert.equal(requiresRealAction('Actually use fs.write to create note-abc.txt containing EXACTLY QA_VALUE.'),true);
   assert.equal(requiresRealAction('Create site-demo.html with heading and CSS'),true);
   assert.equal(requiresRealAction('How do I create a file named example.txt?'),false);
+});
+
+
+function wrongQwenFileEchoSource() {
+  const tick = String.fromCharCode(96);
+  const dollar = String.fromCharCode(36);
+  return [
+    '#!/usr/bin/env node', '',
+    "import fs from 'node:fs';",
+    "import path from 'node:path';", '',
+    'export function respond(message) { return ' + tick + 'Received: ' + dollar + '{message}' + tick + '; }',
+    '', 'process.argv.slice(2).forEach(arg => {',
+    "  fs.writeFileSync(path.join(__dirname, 'response.txt'), respond(arg));",
+    '});',
+  ].join('\n');
+}
+
+test('real Qwen 3B evidence: tightly scoped ESM __dirname file-echo is converted to safe CLI stdout', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-qwen-echo-'));
+  const goal = 'Actually create a working Node.js CLI agent module in my-agent-probe.mjs. Export function respond(message) ' +
+    'with a helpful reply containing the message. Use process.argv and handle different arguments at runtime. No external dependencies.';
+  const source = wrongQwenFileEchoSource();
+  const params = { path: 'my-agent-probe.mjs', content: source };
+  const repaired = repairSimpleFileWritingEchoCliWrite(goal, dir, 'fs.write', params);
+  assert.equal(repaired?.corrected, true, 'observed full source shape should match the repair');
+  assert.ok(!repaired.args.content.includes('__dirname'));
+  assert.ok(!repaired.args.content.includes('writeFileSync'));
+  assert.match(repaired.args.content, /console\.log\(respond\(process\.argv\.slice\(2\)\.join/);
+  fs.writeFileSync(path.join(dir, 'my-agent-probe.mjs'), repaired.args.content);
+  const contract = inspectRequestedArtifact(goal, dir);
+  assert.equal(contract?.ok, true, JSON.stringify(contract));
+  const parse = spawnSync(process.execPath, ['--check', path.join(dir, 'my-agent-probe.mjs')], { encoding: 'utf8', timeout: 10000 });
+  assert.equal(parse.status, 0, String(parse.stderr || parse.error));
+  assert.equal(repairSimpleFileWritingEchoCliWrite(goal, dir, 'fs.write',
+    { path: '../outside.mjs', content: source }), null, 'never repair a different/escaped target');
+  assert.equal(repairSimpleFileWritingEchoCliWrite(goal, dir, 'fs.write',
+    { path: 'my-agent-probe.mjs', content: source + '\nprocess.exit(1);' }), null,
+    'reject unallowlisted extra source statements');
+  assert.equal(repairSimpleFileWritingEchoCliWrite(goal, dir, 'fs.write',
+    { path: 'my-agent-probe.mjs', content: source.replace('response.txt', 'victim.txt') }), null,
+    'reject arbitrary file side-effect destinations');
+  assert.equal(repairSimpleFileWritingEchoCliWrite('Just explain a CLI in my-agent-probe.mjs', dir, 'fs.write', params), null,
+    'never rewrite without the explicit respond and process.argv contract');
 });

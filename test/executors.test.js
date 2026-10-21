@@ -48,16 +48,25 @@ test('W3 cancellation: handle.cancel actually stops a running job (SIGTERM path)
 
 test('W3 docker backend: explicit request, never silent host-fallback', async () => {
   const dir = ws();
-  const out = startJob({ command: 'echo inside', backend: 'docker' }, { workspace: dir });
-  const inv = listBackends();
-  if (inv.docker.available) {
-    assert.equal(out.ok, false);
-    assert.equal(out.error.code, 'docker_image_required');
-  } else {
-    assert.equal(out.ok, false);
-    assert.equal(out.error.code, 'docker_unavailable');
-    assert.match(out.error.message, /FORBIDDEN/);
+  const marker = path.join(dir, 'HOST_FALLBACK_FORBIDDEN.txt');
+  // A deterministic hostile command: if the implementation silently chooses
+  // the local PowerShell/bash backend, this writes into the isolated workspace.
+  const command = process.platform === 'win32'
+    ? 'Set-Content -Path HOST_FALLBACK_FORBIDDEN.txt -Value BAD'
+    : 'printf BAD > HOST_FALLBACK_FORBIDDEN.txt';
+  const out = startJob({ command, backend: 'docker' }, { workspace: dir });
+  if (out.ok) {
+    out.handle.cancel('test-no-host-fallback');
+    await out.handle.settled();
   }
+  assert.equal(out.ok, false, 'docker without an image must never run a host command');
+  // Docker availability probing on CI can vary over seconds under load. Both
+  // are truthful fail-closed outcomes; do not compare two racy independent probes.
+  assert.ok(['docker_image_required', 'docker_unavailable'].includes(out.error?.code),
+    'explicit unavailable/image error expected, got ' + JSON.stringify(out.error));
+  if (out.error.code === 'docker_unavailable') assert.match(out.error.message, /FORBIDDEN/);
+  if (out.error.code === 'docker_image_required') assert.match(out.error.message, /job\\.image|image/);
+  assert.equal(fs.existsSync(marker), false, 'host command must not run as fallback');
 });
 
 test('W3 ssh backend: no host configured → honest error code (not host-exec)', () => {

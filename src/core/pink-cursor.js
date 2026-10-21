@@ -23,15 +23,36 @@ const OVERLAY_PS1 = String.raw`
 # MAJIN pink cursor overlay (WinForms) — spawned by src/core/pink-cursor.js
 param([string]$StateFile)
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-$form = New-Object System.Windows.Forms.Form
+# A topmost visual helper must NEVER capture user clicks or keyboard focus.
+# WinForms opacity/backdrop by itself DOES NOT make a window click-through.
+# Give the overlay a native transparent+no-activate extended style.
+$overlayType = @'
+using System;
+using System.Windows.Forms;
+public sealed class MajinVisualOverlay : Form {
+  protected override CreateParams CreateParams {
+    get {
+      CreateParams cp = base.CreateParams;
+      cp.ExStyle |= 0x00000020 | 0x08000000 | 0x00000080;
+      return cp;
+    }
+  }
+}
+'@
+Add-Type -TypeDefinition $overlayType -ReferencedAssemblies System.Windows.Forms,System.Drawing
+$form = New-Object MajinVisualOverlay
 $form.FormBorderStyle = 'None'; $form.ShowInTaskbar = $false; $form.TopMost = $true
-$form.TransparencyKey = [System.Drawing.Color]::Magenta
-$form.BackColor = [System.Drawing.Color]::Magenta
+# On a real interactive runner the layered TransparencyKey form can be
+# completely absent from CopyFromScreen even while its process keeps running.
+# Use a small, semi-opaque dark backing; the hot-pink circle remains visible.
+$form.BackColor = [System.Drawing.Color]::FromArgb(30,12,45)
+$form.Opacity = 0.94
 $form.Width = 220; $form.Height = 56
-$form.Location = New-Object System.Drawing.Point(100,100)
+$form.Location = [System.Drawing.Point]::new(100,100)
 $circle = New-Object System.Windows.Forms.Panel
-$circle.Width = 30; $circle.Height = 30; $circle.Location = New-Object System.Drawing.Point(2,13)
-$circle.Paint.Add({
+$circle.Width = 30; $circle.Height = 30; $circle.Location = [System.Drawing.Point]::new(2,13)
+$circle.BackColor = [System.Drawing.Color]::FromArgb(30,12,45)
+$circle.Add_Paint({
   param($s,$e)
   $g = $e.Graphics; $g.SmoothingMode = 'AntiAlias'
   $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(235, 255, 60, 165)); $g.FillEllipse($brush, 2,2,24,24)
@@ -41,7 +62,7 @@ $circle.Paint.Add({
 $lbl = New-Object System.Windows.Forms.Label
 $lbl.AutoSize = $false; $lbl.Width = 178; $lbl.Height = 40; $lbl.Location = New-Object System.Drawing.Point(38,8)
 $lbl.ForeColor = [System.Drawing.Color]::White; $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-$lbl.BackColor = [System.Drawing.Color]::FromArgb(160, 30, 12, 45)
+$lbl.BackColor = [System.Drawing.Color]::FromArgb(30, 12, 45)
 $lbl.Text = 'MAJIN'
 $form.Controls.Add($circle); $form.Controls.Add($lbl)
 $timer = New-Object System.Windows.Forms.Timer; $timer.Interval = 60
@@ -61,7 +82,7 @@ $timer.Add_Tick({
   if ($script:target) {
     $dx = ($script:target[0] - $form.Location.X) / 4; $dy = ($script:target[1] - $form.Location.Y) / 4
     if ([math]::Abs($dx) -lt 1 -and [math]::Abs($dy) -lt 1) { $script:target = $null }
-    else { $form.Location = New-Object System.Drawing.Point(($form.Location.X + [int]$dx), ($form.Location.Y + [int]$dy)) }
+    else { $form.Location = [System.Drawing.Point]::new([int]($form.Location.X + [int]$dx), [int]($form.Location.Y + [int]$dy)) }
   }
 })
 $timer.Start()
@@ -69,6 +90,14 @@ $timer.Start()
 `;
 
 let overlayProc = null;
+export function overlayStatus() {
+  return {
+    pid: overlayProc?.pid || null,
+    alive: Boolean(overlayProc && overlayProc.exitCode == null && !overlayProc.killed),
+    exitCode: overlayProc?.exitCode ?? null,
+  };
+}
+
 
 export function cursorPaths(workspaceDir) {
   const dir = path.join(workspaceDir, 'cursor');
@@ -79,7 +108,9 @@ export function ensureOverlayFiles(workspaceDir) {
   const p = cursorPaths(workspaceDir);
   fs.mkdirSync(p.dir, { recursive: true });
   const tmp = p.ps1 + '.tmp';
-  fs.writeFileSync(tmp, OVERLAY_PS1);
+  // Include a UTF-8 BOM: Windows PowerShell 5.1 otherwise parses UTF-8 source
+  // as ANSI and can corrupt characters in labels and diagnostic text.
+  fs.writeFileSync(tmp, '\uFEFF' + OVERLAY_PS1);
   fs.renameSync(tmp, p.ps1);
   return p;
 }
@@ -88,8 +119,11 @@ export function ensureOverlayRunning(workspaceDir) {
   if (!isWindowsDesktop()) return { started: false, reason: 'not-windows-desktop' };
   if (overlayProc && overlayProc.exitCode == null) return { started: false, reason: 'already-running' };
   const p = ensureOverlayFiles(workspaceDir);
-  overlayProc = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', p.ps1, '-StateFile', p.state], {
-    stdio: 'ignore', detached: true, windowsHide: true,
+  overlayProc = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', p.ps1, '-StateFile', p.state], {
+    // A detached Windows child exited immediately (code 0) on the REAL
+    // interactive runner, while a normal PowerShell WinForms child stayed
+    // alive. Unref the handle without DETACHED_PROCESS so the overlay can run.
+    stdio: 'ignore', detached: false, windowsHide: true,
   });
   overlayProc.unref();
   return { started: true, pid: overlayProc.pid };
