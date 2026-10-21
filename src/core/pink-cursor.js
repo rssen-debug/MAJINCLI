@@ -69,7 +69,7 @@ $timer = New-Object System.Windows.Forms.Timer; $timer.Interval = 60
 $script:target = $null
 $timer.Add_Tick({
   if (Test-Path $StateFile) {
-    try { $cmd = Get-Content $StateFile -Raw -ErrorAction Stop | ConvertFrom-Json } catch { $cmd = $null }
+    try { $cmd = Get-Content $StateFile -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json } catch { $cmd = $null }
     if ($cmd -ne $null -and $cmd.op -eq 'quit') { $form.Close(); return }
     if ($cmd -ne $null -and $cmd.op -eq 'hide') { $form.Hide(); return }
     if ($cmd -ne $null -and $cmd.op -eq 'show') { $form.Show() }
