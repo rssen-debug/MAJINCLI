@@ -53,7 +53,10 @@ function Shot($name) {
   $b.Save($path); $g.Dispose(); $b.Dispose(); return $path
 }
 
-$interactive = [Environment]::UserInteractive
+# Github-hosted Windows Actions runs as a service with no usable desktop,
+# even when UserInteractive unexpectedly reports true. Keep self-hosted
+# interactive desktop runs eligible for genuine screenshot evidence.
+$interactive = [Environment]::UserInteractive -and ($env:RUNNER_ENVIRONMENT -ne 'github-hosted')
 if (-not $interactive) {
   # PowerShell ordered hashtables use semicolons/newlines, not commas.
   # A1 is mandatory to the JSON validator even when no desktop exists.
@@ -78,12 +81,15 @@ if ($interactive) {
   }
 }
 
-# A5 computer.use lane smoke
-Add-Step 'A5' 'computer.use lane smoke' {
-  $exit = & node (Join-Path $Repo 'src\cli.js') --smoke 2>&1
-  $ok = $LASTEXITCODE -eq 0
-  $tail = (@($exit) | Select-Object -Last 3) -join ' | '
-  $results.Add([ordered]@{ step = 'A5'; title = 'computer.use lane smoke'; status = ($(if ($ok) { 'PASS' } else { 'FAIL' })); evidence = "exit=$LASTEXITCODE tail=$tail"; artifact = $null })
+# A5 checks only ACTUAL computer.use dry-plan tool wiring.
+# Never infer live desktop-control success from this non-interactive probe.
+Add-Step 'A5' 'computer.use dry-plan wiring smoke (NO live desktop action)' {
+  $probe = Join-Path $Repo 'qa\win-acceptance\computer-use-smoke.mjs'
+  $output = & node $probe 2>&1
+  $code = $LASTEXITCODE
+  $ok = $code -eq 0
+  $tail = (@($output) | Select-Object -Last 3) -join ' | '
+  $results.Add([ordered]@{ step = 'A5'; title = 'computer.use dry-plan wiring smoke (NO live desktop action)'; status = ($(if ($ok) { 'PASS' } else { 'FAIL' })); evidence = "exit=$code dry-plan ONLY; no real mouse or GUI assertion; $tail"; artifact = $null })
 }
 
 
