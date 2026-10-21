@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * W2 live-acceptance EVIDENTIAL audit: the live run happened (scripts/research-live-acceptance
@@ -11,7 +12,7 @@ import path from 'node:path';
  * Missing artifacts = explicit failure: a lane claiming live acceptance must SHOW its receipts.
  */
 
-const DIR = path.resolve(new URL('../docs/evidence/research-live-2026-10-21', import.meta.url).pathname);
+const DIR = fileURLToPath(new URL('../docs/evidence/research-live-2026-10-21', import.meta.url));
 
 test('W2 live-acceptance: committade artifacts existerar med receipt-block', () => {
   for (const f of ['report.md', 'ledger.json', 'sources.jsonl', 'adapter-notes.json']) {
