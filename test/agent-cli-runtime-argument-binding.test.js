@@ -50,6 +50,20 @@ test('actual exported responder propagates two different unpredictable CLI args'
   assert.notEqual(a.stdout,b.stdout);
 });
 
+test('legacy CLI that directly prints a new positional argument remains valid',()=>{
+  const direct='export function respond(message) { return "Received: " + message; }\n'+
+    "const args = process.argv.slice(2); if (args[0] === 'QA_PING') { console.log('QA_PING'); } else { console.log(args[0]); }\n";
+  fs.writeFileSync(dest,direct);
+  const verdict=inspectRequestedArtifact(goal,workspace);
+  assert.equal(verdict.ok,true,verdict.reason);
+  const a=spawnSync(process.execPath,[dest,'QA_PING_NEVER_SEEN_A'],{encoding:'utf8'});
+  const b=spawnSync(process.execPath,[dest,'QA_PING_NEVER_SEEN_B'],{encoding:'utf8'});
+  assert.equal(a.status,0);
+  assert.equal(b.status,0);
+  assert.match(a.stdout,/QA_PING_NEVER_SEEN_A/);
+  assert.match(b.stdout,/QA_PING_NEVER_SEEN_B/);
+});
+
 test('real MAJIN agent receives immediate failure feedback then repairs original CLI',async()=>{
   fs.rmSync(dest,{force:true});
   const rt=await createRuntime({channels:false,scheduler:false});
