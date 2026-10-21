@@ -60,6 +60,9 @@ try{
   await page.locator('#c-model').click();
   await page.waitForFunction(()=>document.querySelector('#modeldrop')?.hidden===false);
   await page.getByRole('combobox',{name:'Provider'}).selectOption('opencode');
+  // The exact-ID input intentionally lives in a collapsed disclosure; open
+  // the real user-facing control instead of trying to fill a hidden field.
+  await page.getByText('Use an exact model ID',{exact:true}).click();
   await page.getByRole('textbox',{name:'Exact model ID'}).fill('glm-5.3-flash');
   await page.getByRole('button',{name:'Use this ID'}).click();
   await page.waitForFunction(()=>document.querySelector('#modeldrop')?.hidden===true,{timeout:10000});
