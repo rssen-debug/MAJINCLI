@@ -395,6 +395,20 @@
       ],
       "evidence": "docs/evidence/w14-release-2026-10-21.md + competitive-bench-2026-10-21.{json,md} + reproducible-2026-10-21.json; npm test 846/0/17",
       "verdict": "99/100 — CAP-anteckning oförändrad: W14 stängd höjer inte percent över 99; W11 (desktop vision) + W12 (pink cursor interaktiv acceptance på användarens maskin) är contessanterna. 100 = W11+W12 verifierade på riktig hårdvara."
+    },
+    {
+      "round": 36,
+      "focus": "W11 pARTIAL-VERIFIED-DEL -> VERIFIED-CORE: desktop vision-grounding + task-eval-harness byggda core-verifierbart; live-hardware-del deklarerad deferred (aldrig fabrikerad)",
+      "done": [
+        "Reuse-principen: absorb microsoft/UFO i sandlådan (851 filer, MIT) — layout (HostAgent/AppAgent-split) och conditional-hardware-disciplinen återanvända; innehåll aldrig kopierat (kompositionen MAJINs: vision.js + computer-use observe)",
+        "src/core/desktop-vision.js (majin-desktop-vision/1): injicerad captureFn krävs — utan → DesktopVisionError (ingen frabricerad skärmdump); captureEvidence skriver bytes+sha256 före analys; groundTargets accepterar BARA strikt JSON [{label,x,y}] (prosa → refusal, aldrig gissade klickkoordinater); verifyOnScreen kräver callers accept() — aldrig modellen-sa-ja; platformGate: live lane BARA win32",
+        "src/core/desktop-eval.js (majin-desktop-eval/1): diskrimineringskontrakt som competitive-bench — simulerade verifierare MÅSTE passa good och faila bad annars flagged (cheat-vs-broken); windows-real på icke-Windows → DEFERRED hardware-required (aldrig pass/fail); aggregate räknar deferred separat; agentLanesLive=pending-hardware",
+        "3 egna desktop-tasks (eget innehåll): notepad-write-save (spec.json-sanning vs note.txt-bytes), window-title-observe (state.json ground truth vs answer.txt claim), rename-file-dialog-win (WINDOWS REAL LANE: proof=%TEMP%-filsystem, setup-PS1 med read-back verify, icke-Windows exit 3 deferred)",
+        "test/desktop-vision.test.js 7/7 + test/desktop-eval.test.js 6/6; scripts/desktop-bench.mjs --save → docs/evidence/desktop-bench-2026-10-21.{json,md} (2 verified, 1 deferred, flagged=0, healthy)",
+        "self-audit (W1-4-repo-hygiëník) fångade claim-ord i renderDesktopMarkdown — neutraliserad; full regression 846→859/0/17"
+      ],
+      "evidence": "docs/evidence/w11-desktop-vision-2026-10-21.md + docs/evidence/desktop-bench-2026-10-21.{json,md}; npm test 859/0/17",
+      "verdict": "99/100 — CAP kvarstår: W11 core-maskin sanning verifierad i sandlådan, men LIVE screenshot/UFO-eval-körningen kräver Windows-hårdvara; W12 interaktiv acceptance kräver användarens maskin. 100 = rikitig hårdvara, aldrig simulation."
     }
   ],
   "percent": 99
