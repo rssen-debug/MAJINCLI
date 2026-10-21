@@ -163,6 +163,19 @@ try {
     const cloud=await computer.run({goal:cloudGoal,maxSteps:'7'},{session:'owner-majin-go-'+nonce,
       cfg:new Config(cfgData),registry:controlledRegistry,emit:()=>{},signal:timeout,
     });
+    if (!cloud.ok) {
+      // Only the synthetic allowlisted window is exposed. Record no private
+      // screenshots, raw provider responses or unrelated window titles.
+      let trace=[];
+      try {
+        trace=fs.readFileSync(path.join(cloud.meta?.evidence||'','steps.jsonl'),'utf8')
+          .split(/\\r?\\n/).filter(Boolean).map(JSON.parse)
+          .map(x=>({phase:x.phase,step:x.step,action:x.action,tool:x.tool,ok:x.ok,
+            error:x.error,reason:x.reason,note:x.note,rawAction:x.raw?.action||null}));
+      } catch {}
+      verdict.cloudTrace=trace.slice(-18);
+      console.log('GO_DESKTOP_TRACE '+JSON.stringify(verdict.cloudTrace).slice(-3000));
+    }
     assert.equal(cloud.ok,true,'Real OpenCode Go desktop planner failed: '+JSON.stringify(cloud.error||cloud).slice(0,350));
     assert.equal(fs.readFileSync(savedFile,'utf8'),cloudText,
       'Go planner did not actually click Save QA after entering the chosen text');
