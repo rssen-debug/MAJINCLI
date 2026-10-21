@@ -1,6 +1,6 @@
 # MAJIN V2 — LATEST HANDOFF (owner-facing, 2026-10-21)
 
-V2 HEAD (v2/main): 003f07a + in-flight PR (this turn: scheduler work, merges at end of turn)
+V2 HEAD (v2/main): b96fc1ec (kernel + scheduler + verifier registry + event bus merged)
 
 COMPLETED (this working day, verified):
 - v2/main created from V1 tip 282a8ff; V1 untouched (policy: only v2/* branches carry V2 code)
@@ -28,6 +28,6 @@ BLOCKED: none
 OPEN PRS: scheduler PR (merge tracks end of this turn)
 
 NEXT (roadmap order):
-1. Verifier registry (file/http/dom/pixel checks) reusing src/core/goal-artifact.js
-2. Event bus typed events into Studio timeline
-3. GAUNTLET harness skeleton (PHASE 10), then hardware lane vs 2.0.0-alpha via majin-remote-command
+1. GAUNTLET harness skeleton (PHASE 10) + first golden tasks against the verifier registry
+2. Context engine + memory store (PHASE 7) with JSON-first persistence, sqlite decision at alpha packaging
+3. Hardware lane vs 2.0.0-alpha on the owner PC via majin-remote-command (PHASE 4 prep)
