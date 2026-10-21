@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, VERSION } from '../src/core/browser-ground.js';
@@ -61,3 +62,32 @@ test('browser grounding uses accessible labels and does not read typed form valu
   assert.match(GROUND_JS,/aria-labelledby/);
   assert.match(GROUND_JS,/\[sensitive field\]/);
 });
+
+test('focused browser observations find relevant accessible controls without hidden values',()=>{
+  const list=[
+    {ref:'e1',tag:'button',role:'button',text:'Save changes',name:null,id:'save'},
+    {ref:'e2',tag:'input',role:'checkbox',text:'Accept terms',name:'consent',id:null},
+    {ref:'e3',tag:'a',role:'link',text:'Privacy policy',name:null,id:null},
+    {ref:'e4',tag:'button',role:'button',text:'Cancel',name:null,id:null},
+  ];
+  assert.deepEqual(findGroundedControls(list,'save').map(x=>x.ref),['e1']);
+  assert.deepEqual(findGroundedControls(list,'checkbox terms').map(x=>x.ref),['e2']);
+  assert.equal(findGroundedControls(list,'totally absent').length,0);
+  assert.equal(findGroundedControls(list,'').length,0);
+  assert.ok(findGroundedControls(list,'button',{cap:1}).length<=1);
+});
+test('browser.elements accepts a focused query and preserves complete reference cache',async()=>{
+  const {readFileSync}=await import('node:fs');
+  const src=readFileSync('src/core/tools/web.js','utf8');
+  assert.match(src,/browser\.elements\(\{query:/);
+  assert.match(src,/findGroundedControls\(payload\.elements/);
+  assert.match(src,/rememberRefs\(session, payload\.elements \|\| \[\]\)/);
+});
+
+test('each round keeps working feedback in a single accessible composer row',()=>{
+  const fs=requireFixture();
+  assert.match(fs,/id="work-progress" role="status"/);
+  assert.match(fs,/@keyframes majin-progress-glide/);
+  assert.match(fs,/prefers-reduced-motion:reduce/);
+});
+function requireFixture(){ return fs.readFileSync('src/ui/index.html','utf8'); }
