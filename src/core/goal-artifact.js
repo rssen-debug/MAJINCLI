@@ -321,6 +321,42 @@ export function verifySingleExactTextCreation(goal, workspace, tool, args, toolO
  * This modifies only an authorized pending fs.write, never reads or executes
  * model-provided code. The normal guarded tool and post-write checks follow.
  */
+/**
+ * Narrow repair for a real free-model failure mixing ES export and
+ * "module.exports = { respond }" in ONE .mjs file, without a CLI entrypoint.
+ * ESM and CommonJS cannot be mixed this way. Repair only a minimal
+ * single-return responder; reject existing CLI, imports, option parser,
+ * filesystem/process calls or unrelated source. Never execute the source.
+ */
+export function repairSimpleMixedEsmCliWrite(goal, workspace, tool, args) {
+  if (tool !== 'fs.write' || !args || typeof args.path !== 'string' ||
+      typeof args.content !== 'string') return null;
+  const target = explicitTarget(goal, workspace);
+  const request = String(goal || '');
+  if (!target || !/\.mjs$/i.test(target.name) ||
+      path.resolve(target.workspace, args.path) !== target.path ||
+      !/\bno\s+external\s+dependencies\b/i.test(request) ||
+      !/\bCLI\b/i.test(request) ||
+      !/\brespond\s*\(\s*message\s*\)/i.test(request)) return null;
+  const src = args.content.trim();
+  if (src.length > 1500 || /\b(?:require|import|process|console|eval|Function|setTimeout|fetch|module\.children)\b/.test(
+    src.replace(/\bmodule\.exports\b/g, 'COMMONJS_EXPORT')
+  )) return null;
+  const normalized = src.replace(/\$\{\s*message\s*\}/g, 'MESSAGE_INTERPOLATION');
+  const pattern = /^\s*export\s+function\s+respond\s*\(\s*message\s*\)\s*\{\s*return\s+[^{};\n]{1,900}\s*;\s*\}\s*module\.exports\s*=\s*\{\s*respond\s*\}\s*;?\s*$/;
+  if (!pattern.test(normalized)) return null;
+  const body = src.replace(/\s*module\.exports\s*=\s*\{\s*respond\s*\}\s*;?\s*$/, '').trimEnd();
+  if (body === src) return null;
+  const content = body +
+    '\nimport { pathToFileURL } from "node:url";\n' +
+    'if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {\n' +
+    '  console.log(respond(process.argv[2] || ""));\n}\n';
+  return {
+    corrected: true, target: target.name, args: { ...args, content },
+    reason: 'replaced mixed ESM/CommonJS export with a correct isolated CLI entrypoint',
+  };
+}
+
 export function repairSimpleCommanderCliWrite(goal, workspace, tool, args) {
   if (tool !== 'fs.write' || !args || typeof args.path !== 'string' ||
       typeof args.content !== 'string') return null;
