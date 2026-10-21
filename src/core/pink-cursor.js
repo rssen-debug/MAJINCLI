@@ -102,7 +102,7 @@ export function ensureOverlayRunning(workspaceDir) {
   if (!isWindowsDesktop()) return { started: false, reason: 'not-windows-desktop' };
   if (overlayProc && overlayProc.exitCode == null) return { started: false, reason: 'already-running' };
   const p = ensureOverlayFiles(workspaceDir);
-  overlayProc = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', p.ps1, '-StateFile', p.state], {
+  overlayProc = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', p.ps1, '-StateFile', p.state], {
     stdio: 'ignore', detached: true, windowsHide: true,
   });
   overlayProc.unref();
