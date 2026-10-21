@@ -1,5 +1,5 @@
 {
-  "asOf": "2026-10-20",
+  "asOf": "2026-10-21",
   "branch": "fix/realworld-repairs",
   "principle": "verifiera före implementereser; aldrig papper-rör som färdig",
   "priority": [
@@ -383,6 +383,18 @@
       ],
       "evidence": "docs/evidence/w6-power-transfer-2026-10-21.md; npm test 802/0/17",
       "verdict": "99/100"
+    },
+    {
+      "round": 35,
+      "focus": "W14 PARTIAL-VERIFIED-DEL -> VERIFIED-CORE: tre luckor (rollback / reproducible / competitive benchmark) stängda mot riktiga mätningar",
+      "done": [
+        "Rollback: src/core/update-rollback.js (majin-rollback/1) — install-manifest + isolerade backup-kopior under .rollback/backups/<v>/ (överlever att installern raderar källfilen, testat), planRollback väljer senaste TIDIGARE version och verifierar backup-sha256 (tamperade bytes = refusal, aldrig restore av oidentifierat innehåll); executeRollback KRÄVER injicerad plattforms-restorer — utan hook → RollbackError no restorer injected (exit 3 via scripts/rollback.mjs); ledger.jsonl appendas först EFTER lyckad restore",
+        "Reproducible: src/core/reproducible.js — manifestHash = sha256 över git-ls-files (path\\0mode\\0size\\0content-sha256); proof = två computes identiska, live-run 494 tracked files/5 399 009 bytes identical ✓; untracked brus påverkar ALDRIG hashen (testat); binary-exe bit-exact scope = NOT TESTED deklarerat (pkg/NT-signing/timestamps). scripts/reproducible-check.mjs --save → docs/evidence/reproducible-2026-10-21.json",
+        "Competitive benchmark: src/core/competitive-bench.js (majin-competitive-bench/1) — reuse-princip: absorb laude-institute/terminal-bench (layouten och verifier-kontrakt återanvänt; canary GUID-task-innehåll kopierat ALDRIG) + tre egna native tasks (report-largest/json-key-extract/two-step-chain) där verifiern omberäknar sanningen ur task-inputs. Kontrakt: good PASS + bad FAIL annars flagged med cheat-vs-broken-distinktion; live 3/3 verified; anti-cheats validerade (fuskande verifier → harness.healthy=false); agentLanesLive=pending-credentials (aldrig fabrication). scripts/competitive-bench.mjs exit≠0 om flagged",
+        "test/w14-release.test.js 10/10 grön; full regression 846/0/17 (802→846); transcript-fynd korrigerat: renderMarkdown in-operator-på-primitiv-bugg fixad före push"
+      ],
+      "evidence": "docs/evidence/w14-release-2026-10-21.md + competitive-bench-2026-10-21.{json,md} + reproducible-2026-10-21.json; npm test 846/0/17",
+      "verdict": "99/100 — CAP-anteckning oförändrad: W14 stängd höjer inte percent över 99; W11 (desktop vision) + W12 (pink cursor interaktiv acceptance på användarens maskin) är contessanterna. 100 = W11+W12 verifierade på riktig hårdvara."
     }
   ],
   "percent": 99
