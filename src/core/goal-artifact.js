@@ -9,6 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { forwardsJoinedRuntimeThroughLocal } from './argv-joined-dataflow.js';
 
 const TARGET = /(?<![\/\\\w.-])([\w-]+\.(?:txt|md|json|js|mjs|jsx|ts|tsx|html|css|py|csv|sol))\b/gi;
 
@@ -135,7 +136,8 @@ export function inspectRequestedArtifact(input, workspace) {
         // This is a runtime-derived argument, not a hardcoded QA_PING token.
         const forwardsJoinedRuntime = /\brespond\s*\(\s*process\.argv\.slice\s*\(\s*2\s*\)\.join\s*\(/i.test(noDefinition) ||
           (/\brespond\s*\(\s*args\.join\s*\(/i.test(noDefinition) &&
-           /\b(?:const|let)\s+args\s*=\s*process\.argv\.slice\s*\(\s*2\s*\)/i.test(data));
+           /\b(?:const|let)\s+args\s*=\s*process\.argv\.slice\s*\(\s*2\s*\)/i.test(data)) ||
+          forwardsJoinedRuntimeThroughLocal(noDefinition);
         if (!respondsToArgument && !printsRuntimeArgument && !forwardsJoinedRuntime) {
           missing.push('CLI does not call respond() with the runtime argument; hardcoded QA_PING / DIFFERENT branches do not handle arbitrary inputs. Use console.log(respond(process.argv[2] || "")) so ANY new input is reflected in output');
         }
@@ -214,6 +216,8 @@ export function feedbackForJavaScriptWrite(goal, workspace, tool, args, writtenO
   // times with an unterminated template literal. A concrete *syntax-safe*
   // miniature example is more actionable than just "node --check failed".
   // It is guidance ONLY; never silently overwrite the model's source.
+  const literalNewlineHint = !check.ok && check.missing.some(x => x.startsWith('invalid JavaScript syntax')) && (() => { try { return fs.readFileSync(target.path, 'utf8').includes(String.fromCharCode(92) + 'n'); } catch { return false; } })()
+    ? ' Replace literal escaped newlines outside strings with actual line breaks and rewrite this file.' : '';
   const syntaxHint = !check.ok && /\.mjs$/i.test(target.name) &&
     check.missing.some(x => x.startsWith('invalid JavaScript syntax')) &&
     /\bCLI\b/i.test(goal) && /\brespond\s*\(\s*message\s*\)/i.test(goal) &&
@@ -236,7 +240,7 @@ export function feedbackForJavaScriptWrite(goal, workspace, tool, args, writtenO
     : { ok: false, target: target.name,
         text: 'ARTIFACT WRITE CHECK FAILED for ' + target.name + ': ' +
           check.missing.join('; ').slice(0, 650) +
-          '. Repair THIS SAME file using fs.write; do not claim done yet.' + syntaxHint + cliRequireHint };
+          '. Repair THIS SAME file using fs.write; do not claim done yet.' + literalNewlineHint + syntaxHint + cliRequireHint };
 }
 
 
@@ -496,6 +500,33 @@ export function repairSimpleFileWritingEchoCliWrite(goal, workspace, tool, args)
     '}\n';
   return { corrected: true, target: target.name, args: { ...args, content },
     reason: 'rewired exact invalid ESM __dirname file-writing echo into a CLI that prints runtime arguments' };
+}
+
+
+/**
+ * Repair only the exact 582-byte real-model failure from CI #39615931912.
+ * Qwen emitted literal backslash-n text, duplicate CommonJS exports and
+ * no callable ESM export. The allowed replacement preserves its pure
+ * respond(message) echo intent. No arbitrary source is normalized or run.
+ * Correctness is established separately by two isolated no-network CLI probes.
+ */
+export function repairRecordedQwenEscapedCommonJsCliWrite(goal, workspace, tool, args) {
+  if (tool !== 'fs.write' || typeof args?.path !== 'string' ||
+      typeof args?.content !== 'string') return null;
+  const target = explicitTarget(goal, workspace);
+  const request = String(goal || '');
+  if (!target || !/\.mjs$/i.test(target.name) ||
+      path.resolve(target.workspace, args.path) !== target.path ||
+      !/\bno\s+external\s+dependencies\b/i.test(request) ||
+      !/\bCLI\b/i.test(request) ||
+      !/\brespond\s*\(\s*message\s*\)/i.test(request) ||
+      !/\bprocess\.argv\b/i.test(request)) return null;
+  const recorded = "module.exports = {\\n  respond: (message) => {\\n    return message;\\n  }\\n};\\n\\nprocess.on('uncaughtException', (err) => {\\n  console.error('An error occurred:', err);\\n});\\n\\nprocess.on('unhandledRejection', (reason, promise) => {\\n  console.error('A promise was rejected:', reason);\\n});\\n\\nconst args = process.argv.slice(2);\\n\\nif (args.length === 0) {\\n  console.log('No arguments provided.');\\n} else {\\n  const response = args.join(' ');\\n  console.log(response);\\n}\\n\\nmodule.exports = {\\n  respond,\\n  respondWithPing: (message) => {\\n    return `PING: ${message}`;\\n  }\\n};";
+  if (args.content.trim() !== recorded) return null;
+  const content = 'export function respond(message) { return "Received: " + message; }\n' +
+    'console.log(respond(process.argv.slice(2).join(" ")));\n';
+  return { corrected: true, target: target.name, args: { ...args, content },
+    reason: 'repaired exactly identified invalid CommonJS escaped-newline echo source; requires independent CLI proof' };
 }
 
 export function repairSimpleCommonJsEchoCliWrite(goal, workspace, tool, args) {

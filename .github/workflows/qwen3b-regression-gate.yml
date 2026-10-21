@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - release/majin-v1.0.2-interactive-20261021
       - fix/realworld-repairs
       - fix/automated-free-model-regression-gate-20261021
   pull_request:

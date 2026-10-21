@@ -176,6 +176,8 @@ await caseRun('05', 'build-ai-agent',
   'Implement a real CLI entrypoint that reads process.argv.slice(2) at runtime and passes the actual received text to respond(message). ' +
   'When run as node ' + agentName + ' QA_PING, the CLI MUST print a response that includes QA_PING. ' +
   'When run again with a DIFFERENT argument, it MUST echo the newly received argument, not a hard-coded QA_PING example. ' +
+  'Use ES module syntax: export function respond(message), NOT module.exports or require. ' +
+  'Use actual source line breaks, NOT literal backslash-n separators. ' +
   'Use process.argv, not a fixed sample string. No external dependencies. Not just a placeholder or a function with no CLI.',
   ['fs.write','fs.read'], () => {
     const exists = has(agentName);
