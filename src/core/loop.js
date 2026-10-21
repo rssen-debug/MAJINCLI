@@ -12,6 +12,7 @@ import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
 import { inspectRequestedArtifact, pinSingleFileWrite } from './goal-artifact.js';
+import { verifyJobIdLineage } from './mission-data-evidence.js';
 import { verifyFollowupJobSelection } from './mission-data-evidence.js';
 
 /*
@@ -107,9 +108,10 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
   const realProvider = requestedRealRoute && requestedRealRoute.kind !== 'mock' &&
     !String(requestedRealRoute.ref || '').startsWith('demo/');
   const followupSource = verifyFollowupJobSelection(initialGoal, messages, cfg.get('workspace'));
+  const sourceLineage = verifyJobIdLineage(initialGoal, cfg.get('workspace'));
   const actionGoal = label === 'main' && !ctx?.readOnly && allowTools &&
     (ctx?.enforceActionEvidence === true || (!modelCall && realProvider)) &&
-    (requiresRealAction(initialGoal) || Boolean(followupSource));
+    (requiresRealAction(initialGoal) || Boolean(followupSource) || Boolean(sourceLineage));
   let actionRetries = 0;
   let artifactRetries = 0;
   let steps = 0;
@@ -254,10 +256,16 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       if (actionGoal) {
         const artifact = inspectRequestedArtifact(initialGoal, cfg.get('workspace'));
         const followup = verifyFollowupJobSelection(initialGoal, messages, cfg.get('workspace'));
-        const contract = followup && !followup.ok
+        const lineage = verifyJobIdLineage(initialGoal, cfg.get('workspace'));
+        const contract = lineage && !lineage.ok ? {
+          ok: false, target: lineage.output, workspaceRelative: lineage.output,
+          source: lineage.source,
+          missing: [...(lineage.missing || []), ...(lineage.missingTitles || [])],
+          reason: lineage.reason,
+        } : followup && !followup.ok
           ? (artifact ? { ...artifact, ok: false, missing: [...(artifact.missing || []), ...followup.missing],
               reason: followup.reason, source: followup.source } : followup)
-          : (artifact || followup);
+          : (lineage || artifact || followup);
         if (contract && !contract.ok) {
           onEvent({ type: 'artifact_verify', label, step: steps, ok: false, target: contract.target, missing: contract.missing });
           if (artifactRetries < 2 && steps < limit) {
@@ -267,7 +275,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
               '. The user requested the file named ' + contract.workspaceRelative +
               ' INSIDE the current MAJIN workspace. Use fs.write with that exact workspace-relative filename, and include every missing required element: ' +
               String((contract.missing || []).join('; ')).slice(0, 600) +
-              (contract.source ? '. Read the prior source file ' + contract.source + ' and copy the EXACT source job ID, never a placeholder like job2.' : '') +
+              (contract.source ? '. Read the original source file ' + contract.source + ' and copy EVERY exact job ID and title from source, never placeholders such as Job1 or job2.' : '') +
               '. Verify the file with fs.read before saying completed. Do not just repeat the claim.' });
             continue;
           }
