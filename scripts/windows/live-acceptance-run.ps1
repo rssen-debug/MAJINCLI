@@ -113,7 +113,7 @@ and the CAP stays at 99 by design.
 Then: git add docs/evidence/live-run-$stamp docs/evidence/desktop-bench-$stamp.* ; git commit ; git push
 "@ | Out-File $checklist -Encoding utf8
 if ((Test-Path $checklist) -and ((Get-Content $checklist -Raw).Length -gt 400)) {
-  LaneResult 'W12-scaffold' $true "checklist written — interactive observation steps remain BY DESIGN (cannot be scripted honestly)"
+  LaneResult 'W12-scaffold' $true "PREPARED ONLY: checklist written; W12 interactive acceptance is NOT VERIFIED"
 } else {
   LaneResult 'W12-scaffold' $false "checklist template failed to write"
 }
@@ -129,5 +129,7 @@ try {
 } catch {}
 if (-not $SummOk) { Say "FATAL: RUN-SUMMARY could not be read back"; exit 1 }
 Say "RUN-SUMMARY: $sumFile"
-Say "Done. Open docs/LIVE-RUN-GUIDE.md, finish the W12 interactive steps, then commit evidence."
+Say "RELEASE GATE: BLOCKED until real interactive W12 visual evidence and agent-driven W11 evidence are independently verified."
+Say "Scaffold PASS is preparation only, not release acceptance."
+Say "Done. Open docs/LIVE-RUN-GUIDE.md, finish the interactive steps, then review evidence before committing."
 Pop-Location
