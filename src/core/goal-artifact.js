@@ -69,7 +69,13 @@ export function inspectRequestedArtifact(input, workspace) {
         env: { ...process.env, NODE_OPTIONS: '' },
       });
       if (syntax.error || syntax.status !== 0) {
-        missing.push('invalid JavaScript syntax (node --check failed; repair this file before claiming done)');
+        // Node stderr can include the model's source and absolute paths:
+        // return ONLY a bounded diagnostic type, never adjacent source lines.
+        const diagnostic = String(syntax.stderr || '').split(/\r?\n/)
+          .map(x => x.trim()).find(x => /^(?:SyntaxError|Error):\s*/.test(x));
+        missing.push('invalid JavaScript syntax (node --check failed' +
+          (diagnostic ? ': ' + diagnostic.slice(0, 180) : '') +
+          '; repair this file before claiming done)');
       }
     }
     if (/\.mjs$/i.test(target.name)) {
@@ -82,6 +88,14 @@ export function inspectRequestedArtifact(input, workspace) {
           'replace it with export function respond(message) { return "Reply: " + message; } ' +
           'and add console.log(respond(process.argv[2] || "")) for the CLI. ' +
           'Remove module.exports and exports.respond entirely.');
+      }
+      // Actual Qwen3B regression on latest merged code: the model generated
+      // "const cli = require('commander')" after an ESM export in ONE .mjs
+      // file. node --check passed but runtime exited 1 because require is
+      // undefined in .mjs, and 'commander' violates "no external deps".
+      // This is a specific static failure, not arbitrary source execution.
+      if (/\brequire\s*\(\s*['"][^'"]+['"]\s*\)/.test(data)) {
+        missing.push('CommonJS require(...) is not available in .mjs; remove it and use built-in process.argv[2] for CLI arguments');
       }
       const asksRespond = /\brespond\s*\(\s*message\s*\)/i.test(input);
       const asksExport = /\bexport\s+(?:a\s+)?(?:function\s+)?respond\b/i.test(input) ||
@@ -161,11 +175,18 @@ export function feedbackForJavaScriptWrite(goal, workspace, tool, args, writtenO
   if (actual !== target.path) return null;
   const check = inspectRequestedArtifact(goal, workspace);
   if (!check) return null;
+  const cliRequireHint = !check.ok && /\.mjs$/i.test(target.name) &&
+    check.missing.some(x => x.startsWith('CommonJS require(')) &&
+    /\bCLI\b|process\.argv|command.line/i.test(goal)
+      ? '\nUse NO external CLI parser: export function respond(message) { return "Reply: " + message; } ' +
+        'console.log(respond(process.argv[2] || "")); ' +
+        'Do not import or require commander; .mjs does not define require.'
+      : '';
   return check.ok
     ? { ok: true, target: target.name,
         text: 'ARTIFACT WRITE CHECK: requested JavaScript file passed syntax and static contract checks (not yet execution-tested).' }
     : { ok: false, target: target.name,
         text: 'ARTIFACT WRITE CHECK FAILED for ' + target.name + ': ' +
           check.missing.join('; ').slice(0, 650) +
-          '. Repair THIS SAME file using fs.write; do not claim done yet.' };
+          '. Repair THIS SAME file using fs.write; do not claim done yet.' + cliRequireHint };
 }
