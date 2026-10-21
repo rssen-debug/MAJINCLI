@@ -299,9 +299,17 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         const el = document.querySelector(${sel});
         if (!el) return { found: false };
         el.scrollIntoView({ block: 'center' });
-        const t = String(el.innerText || el.value || el.getAttribute('aria-label') || el.tagName).slice(0, 80);
+        // NEVER echo input.value: it can contain passwords, tokens, email or
+        // uploaded data. Use rendered label/accessible name for click evidence.
+        const t = String(el.innerText || el.labels?.[0]?.textContent ||
+          el.getAttribute('aria-label') || el.tagName).replace(/\s+/g, ' ').trim().slice(0, 80);
+        const type = String(el.getAttribute('type') || '').toLowerCase();
+        const isCheckbox = el.tagName === 'INPUT' && type === 'checkbox';
+        const before = isCheckbox ? Boolean(el.checked) : null;
         el.click();
-        return { found: true, tag: String(el.tagName).toLowerCase(), text: t };
+        return { found: true, tag: String(el.tagName).toLowerCase(), text: t,
+          checked: isCheckbox ? Boolean(el.checked) : null,
+          changed: isCheckbox ? Boolean(el.checked) !== before : null };
       })()`);
       if (!hit.found) {
         const code = ref ? 'ref_stale' : 'no_such_element';
@@ -313,9 +321,10 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const after = fol.followed ? { url: fol.url, title: fol.title } : await b.eval('(() => ({ url: location.href, title: document.title }))()');
       return {
         ok: true,
-        result: `clicked ${hit.tag} "${hit.text}"${fol.followed ? ' (new tab followed)' : ''} — page now: "${after.title}" at ${after.url}`,
-        meta: { tag: hit.tag, text: hit.text, urlAfter: after.url, title: after.title, openedNewTab: fol.followed },
-        summary: `clicked "${hit.text}"`,
+        result: `clicked ${hit.tag} "${hit.text}"${typeof hit.checked === 'boolean' ? (hit.checked ? ' — checkbox CHECKED' : ' — checkbox UNCHECKED') : ''}${fol.followed ? ' (new tab followed)' : ''} — page now: "${after.title}" at ${after.url}`,
+        meta: { tag: hit.tag, text: hit.text, checked: hit.checked, checkboxChanged: hit.changed,
+          urlAfter: after.url, title: after.title, openedNewTab: fol.followed },
+        summary: `clicked "${hit.text}"${typeof hit.checked === 'boolean' ? (hit.checked ? ' (checked)' : ' (unchecked)') : ''}`,
       };
     },
   }),
@@ -342,11 +351,12 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         if (setter) setter.call(el, ${val}); else el.value = ${val};
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
-        return { found: true, stuck: el.value === ${val}, value: el.value.slice(0, 40) };
+        // Report only equality with the requested input, never the raw value.
+        return { found: true, stuck: el.value === ${val} };
       })()`);
       if (!r.found) return { ok: false, error: { code: 'no_such_element', message: `no field matches ${selector}`, hint: 'browser.read the page first' } };
       if (!r.stuck) return { ok: false, error: { code: 'value_rejected', message: 'the page reverted the value immediately — the field may have javascript validation', hint: 'type slower substrings or confirm the field with browser.shot' } };
-      return { ok: true, result: `filled — page kept value "${r.value}"`, meta: { value: r.value }, summary: `filled ${selector}` };
+      return { ok: true, result: 'filled — browser confirmed input retained (value hidden)', meta: { retained: true, valueHidden: true }, summary: 'field filled and verified' };
     },
   }),
 
