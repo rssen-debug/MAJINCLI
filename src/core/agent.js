@@ -402,7 +402,7 @@ export class Agent {
          trillar tillbaka till normal turn — GENESIS ZERO garanterar att ett svar alltid landar. */
       if (!readOnly) {
         const { shouldMission, runMission } = await import('./mission.js');
-        if (shouldMission(input).mission) {
+        if (shouldMission(input, { atomicFileTransform: true }).mission) {
           try {
             const m = await runMission({
               cfg,

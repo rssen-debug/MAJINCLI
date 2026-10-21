@@ -46,9 +46,19 @@ export function splitInlineItems(t) {
 const ACTION_RE = /(skriv|skapa|rensa|sortera|flytta|kopiera|zip|packa|stalla|fixa|bygg|research|lista|sok|leta|install|test|kolla|sammanfatta|sammanfatt|rapport|check|analys|rakna|dela|cut|g[oö]r|starta|stoppa|render|kompil|deploy|merge|commit|push|bekr[aä]fta|granska|write|summar|build|gather|collect|rename|move|copy|delet|create|generate|produc|draw|paint|compar|count|read|open|close|searc|look)/iu;
 
 /* regelren heuristik: minst tva sektioner med verbeslaktat innehall */
-export function shouldMission(input) {
+export function shouldMission(input, { atomicFileTransform = false } = {}) {
   const t = String(input || '').trim();
   if (t.length < 24) return { mission: false, reason: 'too short to split' };
+  // A source JSON -> ONE Markdown shortlist is a single data transformation,
+  // not four independent tasks. Real Qwen3B QA produced four subagents,
+  // lost the source and never wrote the target. Keep read/write together.
+  const jsonFiles = [...t.matchAll(/(?<![\w.\/\-])([\w.-]+\.json)\b/gi)];
+  const mdFiles = [...t.matchAll(/(?<![\w.\/\-])([\w.-]+\.md)\b/gi)];
+  if (atomicFileTransform && jsonFiles.length === 1 && mdFiles.length === 1 &&
+      /\b(?:read|läs)\b/i.test(t) && /\b(?:create|write|save|skapa|skriv|spara)\b/i.test(t) &&
+      /\ball\s+(?:three\s+|two\s+|\d+\s+)?job\s+ids?\b/i.test(t)) {
+    return { mission: false, reason: 'atomic JSON to job shortlist transformation' };
+  }
   const list = t.match(LIST_RE) || [];
   if (list.length >= 2) return { mission: true, reason: `${list.length} list items` };
   const inline = splitInlineItems(t);

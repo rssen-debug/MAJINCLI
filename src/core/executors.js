@@ -46,9 +46,60 @@ export class ExecHandle {
     this.stdoutPath = path.join(metaDir, 'stdout.log');
     this.stderrPath = path.join(metaDir, 'stderr.log');
     this.stdoutBuf = []; this.stderrBuf = [];
+
+    // Start observing process completion IMMEDIATELY, never when exec.wait is
+    // first called. Fast Windows processes can exit before exec.wait arrives.
+    // Keep the same settled promise for all later and concurrent waiters.
+    this._settlement = new Promise((resolve) => {
+      let finished = false;
+      let timeout = null;
+      const finish = (code, sig) => {
+        if (finished) return;
+        finished = true;
+        if (timeout) clearTimeout(timeout);
+        meta.doneAt = new Date().toISOString();
+        meta.ms = Date.now() - meta.t0;
+        meta.exitCode = code;
+        meta.signal = sig;
+        meta.status = meta.timedOut ? 'timed_out' : meta.cancelledBy ? 'cancelled' :
+          meta.spawnError ? 'error' : code === 0 ? 'completed' : 'failed';
+        try {
+          fs.writeFileSync(this.stdoutPath, Buffer.concat(this.stdoutBuf));
+          fs.writeFileSync(this.stderrPath, Buffer.concat(this.stderrBuf));
+          fs.writeFileSync(path.join(this.metaDir, 'meta.json'), JSON.stringify(
+            { ...meta, t0: undefined, stdoutPath: this.stdoutPath, stderrPath: this.stderrPath }, null, 2));
+        } catch (err) {
+          meta.persistError = String(err?.message || err);
+        }
+        this.stdoutBuf = []; this.stderrBuf = [];
+        // exec.start -> exec.wait is intentionally asynchronous. Retain the
+        // settled handle briefly so "already finished" is never no_such_job.
+        // Archived evidence remains on disk after this TTL.
+        const expiry = setTimeout(() => { if (JOBS.get(this.id) === this) JOBS.delete(this.id); }, 120000);
+        expiry.unref?.();
+        resolve(meta);
+      };
+      // close (not exit) guarantees pipes were flushed before writing logs.
+      proc.once('close', finish);
+      proc.once('error', (err) => {
+        meta.spawnError = String(err?.message || err);
+        // Node emits close after a spawn error; avoid a permanently dangling
+        // promise if an unusual process adapter never emits close.
+        setImmediate(() => { if (!finished && proc.pid == null) finish(null, null); });
+      });
+      if (meta.timeoutSec > 0) {
+        timeout = setTimeout(() => {
+          if (!finished) {
+            meta.timedOut = true;
+            this.cancel('timeout');
+          }
+        }, meta.timeoutSec * 1000);
+        timeout.unref?.();
+      }
+    });
   }
   cancel(reason = 'user-request') {
-    if (this.cancelled || !this.proc || this.proc.killed) return false;
+    if (this.cancelled || !this.proc || this.proc.killed || this.meta.doneAt) return false;
     this.cancelled = true;
     this.meta.cancelledBy = reason;
     try { this.proc.kill('SIGTERM'); } catch {}
@@ -56,33 +107,7 @@ export class ExecHandle {
     setTimeout(() => { try { if (!proc.killed) proc.kill('SIGKILL'); } catch {} }, 5000).unref?.();
     return true;
   }
-  settled() {
-    const meta = this.meta;
-    return new Promise((resolve) => {
-      let settledAlready = false;
-      const finish = (code, sig) => {
-        if (settledAlready) return;
-        settledAlready = true;
-        meta.doneAt = new Date().toISOString();
-        meta.ms = Date.now() - meta.t0;
-        meta.exitCode = code; meta.signal = sig;
-        fs.writeFileSync(this.stdoutPath, Buffer.concat(this.stdoutBuf));
-        fs.writeFileSync(this.stderrPath, Buffer.concat(this.stderrBuf));
-        fs.writeFileSync(path.join(this.metaDir, 'meta.json'), JSON.stringify({ ...meta, t0: undefined, stdoutPath: this.stdoutPath, stderrPath: this.stderrPath }, null, 2));
-        JOBS.delete(this.id);
-        resolve(meta);
-      };
-      this.proc.on('exit', finish);
-      if (meta.timeoutSec > 0) {
-        setTimeout(() => {
-          if (!settledAlready) {
-            meta.timedOut = true;
-            this.cancel('timeout');
-          }
-        }, meta.timeoutSec * 1000).unref?.();
-      }
-    });
-  }
+  settled() { return this._settlement; }
 }
 
 function cappedAppend(buf, chunk, cap) {

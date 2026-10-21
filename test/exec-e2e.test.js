@@ -22,7 +22,11 @@ function setup() {
 
 test('W3 E2E local: real command runs, exit measured, stdout actually captured into durable artifacts', async () => {
   const { ctx } = setup();
-  const started = await tools('exec.start').run({ backend: 'local', command: 'echo w3-e2e-marker-252 && exit 0', timeoutSec: 30 }, ctx);
+  // Windows uses Windows PowerShell 5.1, which does NOT support Bash/PS7 &&.
+  const cmd = process.platform === 'win32'
+    ? "Write-Output 'w3-e2e-marker-252'; exit 0"
+    : 'echo w3-e2e-marker-252 && exit 0';
+  const started = await tools('exec.start').run({ backend: 'local', command: cmd, timeoutSec: 30 }, ctx);
   assert.equal(started.ok, true, JSON.stringify(started));
   assert.match(started.meta.id, /^ex-/);
   assert.ok(started.meta.metaDir && fs.existsSync(started.meta.metaDir), 'metaDir must exist immediately: ' + started.meta.metaDir);
@@ -75,3 +79,24 @@ test('W3 E2E exec.backends exposes measured availability (for honest planning)',
   assert.match(text, /local/);
   assert.match(text, /docker|ssh/);
 }, 20000);
+
+
+test('W3 E2E completed-before-wait: quick command remains waitable with full durable output', async () => {
+  const { ctx } = setup();
+  const marker = 'qa-fast-finished-before-wait-123';
+  const started = await tools('exec.start').run({ backend: 'local',
+    command: 'echo '+marker, timeoutSec: 15 }, ctx);
+  assert.equal(started.ok, true, JSON.stringify(started));
+  // Deliberately let the process complete BEFORE calling exec.wait.
+  // Previously settled() attached the exit handler only at wait time.
+  await new Promise(resolve => setTimeout(resolve, 1800));
+  const waited = await tools('exec.wait').run({ id: started.meta.id }, ctx);
+  assert.equal(waited.ok, true, JSON.stringify(waited).slice(0, 700));
+  assert.equal(waited.meta.exitCode, 0);
+  assert.equal(waited.meta.status, 'completed');
+  assert.match(waited.meta.stdoutTail, /qa-fast-finished-before-wait-123/);
+  const again = await tools('exec.wait').run({ id: started.meta.id }, ctx);
+  assert.equal(again.ok, true, 'a second waiter must receive the cached settled promise');
+  assert.equal(again.meta.exitCode, 0);
+  assert.ok(fs.existsSync(path.join(waited.meta.paths.metaDir,'meta.json')));
+});
