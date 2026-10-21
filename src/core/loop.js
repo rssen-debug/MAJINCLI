@@ -11,7 +11,7 @@ import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
-import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion, pinSingleExactTextWrite, verifySingleExactTextCreation, repairSimpleCommanderCliWrite, repairSimpleMixedEsmCliWrite, repairSimpleCommonJsEchoCliWrite, unchangedInvalidJavaScriptWrite, verifyLocalTokenDemoFiles, isLocalTokenDemoGoal } from './goal-artifact.js';
+import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion, pinSingleExactTextWrite, verifySingleExactTextCreation, repairSimpleCommanderCliWrite, repairSimpleMixedEsmCliWrite, repairSimpleCommonJsEchoCliWrite, repairLiteralEscapedNewlineCliWrite, unchangedInvalidJavaScriptWrite, verifyLocalTokenDemoFiles, isLocalTokenDemoGoal } from './goal-artifact.js';
 import { verifyJobIdLineage, pinJobShortlistWrite } from './mission-data-evidence.js';
 import { verifyFollowupJobSelection } from './mission-data-evidence.js';
 import { verifyIsolatedNodeCli } from './cli-proof.js';
@@ -353,7 +353,8 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       const cliRepair = actionGoal && !ctx?.readOnly && !pin?.corrected && !contentPin
         ? (repairSimpleCommanderCliWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs) ||
            repairSimpleMixedEsmCliWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs) ||
-           repairSimpleCommonJsEchoCliWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs)) : null;
+           repairSimpleCommonJsEchoCliWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs) ||
+           repairLiteralEscapedNewlineCliWrite(initialGoal, cfg.get('workspace'), c.name, candidateArgs)) : null;
       const args = cliRepair?.args || contentPin?.args || pin?.args || candidateArgs;
       if (cliRepair?.corrected) {
         onEvent({ type: 'artifact_cli_dependency_repaired', label, step: steps, target: cliRepair.target });
