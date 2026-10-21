@@ -483,9 +483,10 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       url: 'string optional expected URL fragment',
       title: 'string optional expected title fragment',
       checked: 'string optional true|false expected checkbox checked state',
+      enabled: 'string optional true|false expected element enabled state (includes aria-disabled and inert)',
       waitMs: 'string optional: wait up to 0–5000ms for the expected DOM outcome (default 0)',
     },
-    examples: ['browser.verify({selector:"#success",text:"Saved"})', 'browser.verify({url:"/dashboard"})','browser.verify({selector:"input[name=consent]",checked:"true"})'],
+    examples: ['browser.verify({selector:"#success",text:"Saved"})', 'browser.verify({url:"/dashboard"})','browser.verify({selector:"input[name=consent]",checked:"true"})', 'browser.verify({selector:"#submit",enabled:"true"})'],
     async run(input, ctx) {
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok:false,error:{code:'browser_closed',message:'Open the target page before verifying'} };
