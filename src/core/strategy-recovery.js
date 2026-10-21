@@ -20,7 +20,7 @@ const EXEC=/^(?:exec\.|shell\.|sys\.)/;
  */
 export function browserRecoveryPlan(error='') {
   const msg=String(error||'').toLowerCase();
-  const observe='Use browser.elements to read the CURRENT page\'s accessible controls and numbered references, then browser.read or browser.screenshot if needed. ';
+  const observe='Use browser.elements to read the CURRENT page\'s accessible controls and numbered references, then browser.read or take a fresh screenshot with browser.screenshot if needed. ';
   if(/ref_stale|stale|detached|not attached/.test(msg))
     return observe+'The DOM changed: discard the old reference and obtain a NEW browser.elements ref before any click. Never re-use coordinates or selectors from a prior page.';
   if(/not.found|no.such|selector|element|button|target/.test(msg))
