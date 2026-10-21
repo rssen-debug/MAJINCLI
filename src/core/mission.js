@@ -449,6 +449,14 @@ export async function runMission({ cfg, registry, session, input, emit = () => {
       // CURRENT graph's contracts before skipping an already-executed worker.
       // In particular, the file may have disappeared or been edited after a crash.
       const contracts = buildContracts(node.input);
+      // Never automatically repeat an operation if the prior outcome cannot
+      // be checked without performing it again (for example, a shell command
+      // with side effects, or a task with no typed verification contract).
+      if (!contracts.length || contracts.some((c) => c.type === 'command_exits_zero')) {
+        const reason = !contracts.length ? 'no independent verification contract' : 'verification would re-execute a command';
+        emit({ type: 'mission_carry_unverifiable', id: node.id, reason });
+        throw new Error('REQUIRES_REVIEW: prior work for ' + node.id + ' cannot be verified safely (' + reason + '); refusing automatic replay');
+      }
       const text = c0.value?.text || c0.text || '';
       const results = await Promise.all(contracts.map((c) => verifyContract(c, { cfg, partText: text })));
       const oldDigest = String(c0.verifiedSummary || '').match(/\bsha:([a-f0-9]{8,64})\b/i)?.[1] || null;
