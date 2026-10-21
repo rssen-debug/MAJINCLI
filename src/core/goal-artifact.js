@@ -296,3 +296,40 @@ export function verifySingleExactTextCreation(goal, workspace, tool, args, toolO
     return { ok: false, target: contract.target.name };
   }
 }
+
+
+/**
+ * Very narrow source-level repair for a model that ignored an explicit
+ * "NO external dependencies" CLI request. A real free Qwen3B generated:
+ *   const cli = require('commander'); cli.parse(process.argv);
+ *   const args = cli.args;
+ * in an ES module. Replacing these three plain positional-argument lines
+ * with Node's built-in process.argv.slice(2) is semantically equivalent
+ * for this no-options CLI fixture.
+ *
+ * Never fix arbitrary require() calls, non-ESM files, option-parsing CLIs,
+ * more than one external require(), or another output path.
+ * This modifies only an authorized pending fs.write, never reads or executes
+ * model-provided code. The normal guarded tool and post-write checks follow.
+ */
+export function repairSimpleCommanderCliWrite(goal, workspace, tool, args) {
+  if (tool !== 'fs.write' || !args || typeof args.path !== 'string' ||
+      typeof args.content !== 'string') return null;
+  const target = explicitTarget(goal, workspace);
+  const request = String(goal || '');
+  if (!target || !/\.mjs$/i.test(target.name) ||
+      path.resolve(target.workspace, args.path) !== target.path ||
+      !/\bno\s+external\s+dependencies\b/i.test(request) ||
+      !/\bCLI\b/i.test(request) ||
+      !/\brespond\s*\(\s*message\s*\)/i.test(request)) return null;
+  const src = args.content;
+  if ((src.match(/\brequire\s*\(/g) || []).length !== 1 ||
+      /\bmodule\.exports\b|\bexports\./.test(src)) return null;
+  const legacy = /\b(?:const|let)\s+cli\s*=\s*require\s*\(\s*(['"])commander\1\s*\)\s*;\s*cli\.parse\s*\(\s*process\.argv\s*\)\s*;\s*(?:const|let)\s+args\s*=\s*cli\.args\s*;/;
+  if (!legacy.test(src) || /\bcli\./.test(src.replace(legacy,''))) return null;
+  const content = src.replace(legacy, 'const args = process.argv.slice(2);');
+  return content === src ? null : {
+    corrected: true, target: target.name, args: { ...args, content },
+    reason: 'replaced single no-options CommonJS commander CLI with built-in Node process.argv',
+  };
+}
