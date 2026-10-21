@@ -218,3 +218,27 @@ export function verifySingleFileDeletion(goal, workspace, tool, args, toolOk) {
     text:'Deleted ' + target.name + ' — verified absent from MAJIN workspace' +
       (args.permanent===true?' (permanent deletion)':'') + '.'};
 }
+
+
+/**
+ * Immediate on-disk exact-content evidence for single-file textual updates.
+ * Small models may call fs.patch with a wrong search string, then fs.write the
+ * original content and falsely say "modified". Do not repeat a provider call
+ * without telling the model that the requested EXACTLY bytes are still wrong.
+ * Never echo the file contents, or execute it, into tool feedback.
+ */
+export function feedbackForExactContentWrite(goal, workspace, tool, args, writtenOk) {
+  if (tool !== 'fs.write' || !writtenOk || !args || typeof args.path !== 'string' ||
+      !/\bEXACTLY\b/i.test(String(goal || ''))) return null;
+  const target=explicitTarget(goal,workspace);
+  if (!target || !/\.(?:txt|md|csv)$/i.test(target.name) ||
+      path.resolve(target.workspace,args.path)!==target.path) return null;
+  const proof=inspectRequestedArtifact(goal,workspace);
+  if (!proof) return null;
+  return proof.ok
+    ? {ok:true,target:target.name,
+       text:'EXACT CONTENT WRITE CHECK: requested file bytes independently match the user-specified EXACTLY value.'}
+    : {ok:false,target:target.name,
+       text:'EXACT CONTENT WRITE CHECK FAILED for '+target.name+': '+proof.missing.join('; ').slice(0,220)+
+         '. Overwrite THIS SAME file with the precise requested content using fs.write. Do not claim done or repeat an incorrect fs.patch.'};
+}
