@@ -424,6 +424,21 @@
       ],
       "evidence": "docs/evidence/w2-live-acceptance-2026-10-21.md + docs/evidence/research-live-2026-10-21/*; npm test 864/0/17",
       "verdict": "99/100 — CAP kvarstår: W11-live + W12 interaktiv acceptance på användarens maskin är de återstående portarna till 100."
+    },
+    {
+      "round": 38,
+      "focus": "W13 LIVE-AGENT-SIDE PENDING -> LIVE-VERIFIED (opencode zen/go): fault-injection-disciplinen körd mot riktig provider via oc_sk_-nyckeln användaren gav",
+      "done": [
+        "Endpoint-utforskning dokumenterad: oc_sk=service-account; opencode.ai/console/api/v2/config 200 (workspace-config); opencode.ai/zen/go/v1 OpenAI-kompatibel (37 modeller); x-opencode-session OBLIGATORISK (annars MissingSessionID) — tidigare 404 var fel host",
+        "src/core/live-provider-chaos.js (majin-live-provider-chaos/1): 7 chaos-rader baserade på samma metod som recovery-metrics men mot RIKTIG api — baseline (riktiga tokens), 400ms-deadline-abort, mid-flight-abort, bad-key-refusal, bogus-model-refusal, burst-of-5, empty-messages-guard",
+        "Live-körning TVÅ gånger, samma resultat: rate 100% (2 recovered+5 controlled av 7), stuck=0, unhandled=0; baseline usage 28+173=201 tokens räknat på riktighet",
+        "Nyckelhygien I5 auditerad: riktig nyckel 0 förekomster i artifacts (assertat i suit), chaos-nyckeln maskad",
+        "test/live-provider-chaos.test.js 6/6 (offline engine-kontrakt + evidential audit av committade receipts); regression 864->870/0/17",
+        "i18n-suiten fångade svenska strängar i koden mitt under rundan — översatta före push",
+        "GLM-QA 25->33-axel (parallell agents spår) förblir pending-honest: annan credential-yta, inte denna lane"
+      ],
+      "evidence": "docs/evidence/live-provider-chaos-2026-10-21.{json,md} + docs/evidence/w13-live-provider-chaos-2026-10-21.md; npm test 870/0/17",
+      "verdict": "99/100 — CAP oförändrad: W11-live + W12-interactive på användarens maskin återstår som hårdvaru-portar. Sandbox klar nu av alla cred-gates som den kan räcka."
     }
   ],
   "percent": 99
