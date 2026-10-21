@@ -37,11 +37,27 @@ jobs:
           $proof | ConvertTo-Json -Compress | Set-Content -Encoding utf8 (Join-Path $env:RUNNER_TEMP 'majin-interactive-preflight.json')
           $proof | ConvertTo-Json -Compress | Write-Host
           if (-not $proof.detected) { throw 'No proven interactive desktop on the connected runner; GUI live testing blocked.' }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install MAJIN dependencies only into isolated checkout
+        shell: powershell
+        run: |
+          npm ci --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed in QA checkout' }
+      - name: Verify actual GUI tool operations and W12 pink pixels
+        shell: powershell
+        timeout-minutes: 6
+        run: |
+          node scripts/qa/owner-desktop-live.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Real Windows desktop QA failed; inspect owner-desktop evidence' }
       - name: Upload non-sensitive preflight verdict
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: owner-desktop-preflight
-          path: ${{ runner.temp }}/majin-interactive-preflight.json
+          path: |
+            ${{ runner.temp }}/majin-interactive-preflight.json
+            qa-evidence/owner-desktop.json
           retention-days: 7
           if-no-files-found: warn
