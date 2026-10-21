@@ -280,12 +280,24 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     params: {
       selector: 'string: CSS selector of the thing to click (optional — or give ref)',
       ref: 'string: numbered element reference from browser.elements, e.g. "e3" (optional — or give selector)',
+      expectSelector: 'string optional: unique selector that must be visible after the click',
+      expectText: 'string optional: text that must appear inside expectSelector',
+      expectUrl: 'string optional: URL fragment that must be present after the click',
+      expectChecked: 'string optional true|false: expected checkbox state of expectSelector',
+      verifyWaitMs: 'string optional 0–4000: maximum time for post-click verification (default 2500)',
     },
-    examples: ['browser.click({selector:"button[type=submit]"})', 'browser.click({ref:"e3"})'],
-    async run({ selector, ref }, ctx) {
+    examples: ['browser.click({selector:"button[type=submit]",expectSelector:"#success",expectText:"Saved"})', 'browser.click({ref:"e3",expectUrl:"/dashboard"})'],
+    async run({ selector, ref, expectSelector, expectText, expectUrl, expectChecked, verifyWaitMs }, ctx) {
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
       if (!selector && !ref) return { ok: false, error: { code: 'bad_input', message: 'give selector or ref (from browser.elements)' } };
+      const requiresVerification=Boolean(expectSelector || expectText || expectUrl || expectChecked != null);
+      const expected=requiresVerification?verificationCriteria({
+        selector:expectSelector,text:expectText,url:expectUrl,checked:expectChecked
+      }):null;
+      if(requiresVerification && !expected.ok) return {
+        ok:false,error:{code:'bad_expectation',message:expected.reason}
+      };
       journal.guard(session, `browser.click:${selector || ref}`);
       const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
       let sel;
@@ -328,11 +340,35 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
          so the agent lands where the page actually went */
       const fol = await (b.followNewTarget ? b.followNewTarget({ windowMs: 1500 }) : { followed: false });
       const after = fol.followed ? { url: fol.url, title: fol.title } : await b.eval('(() => ({ url: location.href, title: document.title }))()');
+      // Stagehand-inspired deterministic action + evidence. No extra model
+      // call and no second click. Only poll the outcome on the live page.
+      let proof=null,attempts=0;
+      if(requiresVerification){
+        const script=VERIFY_JS.replace('__MAJIN_ARGS__',JSON.stringify(expected));
+        const waitMs=Math.min(4000,Math.max(0,Math.trunc(Number(verifyWaitMs ?? 2500)||0)));
+        const deadline=Date.now()+waitMs;
+        for(;;){
+          let observed;
+          try{observed=await b.eval(script);}
+          catch(e){return {ok:false,error:{code:'post_click_verify_error',message:String(e?.message||e)},
+            meta:{clicked:hit.text,urlAfter:after.url}};}
+          attempts++;
+          proof=verifyObserved(expected,observed);
+          if(proof.ok || !observed?.valid || Date.now()>=deadline)break;
+          await new Promise(resolve=>setTimeout(resolve,Math.min(200,Math.max(1,deadline-Date.now()))));
+        }
+        if(!proof.ok)return {ok:false,error:{
+          code:'post_click_assertion_failed',
+          message:'The click happened but its requested effect was NOT verified. Re-observe the page before trying a different approach.',
+          failures:proof.failures
+        },meta:{clicked:hit.text,attempts,observed:proof.observed},summary:'click outcome NOT verified'};
+      }
       return {
         ok: true,
         result: `clicked ${hit.tag} "${hit.text}"${typeof hit.checked === 'boolean' ? (hit.checked ? ' — checkbox CHECKED' : ' — checkbox UNCHECKED') : ''}${fol.followed ? ' (new tab followed)' : ''} — page now: "${after.title}" at ${after.url}`,
         meta: { tag: hit.tag, text: hit.text, checked: hit.checked, checkboxChanged: hit.changed,
-          urlAfter: after.url, title: after.title, openedNewTab: fol.followed },
+          urlAfter: after.url, title: after.title, openedNewTab: fol.followed,
+          verified: proof?.ok ?? null, verificationAttempts: attempts },
         summary: `clicked "${hit.text}"${typeof hit.checked === 'boolean' ? (hit.checked ? ' (checked)' : ' (unchecked)') : ''}`,
       };
     },
