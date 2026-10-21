@@ -25,7 +25,8 @@ const good=jobs.map((j,i)=>'- '+j.id+' — '+j.title+' — reason '+(i+1)).join(
 function reset(){fs.writeFileSync(path.join(workspace,src),JSON.stringify(jobs));fs.rmSync(path.join(workspace,dst),{force:true});}
 
 test('single-source shortlist is ONE atomic agent turn, not four hallucinated DAG workers',()=>{
-  assert.deepEqual(shouldMission(goal),{mission:false,reason:'atomic JSON to job shortlist transformation'});
+  assert.deepEqual(shouldMission(goal, { atomicFileTransform: true }),{mission:false,reason:'atomic JSON to job shortlist transformation'});
+  assert.equal(shouldMission(goal).mission,true,'explicit mission API remains unchanged');
 });
 test('other multi-goal missions still route to DAG as before',()=>{
   assert.equal(shouldMission('1. Research cloud services\n2. Read networking notes\n3. Build separate system').mission,true);
