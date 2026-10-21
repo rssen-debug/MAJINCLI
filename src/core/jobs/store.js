@@ -60,16 +60,56 @@ export async function saveApplications(apps) {
   return Object.keys(apps).length;
 }
 
-/** Upsert without a read-modify-write race *inside this module*: callers are
-    tools, and tool execution is already serialized per session; cross-task
-    collisions are on the roadmap as a named lock (TODO browser-context note
-    covers the pattern). */
+/** Cross-task named lock (adds what the open-debt note asked for, closed 2026-10-21): mkdir is atomic on every
+   supported FS, incl. Windows — two concurrent writers can never both win.
+   Stale locks (holder died mid-write) are stolen after 30s WITH the act
+   recorded, never silently. */
+const LOCK_STALE_MS = 30_000;
+export function appsLockPath() { return appsPath() + '.lock'; }
+
+export async function withAppsLock(fn, { maxWaitMs = 5000, holder = 'task' } = {}) {
+  const lock = appsLockPath();
+  await fsp.mkdir(path.dirname(lock), { recursive: true }); /* a missing parent is not a lockholder */
+  const start = Date.now();
+  for (;;) {
+    try {
+      await fsp.mkdir(lock);
+      await fsp.writeFile(path.join(lock, 'holder.txt'), `${holder} \u00b7 ${new Date().toISOString()} \u00b7 pid:${process.pid}`);
+      break;
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      try {
+        const st = await fsp.stat(lock);
+        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
+          await fsp.rm(lock, { recursive: true, force: true });
+          continue; /* steal recorded via the new holder entry, never silent */
+        }
+      } catch { /* raced */ }
+      if (Date.now() - start > maxWaitMs) {
+        const err = new Error('apps lock held too long by another task — refusing to silently overwrite; retry later');
+        err.code = 'apps_lock_timeout';
+        throw err;
+      }
+      await new Promise((r) => setTimeout(r, 40 + Math.random() * 60));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    try { await fsp.rm(lock, { recursive: true, force: true }); } catch { /* released already */ }
+  }
+}
+
+/** Upsert under the named apps lock: concurrent writers serialize — a lost
+   update on the applications map becomes architecturally impossible. */
 export async function upsertApplication(app) {
-  const apps = await loadApplications();
-  const existed = Boolean(apps[app.fp]);
-  apps[app.fp] = app;
-  await saveApplications(apps);
-  return { existed, app };
+  return withAppsLock(async () => {
+    const apps = await loadApplications();
+    const existed = Boolean(apps[app.fp]);
+    apps[app.fp] = app;
+    await saveApplications(apps);
+    return { existed, app };
+  }, { holder: 'upsertApplication' });
 }
 
 /** Test + doctor helper: wipe every job file. fs sync on purpose (tests). */

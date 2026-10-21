@@ -290,6 +290,13 @@
       "done": "research-numeric-conflict LIMIT-fIx: tre lager av sanning: (1) forst blev arg oneck-merjen doljde — fixad pa raw-claims-in-cluster; (2) sedan visade bucket-keyingen doljde konflikten bassapade pga ordval medan meningarna sa motsatande — fixad med GLOBAL pass over allClaims (sourceId-sdiff); (3) enhet test antog crude-2-klustret - justerat till RÄTT kontrakt mark-MERGED-cluster-med-conflicts:true; full svit",
       "percent": 89,
       "next": "win-runner acceptance eller live-channel med din pekade creds/godkannande"
+    },
+    {
+      "round": 26,
+      "date": "2026-10-21",
+      "done": "jobs STORE named-lock implementerad (mkdir-atomiskt, stale-steal med audit-trail, maxWait timeout, auto-release vid throw) = den enda kvarvarande open-debt-markern fran self-audit nu STANGD: self-audit verdict FOINAN clean 0/0/0/0 for HELA repot (forsta gangen); 3/3 lock-tester (20 concurrent upserts survive, stale-steal, exception-release); full svit 740/724/0/16",
+      "percent": 90,
+      "next": "win-runner acceptance eller live-channel-send med godkanda creds"
     }
   ]
 }
