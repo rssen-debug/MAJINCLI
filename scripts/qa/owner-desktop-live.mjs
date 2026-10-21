@@ -169,7 +169,7 @@ try {
       let trace=[];
       try {
         trace=fs.readFileSync(path.join(cloud.meta?.evidence||'','steps.jsonl'),'utf8')
-          .split(/\\r?\\n/).filter(Boolean).map(JSON.parse)
+          .split('\n').filter(Boolean).map(JSON.parse)
           .map(x=>({phase:x.phase,step:x.step,action:x.action,tool:x.tool,ok:x.ok,
             error:x.error,reason:x.reason,note:x.note,rawAction:x.raw?.action||null}));
       } catch {}
