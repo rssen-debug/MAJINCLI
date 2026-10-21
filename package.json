@@ -1,6 +1,6 @@
 {
   "name": "majin",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MAJIN â€” a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
   "type": "module",
   "license": "MIT",
