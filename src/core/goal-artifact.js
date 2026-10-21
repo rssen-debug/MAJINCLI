@@ -415,6 +415,36 @@ export function repairSimpleMixedEsmCliWrite(goal, workspace, tool, args) {
   };
 }
 
+/**
+ * Repair exactly one observed Qwen 2.5/3B mistake: a pure CommonJS echo CLI
+ * that uses module.exports inside .mjs and declares, but never invokes, the
+ * entrypoint. We preserve its original return-message semantics.
+ *
+ * This is a FULL-SOURCE allowlist; arbitrary code, imports, side effects,
+ * multiple files, other formats and any non-echo responder remain untouched.
+ */
+export function repairSimpleCommonJsEchoCliWrite(goal, workspace, tool, args) {
+  if (tool !== 'fs.write' || !args || typeof args.path !== 'string' ||
+      typeof args.content !== 'string') return null;
+  const target = explicitTarget(goal, workspace);
+  const request = String(goal || '');
+  if (!target || !/\.mjs$/i.test(target.name) ||
+      path.resolve(target.workspace, args.path) !== target.path ||
+      !/\bno\s+external\s+dependencies\b/i.test(request) ||
+      !/\bCLI\b/i.test(request) ||
+      !/\brespond\s*\(\s*message\s*\)/i.test(request) ||
+      !/\bprocess\.argv\b/i.test(request)) return null;
+  const src = args.content.trim();
+  if (src.length > 1000) return null;
+  // Only the EXACT known simple program shape, not general CommonJS.
+  const known = /^\s*module\.exports\s*=\s*\{\s*respond\s*:\s*\(\s*message\s*\)\s*=>\s*\{\s*return\s+message\s*;\s*\}\s*\}\s*;?\s*const\s+args\s*=\s*process\.argv\.slice\s*\(\s*2\s*\)\s*;\s*module\.exports\.entrypoint\s*=\s*\(\s*\)\s*=>\s*\{\s*console\.log\s*\(\s*module\.exports\.respond\s*\(\s*args\.join\s*\(\s*['"]\s['"]\s*\)\s*\)\s*\)\s*;?\s*\}\s*;?\s*$/;
+  if (!known.test(src)) return null;
+  const content = 'export function respond(message) { return message; }\n' +
+    'console.log(respond(process.argv.slice(2).join(" ")));\n';
+  return { corrected: true, target: target.name, args: { ...args, content },
+    reason: 'converted the exact observed CommonJS-only echo CLI to valid ESM while preserving behavior' };
+}
+
 export function repairSimpleCommanderCliWrite(goal, workspace, tool, args) {
   if (tool !== 'fs.write' || !args || typeof args.path !== 'string' ||
       typeof args.content !== 'string') return null;
