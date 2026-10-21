@@ -25,11 +25,11 @@ test('UI indicates states, can stop listening and respects reduced motion',()=>{
 });
 test('release version is consistent across all packaging paths',()=>{
   for (const p of ['package.json','package-lock.json']) {
-    const v=JSON.parse(fs.readFileSync(p,'utf8'));assert.equal(v.version,'1.0.9');
+    const v=JSON.parse(fs.readFileSync(p,'utf8'));assert.equal(v.version,'2.0.0-alpha');
   }
-  assert.equal(JSON.parse(fs.readFileSync('package-lock.json','utf8')).packages[''].version,'1.0.9');
+  assert.equal(JSON.parse(fs.readFileSync('package-lock.json','utf8')).packages[''].version,'2.0.0-alpha');
   for(const p of ['src/core/version.js','installer/majin.iss','scripts/publish.ps1']){
-    const text=fs.readFileSync(p,'utf8');assert.match(text,/1\.0\.9/);
+    const text=fs.readFileSync(p,'utf8');assert.match(text,/2\.0\.0-alpha/);
   }
 });
 

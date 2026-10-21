@@ -56,7 +56,7 @@ test('setup: the payload is a MAJIN that runs, file by file', { skip: canBundle 
   assert.ok(size > 100000, `a 100 kB payload cannot hold the bundle: ${size}`);
   assert.ok(size < 900000, `the installer should stay small: ${size} B`);
   const hdr = read('dist/setup/payload.h');
-  assert.match(hdr, /#define MAJIN_VERSION "\d+\.\d+\.\d+"/, 'the stub knows the version it installs');
+  assert.match(hdr, /#define MAJIN_VERSION "\d+\.\d+\.\d+(?:-[\w.]+)?"/, 'the stub knows the version it installs');
   assert.match(hdr, /#define MAJIN_PAYLOAD_LEN \d+UL/);
   assert.match(hdr, /#define MAJIN_PAYLOAD_SHA256 "[0-9a-f]{64}"/);
   const declared = Number(/MAJIN_PAYLOAD_LEN (\d+)UL/.exec(hdr)[1]);

@@ -9,4 +9,4 @@
  * package.json, the .iss default or the docs disagree, and it asserts the property that matters on a fresh
  * install - a program at the release it came from never reports an update.
  */
-export const VERSION = '1.0.9';
+export const VERSION = '2.0.0-alpha'; // V2 line identifies itself independently from V1 maintenance (main = 1.0.x)

@@ -22,8 +22,8 @@ test('narrator UI mode and setup exist without model download on app launch',()=
  assert.match(p,/valid_origin/);
  assert.match(fs.readFileSync('scripts/install-kokoro-voice.ps1','utf8'),/kokoro-v1\.0\.onnx/);
 });
-test('v1.0.9 release identifiers align',()=>{
- for(const f of ['package.json','package-lock.json'])assert.equal(JSON.parse(fs.readFileSync(f,'utf8')).version,'1.0.9');
- assert.equal(JSON.parse(fs.readFileSync('package-lock.json','utf8')).packages[''].version,'1.0.9');
- for(const f of ['src/core/version.js','installer/majin.iss','scripts/publish.ps1'])assert.match(fs.readFileSync(f,'utf8'),/1\.0\.9/);
+test('V2 release identifiers align (2.0.0-alpha)',()=>{
+ for(const f of ['package.json','package-lock.json'])assert.equal(JSON.parse(fs.readFileSync(f,'utf8')).version,'2.0.0-alpha');
+ assert.equal(JSON.parse(fs.readFileSync('package-lock.json','utf8')).packages[''].version,'2.0.0-alpha');
+ for(const f of ['src/core/version.js','installer/majin.iss','scripts/publish.ps1'])assert.match(fs.readFileSync(f,'utf8'),/2\.0\.0-alpha/);
 });

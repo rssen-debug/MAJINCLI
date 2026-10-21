@@ -13,7 +13,7 @@ name: build-exe
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ['v1.*']  # V2 isolation: never publish production installers from v2 work; V2 uses its own alpha pipeline
   pull_request:
     branches: [main]
   workflow_dispatch:
