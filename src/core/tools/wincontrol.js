@@ -158,9 +158,19 @@ async function runBridge(action, { window = '', text = '', caption = '' } = {}) 
     stdout = String(e.stdout || '');
     stderr = String(e.stderr || '');
   }
-  const line = stdout.trim().split(/\r?\n/).pop() || '';
+  // A PowerShell bridge can produce progress/warnings around the contract
+  // JSON. Read the most recent actual JSON object rather than assuming the
+  // final output line is the payload.
+  const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
   let j = null;
-  try { j = JSON.parse(line); } catch { /* no structured result */ }
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const candidate = JSON.parse(lines[i]);
+      if (candidate && typeof candidate === 'object' && typeof candidate.ok === 'boolean') {
+        j = candidate; break;
+      }
+    } catch { /* continue to another output line */ }
+  }
   if (!j) {
     // PowerShell 5.1 can serialize process errors as CLIXML. Extract the
     // actual Error stream and provide a bounded diagnostic, not a fake PASS.
@@ -172,7 +182,8 @@ async function runBridge(action, { window = '', text = '', caption = '' } = {}) 
     const detail = psErrors || plain.slice(-620) || String(failure?.message || '').slice(0,180) || 'no JSON output';
     return { ok:false, error: { code:failure?'bridge_exit':'bridge_parse',
       message:'Win32 control bridge ' + exit + ', stdout_bytes=' + stdout.length +
-        ', stderr_bytes=' + stderr.length + ': ' + detail } };
+        ', stderr_bytes=' + stderr.length + ', stdout_tail=' +
+        stdout.slice(-270).replace(/MAJIN_QA_[A-Z0-9]+/g,'QA_TEXT') + ': ' + detail } };
   }
   if (j.ok === false) return { ok: false, error: { code: j.error?.code || 'control_failed', message: j.error?.message || 'control op failed', hint: j.error?.hint || null }, meta: j };
   return { ok: true, report: j, meta: j };
