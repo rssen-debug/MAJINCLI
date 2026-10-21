@@ -238,18 +238,29 @@ allowedBrowserSessions.add(applySession);
 await caseRun('10', 'submit-synthetic-job-form',
   'On this LOCAL QA job portal ONLY ' + base + ', use browser.open, browser.fill if needed, browser.click to tick the consent checkbox, and browser.click the Apply button. The job ID is QA-JOB-' + stamp +
   '. This is a fake job fixture, not a real employer. Actually submit it; do not invent a receipt.',
-  ['browser.open','browser.read','browser.fill','browser.click'], () => ({
-    ok: receipts.some(r => r.job === 'QA-JOB-' + stamp && r.receipt === receiptId),
-    reason: 'independent local HTTP server received actual POST and issued ' + receiptId
-  }), { session:applySession, timeoutMs:150000 });
+  ['browser.open','browser.read','browser.fill','browser.click'], () => {
+    const expected = 'QA-JOB-' + stamp;
+    const pass = receipts.some(r => r.job === expected && r.receipt === receiptId);
+    const received = receipts.find(r => r.receipt === receiptId);
+    return {
+      ok: pass,
+      reason: pass
+        ? 'independent HTTP POST confirmed correct job ID and server-issued receipt'
+        : received
+          ? 'local POST received but submitted job ID did not match required fixture ID (or was blank)'
+          : 'NO real HTTP POST/receipt observed by the local server',
+    };
+  }, { session:applySession, timeoutMs:150000 });
 await caseRun('11', 'real-public-web-research',
   'Use web.search to find the official Node.js documentation URL and save at least one actual URL to node-sources-' + stamp +
   '.md. Do not fabricate a search result.',
-  ['web.search','fs.write'], () => ({
-    ok: /https?:\/\/[^\s)]+/.test(read('node-sources-' + stamp + '.md')) &&
-        /nodejs\.org|nodejs\.dev/.test(read('node-sources-' + stamp + '.md')),
-    reason: 'public web search resulted in an independently saved official documentation URL'
-  }));
+  ['web.search','fs.write'], () => {
+    const saved = read('node-sources-' + stamp + '.md');
+    const ok = /https?:\/\/[^\s)]+/.test(saved) && /nodejs\.org|nodejs\.dev/.test(saved);
+    return { ok, reason: ok
+      ? 'independently verified official Node.js documentation URL was SAVED in the requested file'
+      : 'NO matching official Node.js URL in the requested output file; search result alone is NOT a saved artifact' };
+  });
 clearInterval(approvalPoll);
 // Close every browser session BEFORE the HTTP fixture, otherwise chromium's
 // persistent socket can hold server.close open and the final verdict is lost.
