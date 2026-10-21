@@ -428,7 +428,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         if (r.name === 'fs.write' && typeof r.args?.path === 'string' &&
             typeof r.args.content === 'string') {
           if (writeProof.ok) invalidJsWrites.delete(r.args.path);
-          else if (/\\.(?:js|mjs)$/i.test(r.args.path))
+          else if (/\.(?:js|mjs)$/i.test(r.args.path))
             invalidJsWrites.set(r.args.path, { content: r.args.content, repeats: 0 });
         }
       }
