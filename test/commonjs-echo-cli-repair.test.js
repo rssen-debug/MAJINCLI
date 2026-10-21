@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { repairSimpleCommonJsEchoCliWrite } from '../src/core/goal-artifact.js';
+import { repairSimpleCommonJsEchoCliWrite, inspectRequestedArtifact } from '../src/core/goal-artifact.js';
 
 const workspace=fs.mkdtempSync(path.join(os.tmpdir(),'majin-commonjs-echo-'));
 const name='my-agent-qa.mjs';
@@ -22,6 +22,7 @@ test('repairs exact observed Qwen CommonJS-only .mjs echo without inventing new 
   assert.ok(!outcome.args.content.includes('module.exports'));
   const abs=path.join(workspace,name);
   fs.writeFileSync(abs,outcome.args.content);
+  assert.equal(inspectRequestedArtifact(goal,workspace).ok,true,'static oracle must recognize a genuine joined runtime argument');
   const check=spawnSync(process.execPath,['--check',abs],{encoding:'utf8'});
   assert.equal(check.status,0,check.stderr);
   const first=spawnSync(process.execPath,[abs,'QA_PING_ONE'],{encoding:'utf8'});
