@@ -48,9 +48,17 @@ for (const f of fs.readdirSync(dist)) {
 }
 
 /* 1) resurser bredvid bundlen */
+// The installed logo used to come from a stale hand-maintained .ico.
+// Generate the multi-size Windows icon from the *same* pink PNG shown in MAJIN UI.
+// Windows-only: no need to generate icons during a Linux bundle-only build.
 copyDir(path.join(root, 'src', 'ui'), path.join(dist, 'ui'));
 copyDir(path.join(root, 'rules'), path.join(dist, 'rules'));
 copyDir(path.join(root, 'assets'), path.join(dist, 'assets'));
+if (process.platform === 'win32' && !noPkg && process.env.MAJIN_NO_ICON !== '1') {
+  run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', path.join(root, 'scripts', 'refresh-icon.ps1'),
+    '-Destination', path.join(dist, 'assets', 'majin.ico')]);
+}
 fs.copyFileSync(path.join(root, 'package.json'), path.join(dist, 'package.json'));
 
 /* 2) esbuild — som en fil i dist/, aldrig som `node -e <manus>`: ett
@@ -133,7 +141,7 @@ function embedExeIcon(exe) {
     console.log('  icon      skipped (MAJIN_NO_ICON=1)');
     return;
   }
-  const ico = path.join(root, 'assets', 'majin.ico');
+  const ico = path.join(dist, 'assets', 'majin.ico');
   if (!fs.existsSync(ico)) {
     console.log('  icon      skipped (no assets/majin.ico)');
     return;
