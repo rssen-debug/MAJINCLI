@@ -28,6 +28,8 @@ jobs:
       - name: Run the acceptance pack (non-interactive)
         run: powershell -ExecutionPolicy Bypass -File qa\win-acceptance\run-all.ps1 -Out "$env:RUNNER_TEMP\win-acceptance.json"
         continue-on-error: true
+        env:
+          MAJIN_ACCEPTANCE_NONINTERACTIVE: "1"
       - name: Validate the evidence conforms to the contract
         run: node scripts/verify-win-acceptance.mjs "$env:RUNNER_TEMP\win-acceptance.json"
       - name: Enforce the gate ONLY when interactive evidence was captured

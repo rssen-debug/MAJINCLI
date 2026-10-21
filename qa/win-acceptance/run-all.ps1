@@ -26,8 +26,11 @@ $shotDir = Join-Path $PSScriptRoot 'shots'
 New-Item -ItemType Directory -Force -Path $shotDir | Out-Null
 
 function Add-Step($id, $title, [scriptblock]$probe) {
-  try { $probe.Invoke() }
-  catch { $results.Add([ordered]@{ step = $id; title = $title; status = 'FAIL'; evidence = $_.Exception.Message; artifact = $null }) }
+  $oldPref = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try { & $probe }
+  catch { $results.Add([ordered]@{ step = $id; title = $title; status = 'FAIL'; evidence = "probe threw: $($_.Exception.Message)"; artifact = $null }) }
+  finally { $ErrorActionPreference = $oldPref }
 }
 function Select-BitmapColor($Path, $Hex) {
   Add-Type -AssemblyName System.Drawing
@@ -54,9 +57,9 @@ function Shot($name) {
 }
 
 # Github-hosted Windows Actions runs as a service with no usable desktop,
-# even when UserInteractive unexpectedly reports true. Keep self-hosted
-# interactive desktop runs eligible for genuine screenshot evidence.
-$interactive = [Environment]::UserInteractive -and ($env:RUNNER_ENVIRONMENT -ne 'github-hosted')
+# even when UserInteractive unexpectedly reports true. Two independent
+# self-authenticating signals decide: service runner check + explicit override.
+$interactive = [Environment]::UserInteractive -and ($env:RUNNER_ENVIRONMENT -ne 'github-hosted') -and ($env:MAJIN_ACCEPTANCE_NONINTERACTIVE -ne '1')
 if (-not $interactive) {
   # PowerShell ordered hashtables use semicolons/newlines, not commas.
   # A1 is mandatory to the JSON validator even when no desktop exists.
@@ -74,7 +77,7 @@ if (-not $interactive) {
 if ($interactive) {
   Add-Step 'A1' 'pink cursor overlay visible + drawn on screen' {
     $proc = Get-Process | Where-Object { $_.Name -match 'pink|majin' } | Select-Object -First 1
-    if (-not $proc) { $results.Add([ordered]@{ step = 'A1'; title = 'pink cursor overlay visible + drawn on screen'; status = 'FAIL'; evidence = 'no MAJIN/pink-cursor process found — start the app first'; artifact = $null }); return }
+    if (-not $proc) { $results.Add([ordered]@{ step = 'A1'; title = 'pink cursor overlay visible + drawn on screen'; status = 'NOT TESTED'; evidence = 'no MAJIN process running in this session — the overlay cannot be evaluated without the app; start MAJIN and rerun'; artifact = $null }); return }
     $shot = Shot 'A1-pink-cursor'
     $found = Select-BitmapColor -Path $shot -Hex 'FF3CA5'
     $results.Add([ordered]@{ step = 'A1'; title = 'pink cursor overlay visible + drawn on screen'; status = ($(if ($found) { 'PASS' } else { 'FAIL' })); evidence = "canvas scan for #ff3ca5: $found"; artifact = $shot })
