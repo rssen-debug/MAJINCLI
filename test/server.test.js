@@ -531,3 +531,28 @@ test('/api/tools exposes live JSON Schema contracts, not only parameter names', 
     assert.equal(t.parameters.type, 'object');
   }
 });
+
+
+test('workspace previews serve actual files including Windows-style workspace prefixes, never outside paths', async () => {
+  const root = path.join(home, 'workspace');
+  const nested = path.join(root, 'preview-audit');
+  fs.mkdirSync(nested, { recursive: true });
+  fs.writeFileSync(path.join(nested, 'index.html'), '<h1>MAJIN preview audited</h1>');
+  const read = async file => get('/api/file?path=' + encodeURIComponent(file) + '&t=' + TOKEN);
+  for (const name of ['preview-audit/index.html', 'workspace/preview-audit/index.html', 'workspace\\preview-audit\\index.html']) {
+    const result = await read(name);
+    assert.equal(result.status, 200, name + ': ' + result.body);
+    assert.match(result.body, /MAJIN preview audited/);
+  }
+  const missing = await read('preview-audit/absent.html');
+  assert.equal(missing.status, 404);
+  const blocked = await read('../config.json');
+  assert.equal(blocked.status, 403, 'do not expose files outside workspace');
+  const link = path.join(nested, 'escape.html');
+  try {
+    fs.symlinkSync(path.join(home, 'config.json'), link);
+    assert.equal((await read('preview-audit/escape.html')).status, 403, 'symlink must not bypass workspace restrictions');
+  } catch (e) {
+    if (e.code !== 'EPERM' && e.code !== 'EACCES') throw e;
+  } finally { fs.rmSync(link, { force: true }); }
+});

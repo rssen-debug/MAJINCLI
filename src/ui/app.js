@@ -296,7 +296,8 @@ function closeAnswer(ev) {
     const secs = ((Date.now() - S.t0) / 1000).toFixed(1);
     foot.textContent = [meta.job && 'job ' + meta.job, meta.steps && meta.steps + ' steps', meta.tools && meta.tools + ' tools', meta.usage && (meta.usage.input + '→' + meta.usage.output + ' tok'), meta.usage && meta.usage.costUsd ? '$' + meta.usage.costUsd.toFixed(4) : null, secs + 's'].filter(Boolean).join(' · ');
     a.m.append(foot);
-    if (S.voice && ev.text) speak(ev.text);
+    const audibleReply = String(ev.text || S.curBody || '').trim();
+    if (S.voice && !S.cancelled && audibleReply) void speak(audibleReply);
   }
   S.cur = null;
   S.tools = null;
@@ -905,7 +906,7 @@ function startMic() {
   catch(e){stopMic();voiceState('error',e.message);}
 }
 function micToggle(){
-  if(S.handsFree){S.handsFree=false;stopMic();speechSynthesis?.cancel();}
+  if(S.handsFree){S.handsFree=false;stopMic();window.speechSynthesis?.cancel();}
   else {S.handsFree=true;S.voice=true;$('b-voice')?.classList.add('on');startMic();}
 }
 let currentVoiceAudio=null, voiceRequest=null;
@@ -936,32 +937,53 @@ async function neuralNarrator(text){
   }
 }
 function browserNarrator(clean){
-  return new Promise(resolve=>{
-    if(!('speechSynthesis' in window)){resolve();return;}
+  return new Promise((resolve,reject)=>{
+    if(!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)){
+      reject(new Error('No text-to-speech engine is available in this browser'));return;
+    }
+    const engine=window.speechSynthesis;
+    let finished=false;
+    // Some Chromium/Windows installations never fire onend when output is
+    // unavailable. Bound the turn so the microphone can resume.
+    const timeout=setTimeout(()=>finish(new Error('Speech playback timed out; check Windows audio output')),Math.min(60000,8000+clean.length*110));
+    function finish(error){
+      if(finished)return;
+      finished=true;clearTimeout(timeout);
+      if(error){try{engine.cancel();}catch{}reject(error);}
+      else resolve(true);
+    }
     const u=new SpeechSynthesisUtterance(clean);
     const lang=S.st?.config?.ui?.voice?.lang||'sv-SE';
     u.lang=lang;u.rate=S.st?.config?.ui?.voice?.rate||1.04;
-    const voices=speechSynthesis.getVoices().filter(x=>x.lang?.slice(0,2).toLowerCase()===lang.slice(0,2).toLowerCase());
+    const voices=engine.getVoices().filter(x=>x.lang?.slice(0,2).toLowerCase()===lang.slice(0,2).toLowerCase());
     u.voice=voices.find(x=>/natural|neural/i.test(x.name))||voices[0]||null;
-    u.onend=resolve;u.onerror=resolve;
-    speechSynthesis.cancel();speechSynthesis.speak(u);
+    u.onend=()=>finish();
+    u.onerror=e=>finish(new Error('Speech playback failed: '+(e.error||'unknown')));
+    try{engine.cancel();engine.resume();engine.speak(u);}
+    catch(e){finish(e);}
   });
 }
 async function speak(t){
   if(!S.voice)return;
-  const clean=String(t).replace(/[*_#]/g,'').slice(0,700).trim();
+  const clean=String(t).replace(/\`[^\`]+\`/g,' ').replace(/https?:\/\/\S+/g,' link ').replace(/[*_#]/g,'').slice(0,1200).trim();
   if(!clean)return;
   stopMic();
   speechActive=true;voiceState('speaking','MAJIN speaking…');
   try {
-    // English narration uses the local Kokoro male model. Swedish content
-    // falls back to OS Swedish until a properly licensed sv voice is installed.
-    const isEnglish = S.narratorEnglish === true;
-    if(isEnglish){try{await neuralNarrator(clean);return;}catch(e){voiceState('speaking','Local voice unavailable; using system voice');}}
+    // A locally configured Kokoro narrator is optional; never silently
+    // claim audible playback if both Kokoro and browser TTS fail.
+    if(S.narratorEnglish === true){
+      try{await neuralNarrator(clean);return;}
+      catch(e){voiceState('speaking','Local narrator unavailable; trying system voice');}
+    }
     await browserNarrator(clean);
+  } catch(e) {
+    voiceState('error','Could not play speech: '+e.message);
+    toast('Voice output failed: '+e.message+'. Check volume and selected Windows audio device.');
   } finally {
-    speechActive=false;voiceState('idle','Voice ready');
+    speechActive=false;
     if(S.handsFree&&!S.busy)startMic();
+    else if(document.body.dataset.voiceMode==='speaking')voiceState('idle','Voice ready');
   }
 }
 
@@ -1226,7 +1248,7 @@ $('b-narrator').onclick = () => {
 $('b-voice').onclick = () => {
   S.voice = !S.voice;
   $('b-voice').classList.toggle('on', S.voice);
-  if (!S.voice) {S.handsFree=false;stopMic();speechSynthesis?.cancel();}
+  if (!S.voice) {S.handsFree=false;stopMic();window.speechSynthesis?.cancel();}
 };
 $('b-test').onclick = async () => {
   setStatus('selftest…');

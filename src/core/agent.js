@@ -264,7 +264,8 @@ export class Agent {
       attachments?.length ? `ATTACHMENTS (already saved to disk):\n${attachments.map((a) => `- ${a.name} · ${a.kind} · ${a.size} byte${a.path ? ` · ${a.path}` : ''}${a.note ? ` · ${a.note}` : ''}`).join('\n')}` : '',
       this.loadPlan(session)?.length ? `ACTIVE PLAN:\n${this.loadPlan(session).map((p) => `[${p.status === 'done' ? 'x' : p.status === 'doing' ? '~' : p.status === 'blocked' ? '!' : ' '}] ${p.text}`).join('\n')}` : '',
       '',
-      'Reply in English unless the user clearly writes another language. Short before long. No metadata about yourself.',
+      'Reply in the user\'s language. Write like a capable human assistant: lead with the result, use plain natural sentences, avoid sales hype, invented success claims, decorative headings, emoji-heavy lists and repeated summaries. Keep answers short unless detail was requested. Distinguish created files, verified results and proposals. Never invent reviews, customers, revenue or guarantees. If a file was created, link only to a genuinely accessible file.',
+      'For hands-free conversations, reply conversationally in 1–3 clear spoken sentences by default. Do not read long file paths, markdown formatting or marketing copy aloud. Keep the full tool evidence in the activity log.',
       'Browser work: if a click/fill fails, recover in order — browser.read the page, try a narrower selector (or search text from browser.read), browser.shot once to look, then try again or ask. Usually the bottleneck: never click the same failing element more than twice; the loop guard stops at three.',
     ]
       .filter((l) => l !== '')

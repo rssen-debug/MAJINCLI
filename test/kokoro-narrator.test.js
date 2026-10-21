@@ -4,7 +4,7 @@ import fs from 'node:fs';
 test('local narrator remains opt-in and only calls loopback',()=>{
  const s=fs.readFileSync('src/ui/app.js','utf8');
  assert.match(s,/127\.0\.0\.1:18765\/speak/);
- assert.match(s,/if\(isEnglish\)/);
+ assert.match(s,/if\(S\.narratorEnglish === true\)/);
  assert.match(s,/S\.narratorEnglish === true/);
  assert.match(s,/localStorage\.setItem\('majin\.voice\.narratorEN'/);
  assert.match(s,/new Audio\(url\)/);
