@@ -203,7 +203,12 @@ function workPulse(phase){
   if(!S.busy)return;
   if(phase)workPhase=String(phase).slice(0,130);
   workLastEvent=Date.now();
-  const bar=$('work-progress');if(bar)bar.hidden=false;
+  const bar=$('work-progress');
+  if(bar){
+    bar.hidden=false;
+    bar.dataset.phase=/verif|validat|check|kontroll/i.test(workPhase)?'verify':
+      /fail|error|failed|block|stuck/i.test(workPhase)?'problem':'active';
+  }
 }
 setInterval(()=>{
   const bar=$('work-progress');if(!bar)return;
@@ -223,7 +228,8 @@ function onEvent(ev) {
     if (ev.type === 'route') workPulse('Choosing the best model');
     else if (ev.type === 'step') workPulse('Step '+ev.step+'/'+ev.of+' · '+(ev.model||'model'));
     else if (ev.type === 'tool' || ev.type === 'tool_begin') workPulse('Using '+(ev.name||ev.tool||'a tool'));
-    else if (ev.type === 'tool_result') workPulse(ev.ok?'Tool finished · reviewing results':'Tool failed · adjusting approach');
+    else if (ev.type === 'tool_result') workPulse(ev.ok?'Tool finished · checking result':'Tool failed · adjusting approach');
+    else if (ev.type === 'verify' || ev.type === 'verification') workPulse('Verifying the real result');
     else if (ev.type === 'thinking') workPulse('Thinking through the next step');
     else if (ev.type === 'delta') workPulse('Writing the response');
     else if (ev.type === 'escalate') workPulse('Switching models');

@@ -11,6 +11,7 @@ import { bus } from '../log.js';
 import { openFor, closeFor, isOpen, journal } from '../browser.js';
 import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, VERSION as GROUND_V } from '../browser-ground.js';
 import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
+import { VERIFY_JS, verificationCriteria, verifyObserved } from '../browser-evidence.js';
 
 const followedSafe = (fol) => (fol && fol.followed === true ? true : false);
 
@@ -431,6 +432,52 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       })()`);
       if (!confirm.ok) return { ok: false, error: { code: 'no_upload', message: 'the input did not accept the file', hint: 'screenshot the page and check for a custom uploader' } };
       return { ok: true, result: `uploaded — page now holds "${confirm.name}" (${confirm.size} bytes)`, meta: { name: confirm.name, size: confirm.size, path: abs }, summary: `uploaded ${confirm.name}` };
+    },
+  }),
+
+  def({
+    name: 'browser.verify',
+    group: 'web',
+    risk: 'read',
+    desc: 'Verify a REAL post-action browser outcome. Checks live URL, title, element visibility, text and checkbox state. On failure returns FAILED with observed evidence — never calls a click successful merely because it executed. Use after browser.click/fill when the goal requires an effect.',
+    params: {
+      selector: 'string optional CSS selector to assert exists and is visible',
+      present: 'string optional true|false, default true if selector set',
+      text: 'string optional expected text fragment within selector',
+      url: 'string optional expected URL fragment',
+      title: 'string optional expected title fragment',
+      checked: 'string optional true|false expected checkbox checked state',
+      waitMs: 'string optional: wait up to 0–5000ms for the expected DOM outcome (default 0)',
+    },
+    examples: ['browser.verify({selector:"#success",text:"Saved"})', 'browser.verify({url:"/dashboard"})','browser.verify({selector:"input[name=consent]",checked:"true"})'],
+    async run(input, ctx) {
+      const session = ctx.session || 'default';
+      if (!isOpen(session)) return { ok:false,error:{code:'browser_closed',message:'Open the target page before verifying'} };
+      const criteria=verificationCriteria(input);
+      if(!criteria.ok)return {ok:false,error:{code:'bad_expectation',message:criteria.reason}};
+      journal.guard(session, 'browser.verify:' + JSON.stringify(criteria).slice(0,250));
+      const b=await openFor({session,cfgGet:k=>ctx.cfg.get(k)});
+      const script=VERIFY_JS.replace('__MAJIN_ARGS__',JSON.stringify(criteria));
+      const waitMs=Math.min(5000,Math.max(0,Math.trunc(Number(input?.waitMs)||0)));
+      const deadline=Date.now()+waitMs;
+      let observed,verdict;
+      // Stagehand-style observe→verify with bounded wait for asynchronous DOM
+      // updates. Every poll rechecks LIVE state, never replays the click.
+      for(;;){
+        try { observed=await b.eval(script); }
+        catch(e){ return {ok:false,error:{code:'browser_verify_error',message:String(e?.message||e)}}; }
+        verdict=verifyObserved(criteria,observed);
+        if(verdict.ok || Date.now()>=deadline)break;
+        await new Promise(resolve=>setTimeout(resolve,Math.min(250,Math.max(1,deadline-Date.now()))));
+      }
+      if(!verdict.ok){
+        return {ok:false,error:{code:'assertion_failed',
+          message:'Browser outcome NOT verified. Re-observe with browser.elements/read and choose a different recovery step; do not repeat an identical action.',
+          failures:verdict.failures},meta:{assertions:verdict.assertions,observed:verdict.observed},
+          summary:'verification FAILED'};
+      }
+      return {ok:true,result:'Verified live browser outcome: '+verdict.assertions.map(a=>a.name+'='+a.actual).join(', '),
+        meta:{assertions:verdict.assertions,observed:verdict.observed},summary:'browser outcome VERIFIED'};
     },
   }),
 
