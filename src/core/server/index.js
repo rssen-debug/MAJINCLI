@@ -221,7 +221,7 @@ a{color:#fff}b{color:#fff}pre{background:#0a1420;padding:10px 14px;border:1px so
     if (wantsIndex(p)) {
       const file = path.join(UI_DIR, 'index.html');
       if (!fs.existsSync(file)) return html(res, 200, '<pre>UI missing — run: npm run ui</pre>');
-      const raw = fs.readFileSync(file, 'utf8').replace(/'__MAJIN_TOKEN__'/g, JSON.stringify(token)).replace(/'__MAJIN_VERSION__'/g, JSON.stringify(VERSION)).replace(/__MAJIN___/g, cfg.get('name') || 'MAJIN');
+      const raw = fs.readFileSync(file, 'utf8').replace(/'__MAJIN_TOKEN__'/g, JSON.stringify(token)).replace(/'__MAJIN_VERSION__'/g, JSON.stringify(VERSION)).replace(/__MAJIN_FAVICON_VERSION__/g, VERSION).replace(/__MAJIN___/g, cfg.get('name') || 'MAJIN');
       res.setHeader('set-cookie', `majin=${token}; Path=/; SameSite=Lax`);
       return html(res, 200, raw);
     }
