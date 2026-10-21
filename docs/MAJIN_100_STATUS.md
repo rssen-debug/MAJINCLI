@@ -4,7 +4,7 @@
 
 > Ärlighetsregel: ingen % utan reproducerbart bevis. Gamla COMPLETION_MATRIX.md (100/100 på papper) motsägs av uppmätta artefakter och ersätts av DENNA fil som sanning.
 
-## Total ekvivalent status: **93/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
+## Total ekvivalent status: **94/100** (MASTER-promptens W1–W14-acceptans, inte gamla scoringen)
 
 ## Per-våg (VERIFIED kräver artefakt, INTE bara att koden finns)
 
@@ -13,7 +13,7 @@
 | W1 Absorb | **VERIFIED-CORE** |  implementerad + bevisad: fixtures 5/5 ✓ + riktigt scan microsoft/UFO (851 fil, MIT, modulvärme); gap-analys vs 108-verktyg ✓ (se docs/evidence / absorb-artefakter) |
 | W2 Research-motor | **VERIFIED-CORE + ENV-BLOCK-ANT*** | research.run implementerad (pipeline, ledger, konfliktflaggor); 8/8 fixtures ✓ + hela suiten 573/555/0/18 ✓; real-net-integration begränsad av sandbox-egress (DuckDuckGo/Bing 0/0) — verifieras i acceptance-lane |
 | W3 Execution-backends | **VERIFIED-CORE (lokal) + HONEST GATE (docker/ssh)** | exec.* ×5 implementerade, plattform-säkra (powershell|bash); docker:valuektra validerad på CI häringen valuektra: ärliga docker_unavailable/ssh_host_required med FORBIDDEN-policy uppmätta; 7/7 tester ✓ + hela sviten 580/562/0/18 |
-| W4 Standing agent teams | **INCOMPLETE** | src/core/swarm.js finns (HYPERSWARM-papper); persistent identity/shared memory/budgets/checkpoint/recovery obevit |
+| W4 Standing agent teams | **VERIFIED-CORE** | src/core/teams.js + team.manage/team.run (133→135 verktyg); persistent identity (roster, stabilt addedAt), shared memory (blackboard jsonl + digest-injektion), budgets (per-member maxSteps + global teamStepCap, TeamBudgetError hoggljudd), checkpoint (fore runSwarm-donemark), recovery (resumeId exactly-once, counter-proof) — monsterfran VERIFIERAD absorb-scan openai/swarm (MIT), exekveringen kor pa befintlig runSwarm oforandrad; 9/9 tester + full 760/0/17; evidence: docs/evidence/w4-teams-absorb-2026-10-21.md. Vit lucka: live-run mot riktig provider ar cred-gated (same W2/W8-block), honest-fail-path testad |
 | W5 Event flows | **VERIFIED-CORE** | flows.* ×6 motorn implementerad: file (chokidar-reel direktetdbesyst), webhook (HTTP intake), github-poll (dedupe), manual (renderTemplate), manual/schedule triggers; dedupe+rate-limit+bounded-retries+approval-gate bevisade; 8/8 tester + full 591/575/0/16 |
 | W6 Power Transfer | **MISSING** | är beroende av W1 |
 | W7 Mission loop | **VERIFIED-CORE (recovery)** | kontrakt+verify→repair→replan fanns; checkpoint-persistens + crash-recovery tillagd: resumed missions fortsatter utan att sidoeffekter upprepas (bevisat med raknare); 3 nya tester + full 583/565/0/18 |

@@ -323,7 +323,19 @@
       ],
       "evidence": "GitHub Actions runs 39527628978 (green, A5 PASS) and 39527393552 (red, gate caught missing probe); artifacts win-acceptance-<sha> inspected directly",
       "verdict": "93/100"
+    },
+    {
+      "round": 30,
+      "focus": "W4 Standing agent teams INCOMPLETE -> VERIFIED-CORE, built on absorb-verified patterns (reuse directive honored, no wheel reinvented)",
+      "done": [
+        "absorb-scans: openai/swarm (278 filer, MIT) source-verified patternextract (Agent-entity, context_variables blackboard, handoff); crewAI 4000 filer gav heat=0 — scanner-limitation flagged honestly in evidence",
+        "src/core/teams.js: TeamStore (roster persistens, member-upsert stabilt addedAt, blackboard jsonl+digest, atomic checkpoint) + runTeam (budget TeamBudgetError loud, resume exactly-once via makeWorker-injection)",
+        "tools: team.manage + team.run (133 -> 135 registered, counter-asserts bumped consciously), i18n-gate honored (12 swedish literals -> english)",
+        "test/teams.test.js 9/9: identity, memory, budget, checkpoint, recovery counter-proof, tool surface, honest-fail-without-provider"
+      ],
+      "evidence": "docs/evidence/w4-teams-absorb-2026-10-21.md; full npm test 760/0/17",
+      "verdict": "94/100"
     }
   ],
-  "percent": 93
+  "percent": 94
 }

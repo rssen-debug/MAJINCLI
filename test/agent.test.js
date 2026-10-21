@@ -154,7 +154,7 @@ test('abort: stop() unwinds without hanging', async () => {
 });
 
 test('registry + runtime: the promises kept', async () => {
-  assert.equal(rt.registry.list().length, 133, '133 tools (129 core/majic + 4 control), none disabled');
+  assert.equal(rt.registry.list().length, 135, '135 tools (131 core/majic + 4 control), none disabled');
   const names = rt.registry.list().map((t) => t.name);
   for (const must of ['fs.write', 'shell.run', 'web.fetch', 're.analyze', 'majin.configure', 'agent.delegate', 'agent.moa']) {
     assert.ok(names.includes(must), `${must} must exist`);
@@ -163,8 +163,8 @@ test('registry + runtime: the promises kept', async () => {
   assert.ok(Object.keys(groups).length >= 6, 'groups for the UI');
   assert.ok(groups.reverse.length >= 20, 'the RE group must be large');
   assert.equal(typeof rt.version, 'string');
-  assert.equal(rt.state({ includeTools: false }).tools.count, 133, 'state must report the tool count');
-  assert.equal(rt.state().tools.length, 133, 'full state lists every tool');
+  assert.equal(rt.state({ includeTools: false }).tools.count, 135, 'state must report the tool count');
+  assert.equal(rt.state().tools.length, 135, 'full state lists every tool');
   const st = rt.state();
   for (const k of ['config', 'routes', 'moa', 'guard', 'usage', 'channels', 'providers', 'memory']) {
     assert.ok(k in st, `state.${k} is missing`);
