@@ -17,7 +17,9 @@ test('UI indicates states, can stop listening and respects reduced motion',()=>{
   const html=fs.readFileSync('src/ui/index.html','utf8');
   assert.match(html,/<html lang="en" translate="no">/);
   assert.match(html,/name="google" content="notranslate"/);
-  assert.match(html,/aria-pressed="false">Talk/);
+  assert.match(html,/<button id="mic"[^>]+aria-pressed="false"/);
+  assert.match(html,/aria-label="Talk to MAJIN"/);
+  assert.match(html,/id="composer"[\s\S]*id="mic"[\s\S]*id="input"/);
   assert.match(html,/data-voice-mode="listening"/);
   assert.match(html,/prefers-reduced-motion/);
 });
