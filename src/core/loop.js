@@ -11,7 +11,7 @@ import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
-import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion, pinSingleExactTextWrite, verifySingleExactTextCreation, repairSimpleCommanderCliWrite } from './goal-artifact.js';
+import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion, pinSingleExactTextWrite, verifySingleExactTextCreation, repairSimpleCommanderCliWrite, verifyLocalTokenDemoFiles, isLocalTokenDemoGoal } from './goal-artifact.js';
 import { verifyJobIdLineage, pinJobShortlistWrite } from './mission-data-evidence.js';
 import { verifyFollowupJobSelection } from './mission-data-evidence.js';
 
@@ -145,7 +145,8 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
   const sourceLineage = verifyJobIdLineage(initialGoal, cfg.get('workspace'));
   const actionGoal = label === 'main' && !ctx?.readOnly && allowTools &&
     (ctx?.enforceActionEvidence === true || (!modelCall && realProvider)) &&
-    (requiresRealAction(initialGoal) || Boolean(followupSource) || Boolean(sourceLineage));
+    (requiresRealAction(initialGoal) || Boolean(followupSource) || Boolean(sourceLineage) ||
+      isLocalTokenDemoGoal(initialGoal));
   let actionRetries = 0;
   let artifactRetries = 0;
   let steps = 0;
@@ -413,6 +414,18 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         tool_call_id: r.id,
         content: guarded.text,
       });
+    }
+
+    // Explicit isolated TWO-FILE testnet demo: real permitted writes already
+    // persisted both source+notes. Stop before a potentially stalled provider
+    // call, but never claim a real token was deployed or audited.
+    if (actionGoal && !ctx?.readOnly) {
+      const demo = verifyLocalTokenDemoFiles(initialGoal, cfg.get('workspace'), results);
+      if (demo?.ok) {
+        onEvent({ type: 'local_token_demo_verified', label, step: steps, files: demo.files });
+        return { text: demo.text, steps, toolLog, usage: tally, escalated,
+          stopReason: 'verified_local_token_demo_files' };
+      }
     }
 
     // Atomic "create x.txt containing EXACTLY TOKEN": independent byte proof

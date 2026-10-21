@@ -333,3 +333,56 @@ export function repairSimpleCommanderCliWrite(goal, workspace, tool, args) {
     reason: 'replaced single no-options CommonJS commander CLI with built-in Node process.argv',
   };
 }
+
+
+/**
+ * Independent completion only for an explicit LOCAL QA token-demo task
+ * requesting two NAMED workspace files: one Solidity source and one testnet
+ * note. This is NOT proof of ERC20 correctness, safety, actual compilation,
+ * deployment, token issuance or financial success.
+ *
+ * A real Qwen 3B run created both valid demo files on step 1, but the next
+ * Ollama call stalled; the loop incorrectly marked the finished FILE task
+ * BLOCKED. Avoid that extra inference only after real authorized writes and
+ * independent bounded filesystem evidence.
+ */
+export function isLocalTokenDemoGoal(goal) {
+  const input = String(goal || '');
+  return /\blocal\s+QA\s+demo\s+ONLY\b/i.test(input) &&
+    /\bNO\s+live\s+chain\b/i.test(input) &&
+    /\bNO\s+real\s+funds\b/i.test(input) &&
+    /\bSave\s+both\s+files\b/i.test(input) &&
+    /\bcreate\s+[\w-]+\.sol\b/i.test(input) &&
+    /\bWrite\s+[\w-]+\.md\b/i.test(input);
+}
+
+export function verifyLocalTokenDemoFiles(goal, workspace, results) {
+  const input = String(goal || '');
+  if (!isLocalTokenDemoGoal(input) || !Array.isArray(results)) return null;
+  const sol = [...new Set([...input.matchAll(/(?<![/\\\w.-])([\w-]+\.sol)\b/gi)].map(m=>m[1]))];
+  const notes = [...new Set([...input.matchAll(/(?<![/\\\w.-])([\w-]+\.md)\b/gi)].map(m=>m[1]))];
+  if (sol.length !== 1 || notes.length !== 1) return null;
+  const root = path.resolve(workspace || '.');
+  const names = [sol[0], notes[0]];
+  const paths = names.map(n=>path.resolve(root,n));
+  if (paths.some(p=>path.dirname(p)!==root)) return null;
+  const wrote = new Set(results.filter(r=>r?.name==='fs.write' && r.out?.ok!==false)
+    .map(r=>typeof r.args?.path==='string'?path.resolve(root,r.args.path):null));
+  if (paths.some(p=>!wrote.has(p))) return null;
+  const load = p => {
+    try {
+      const stat = fs.lstatSync(p);
+      if (!stat.isFile() || stat.size <= 0 || stat.size > 65536) return '';
+      return fs.readFileSync(p,'utf8');
+    } catch { return ''; }
+  };
+  const source = load(paths[0]), text = load(paths[1]);
+  const ok = /\bcontract\s+ExampleToken\b/.test(source) &&
+    /\btotalSupply\b/.test(source) &&
+    /\bfunction\s+transfer\s*\(/.test(source) &&
+    /\btestnet\b/i.test(text);
+  if (!ok) return { ok:false, files:names, reason:'source or notes lack required local demo markers' };
+  return { ok:true, files:names,
+    text:'Created the local ExampleToken demo source ('+names[0]+') and testnet notes ('+names[1]+
+      ') in MAJIN workspace. Both files verified on disk. NO deployment performed; contract NOT audited.' };
+}
