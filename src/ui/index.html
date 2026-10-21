@@ -362,6 +362,10 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 @keyframes majin-ember{0%,100%{transform:scale(.88);opacity:.66}50%{transform:scale(1.16);opacity:1}}
 @keyframes majin-ember-ring{0%{transform:scale(.7);opacity:.5}100%{transform:scale(1.5);opacity:0}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress .pulse,#composer #work-progress .pulse::after{animation:none!important}}
+/* Inline spirit ember: amber means waiting for a tool, not failure. */
+#composer #work-progress[data-phase="stalled"]{--ember:#ffd197;--halo:rgba(255,209,151,.22)}
+#composer #work-progress[data-phase="stalled"] .pulse{animation-duration:2.5s}
+#composer #work-progress[data-phase="stalled"]::after{opacity:.25;animation-duration:4s}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
