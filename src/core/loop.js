@@ -11,7 +11,7 @@ import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
-import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion, pinSingleExactTextWrite, verifySingleExactTextCreation, verifyLocalTokenDemoFiles } from './goal-artifact.js';
+import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion, pinSingleExactTextWrite, verifySingleExactTextCreation, verifyLocalTokenDemoFiles, isLocalTokenDemoGoal } from './goal-artifact.js';
 import { verifyJobIdLineage, pinJobShortlistWrite } from './mission-data-evidence.js';
 import { verifyFollowupJobSelection } from './mission-data-evidence.js';
 
@@ -145,7 +145,8 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
   const sourceLineage = verifyJobIdLineage(initialGoal, cfg.get('workspace'));
   const actionGoal = label === 'main' && !ctx?.readOnly && allowTools &&
     (ctx?.enforceActionEvidence === true || (!modelCall && realProvider)) &&
-    (requiresRealAction(initialGoal) || Boolean(followupSource) || Boolean(sourceLineage));
+    (requiresRealAction(initialGoal) || Boolean(followupSource) || Boolean(sourceLineage) ||
+      isLocalTokenDemoGoal(initialGoal));
   let actionRetries = 0;
   let artifactRetries = 0;
   let steps = 0;
