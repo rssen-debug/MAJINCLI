@@ -447,6 +447,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       url: 'string optional expected URL fragment',
       title: 'string optional expected title fragment',
       checked: 'string optional true|false expected checkbox checked state',
+      waitMs: 'string optional: wait up to 0–5000ms for the expected DOM outcome (default 0)',
     },
     examples: ['browser.verify({selector:"#success",text:"Saved"})', 'browser.verify({url:"/dashboard"})','browser.verify({selector:"input[name=consent]",checked:"true"})'],
     async run(input, ctx) {
@@ -457,10 +458,18 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       journal.guard(session, 'browser.verify:' + JSON.stringify(criteria).slice(0,250));
       const b=await openFor({session,cfgGet:k=>ctx.cfg.get(k)});
       const script=VERIFY_JS.replace('__MAJIN_ARGS__',JSON.stringify(criteria));
-      let observed;
-      try { observed=await b.eval(script); }
-      catch(e){ return {ok:false,error:{code:'browser_verify_error',message:String(e?.message||e)}}; }
-      const verdict=verifyObserved(criteria,observed);
+      const waitMs=Math.min(5000,Math.max(0,Math.trunc(Number(input?.waitMs)||0)));
+      const deadline=Date.now()+waitMs;
+      let observed,verdict;
+      // Stagehand-style observe→verify with bounded wait for asynchronous DOM
+      // updates. Every poll rechecks LIVE state, never replays the click.
+      for(;;){
+        try { observed=await b.eval(script); }
+        catch(e){ return {ok:false,error:{code:'browser_verify_error',message:String(e?.message||e)}}; }
+        verdict=verifyObserved(criteria,observed);
+        if(verdict.ok || Date.now()>=deadline)break;
+        await new Promise(resolve=>setTimeout(resolve,Math.min(250,Math.max(1,deadline-Date.now()))));
+      }
       if(!verdict.ok){
         return {ok:false,error:{code:'assertion_failed',
           message:'Browser outcome NOT verified. Re-observe with browser.elements/read and choose a different recovery step; do not repeat an identical action.',
