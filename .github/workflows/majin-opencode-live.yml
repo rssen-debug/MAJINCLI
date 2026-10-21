@@ -38,6 +38,12 @@ jobs:
         run: |
           node scripts/qa/opencode-free-smoke.mjs
           echo 'OpenCode Go live smoke passed.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Real Qwen and Grok protocol acceptance
+        if: steps.access.outputs.available == 'true'
+        shell: bash
+        run: |
+          node scripts/qa/opencode-dialects-live.mjs
+          echo 'All three Go wire-protocol families were exercised against the live account.' >> "$GITHUB_STEP_SUMMARY"
       - name: Report missing real-key coverage
         if: steps.access.outputs.available != 'true'
         run: echo "::notice::Live Go acceptance BLOCKED by missing OPENCODE_API_KEY; green job DOES NOT mean live Go passed."
