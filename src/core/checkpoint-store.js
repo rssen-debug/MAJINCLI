@@ -29,9 +29,9 @@ export function saveCheckpoint(root, id, state) {
 export function loadCheckpoint(root, id) {
   const file = checkpointPath(root, id);
   let data;
-  const stat = (() => { try { return fs.statSync(file); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } })();
+  const stat = (() => { try { return fs.lstatSync(file); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } })();
   if (!stat) return null;
-  if (!stat.isFile() || stat.size > 1024 * 1024) throw new Error('Invalid checkpoint file size');
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024) throw new Error('Invalid checkpoint file size');
   try { data = JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (e) { if (e.code === 'ENOENT') return null; throw e; }
   if (data?.schema !== 1 || data?.id !== id || !data?.state || typeof data.state !== 'object' || Array.isArray(data.state)) throw new Error('Invalid checkpoint schema');
