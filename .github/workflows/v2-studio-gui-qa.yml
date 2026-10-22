@@ -58,6 +58,25 @@ jobs:
           node scripts/v2-gui-qa.mjs
           if ($LASTEXITCODE -ne 0) { throw 'GUI-QA RED — see gui-qa-out/gui-qa-results.json artifact' }
           Write-Host ("gui-qa script: {0:N1}s" -f $t.Elapsed.TotalSeconds)
+      - name: Human summary (GITHUB_STEP_SUMMARY reuse)
+        if: always()
+        run: |
+          $path = "gui-qa-out/gui-qa-results.json"
+          if (Test-Path $path) {
+            $r = Get-Content $path -Raw | ConvertFrom-Json
+            $ok = ($r.steps | Where-Object {$_.ok}).Count
+            $tot = ($r.steps).Count
+            Add-Content $GITHUB_STEP_SUMMARY ("## GUI-QA: " + $r.verdict + " (" + $ok + "/" + $tot + ")")
+            Add-Content $GITHUB_STEP_SUMMARY ""
+            Add-Content $GITHUB_STEP_SUMMARY "| Steg | Status | Notis |"
+            Add-Content $GITHUB_STEP_SUMMARY "|---|---|---|"
+            foreach ($s in $r.steps) { $mark = if ($s.ok) { ":white_check_mark:" } else { ":x:" }; $note = if ($s.note) { $s.note } else { "" }; Add-Content $GITHUB_STEP_SUMMARY ("| " + $s.label + " | " + $mark + " | " + $note + " |") }
+            Add-Content $GITHUB_STEP_SUMMARY ""
+            Add-Content $GITHUB_STEP_SUMMARY ("**Kanal:** " + $r.channel + " | **Headless:** " + $r.headless + " | **Run:** " + $env:GITHUB_RUN_ID)
+          } else {
+            Add-Content $GITHUB_STEP_SUMMARY "## GUI-QA: harness dog tidigt — se artifact-upload + logg"
+          }
+
       - name: Upload evidence (results JSON + full-page screenshot)
         if: always()
         uses: actions/upload-artifact@v4
