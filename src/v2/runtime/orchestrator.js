@@ -57,17 +57,19 @@ function startPreviewServer(root) {
  * Retargets acceptance spec paths into the workspaceDir, and if any acceptance
  * needs http, starts a local preview and substitutes '<port>' in its url spec.
  */
-export async function runObjective(objectiveText, { workspaceDir, events = null, compiled = null, provider = null, allowModel = true } = {}) {
+export async function runObjective(objectiveText, { workspaceDir, events = null, compiled = null, provider = null, allowModel = true, telemetry = null } = {}) {
   if (!workspaceDir) throw new Error('runObjective requires workspaceDir');
   fs.mkdirSync(workspaceDir, { recursive: true });
 
   const goal = new Goal({ id: newGoalId(), objective: objectiveText, events });
+  const orchStart = Date.now();
   goal.transition('PLANNING', 'compiled');
   let compileMeta = { source: 'deterministic' };
   let goalObj = compiled;
   if (!goalObj) {
     ({ goal: goalObj, meta: compileMeta } = await compileGoal(objectiveText, { provider, allowModel }));
   }
+  telemetry?.append('goal.start', { goalId: goal.id, objectiveLen: objectiveText.length, risk: null, compilerSource: compileMeta.source });
   goal.acceptance.push(...goalObj.acceptance.map((a) => ({ id: a.id, description: a.description })));
   goalObj.acceptance = goalObj.acceptance.map((a) => ({
     ...a,
@@ -109,7 +111,9 @@ export async function runObjective(objectiveText, { workspaceDir, events = null,
         if (task.action.startsWith('verify_')) {
           const accId = task.action.replace(/^verify_/, '').replace(/^verify:/, '');
           const acc = goalObj.acceptance.find((a) => a.id === accId) || goalObj.acceptance[0];
+          const vt0 = Date.now();
           const v = await verifyAcceptance(goal, { acceptanceId: acc.id, kind: acc.verify.kind, spec: acc.verify.spec, taskId: task.id });
+          telemetry?.append('verification', { goalId: goal.id, acceptanceId: acc.id, kind: acc.verify.kind, verified: v.verified, durationMs: Date.now() - vt0 });
           summary.verification.push({ acceptance: acc.id, verified: v.verified });
           return v.verified ? { result: 'success' } : { result: 'failure', error: { cls: 'VERIFICATION_FAILURE', message: JSON.stringify(v.error || {}) } };
         }
@@ -120,11 +124,13 @@ export async function runObjective(objectiveText, { workspaceDir, events = null,
     if (verdict.summary.failed > 0) {
       goal.transition('FAILED', `verification failed for ${verdict.summary.failed} task(s)`);
       summary.goal = { state: goal.state, uncovered: goal.acceptance.map((a) => a.id) };
+      telemetry?.append('goal.finish', { goalId: goal.id, finalState: goal.state, durationMs: Date.now() - orchStart, tasks: verdict.summary.total, done: verdict.summary.done, failed: verdict.summary.failed, receipts: goal.receipts.length, verifiedReceipts: goal.receipts.filter((r) => r.verified).length, acceptanceCount: goal.acceptance.length });
       return summary;
     }
     goal.transition('VERIFYING', 'graph done');
     goal.complete();
     summary.goal = { state: goal.state, receipts: goal.receipts.length, verifiedReceipts: goal.receipts.filter((r) => r.verified).length };
+    telemetry?.append('goal.finish', { goalId: goal.id, finalState: goal.state, durationMs: Date.now() - orchStart, tasks: verdict.summary.total, done: verdict.summary.done, failed: verdict.summary.failed, receipts: goal.receipts.length, verifiedReceipts: summary.goal.verifiedReceipts, acceptanceCount: goal.acceptance.length });
     return summary;
   } finally {
     if (server) await new Promise((res) => server.close(res));

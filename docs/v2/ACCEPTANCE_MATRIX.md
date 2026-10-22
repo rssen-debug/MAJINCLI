@@ -27,3 +27,4 @@
 | Model runtime: provider adapter + validated chat | VERIFIED | test/v2-model.test.js 4/4 incl. kernel-class mapping (timeout/auth/rate/5xx/network/non-json) against in-process mock server; schema-rejects never reach a value |
 | Compiler router (model-authored goals) | VERIFIED | test/v2-compiler-model.test.js 5/5: provenance stamped by router (model forging attempts rejected), permissions clamped to allowlist, loud deterministic fallback with failure class on malformed/dead endpoints, allowModel off-switch |
 | Model-compiled goal drives orchestrator end-to-end | VERIFIED | test/v2-orchestrator-model.test.js: model-authored website goal reaches COMPLETED via independent verification |
+| Telemetry ledger 122-124 | VERIFIED | test/v2-telemetry.test.js 4/4: field allowlist drops secrets, 256-char clamp, percentile math, real objective trail |
