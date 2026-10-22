@@ -1,6 +1,6 @@
 # MAJIN V2 — LATEST HANDOFF (owner-facing, 2026-10-21)
 
-V2 HEAD (v2/main): 0e3a44b5 (studio goal runs: dogfooded consent gate, 1 grant = 1 run, busy-before-gate bug found by test, injection-proof fixed workspace) ← 33ec0a50 (receipts panel) ← 2c9007e7 (anchors Ed25519) ← 2cc6777f (opencode profiles)
+V2 HEAD (v2/main): 641e69e5 (studio voice panel: offline-first WAV, consent dogfood per external synthesis, honest STT gate, transient uploads) ← 0e3a44b5 (goal runs) ← 33ec0a50 (receipts panel) ← 2c9007e7 (anchors)
 
 COMPLETED (this working day, verified):
 - v2/main created from V1 tip 282a8ff; V1 untouched (policy: only v2/* branches carry V2 code)
