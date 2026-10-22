@@ -23,7 +23,7 @@ export function compactBrowserText(input,{maxChars=2600}={}){
   };
   // Main content first, then late-page status/footer evidence, both bounded.
   for(const row of unique.slice(0,Math.min(28,unique.length)))take(row);
-  if(unique.length>30){
+  if(unique.length>30 || unique.join('\n').length>budget){
     selected.push('… [middle page content omitted]');
     used+=34;
     for(const row of unique.slice(-8))take(row);
