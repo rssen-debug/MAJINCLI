@@ -59,7 +59,7 @@ export function verificationCriteria(input = {}) {
   // as ?next=/dashboard from masquerading as a successful navigation.
   const urlPath = String(input.urlPath || '').trim().slice(0, 350);
   const urlOrigin = String(input.urlOrigin || '').trim().slice(0, 350);
-  if(urlPath && (!urlPath.startsWith('/') || urlPath.startsWith('//') || urlPath.includes('?') || urlPath.includes('#')))
+  if(urlPath && (!urlPath.startsWith('/') || urlPath.startsWith('//') || urlPath.includes('?') || urlPath.includes('#') || /[\u0000-\u001f\u007f]/.test(urlPath)))
     return {ok:false,reason:'urlPath must be an absolute pathname (for example /dashboard), with no query or fragment'};
   if(urlOrigin){
     try {
@@ -69,14 +69,16 @@ export function verificationCriteria(input = {}) {
     } catch { return {ok:false,reason:'urlOrigin must be an exact HTTP(S) origin'}; }
   }
   const title = String(input.title || '').trim().slice(0, 200);
-  const present = ['true','false'].includes(String(input.present)) ? String(input.present) === 'true' : null;
-  const checked = ['true','false'].includes(String(input.checked)) ? String(input.checked) === 'true' : null;
-  const enabled = ['true','false'].includes(String(input.enabled)) ? String(input.enabled) === 'true' : null;
+  const present = [true,false,'true','false'].includes(input.present) ? (input.present===true || input.present==='true') : null;
+  const checked = [true,false,'true','false'].includes(input.checked) ? (input.checked===true || input.checked==='true') : null;
+  const enabled = [true,false,'true','false'].includes(input.enabled) ? (input.enabled===true || input.enabled==='true') : null;
   // Explicit list/card count assertions: unlike clicks, lists can legitimately
   // contain many matches. Stay read-only and don't inspect element values.
   const countRaw = input.count;
-  const hasCount = countRaw !== undefined && countRaw !== null && String(countRaw).trim() !== '';
+  const hasCount = countRaw !== undefined && countRaw !== null && (typeof countRaw !== 'string' || countRaw.trim() !== '');
   const count = hasCount ? Number(countRaw) : null;
+  if(hasCount && !['number','string'].includes(typeof countRaw))
+    return {ok:false,reason:'count must be numeric'};
   if(hasCount && (!Number.isSafeInteger(count) || count<0 || count>1000))
     return {ok:false,reason:'count must be a whole number between 0 and 1000'};
   if(hasCount && (!selector || text || checked!==null || enabled!==null || present!==null))
