@@ -291,11 +291,11 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         return { ok: ${sel} ? t != null : true, url: location.href, title: document.title, text: String(body).slice(0, 12000) };
       })()`;
       const r = await b.eval(expr);
-      journal.guard(session, `browser.read:${selector}`);
+      journal.guard(session, `browser.read:${selector}:${focused?'main':'all'}`);
       if (!r.ok && selector) return { ok: false, error: { code: 'no_such_element', message: `no element matches ${selector}` } };
       const controls = selector ? [] : await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
       return { ok: true, result: (r.text || '(page is empty)') + formatControlHints(controls),
-        meta: { url: r.url, title: r.title, chars: (r.text || '').length, groundedControls: Array.isArray(controls) ? controls.length : 0 },
+        meta: { url: r.url, title: r.title, mode: focused ? 'main' : 'all', chars: (r.text || '').length, groundedControls: Array.isArray(controls) ? controls.length : 0 },
         summary: `${(r.text || '').length} chars from ${r.title || r.url}` };
     },
   }),
