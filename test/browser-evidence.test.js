@@ -206,3 +206,15 @@ test('visual result verification feedback stays within existing composer',()=>{
  assert.match(html,/majin-proof-breathe/);
  assert.match(html,/prefers-reduced-motion:reduce/);
 });
+
+test('browser count verification refuses boolean or object coercion',()=>{
+ for(const count of [true,false,{},[],[1]]){
+   assert.equal(verificationCriteria({selector:'.result',count}).ok,false);
+ }
+ assert.equal(verificationCriteria({selector:'.result',count:1}).ok,true);
+});
+test('strict proof UI is restrained and reduced-motion safe',()=>{
+ const html=fs.readFileSync('src/ui/index.html','utf8');
+ assert.match(html,/majin-strict-proof-cue/);
+ assert.match(html,/prefers-reduced-motion:reduce/);
+});
