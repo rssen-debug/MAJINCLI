@@ -709,6 +709,10 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 }
 @keyframes majin-verify-sweep{from{background-position:110% 0}to{background-position:-110% 0}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verify"]::before{animation:none}}
+/* Browser proof activity: a tiny tick in the existing compact composer status. */
+#composer #work-progress[data-phase="compact"] #work-progress-symbol{animation:majin-compact-evidence-tick 2.2s ease-in-out infinite}
+@keyframes majin-compact-evidence-tick{50%{opacity:.65;text-shadow:0 0 8px rgba(204,151,249,.58)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="compact"] #work-progress-symbol{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
