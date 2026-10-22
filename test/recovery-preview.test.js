@@ -70,3 +70,9 @@ test('recovery decision output remains in the supported action set',()=>{
  assert.equal(preview.ready,true);
  assert.deepEqual(preview.steps.map(s=>s.action),['resume','approval']);
 });
+
+test('preview returns string reasons suitable for UI rendering',()=>{
+ const r=recoveryPreview({schema:1,id:'reason',state:{steps:[{id:'read',risk:'read',status:'pending'}]}});
+ assert.equal(r.ready,true);
+ assert.equal(typeof r.steps[0].reason,'string');
+});
