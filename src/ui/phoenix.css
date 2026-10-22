@@ -695,3 +695,9 @@ body.simple header #b-voice.on {
   border-color:var(--cy);
   box-shadow:0 0 0 2px var(--cysoft),0 0 15px var(--cysoft);
 }
+
+/* One calm voice surface, without double tool/status lines crowding the chat. */
+body.simple .msg .who{letter-spacing:.045em;font-weight:550}
+body.simple .msg .body{line-height:1.7}
+body.simple .msg .foot{opacity:.55;font-size:10px}
+body.simple[data-voice-mode="speaking"] #composer .composer-talk{color:var(--cy);box-shadow:0 0 0 4px var(--cysoft)}
