@@ -4,7 +4,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
 const read = (relative) => fs.readFileSync(new URL('../' + relative, import.meta.url), 'utf8');
 const html = read('src/ui/index.html');
