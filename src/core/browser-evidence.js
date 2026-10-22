@@ -77,6 +77,8 @@ export function verificationCriteria(input = {}) {
   const countRaw = input.count;
   const hasCount = countRaw !== undefined && countRaw !== null && String(countRaw).trim() !== '';
   const count = hasCount ? Number(countRaw) : null;
+  if(hasCount && !['string','number'].includes(typeof countRaw))
+    return {ok:false,reason:'count must be a numeric string or number'};
   if(hasCount && (!Number.isSafeInteger(count) || count<0 || count>1000))
     return {ok:false,reason:'count must be a whole number between 0 and 1000'};
   if(hasCount && (!selector || text || checked!==null || enabled!==null || present!==null))
