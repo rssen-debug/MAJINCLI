@@ -11,10 +11,10 @@ const classify=context.window.MAJIN_VOICE_INTENT.classify;
 assert.equal(typeof classify,'function');
 const cases=[];
 for(let i=0;i<25;i++){
- cases.push({utterance:['nej','vänta','stopp','avbryt','cancel'][i%5],busy:true,kind:'cancel'});
- cases.push({utterance:'nej vänta öppna '+(i+1)+' jobb',busy:true,kind:'replace',text:'öppna '+(i+1)+' jobb'});
- cases.push({utterance:'sök efter IT-jobb '+(i+1),busy:true,kind:'send'});
- cases.push({utterance:'jag säger nej till alternativ '+(i+1),busy:false,kind:'send'});
+ cases.push({utterance:['nej','v\u00e4nta','stopp','avbryt','cancel'][i%5],busy:true,kind:'cancel'});
+ cases.push({utterance:'nej v\u00e4nta \u00f6ppna '+(i+1)+' jobb',busy:true,kind:'replace',text:'\u00f6ppna '+(i+1)+' jobb'});
+ cases.push({utterance:'s\u00f6k efter IT-jobb '+(i+1),busy:true,kind:'send'});
+ cases.push({utterance:'jag s\u00e4ger nej till alternativ '+(i+1),busy:false,kind:'send'});
 }
 assert.equal(cases.length,100);
 const results=cases.map((c,i)=>{
