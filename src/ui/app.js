@@ -240,8 +240,13 @@ function onEvent(ev) {
           const bar=$('work-progress');if(bar){bar.dataset.phase='action';bar.title='Action executed locally; remote result has not been verified';}
         }
         const verified=ev.meta?.verified===true;
-        workPulse(verified?'Click result verified':'Click sent · checking its effect');
-        const bar=$('work-progress');if(bar)bar.dataset.phase=verified?'verified':'action';
+        if(verified){
+          workPulse('Browser result verified');
+          const bar=$('work-progress');if(bar)bar.dataset.phase='verified';
+        } else if(!receipt || receipt.evidence!=='action_only'){
+          workPulse('Click sent · checking its effect');
+          const bar=$('work-progress');if(bar)bar.dataset.phase='action';
+        }
       } else if(ev.tool==='browser.verify' && ev.ok){
         workPulse('Browser result verified');
         const bar=$('work-progress');if(bar)bar.dataset.phase='verified';
