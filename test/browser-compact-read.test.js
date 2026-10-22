@@ -31,3 +31,19 @@ test('browser.read compact is explicitly opt-in and visible as one inline activi
   assert.match(app,/ev\.meta\?\.mode==='compact'/);
   assert.match(html,/work-progress\[data-phase="compact"\]/);
 });
+
+test('long head rows never displace end-of-page success or failure evidence',()=>{
+ for(const rowCount of [20,100]){
+   const rows=Array.from({length:rowCount-1},(_,i)=>'Section '+i+' '+('details '.repeat(100)));
+   rows.push('FINAL STATUS: operation failed');
+   const out=compactBrowserText(rows.join('\n'),{maxChars:1000});
+   assert.match(out.text,/FINAL STATUS: operation failed/);
+   assert.match(out.text,/Section 0/);
+   assert.ok(out.outputChars<=1000);
+ }
+});
+test('browser evidence UI uses only existing composer and reduced motion',()=>{
+ const html=fs.readFileSync('src/ui/index.html','utf8');
+ assert.ok(html.includes('majin-compact-evidence-glow'));
+ assert.match(html,/prefers-reduced-motion:reduce/);
+});
