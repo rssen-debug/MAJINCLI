@@ -82,3 +82,11 @@ test('inherited checkpoint step ids cannot impersonate valid steps',()=>{
  inherited.status='pending'; inherited.risk='read';
  assert.equal(recoveryPreview({schema:1,id:'safe',state:{steps:[inherited]}}).ready,false);
 });
+
+test('recovery preview requires explicit risk and status metadata',()=>{
+ const noRisk={id:'a',status:'pending'};
+ const noStatus={id:'b',risk:'read'};
+ for (const step of [noRisk,noStatus]) {
+  assert.equal(recoveryPreview({schema:1,id:'valid',state:{steps:[step]}}).reason,'invalid-step');
+ }
+});
