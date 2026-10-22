@@ -34,3 +34,4 @@
 | Provider chain: failover + breakers + telemetry | VERIFIED | test/v2-provider-chain.test.js 5/5: retry-safe only, AUTH fails fast, breaker accumulates across requests, half-open probes, cap honored |
 | Config layer 40-45 | VERIFIED | test/v2-config-context.test.js 7/7: defaults<repo<local merge, corrupt JSON errors with filename, partial-broken warn-and-survive, untrusted repos can only tighten safety |
 | Context engine -> roleCall integration | VERIFIED | same file: sections packed inside token budget with truncation markers intact; no-sections path unchanged |
+| majin-v2 CLI entry | VERIFIED | test/v2-cli.test.js 5/5 real child processes: COMPLETED exit 0 vs FAILED exit 1 vs refusal exit 2, telemetry report, gauntlet passthrough writes report files |

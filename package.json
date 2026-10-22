@@ -1,14 +1,15 @@
 {
   "name": "majin",
   "version": "2.0.0-alpha",
-  "description": "MAJIN â€” a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
+  "description": "MAJIN \u00e2\u20ac\u201d a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
   "type": "module",
   "license": "MIT",
   "engines": {
     "node": ">=20.11.0"
   },
   "bin": {
-    "majin": "./src/cli/majin.js"
+    "majin": "./src/cli/majin.js",
+    "majin-v2": "./bin/majin-v2.mjs"
   },
   "main": "./src/core/runtime.js",
   "exports": {

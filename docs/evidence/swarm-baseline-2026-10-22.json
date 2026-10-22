@@ -45,7 +45,7 @@
     {
       "kind": "parallel",
       "rep": 0,
-      "wallMs": 70,
+      "wallMs": 72,
       "okCount": 8,
       "failCount": 0,
       "overlap": 28,
@@ -55,7 +55,7 @@
     {
       "kind": "serial",
       "rep": 1,
-      "wallMs": 488,
+      "wallMs": 489,
       "okCount": 8,
       "failCount": 0,
       "overlap": 0,
@@ -75,7 +75,7 @@
     {
       "kind": "serial",
       "rep": 2,
-      "wallMs": 453,
+      "wallMs": 452,
       "okCount": 8,
       "failCount": 0,
       "overlap": 0,
@@ -85,7 +85,7 @@
     {
       "kind": "parallel",
       "rep": 2,
-      "wallMs": 72,
+      "wallMs": 71,
       "okCount": 8,
       "failCount": 0,
       "overlap": 28,

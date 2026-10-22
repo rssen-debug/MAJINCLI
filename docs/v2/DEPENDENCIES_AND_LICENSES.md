@@ -32,6 +32,7 @@ Repo philosophy measured: ONE runtime dep today (chokidar). Every new dep must e
 \ n
 | Multi-provider routing/fallback (59-61) | **V2 ProviderChain hand-rolled** (priority order, per-provider circuit breaker, retry-safe classes only, telemetry) | n/a | Evaluated 2026-10-22: LiteLLM (canonical answer but python gateway service), llm-fallback-router/llm-fallback-gateway/modelchain/prio-llm-router (all young 2026 packages; fit is wrong against the receipts discipline). Defer re-eval on stabilization. +0 deps |
 | Config loader (40-45) | **hand-rolled JSON-only (majin.json + majin.local.json)** | n/a | Evaluated 2026-10-22: cosmiconfig (MIT, 4.2k stars, ~100M dl/wk) is the right general answer BUT ships .js-eval/yaml loaders we explicitly refuse at config time, plus 4 transitive deps for a 60-key schema. Hand-rolled JSON-only = no code-exec at config time, no yaml. +0 deps |
+| CLI arg parsing (majin-v2 entry) | **node:util.parseArgs (built-in, stable >=20)** | n/a | Evaluated 2026-10-22: commander 15 (MIT, 149k dependents, ~35M dl/wk) is right for multi-subcommand CLIs that need auto-help/shell completion; ours is flat flags. Built-in parseArgs covers it with zero version-pinning risk. +0 deps |
 
 ## Policy from here
 
