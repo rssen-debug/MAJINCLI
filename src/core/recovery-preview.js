@@ -2,6 +2,7 @@
 import { recoveryDecision } from './recovery-policy.js';
 export function recoveryPreview(checkpoint) {
   if (checkpoint?.schema !== 1 || typeof checkpoint?.id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(checkpoint.id)) return { ready:false, reason:'invalid-checkpoint', steps:[] };
+  // Preview only a persisted checkpoint, never untrusted arbitrary input.
   const steps = checkpoint.state?.steps;
   if (!Array.isArray(steps)) return { ready:false, reason:'no-steps', steps:[] };
   if (steps.length > 1000) return { ready:false, reason:'too-many-steps', steps:[] };
@@ -15,6 +16,9 @@ export function recoveryPreview(checkpoint) {
     results.push({ index, id, action: decision.action, reason: decision.reason });
   }
   const counts = { resume:0, skip:0, inspect:0, approval:0 };
-  for (const step of results) counts[step.action]++;
+  for (const step of results) {
+    if (!Object.hasOwn(counts, step.action)) return { ready:false, reason:'unknown-recovery-action', steps:[] };
+    counts[step.action]++;
+  }
   return { ready:true, counts, steps:results };
 }
