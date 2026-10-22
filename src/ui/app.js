@@ -234,6 +234,16 @@ function onEvent(ev) {
     if (ev.type === 'route') workPulse('Choosing the best model');
     else if (ev.type === 'step') workPulse('Step '+ev.step+'/'+ev.of+' · '+(ev.model||'model'));
     else if (ev.type === 'tool' || ev.type === 'tool_begin') workPulse('Using '+(ev.name||ev.tool||'a tool'));
+    else if (ev.type === 'tool_waiting') {
+      const elapsed=Math.round(Math.max(0,Number(ev.elapsedMs)||0)/1000);
+      workPulse('Still using '+String(ev.tool||'tool').slice(0,60)+' · '+elapsed+'s');
+      const bar=$('work-progress');
+      if(bar){
+        bar.dataset.phase='waiting';
+        bar.title='MAJIN has not received a result from '+String(ev.tool||'this tool')+' yet. This is a heartbeat, not a success confirmation.';
+      }
+      if($('work-progress-symbol'))$('work-progress-symbol').textContent='◌';
+    }
     else if (ev.type === 'tool_result') {
       if(ev.tool==='browser.click' && ev.ok){
         // A successful click is not the same thing as a verified remote effect.
