@@ -4,9 +4,9 @@ import fs from 'node:fs';
 
 test('blocked browser clicks reveal obstacle without attempting blind retries',()=>{
   const tool=fs.readFileSync('src/core/tools/web.js','utf8');
-  assert.match(tool,/coveringRole:String\(over\.closest\(/);
+  assert.match(tool,/coveringRole:String\(overlay\.getAttribute\('role'\)/);
   assert.match(tool,/coveringId:String\(over\.id\|\|''\)/);
-  assert.match(tool,/recovery:'browser\.elements\(\{refresh:"true"\}\)/);
+  assert.match(tool,/browser\.elements\(\{refresh:"true"\}\)/);
   assert.match(tool,/code:'click_blocked'/);
   assert.match(tool,/Another page element overlaps the target/);
   assert.match(tool,/Control is disabled or inert/);
