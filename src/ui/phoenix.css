@@ -635,3 +635,9 @@ body.simple .msg .appr :is(button,a):focus-visible { border-radius:6px; text-dec
 /* Aurora: avoid cropped keyboard outlines near the edges of approval cards. */
 body.simple .msg .appr { overflow:visible; }
 body.simple .msg .appr :is(button,a):focus-visible { outline-offset:3px; }
+
+/* Aurora: permission choices stay clearly grouped at narrow widths. */
+@media (max-width:520px) {
+ body.simple .msg .appr { display:flow-root; }
+ body.simple .msg .appr :is(button,a) { max-width:100%; overflow-wrap:anywhere; }
+}
