@@ -565,3 +565,11 @@ body.simple .msg [data-recovery-status] {
   font-size:.82em;
 }
 body.simple .msg [data-recovery-status="approval"] { border-color:var(--warn);color:var(--ink); }
+
+/* Aurora: distinct readable recovery states in the existing inline treatment. */
+body.simple .msg [data-recovery-status="resume"] { border-color:var(--ok);color:var(--ink); }
+body.simple .msg [data-recovery-status="inspect"] { border-style:dashed;color:var(--ink); }
+body.simple .msg [data-recovery-status="skip"] { opacity:.75; }
+@media(prefers-contrast:more) {
+ body.simple .msg [data-recovery-status] { border-width:2px; }
+}
