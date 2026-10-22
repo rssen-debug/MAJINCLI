@@ -244,6 +244,15 @@ function onEvent(ev) {
         workPulse('Mapping page structure · '+count+' accessible elements');
         const bar=$('work-progress');if(bar){bar.dataset.phase='structure';bar.title='Read-only page outline; no form values or passwords';}
       } else if(ev.tool==='browser.elements' && ev.ok){
+        if(ev.meta?.deltaMode==='unchanged'){
+          workPulse('Page unchanged · existing controls still visible');
+          const bar=$('work-progress');if(bar)bar.dataset.phase='delta';
+        } else if(ev.meta?.deltaMode==='delta'){
+          const changed=Math.max(0,Number(ev.meta?.changed)||0);
+          const removed=Math.max(0,Number(ev.meta?.removed)||0);
+          workPulse(changed+' updated controls · '+removed+' removed');
+          const bar=$('work-progress');if(bar)bar.dataset.phase='delta';
+        } else {
         const matched=Number(ev.meta?.matched);
         const total=Number(ev.meta?.count);
         const count=Number.isFinite(matched)&&matched>=0 ? matched :
@@ -251,6 +260,7 @@ function onEvent(ev) {
         workPulse(count===null?'Reading controls on the page':
           count+' interactive controls found');
         const bar=$('work-progress');if(bar)bar.dataset.phase='grounded';
+        }
       } else if(ev.tool==='browser.click' && !ev.ok && ev.error?.code==='click_blocked') {
         const reason=String(ev.error?.reason||'').slice(0,50);
         const phrases={occluded:'Another element covers the button · checking the page',
