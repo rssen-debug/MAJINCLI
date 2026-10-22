@@ -72,12 +72,21 @@ export function verificationCriteria(input = {}) {
   const present = ['true','false'].includes(String(input.present)) ? String(input.present) === 'true' : null;
   const checked = ['true','false'].includes(String(input.checked)) ? String(input.checked) === 'true' : null;
   const enabled = ['true','false'].includes(String(input.enabled)) ? String(input.enabled) === 'true' : null;
+  // Explicit list/card count assertions: unlike clicks, lists can legitimately
+  // contain many matches. Stay read-only and don't inspect element values.
+  const countRaw = input.count;
+  const hasCount = countRaw !== undefined && countRaw !== null && String(countRaw).trim() !== '';
+  const count = hasCount ? Number(countRaw) : null;
+  if(hasCount && (!Number.isSafeInteger(count) || count<0 || count>1000))
+    return {ok:false,reason:'count must be a whole number between 0 and 1000'};
+  if(hasCount && (!selector || text || checked!==null || enabled!==null || present!==null))
+    return {ok:false,reason:'count needs selector and cannot combine with text/checked/enabled/present'};
   if (!selector && !url && !title && !urlPath && !urlOrigin) return { ok:false, reason:'Specify a selector, URL fragment, exact URL path/origin, or title fragment to verify' };
   if ((text || present !== null || checked !== null || enabled !== null) && !selector) return {ok:false, reason:'Element text, presence and checkbox checks require selector'};
   if (checked !== null && !selector) return {ok:false, reason:'Checkbox assertion requires selector'};
   if (present === false && (text || checked !== null || enabled !== null))
     return {ok:false, reason:'An absent element cannot also have matching text or checkbox state'};
-  return { ok:true, selector, text, url, urlPath, urlOrigin, title, present, checked, enabled };
+  return { ok:true, selector, text, url, urlPath, urlOrigin, title, present, checked, enabled, count };
 }
 
 export function verifyObserved(criteria, observed) {
@@ -85,6 +94,9 @@ export function verifyObserved(criteria, observed) {
   if (!observed?.valid) return {ok:false, reason:observed?.reason || 'observation_failed'};
   const assertions = [];
   if (criteria.selector) {
+    if (criteria.count !== null && criteria.count !== undefined) {
+      assertions.push({name:'element_count_exact',expected:criteria.count,actual:observed.matchCount});
+    } else {
     assertions.push({name:'element_present', expected:criteria.present ?? true, actual:observed.exists === true});
     if (criteria.present !== false) {
       assertions.push({name:'element_unique',expected:true,actual:observed.unique === true});
@@ -92,6 +104,7 @@ export function verifyObserved(criteria, observed) {
       if (criteria.text) assertions.push({name:'element_text_contains',expected:true,actual:observed.textMatch === true});
       if (criteria.checked !== null) assertions.push({name:'checkbox_checked',expected:criteria.checked,actual:observed.checked});
       if (criteria.enabled !== null) assertions.push({name:'element_enabled',expected:criteria.enabled,actual:observed.enabled});
+    }
     }
   }
   if (criteria.url) assertions.push({name:'url_contains',expected:true,actual:observed.urlMatch === true});
