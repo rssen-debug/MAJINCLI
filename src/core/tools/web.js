@@ -535,7 +535,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       if (!retained) return {ok:false,error:{code:'value_reverted',
         message:'Field initially accepted input but the app reverted it after its framework update. Re-observe before retrying.'},
         meta:{retained:false,valueHidden:true}};
-      return { ok: true, result: 'filled — value retained after page update (hidden)', meta: { retained: true, valueHidden: true, verified: true }, summary: 'field value verified' };
+      return { ok: true, result: 'filled — value retained after page update (value hidden)', meta: { retained: true, valueHidden: true, verified: true }, summary: 'field value verified' };
     },
   }),
 
