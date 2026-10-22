@@ -70,3 +70,14 @@ test('checkpoint saving rejects a symlinked destination',t=>{
  assert.throws(()=>saveCheckpoint(dir,'link',{step:1}),/Unsafe checkpoint destination/);
  assert.equal(fs.readFileSync(target,'utf8'),'untouched');
 });
+
+test('checkpoint load refuses symbolic-link storage root',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'majin-checkpoint-root-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const real=path.join(dir,'real');fs.mkdirSync(real);
+ saveCheckpoint(real,'demo',{safe:true});
+ const link=path.join(dir,'alias');
+ try{fs.symlinkSync(real,link,'dir');}catch(e){if(['EPERM','EACCES','ENOTSUP'].includes(e.code)){t.skip('symlinks unavailable');return;}throw e;}
+ assert.throws(()=>loadCheckpoint(link,'demo'),/Invalid checkpoint directory/);
+ assert.equal(loadCheckpoint(real,'demo').state.safe,true);
+});

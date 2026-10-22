@@ -641,3 +641,11 @@ body.simple .msg .appr :is(button,a):focus-visible { outline-offset:3px; }
  body.simple .msg .appr { display:flow-root; }
  body.simple .msg .appr :is(button,a) { max-width:100%; overflow-wrap:anywhere; }
 }
+
+/* Aurora: readable approval heading on compact screens. */
+body.simple .msg .appr h4 { font-weight:700;line-height:1.45;letter-spacing:.01em; }
+@media(max-width:560px){body.simple .msg .appr h4 {font-size:13px;}}
+
+/* Aurora: visible, compact permission header without new panels. */
+body.simple .msg .appr h4 { overflow-wrap:anywhere; margin-block-end:8px; }
+body.simple .msg .appr:focus-within h4 { text-decoration:underline;text-underline-offset:4px; }

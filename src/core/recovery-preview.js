@@ -25,5 +25,7 @@ export function recoveryPreview(checkpoint) {
     counts[decision.action]++;
     results.push({ index, id, action: decision.action, reason: String(decision.reason || 'unspecified') });
   }
-  return { ready:true, counts, steps:results };
+  // A readable checkpoint is not necessarily safe to run without supervision.
+  const needsAttention = counts.inspect > 0 || counts.approval > 0;
+  return { ready:true, needsAttention, counts, steps:results };
 }

@@ -110,3 +110,10 @@ test('own valid step id passes while inherited id is rejected',()=>{
  assert.equal(recoveryPreview({schema:1,id:'session',state:{steps:[valid]}}).ready,true);
  assert.equal(recoveryPreview({schema:1,id:'session',state:{steps:[inherited]}}).ready,false);
 });
+
+test('recovery previews identify work requiring human attention',()=>{
+ const state=step=>({schema:1,id:'example',state:{steps:[step]}});
+ assert.equal(recoveryPreview(state({id:'read',risk:'read',status:'pending'})).needsAttention,false);
+ assert.equal(recoveryPreview(state({id:'write',risk:'write',status:'pending'})).needsAttention,true);
+ assert.equal(recoveryPreview(state({id:'unknown',risk:'read',status:'running'})).needsAttention,true);
+});
