@@ -11,7 +11,8 @@ export const VERSION = 'majin-watchdog/1';
 /* Race a promise against a hard timeout. The timeout error is explicit and
    tagged — callers must not confuse it with a tool-produced failure. */
 export function withTimeout(promise, { ms, code = 'tool_timeout', label = 'tool', signal } = {}) {
-  const limit = Math.max(250, Number(ms) || 300_000);
+  const requested = Number(ms);
+  const limit = Number.isFinite(requested) && requested > 0 ? Math.max(250, Math.min(requested, 2_147_483_647)) : 300_000;
   return new Promise((resolve, reject) => {
     let settled = false;
     let timer;
