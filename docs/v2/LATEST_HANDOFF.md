@@ -1,6 +1,6 @@
 # MAJIN V2 — LATEST HANDOFF (owner-facing, 2026-10-21)
 
-V2 HEAD (v2/main): 5fb8aaa5 (voice lane: edge-tts adopted, consent-gated, proof lane live) (executor layer merged (ph2/8): whitelist→preflight→mode→consent→confinement-proof; zod adopted; earlier incident fully repaired (see postmortem))
+V2 HEAD (v2/main): 26aa3e16 (STT lane: whisper.cpp CLI adapters, honest inconclusive verdict, +0 deps) ← 5fb8aaa5 (voice/TTS edge-tts, consent-gated, live proof) (executor layer merged (ph2/8): whitelist→preflight→mode→consent→confinement-proof; zod adopted; earlier incident fully repaired (see postmortem))
 
 COMPLETED (this working day, verified):
 - v2/main created from V1 tip 282a8ff; V1 untouched (policy: only v2/* branches carry V2 code)
