@@ -29,11 +29,18 @@
       "description": "Record exact protected V1/V2 baselines and create a separate V3 branch without modifying either protected ref.",
       "weight": 2,
       "status": "VERIFIED",
-      "relevant_commits": [],
-      "test_evidence": ["docs/v3/BASELINE.md: exact SHAs and branch ancestry", "git rev-parse origin/main origin/v2/main unchanged after tests"],
+      "relevant_commits": [
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      ],
+      "test_evidence": [
+        "docs/v3/BASELINE.md: exact SHAs and branch ancestry",
+        "git rev-parse origin/main origin/v2/main unchanged after tests"
+      ],
       "validation_environment": "Public git clone; Linux sandbox; protected refs checked locally after the V3 tests",
-      "blockers": ["Remote V3 ref is not established until a safe authorized push succeeds"],
-      "last_verified_sha": "PENDING_LOCAL_COMMIT"
+      "blockers": [
+        "Remote V3 ref is not established until a safe authorized push succeeds"
+      ],
+      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
     },
     {
       "id": "SRC-02",
@@ -41,11 +48,17 @@
       "description": "Complete behavioral and license audit of all major V1/V2 subsystems, including target Windows/live evidence and a reviewed reuse decision for each.",
       "weight": 3,
       "status": "IN_PROGRESS",
-      "relevant_commits": [],
-      "test_evidence": ["docs/v3/SOURCE_AUDIT.md: structural inventory and initial code evidence"],
+      "relevant_commits": [
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      ],
+      "test_evidence": [
+        "docs/v3/SOURCE_AUDIT.md: structural inventory and initial code evidence"
+      ],
       "validation_environment": "Source inspection and full automated Node suite on sandbox Linux",
-      "blockers": ["Voice, desktop, Windows install and live browser lanes were not evaluated on target hardware"],
-      "last_verified_sha": "PENDING_LOCAL_COMMIT"
+      "blockers": [
+        "Voice, desktop, Windows install and live browser lanes were not evaluated on target hardware"
+      ],
+      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
     },
     {
       "id": "ARC-01",
@@ -53,11 +66,16 @@
       "description": "Establish a V3-only module boundary and document reuse boundaries without duplicating V2 Goal/verifier contracts.",
       "weight": 2,
       "status": "VERIFIED",
-      "relevant_commits": [],
-      "test_evidence": ["docs/v3/ARCHITECTURE.md", "V3 source imports V2 Goal and runVerifier; no V1/V2 implementation files changed"],
+      "relevant_commits": [
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      ],
+      "test_evidence": [
+        "docs/v3/ARCHITECTURE.md",
+        "V3 source imports V2 Goal and runVerifier; no V1/V2 implementation files changed"
+      ],
       "validation_environment": "Source-level inspection and git diff boundary check on Linux",
       "blockers": [],
-      "last_verified_sha": "PENDING_LOCAL_COMMIT"
+      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
     },
     {
       "id": "ARC-02",
@@ -65,11 +83,17 @@
       "description": "Provide a model-independent, cancellable and durable general V3 runtime with bounded execution, recovery and visible result events.",
       "weight": 4,
       "status": "IN_PROGRESS",
-      "relevant_commits": [],
-      "test_evidence": ["Single deterministic file-task slice exists; no generic runtime/event integration yet"],
+      "relevant_commits": [
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      ],
+      "test_evidence": [
+        "Single deterministic file-task slice exists; no generic runtime/event integration yet"
+      ],
       "validation_environment": "Unit/integration-tested local single-process execution",
-      "blockers": ["Only one synchronous local file capability is implemented; cancellation, event streaming and recovery are not yet wired"],
-      "last_verified_sha": "PENDING_LOCAL_COMMIT"
+      "blockers": [
+        "Only one synchronous local file capability is implemented; cancellation, event streaming and recovery are not yet wired"
+      ],
+      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
     },
     {
       "id": "ARC-03",
@@ -80,7 +104,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "Not tested",
-      "blockers": ["V3 preview is not wired into the CLI or installer"],
+      "blockers": [
+        "V3 preview is not wired into the CLI or installer"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -92,7 +118,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "Not tested on real microphone hardware",
-      "blockers": ["V3 has no realtime audio capture path"],
+      "blockers": [
+        "V3 has no realtime audio capture path"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -104,7 +132,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "Not tested",
-      "blockers": ["No V3 barge-in loop or latency measurement"],
+      "blockers": [
+        "No V3 barge-in loop or latency measurement"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -116,7 +146,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "Not tested with Swedish/English live audio",
-      "blockers": ["Candidate VAD/voice framework has not been selected or integrated"],
+      "blockers": [
+        "Candidate VAD/voice framework has not been selected or integrated"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -128,7 +160,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "No Windows desktop available in this sandbox",
-      "blockers": ["Requires interactive Windows runner and real audio devices"],
+      "blockers": [
+        "Requires interactive Windows runner and real audio devices"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -140,7 +174,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "Not tested as a V3 flow",
-      "blockers": ["V3 has not integrated the inherited browser tools"],
+      "blockers": [
+        "V3 has not integrated the inherited browser tools"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -152,7 +188,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "No Windows desktop available in this sandbox",
-      "blockers": ["V3 permission wrapper and live Windows proof are absent"],
+      "blockers": [
+        "V3 permission wrapper and live Windows proof are absent"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -164,7 +202,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "Not tested",
-      "blockers": ["No V3 browser/desktop action contract yet"],
+      "blockers": [
+        "No V3 browser/desktop action contract yet"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -173,11 +213,16 @@
       "description": "A V3 goal executes one permitted workspace action, persists its Goal state and reaches COMPLETED only after a verified acceptance receipt.",
       "weight": 3,
       "status": "VERIFIED",
-      "relevant_commits": [],
-      "test_evidence": ["test/v3-vertical-slice.test.js: full request-to-file goal lifecycle, saved goal and verified receipt", "Existing V2 Goal completion gate reused"],
+      "relevant_commits": [
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      ],
+      "test_evidence": [
+        "test/v3-vertical-slice.test.js: full request-to-file goal lifecycle, saved goal and verified receipt",
+        "Existing V2 Goal completion gate reused"
+      ],
       "validation_environment": "Node v20.20.2, sandbox Linux, temporary workspace",
       "blockers": [],
-      "last_verified_sha": "PENDING_LOCAL_COMMIT"
+      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
     },
     {
       "id": "GOA-02",
@@ -185,11 +230,17 @@
       "description": "Natural-language planning creates acceptance criteria and adapts/replaces active work after user correction or cancellation.",
       "weight": 3,
       "status": "IN_PROGRESS",
-      "relevant_commits": [],
-      "test_evidence": ["Objective text is stored as a Goal; no V3 planner, replanning or cancellation loop"],
+      "relevant_commits": [
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      ],
+      "test_evidence": [
+        "Objective text is stored as a Goal; no V3 planner, replanning or cancellation loop"
+      ],
       "validation_environment": "Single local deterministic task",
-      "blockers": ["No V3 model planner or interrupt controller"],
-      "last_verified_sha": "PENDING_LOCAL_COMMIT"
+      "blockers": [
+        "No V3 model planner or interrupt controller"
+      ],
+      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
     },
     {
       "id": "GOA-03",
@@ -200,7 +251,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "Not fault-injection tested",
-      "blockers": ["V3 recovery loop and duplicate-action protection are not integrated"],
+      "blockers": [
+        "V3 recovery loop and duplicate-action protection are not integrated"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -212,7 +265,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "Not tested in V3",
-      "blockers": ["V3 vertical slice currently has one file action only"],
+      "blockers": [
+        "V3 vertical slice currently has one file action only"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -224,7 +279,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "Not tested in V3",
-      "blockers": ["No V3 coordinator/worker runtime"],
+      "blockers": [
+        "No V3 coordinator/worker runtime"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -236,7 +293,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "No V3 objective benchmark",
-      "blockers": ["No objective-level V3 baseline or multi-agent policy"],
+      "blockers": [
+        "No objective-level V3 baseline or multi-agent policy"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -248,7 +307,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "Not tested",
-      "blockers": ["No V3 multi-agent UI/workflow"],
+      "blockers": [
+        "No V3 multi-agent UI/workflow"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -260,7 +321,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "No V3 provider call",
-      "blockers": ["V3 demo intentionally does not call a model"],
+      "blockers": [
+        "V3 demo intentionally does not call a model"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -272,7 +335,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "Not tested as V3",
-      "blockers": ["V3 provider configuration surface is absent"],
+      "blockers": [
+        "V3 provider configuration surface is absent"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -284,7 +349,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "No V3 provider integration test",
-      "blockers": ["Requires safe operator-configured credentials and isolated live test"],
+      "blockers": [
+        "Requires safe operator-configured credentials and isolated live test"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -296,7 +363,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "V2 store inspected; V3 behavior not tested",
-      "blockers": ["V3 memory adapter not implemented"],
+      "blockers": [
+        "V3 memory adapter not implemented"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -308,7 +377,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "Not tested in V3",
-      "blockers": ["No V3 memory controls"],
+      "blockers": [
+        "No V3 memory controls"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -320,7 +391,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "No V3 memory benchmark",
-      "blockers": ["Benchmark corpus and V3 adapter not created"],
+      "blockers": [
+        "Benchmark corpus and V3 adapter not created"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -329,11 +402,18 @@
       "description": "Default V3 local surface is minimal, uses semantic labels/live status/visible focus, reduced-motion styling and no external assets.",
       "weight": 3,
       "status": "VERIFIED",
-      "relevant_commits": [],
-      "test_evidence": ["test/v3-vertical-slice.test.js: markup, labels, live region, reduced-motion rule and no external asset assertions", "HTTP integration test returns visible success payload"],
+      "relevant_commits": [
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      ],
+      "test_evidence": [
+        "test/v3-vertical-slice.test.js: markup, labels, live region, reduced-motion rule and no external asset assertions",
+        "HTTP integration test returns visible success payload"
+      ],
       "validation_environment": "Static DOM-string assertions and HTTP API integration; rendered browser and assistive technology not run",
-      "blockers": ["Visual and assistive-technology acceptance is still required for UI-02"],
-      "last_verified_sha": "PENDING_LOCAL_COMMIT"
+      "blockers": [
+        "Visual and assistive-technology acceptance is still required for UI-02"
+      ],
+      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
     },
     {
       "id": "UI-02",
@@ -344,7 +424,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "No browser-rendered UI run",
-      "blockers": ["Playwright/real-browser validation not run for V3 page"],
+      "blockers": [
+        "Playwright/real-browser validation not run for V3 page"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -356,7 +438,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "Not implemented",
-      "blockers": ["Current page is a deterministic file-task preview, not the final chat product"],
+      "blockers": [
+        "Current page is a deterministic file-task preview, not the final chat product"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -365,11 +449,17 @@
       "description": "V3 preview server is loopback-only, rejects non-local Host/cross-origin writes and limits the API to JSON local actions.",
       "weight": 3,
       "status": "VERIFIED",
-      "relevant_commits": [],
-      "test_evidence": ["test/v3-vertical-slice.test.js: external Origin rejected, non-JSON refused, non-loopback bind refused"],
+      "relevant_commits": [
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      ],
+      "test_evidence": [
+        "test/v3-vertical-slice.test.js: external Origin rejected, non-JSON refused, non-loopback bind refused"
+      ],
       "validation_environment": "Node HTTP integration test on sandbox Linux/loopback",
-      "blockers": ["Does not constitute the complete product security threat model"],
-      "last_verified_sha": "PENDING_LOCAL_COMMIT"
+      "blockers": [
+        "Does not constitute the complete product security threat model"
+      ],
+      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
     },
     {
       "id": "SEC-02",
@@ -377,11 +467,17 @@
       "description": "Workspace write capability rejects traversal/reserved paths and prevents accidental overwrite; complete per-tool permissions and injection defenses are enforced.",
       "weight": 2,
       "status": "IN_PROGRESS",
-      "relevant_commits": [],
-      "test_evidence": ["test/v3-vertical-slice.test.js: path traversal, hidden path, reserved device name and overwrite tests pass"],
+      "relevant_commits": [
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      ],
+      "test_evidence": [
+        "test/v3-vertical-slice.test.js: path traversal, hidden path, reserved device name and overwrite tests pass"
+      ],
       "validation_environment": "Node tests on sandbox Linux; system-wide permission and injection model not tested",
-      "blockers": ["Only the file-demo capability is scoped; other V1/V2 tools are not yet routed through V3 policy"],
-      "last_verified_sha": "PENDING_LOCAL_COMMIT"
+      "blockers": [
+        "Only the file-demo capability is scoped; other V1/V2 tools are not yet routed through V3 policy"
+      ],
+      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
     },
     {
       "id": "VER-01",
@@ -389,11 +485,15 @@
       "description": "V3 completion requires an independent file verification result and verified acceptance receipt with exact SHA-256 evidence.",
       "weight": 3,
       "status": "VERIFIED",
-      "relevant_commits": [],
-      "test_evidence": ["test/v3-vertical-slice.test.js: result hash, COMPLETED state and receipt verified assertions"],
+      "relevant_commits": [
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      ],
+      "test_evidence": [
+        "test/v3-vertical-slice.test.js: result hash, COMPLETED state and receipt verified assertions"
+      ],
       "validation_environment": "Node integration test using V2 file verifier in temporary workspace",
       "blockers": [],
-      "last_verified_sha": "PENDING_LOCAL_COMMIT"
+      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
     },
     {
       "id": "VER-02",
@@ -401,11 +501,20 @@
       "description": "Full post-change automated suite and syntax/i18n/whitespace gates pass with skipped environment-dependent tests reported honestly.",
       "weight": 2,
       "status": "VERIFIED",
-      "relevant_commits": [],
-      "test_evidence": ["npm test: 1,183 passed, 0 failed, 19 skipped of 1,202", "npm run check: 450/450 files parse cleanly", "npm run i18n: 0 Swedish literals in 235 files", "git diff --check: clean"],
+      "relevant_commits": [
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      ],
+      "test_evidence": [
+        "npm test: 1,183 passed, 0 failed, 19 skipped of 1,202",
+        "npm run check: 450/450 files parse cleanly",
+        "npm run i18n: 0 Swedish literals in 235 files",
+        "git diff --check: clean"
+      ],
       "validation_environment": "Node v20.20.2, npm 10.8.2, sandbox Linux",
-      "blockers": ["19 environment-gated tests are not real Windows, microphone or live-provider acceptance"],
-      "last_verified_sha": "PENDING_LOCAL_COMMIT"
+      "blockers": [
+        "19 environment-gated tests are not real Windows, microphone or live-provider acceptance"
+      ],
+      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
     },
     {
       "id": "VER-03",
@@ -416,7 +525,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "No V3 benchmark run",
-      "blockers": ["Real website, job, desktop, browser, voice and recovery objectives not validated as V3"],
+      "blockers": [
+        "Real website, job, desktop, browser, voice and recovery objectives not validated as V3"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -428,7 +539,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "No Windows environment available",
-      "blockers": ["V3 is not wired into the existing installer"],
+      "blockers": [
+        "V3 is not wired into the existing installer"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -440,7 +553,9 @@
       "relevant_commits": [],
       "test_evidence": [],
       "validation_environment": "No V3 packaging run",
-      "blockers": ["No V3 release workflow or artifact"],
+      "blockers": [
+        "No V3 release workflow or artifact"
+      ],
       "last_verified_sha": ""
     },
     {
@@ -449,11 +564,17 @@
       "description": "Documentation, CI, dependency notices, SBOM and release acceptance report accurately match the verified V3 feature set.",
       "weight": 1,
       "status": "IN_PROGRESS",
-      "relevant_commits": [],
-      "test_evidence": ["Initial docs/v3 audit, research, dependency and license records exist"],
+      "relevant_commits": [
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      ],
+      "test_evidence": [
+        "Initial docs/v3 audit, research, dependency and license records exist"
+      ],
       "validation_environment": "Documentation/source inspection only; no release CI/SBOM run",
-      "blockers": ["Public V3 release workflow, SBOM and complete acceptance evidence remain outstanding"],
-      "last_verified_sha": "PENDING_LOCAL_COMMIT"
+      "blockers": [
+        "Public V3 release workflow, SBOM and complete acceptance evidence remain outstanding"
+      ],
+      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
     }
   ]
 }

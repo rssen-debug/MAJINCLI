@@ -3,14 +3,14 @@
 **Checkpoint date:** 2026-10-22 (Europe/Stockholm)
 **Current branch:** `v3/main` (local, based on `origin/v2/main`)
 **Latest verified source baseline before this round:** V1 `814459ea50fc86c5ac1aeed939ec9d2344dc5bfb`; V2 `b2533097ca3c744fa7e9b152b221a97186507835`.
-**Latest verified V3 commit:** pending final full-suite run and local commit in this round.
+**Latest verified V3 code/test commit:** `6b27fa6d93ce95d113569a408174ea4bfcbaaa05` (full suite and static checks pass).
 **Current score target for this checkpoint:** see `PROGRESS.md` / `ACCEPTANCE_MATRIX.json`; only VERIFIED weights count.
 
 ## Current goal
 
 Create an evidence-backed V3 foundation and vertical slice while protecting V1 `main` and V2 `v2/main`.
 
-## Completed in this round (implementation staged for verification)
+## Completed and verified in this round
 
 - Read the repository and confirmed protected branch SHAs.
 - Created a separate local `v3/main` from V2; there was no remote `v3/main` at initial inspection.
@@ -28,12 +28,11 @@ Create an evidence-backed V3 foundation and vertical slice while protecting V1 `
 
 ## Immediate next steps
 
-1. Run `npm test` on the complete post-change tree; report exact pass/fail/skips.
-2. Run `npm run check` and `npm run i18n`; record each outcome.
-3. Re-read `git status`, `git diff --check` and protected branch refs; verify changes are limited to V3 paths.
-4. Update acceptance matrix only from test evidence; record final source/test SHA after commit.
-5. Commit to local `v3/main`. Push is blocked unless a non-exposed, authorized GitHub credential path becomes available; never use the token posted in chat.
-6. Next engineering objective: adapt the existing V2 DAG/scheduler + safe tool registry into a narrowly scoped V3 goal executor, starting with a second genuinely useful deliverable and a cancellation/approval contract. Keep the V3 UI minimal and run Playwright DOM/browser acceptance before claiming rendered accessibility.
+1. Push the verified V3 commits only through a safe, authorized credential path; never use a credential pasted into chat.
+2. Reconcile the Node support floor (`>=20.11` in the manifest vs `>=22` dependency warnings) with the Windows installer and CI.
+3. Next engineering objective: adapt the existing V2 DAG/scheduler plus safe tool registry into a narrowly scoped V3 goal executor, starting with a second genuinely useful deliverable and an explicit cancellation/approval contract.
+4. Keep the default UI minimal and add real Playwright DOM/browser acceptance before claiming rendered accessibility.
+5. Continue the deep V1/V2 behavioral audit and Windows validation; update only evidence-backed acceptance weights.
 
 ## Outstanding blockers
 

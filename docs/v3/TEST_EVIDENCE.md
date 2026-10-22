@@ -1,6 +1,7 @@
 # MAJIN V3 test evidence
 
 **Validation environment:** Linux sandbox, Node `v20.20.2`, npm `10.8.2`.
+**Verified V3 implementation commit:** `6b27fa6d93ce95d113569a408174ea4bfcbaaa05`.
 **Scope caveat:** No Windows desktop, microphone, headed browser or operator credentials were used. The pasted credentials were not used; rotate/revoke them.
 
 ## V2 source baseline before V3 code

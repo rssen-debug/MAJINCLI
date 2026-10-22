@@ -3,7 +3,7 @@
 **As of:** 2026-10-22 (Europe/Stockholm)
 **Branch:** `v3/main` (local)
 **Release status:** **NOT READY**
-**Current checkpoint:** initial V3 vertical slice; final local commit SHA is recorded in `NEXT_ACTIONS.md` after commit.
+**Current checkpoint:** initial V3 vertical slice; implementation commit `6b27fa6d93ce95d113569a408174ea4bfcbaaa05` is locally committed. Remote push status is reported separately.
 
 ## Score
 
