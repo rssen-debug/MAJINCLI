@@ -10,7 +10,7 @@
 
 export const STUDIO_REVISION = 'studio-scaffold.r1'; // not product semver — the single VERSION literal rule lives in src/core/version.js
 
-export function renderStudioPage({ title = 'MAJIN V2 Studio', enableWrites = false, enableGoals = false, enableVoice = false } = {}) {
+export function renderStudioPage({ title = 'MAJIN V2 Studio', enableWrites = false, enableGoals = false, enableVoice = false, enableBundle = false } = {}) {
   return `<!doctype html>
 <html lang="sv">
 <head>
@@ -58,6 +58,9 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
 #voice{grid-column:1/-1}
 #voice input[type=text],#voice input:not([type]){background:var(--bg);border:1px solid var(--line);border-radius:4px;color:var(--fg);padding:4px 6px;font:inherit;font-size:12px}
 #voice button{background:var(--accent);border:0;border-radius:4px;color:#0b0e12;padding:5px 10px;font:inherit;font-size:12px;cursor:pointer;font-weight:600}
+#bundle{grid-column:1/-1}
+#bundle button{background:var(--accent);border:0;border-radius:4px;color:#0b0e12;padding:5px 10px;font:inherit;font-size:12px;cursor:pointer;font-weight:600;margin-right:8px}
+#bundle pre{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px;font-size:12px;white-space:pre-wrap;max-height:180px;overflow:auto}
 #voice audio{width:100%;margin-top:6px}
 #v-out.err,#v-transcript.err{color:var(--bad)} #v-out.ok2,#v-transcript.ok2{color:var(--ok)}
 #goals input{background:var(--bg);border:1px solid var(--line);border-radius:4px;color:var(--fg);padding:4px 6px;font:inherit;font-size:12px}
@@ -121,6 +124,15 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
         <button id="v-listen" type="button">Transcribe</button>
       </div>
       <div id="v-transcript" style="font-size:12px;margin-top:6px;white-space:pre-wrap"></div>
+    </div>
+  </section>
+  <section id="bundle">
+    <h2>Evidence dossier</h2>
+    <div class="mode ${enableBundle ? 'on">bundle export ENABLED — portable dossier writes to the operator-fixed --bundle-dir only; destination paths from the client are never honoured' : 'off">bundle surface disabled (start with --bundle-dir; disabled means NO dossier)'}</div>
+    <div ${enableBundle ? '' : 'hidden'}>
+      <button id="b-export" type="button">Export dossier</button>
+      <button id="b-verify" type="button">Verify dossier</button>
+      <pre id="b-verdict" style="display:none"></pre>
     </div>
   </section>
   <section id="goals">
@@ -274,6 +286,31 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
   loadReceipts();
 
   var VOICE=${enableVoice ? 'true' : 'false'};
+  var BUNDLE=${enableBundle ? 'true' : 'false'};
+  if(BUNDLE){
+    var bVerdict=document.getElementById('b-verdict');
+    function bShow(cls,txt){bVerdict.style.display='block';bVerdict.className=cls;bVerdict.textContent=txt}
+    document.getElementById('b-export').addEventListener('click',function(){
+      bShow('','exporting dossier…');
+      fetch('/api/bundle/export',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})
+        .then(function(r){return r.json().then(function(b){return{code:r.status,body:b}})})
+        .then(function(x){var b=x.body;
+          if(x.code===200){bShow('ok2','BUNDLE EXPORTED\nfiles: '+b.files+' · entries: '+b.stats.entries+' · anchors: '+b.stats.anchors+' · tsr: '+b.stats.tsr+'\ndestination: operator-fixed --bundle-dir')}
+          else{bShow('err','EXPORT REFUSED '+x.code+': '+esc(b.cls||'')+' — '+esc(b.error||b.reason||''))}
+        }).catch(function(e){bShow('err','export failed: '+e.message)});
+    });
+    document.getElementById('b-verify').addEventListener('click',function(){
+      bShow('','verifying dossier…');
+      fetch('/api/bundle/verify',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})
+        .then(function(r){return r.json().then(function(b){return{code:r.status,body:b}})})
+        .then(function(x){var b=x.body;
+          var lines=['verdict: '+b.cls];
+          if(b.detail)lines.push(b.detail);
+          if(b.cls==='BUNDLE_OK')lines.push('chain entries: '+b.chainEntries+' · anchors: '+b.anchors+' · tsr: '+b.tsr+(b.genTime?' · existence-in-time: '+b.genTime:''));
+          bShow(b.cls==='BUNDLE_OK'?'ok2':'err',lines.join('\n'));
+        }).catch(function(e){bShow('err','verify failed: '+e.message)});
+    });
+  }
   if(VOICE){
     var vOut=document.getElementById('v-out'), vTr=document.getElementById('v-transcript');
     document.getElementById('v-speak').addEventListener('click',function(){
