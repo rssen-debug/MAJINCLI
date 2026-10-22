@@ -40,3 +40,9 @@ test('preview produces only known recovery actions',()=>{
  assert.deepEqual(result.counts,{resume:1,skip:0,inspect:0,approval:0});
  assert.ok(result.steps.every(step=>['resume','skip','inspect','approval'].includes(step.action)));
 });
+
+test('preview rejects array and scalar checkpoint states',()=>{
+ for(const state of [[], 'bad', 123, null]) {
+  assert.equal(recoveryPreview({schema:1,id:'valid',state}).ready,false);
+ }
+});
