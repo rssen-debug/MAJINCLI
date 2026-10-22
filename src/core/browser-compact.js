@@ -21,12 +21,25 @@ export function compactBrowserText(input,{maxChars=2600}={}){
     const piece=row.slice(0,Math.min(remaining-1,450));
     if(piece){selected.push(piece);used+=piece.length+1;}
   };
-  // Main content first, then late-page status/footer evidence, both bounded.
-  for(const row of unique.slice(0,Math.min(28,unique.length)))take(row);
-  if(unique.length>30 || unique.join('\n').length>budget){
-    selected.push('… [middle page content omitted]');
-    used+=34;
-    for(const row of unique.slice(-8))take(row);
+  // Reserve tail space whenever the unique content exceeds the character budget,
+  // even if the page has fewer than thirty rows.
+  const hasTail=unique.length>30 || unique.join('\n').length>budget;
+  const marker='… [middle page content omitted]';
+  const tail=hasTail?unique.slice(-3):[];
+  const reserve=hasTail?Math.min(450,Math.floor(budget*.4)):0;
+  const headLimit=budget-reserve-marker.length-1;
+  if(hasTail){
+    for(const row of unique.slice(0,Math.max(0,unique.length-3)).slice(0,28)){
+      if(used>=headLimit)break;
+      const remaining=headLimit-used;
+      if(remaining<30)break;
+      const piece=row.slice(0,Math.min(remaining-1,450));
+      selected.push(piece);used+=piece.length+1;
+    }
+    selected.push(marker);used+=marker.length+1;
+    for(const row of tail)take(row.slice(0,110));
+  } else {
+    for(const row of unique)take(row);
   }
   const result=selected.join('\n').slice(0,cap);
   return {text:result,originalChars:String(input||'').length,outputChars:result.length,
