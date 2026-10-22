@@ -695,3 +695,6 @@ body.simple header #b-voice.on {
   border-color:var(--cy);
   box-shadow:0 0 0 2px var(--cysoft),0 0 15px var(--cysoft);
 }
+
+/* Listening clarity for natural speech turns. */
+body.simple[data-voice-mode="listening"] #composer .composer-talk{outline:2px solid var(--cy);outline-offset:2px;box-shadow:0 0 0 7px var(--cysoft),0 0 22px var(--cysoft)}
