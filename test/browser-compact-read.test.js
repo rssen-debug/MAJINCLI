@@ -31,3 +31,16 @@ test('browser.read compact is explicitly opt-in and visible as one inline activi
   assert.match(app,/ev\.meta\?\.mode==='compact'/);
   assert.match(html,/work-progress\[data-phase="compact"\]/);
 });
+
+test('long pages with only twenty rows preserve final status',()=>{
+ const rows=Array.from({length:19},(_,i)=>'Section '+i+' '+('text '.repeat(100)));
+ rows.push('LAST STATUS: operation failed');
+ const out=compactBrowserText(rows.join('\\n'),{maxChars:1000});
+ assert.match(out.text,/LAST STATUS: operation failed/);
+ assert.ok(out.outputChars<=1000);
+});
+test('compact UI status is restricted to the existing composer',()=>{
+ const html=fs.readFileSync('src/ui/index.html','utf8');
+ assert.ok(html.includes('majin-compact-evidence-tick'));
+ assert.match(html,/prefers-reduced-motion:reduce/);
+});
