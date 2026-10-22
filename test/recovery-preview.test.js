@@ -96,3 +96,10 @@ test('recovery rejects unknown risk and status values',()=>{
   assert.equal(recoveryPreview({schema:1,id:'valid',state:{steps:[step]}}).reason,'invalid-step-metadata');
  }
 });
+
+test('single-pass decision counts match every preview action',()=>{
+ const r=recoveryPreview({schema:1,id:'counts',state:{steps:[{id:'a',risk:'read',status:'pending'},{id:'b',risk:'read',status:'pending'},{id:'c',risk:'external',status:'pending'}]}});
+ assert.equal(r.ready,true);
+ assert.equal(r.steps.length,3);
+ assert.deepEqual(r.counts,{resume:2,skip:0,inspect:0,approval:1});
+});
