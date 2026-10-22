@@ -750,3 +750,7 @@ body.simple #studio{border-left:1px solid var(--line)}
  body.simple footer{padding:8px 12px 11px}
 }
 @media(prefers-reduced-motion:reduce){body.simple .sess,body.simple #composer{transition:none}}
+
+/* V1 round 44: the living orb shows activity without a duplicate action.
+   Workspace already opens the same Activity tab; keep the shortcut in expert mode. */
+body.simple #run-state #run-details { display:none; }
