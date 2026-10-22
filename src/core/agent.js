@@ -45,7 +45,8 @@ export class Agent {
   planPath(session) {
     try {
       const hp = historyPath(session);
-      return hp.replace(/\.jsonl$/, '.plan.json');
+      // Never let an unexpected history filename become a journal destination.
+      return typeof hp === 'string' && hp.endsWith('.jsonl') ? hp.slice(0, -6) + '.plan.json' : null;
     } catch { return null; }
   }
 
