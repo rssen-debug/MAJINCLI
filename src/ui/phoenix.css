@@ -417,3 +417,20 @@ body.simple .msg .appr button:not(:disabled):active {
 @media(hover:none) {
   body.simple .msg .appr button:hover { box-shadow:none; }
 }
+
+/* Aurora: improve approval contrast in both themes without another panel. */
+body.simple .msg .appr {
+  border-inline-start:3px solid var(--warn);
+  overflow-wrap:anywhere;
+}
+body.simple .msg .appr button:disabled {
+  opacity:.55;
+  cursor:not-allowed;
+}
+body.simple .msg .appr button:focus-visible {
+  outline:2px solid var(--warn);
+  outline-offset:3px;
+}
+@media(prefers-reduced-motion:reduce){
+ body.simple .msg .appr button{transition:none!important}
+}
