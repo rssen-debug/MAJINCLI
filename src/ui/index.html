@@ -738,6 +738,9 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 #composer #work-progress[data-phase="verify"]{border-top-color:rgba(226,151,250,.3)}
 #composer #work-progress[data-phase="stagnation"]{border-top-color:rgba(250,180,99,.3)}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verify"],#composer #work-progress[data-phase="stagnation"]{transition:none!important}}
+/* The existing inline recovery cue stays readable without an extra panel. */
+#composer #work-progress[data-phase="recover"]{text-decoration-color:rgba(215,151,246,.42);text-underline-offset:3px}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recover"]{scroll-behavior:auto}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
