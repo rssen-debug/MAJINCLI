@@ -551,3 +551,17 @@ body.simple .msg .appr button:focus-visible {
 @media (prefers-reduced-motion:reduce) {
   body.simple .msg .appr button { transition:none!important; }
 }
+
+/* Aurora recovery status: compact inline progress, no additional panels. */
+body.simple .msg [data-recovery-status] {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 9px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  color:var(--dim);
+  background:var(--bg2);
+  font-size:.82em;
+}
+body.simple .msg [data-recovery-status="approval"] { border-color:var(--warn);color:var(--ink); }
