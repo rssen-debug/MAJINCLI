@@ -79,3 +79,15 @@ test('newly enabled submit control resets stagnation warning',()=>{
  assert.equal(observeBrowserPage(session,{...state,controls:[{...state.controls[0],enabled:true}]}).stagnant,false);
  clearBrowserStagnation(session);
 });
+
+test('large form changes in middle and inserted fields are detected',()=>{
+ const s='rebased-middle';const controls=Array.from({length:55},(_,i)=>({selector:'#field-'+i,label:'Field '+i,checked:false,enabled:false}));
+ const state={...page(),controls};observeBrowserPage(s,state);
+ for(let i=0;i<2;i++){noteBrowserAction(s);observeBrowserPage(s,state);}
+ assert.equal(observeBrowserPage(s,state).stagnant,true);
+ const changed=controls.map(x=>({...x}));changed[29].enabled=true;
+ noteBrowserAction(s);assert.equal(observeBrowserPage(s,{...state,controls:changed}).stagnant,false);
+ noteBrowserAction(s);observeBrowserPage(s,state);
+ noteBrowserAction(s);assert.equal(observeBrowserPage(s,{...state,controls:[...controls.slice(0,25),{selector:'#extra',label:'Extra'},...controls.slice(25)]}).stagnant,false);
+ clearBrowserStagnation(s);
+});
