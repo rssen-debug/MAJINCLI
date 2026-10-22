@@ -89,3 +89,14 @@ test('agent refuses plan steps with excessive metadata keys', t => {
  assert.equal(agent.loadPlan('demo'),null);
  assert.equal(agent.plans.size,0);
 });
+
+test('agent refuses persisted plan steps with prototype pollution keys',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'majin-plan-proto-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const agent=Object.create(Agent.prototype);
+ agent.plans=new Map();
+ agent.planPath=()=>path.join(dir,'demo.plan.json');
+ fs.writeFileSync(agent.planPath(),'{"session":"demo","plan":[{"__proto__":{"polluted":true},"id":"bad"}]}');
+ assert.equal(agent.loadPlan('demo'),null);
+ assert.equal(agent.plans.size,0);
+});
