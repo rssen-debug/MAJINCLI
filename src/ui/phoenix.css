@@ -695,3 +695,7 @@ body.simple header #b-voice.on {
   border-color:var(--cy);
   box-shadow:0 0 0 2px var(--cysoft),0 0 15px var(--cysoft);
 }
+
+/* V1 round 44: the living orb shows activity without a duplicate action.
+   Workspace already opens the same Activity tab; keep the shortcut in expert mode. */
+body.simple #run-state #run-details { display:none; }
