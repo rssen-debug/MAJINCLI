@@ -245,7 +245,18 @@ function onEvent(ev) {
       if($('work-progress-symbol'))$('work-progress-symbol').textContent='◌';
     }
     else if (ev.type === 'tool_result') {
-      if(ev.tool==='browser.click' && ev.ok){
+      if(ev.tool==='browser.read' && ev.ok && ev.meta?.mode==='compact'){
+        const original=Math.max(0,Number(ev.meta.sourceChars)||0);
+        const delivered=Math.max(0,Number(ev.meta.visibleChars)||0);
+        workPulse('Page distilled · '+delivered+'/'+original+' chars');
+        const bar=$('work-progress');
+        if(bar){
+          bar.dataset.phase='compact';
+          bar.title='Condensed browser text from '+original+' to '+delivered+' characters; original page remains unchanged';
+        }
+        if($('work-progress-symbol'))$('work-progress-symbol').textContent='✧';
+      }
+      else if(ev.tool==='browser.click' && ev.ok){
         // A successful click is not the same thing as a verified remote effect.
         const receipt=ev.meta?.receipt;
         if(receipt?.status==='browser_completed' && receipt.evidence==='action_only'){

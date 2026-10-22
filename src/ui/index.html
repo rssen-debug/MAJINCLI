@@ -600,6 +600,10 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
   #composer:has(#work-progress:not([hidden]))::after{animation:none}
 }
 
+/* Page distilled: a single subtle violet ember, no additional panel. */
+#composer #work-progress[data-phase="compact"]{--ember:#cba6ff;--halo:rgba(203,166,255,.19);color:#d9c2ff;border-top-color:rgba(203,166,255,.15)}
+#composer #work-progress[data-phase="compact"] .pulse{animation-duration:2.8s;box-shadow:0 0 9px rgba(203,166,255,.25)}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="compact"] .pulse{animation:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
