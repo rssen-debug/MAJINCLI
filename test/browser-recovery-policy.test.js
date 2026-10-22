@@ -38,3 +38,10 @@ test('agent connects recovery guidance and subtle UI, no new overlays',()=>{
 test('inherited prototype error codes never produce fabricated recovery advice',()=>{
  for(const code of ['__proto__','constructor','toString','valueOf']) assert.equal(suggestBrowserRecovery('browser.click',{code}),null);
 });
+
+test('recovery ignores malicious non-string tool names without coercion',()=>{
+ const bad={toString(){throw Error('must not run')}};
+ assert.equal(suggestBrowserRecovery(bad,{code:'ref_stale'}),null);
+ assert.equal(suggestBrowserRecovery(['browser.click'],{code:'ref_stale'}),null);
+ assert.equal(suggestBrowserRecovery('browser.click',{code:'ref_stale'}).phase,'refresh_page');
+});
