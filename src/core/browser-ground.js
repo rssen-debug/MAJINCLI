@@ -16,15 +16,19 @@ export const VERSION = 'majin-ground/1';
 /* runs INSIDE the page — annotated pink marks match the MAJIN cursor brand */
 export const GROUND_JS = `(() => {
   document.querySelectorAll('.majin-mark').forEach((n) => n.remove());
+  document.querySelectorAll('[data-majin-ref]').forEach((n) => n.removeAttribute('data-majin-ref'));
   const SEL = 'a, button, input, select, textarea, summary, [role="button"], [role="link"], [role="checkbox"], [role="textbox"], [onclick], [contenteditable="true"]';
   const out = [];
   const nodes = [...document.querySelectorAll(SEL)];
   for (const el of nodes) {
+    if (out.length >= 200) break; // match per-session cache cap; never display unclickable refs
     const rect = el.getBoundingClientRect();
     if (!rect || rect.width < 4 || rect.height < 4) continue;
     const style = getComputedStyle(el);
     if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) === 0) continue;
-    if (rect.bottom < 0 || rect.right < 0) continue;
+    if (rect.bottom < 0 || rect.right < 0 || rect.top >= innerHeight || rect.left >= innerWidth) continue;
+    if (el.closest('[inert], [aria-hidden="true"]')) continue;
+    if (el.matches(':disabled') || el.getAttribute('aria-disabled') === 'true') continue;
     const ref = 'e' + (out.length + 1);
     el.setAttribute('data-majin-ref', ref);
     const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
@@ -43,7 +47,7 @@ export const GROUND_JS = `(() => {
     const mark = document.createElement('div');
     mark.className = 'majin-mark';
     mark.textContent = ref.replace('e', '');
-    mark.style.cssText = 'position:fixed;left:' + (rect.left + window.scrollX + 2) + 'px;top:' + (rect.top + window.scrollY + 2) + 'px;z-index:2147483647;background:#ff3ca5;color:#fff;font:700 11px/14px system-ui;padding:1px 5px;border-radius:9px;pointer-events:none;box-shadow:0 0 8px rgba(255,60,165,.8);';
+    mark.style.cssText = 'position:fixed;left:' + (rect.left + 2) + 'px;top:' + (rect.top + 2) + 'px;z-index:2147483647;background:#ff3ca5;color:#fff;font:700 11px/14px system-ui;padding:1px 5px;border-radius:9px;pointer-events:none;box-shadow:0 0 8px rgba(255,60,165,.8);';
     document.body.appendChild(mark);
     out.push({ ref, tag, role: el.getAttribute('role') || (tag === 'a' ? 'link' : tag === 'button' ? 'button' : tag === 'input' ? (el.type || 'input') : tag), type: el.type || null, text, name: el.name || null, id: el.id || null, href: el.href || null, disabled: Boolean(el.disabled), cx: Math.round(cx), cy: Math.round(cy) });
   }
