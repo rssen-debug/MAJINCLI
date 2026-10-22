@@ -19,3 +19,13 @@ test('watchdog cancels pending wait when user aborts', async () => {
 test('watchdog preserves timeout error identity', async () => {
   await assert.rejects(withTimeout(new Promise(() => {}), { ms: 1, code: 'my_timeout' }), { code: 'my_timeout', timeoutMs: 250 });
 });
+
+test('watchdog rejects non-positive deadlines by using safe default, then obeys cancellation', async () => {
+  const ctrl = new AbortController();
+  const result = withTimeout(new Promise(() => {}), { ms: -1, signal: ctrl.signal });
+  ctrl.abort();
+  await assert.rejects(result, { code: 'aborted' });
+});
+test('watchdog rounds fractional deadlines to integer milliseconds', async () => {
+  await assert.rejects(withTimeout(new Promise(() => {}), { ms: 250.1 }), { code: 'tool_timeout', timeoutMs: 251 });
+});
