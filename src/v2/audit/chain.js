@@ -25,25 +25,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import jcsCanonicalize from 'canonicalize'; // RFC 8785 JCS — the RFC author's own reference implementation (Apache-2.0)
 
 export const GENESIS = '0'.repeat(64);
 export const AUDIT_FILE = 'chain.jsonl';
 export const HEAD_FILE = 'head.json';
 
-/** Deterministic JSON: object keys sorted recursively, JSON semantics
- *  (undefined/functions dropped, JSON-number rules). Arrays keep order. */
+/** Deterministic JSON for hashing — RFC 8785 (JCS) via the author's own
+ *  reference lib. Bit-identical on our domain to the previous hand-rolled
+ *  canonicalizer (proven by the fixture-chain test + the JCS corpus test),
+ *  so EXISTING chains verify unchanged — and our hashes are now interoperable
+ *  with the receipts ecosystem that standardized on JCS (askledger et al.).
+ *  Keys sorted, no whitespace, ES number shortest-round-trip, JSON escaping. */
 export function canonicalize(value) {
-  if (value === null || typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return '[' + value.map((v) => (v === undefined ? 'null' : canonicalize(v))).join(',') + ']';
-  }
-  if (typeof value === 'object') {
-    const keys = Object.keys(value).filter((k) => value[k] !== undefined && typeof value[k] !== 'function').sort();
-    return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalize(value[k])).join(',') + '}';
-  }
-  return 'null';
+  // jcsCanonicalize returns undefined for undefined/functions — our domain
+  // never produces them in auditable payloads; keep the old neutral answer.
+  return jcsCanonicalize(value) ?? 'null';
 }
 
 export function hashEntry(entry) {
