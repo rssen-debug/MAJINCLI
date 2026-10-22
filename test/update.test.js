@@ -317,4 +317,10 @@ test('Windows updater acknowledges only a successfully spawned installer', { ski
   } });
   assert.equal(started.ok, true);
   assert.equal(calls, 2, 'successful installer receives a detached restart watchdog');
+  const failedWatchdog = await U.installSetup({ ...options, spawnImpl: (_file) => {
+    const child = new EventEmitter(); child.pid = 1234; child.unref = () => {};
+    process.nextTick(() => child.emit(_file === 'powershell.exe' ? 'error' : 'spawn', new Error('watchdog blocked')));
+    return child;
+  } });
+  assert.equal(failedWatchdog.ok, false, 'no false success when relaunch watchdog fails');
 });
