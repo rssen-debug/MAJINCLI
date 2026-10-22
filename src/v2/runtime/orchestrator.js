@@ -12,6 +12,7 @@ import { runGraph } from './scheduler.js';
 import { verifyAcceptance } from './verify-bridge.js';
 import { compileGoal } from '../compiler/router.js';
 import { plan } from '../supervisor/supervisor.js';
+import { planWithModel } from '../supervisor/plan-with-model.js';
 
 /** deterministic deliverable templates; honest content placeholders for now */
 const TEMPLATES = [
@@ -57,7 +58,7 @@ function startPreviewServer(root) {
  * Retargets acceptance spec paths into the workspaceDir, and if any acceptance
  * needs http, starts a local preview and substitutes '<port>' in its url spec.
  */
-export async function runObjective(objectiveText, { workspaceDir, events = null, compiled = null, provider = null, allowModel = true, telemetry = null } = {}) {
+export async function runObjective(objectiveText, { workspaceDir, events = null, compiled = null, provider = null, allowModel = true, telemetry = null, plannerWithModel = false } = {}) {
   if (!workspaceDir) throw new Error('runObjective requires workspaceDir');
   fs.mkdirSync(workspaceDir, { recursive: true });
 
@@ -86,9 +87,15 @@ export async function runObjective(objectiveText, { workspaceDir, events = null,
       : a);
   }
 
-  const summary = { goal: null, compiler: compileMeta, acceptance: goalObj.acceptance.length, produced: [], verification: [] };
+  let plannerMeta = { source: 'template' };
+  const summary = { goal: null, compiler: compileMeta, planner: plannerMeta, acceptance: goalObj.acceptance.length, produced: [], verification: [] };
   try {
-    const { graph } = plan(goalObj, { goalId: goal.id });
+    const planned = plannerWithModel && provider
+      ? await planWithModel(goalObj, provider, { goalId: goal.id })
+      : plan(goalObj, { goalId: goal.id });
+    const { graph } = planned;
+    plannerMeta = planned.meta || plannerMeta;
+    summary.planner = plannerMeta;
     goal.transition('READY', 'plan compiled'); goal.transition('RUNNING', 'execution');
 
     const deliverableFiles = new Map();
@@ -97,7 +104,12 @@ export async function runObjective(objectiveText, { workspaceDir, events = null,
       execute: async (task) => {
         if (task.action === 'plan') return { result: 'success', evidence: { strategy: 'template', risk: goalObj.risk } };
         if (task.action.startsWith('build_')) {
-          const deliverable = task.action.replace(/^build_\d*:/, '').replace(/^build_/, '');
+          // Deliverable content comes from the COMPILED GOAL by index when
+          // possible (planner-model actions like "fetch html skeleton"
+          // describe work, they do not retype what an acceptance demands).
+          const idx = Number((task.id.match(/^build:(\d+)$/) || [])[1]);
+          const actionTail = task.action.replace(/^build_\d*:/, '').replace(/^build_/, '');
+          const deliverable = (Number.isFinite(idx) && goalObj.deliverables[idx]) ? goalObj.deliverables[idx] : actionTail;
           const t = templateFor(deliverable);
           const written = deliverableFiles.get(task.id) || [];
           for (const [rel, content] of Object.entries(t.files)) {
