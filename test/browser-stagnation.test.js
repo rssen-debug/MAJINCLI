@@ -40,3 +40,31 @@ test('tool and one-line UI are actually wired to browser stagnation evidence',()
   assert.match(app,/meta\?\.stagnation\?\.stagnant===true/);
   assert.match(html,/data-phase="stagnation"/);
 });
+
+test('long page tail progress resets stagnation without recording raw text',()=>{
+ const s='tail-observation-round';
+ const long='X'.repeat(16000);
+ observeBrowserPage(s,page(long+' Pending'));
+ for(let i=0;i<2;i++){noteBrowserAction(s);observeBrowserPage(s,page(long+' Pending'));}
+ assert.equal(observeBrowserPage(s,page(long+' Pending')).stagnant,true);
+ noteBrowserAction(s);
+ assert.equal(observeBrowserPage(s,page(long+' Saved')).stagnant,false);
+ clearBrowserStagnation(s);
+});
+test('last checked control on a large form is not considered stagnant',()=>{
+ const s='tail-control-round';
+ const controls=Array.from({length:60},(_,i)=>({selector:'#control-'+i,label:'Label '+i,checked:false}));
+ const state={...page(),controls};
+ observeBrowserPage(s,state);
+ for(let i=0;i<2;i++){noteBrowserAction(s);observeBrowserPage(s,state);}
+ assert.equal(observeBrowserPage(s,state).stagnant,true);
+ const changed=controls.map(x=>({...x}));changed[59].checked=true;
+ noteBrowserAction(s);
+ assert.equal(observeBrowserPage(s,{...state,controls:changed}).stagnant,false);
+ clearBrowserStagnation(s);
+});
+test('consolidated stagnation visual stays accessible and inline',()=>{
+ const html=fs.readFileSync('src/ui/index.html','utf8');
+ assert.match(html,/majin-stagnation-orbit/);
+ assert.match(html,/prefers-reduced-motion:reduce/);
+});
