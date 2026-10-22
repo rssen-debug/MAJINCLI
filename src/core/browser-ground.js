@@ -16,7 +16,12 @@ export const VERSION = 'majin-ground/1';
 /* runs INSIDE the page — annotated pink marks match the MAJIN cursor brand */
 export const GROUND_JS = `(() => {
   document.querySelectorAll('.majin-mark').forEach((n) => n.remove());
-  document.querySelectorAll('[data-majin-ref]').forEach((n) => n.removeAttribute('data-majin-ref'));
+  // agent-browser-inspired stable refs: retain a ref while its DOM node
+  // survives. A replaced node gets a NEW identity; never recycle a stale ref.
+  const used = new Set([...document.querySelectorAll('[data-majin-ref]')]
+    .map(n => n.getAttribute('data-majin-ref')).filter(x => /^e[1-9][0-9]*$/.test(x)));
+  let next = Number(window.__majinRefSequence || 0);
+  for (const id of used) next = Math.max(next, Number(id.slice(1)));
   const SEL = 'a, button, input, select, textarea, summary, [role="button"], [role="link"], [role="checkbox"], [role="textbox"], [onclick], [contenteditable="true"]';
   const out = [];
   const nodes = [...document.querySelectorAll(SEL)];
@@ -29,8 +34,12 @@ export const GROUND_JS = `(() => {
     if (rect.bottom < 0 || rect.right < 0 || rect.top >= innerHeight || rect.left >= innerWidth) continue;
     if (el.closest('[inert], [aria-hidden="true"]')) continue;
     if (el.matches(':disabled') || el.getAttribute('aria-disabled') === 'true') continue;
-    const ref = 'e' + (out.length + 1);
-    el.setAttribute('data-majin-ref', ref);
+    let ref = el.getAttribute('data-majin-ref');
+    if (!ref || !/^e[1-9][0-9]*$/.test(ref)) {
+      do { ref = 'e' + (++next); } while (used.has(ref));
+      el.setAttribute('data-majin-ref', ref);
+      used.add(ref);
+    }
     const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
     const tag = el.tagName.toLowerCase();
     const type = String(el.getAttribute('type') || el.type || '').toLowerCase();
@@ -51,10 +60,11 @@ export const GROUND_JS = `(() => {
     document.body.appendChild(mark);
     out.push({ ref, tag, role: el.getAttribute('role') || (tag === 'a' ? 'link' : tag === 'button' ? 'button' : tag === 'input' ? (el.type || 'input') : tag), type: el.type || null, text, name: el.name || null, id: el.id || null, href: el.href || null, disabled: Boolean(el.disabled), cx: Math.round(cx), cy: Math.round(cy) });
   }
+  window.__majinRefSequence = next;
   return { url: location.href, title: document.title, count: out.length, elements: out };
 })()`;
 
-export const CLEAR_JS = `(() => { document.querySelectorAll('.majin-mark').forEach((n) => n.remove()); document.querySelectorAll('[data-majin-ref]').forEach((n) => n.removeAttribute('data-majin-ref')); return true; })()`;
+export const CLEAR_JS = `(() => { document.querySelectorAll('.majin-mark').forEach((n) => n.remove()); document.querySelectorAll('[data-majin-ref]').forEach((n) => n.removeAttribute('data-majin-ref')); delete window.__majinRefSequence; return true; })()`;
 
 /* Browser snapshot deltas: per-session, read-only, bounded, no secret values.
  * Every changed ref remains the CURRENT page's ref; unchanged is reported

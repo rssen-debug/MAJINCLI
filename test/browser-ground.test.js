@@ -93,7 +93,8 @@ test('each round keeps working feedback in a single accessible composer row',()=
 function requireFixture(){ return fs.readFileSync('src/ui/index.html','utf8'); }
 
 test('grounding never leaves stale refs or advertises controls outside viewport',()=>{
-  assert.match(GROUND_JS,/removeAttribute\('data-majin-ref'\)/);
+  assert.match(CLEAR_JS,/removeAttribute\('data-majin-ref'\)/);
+  assert.match(GROUND_JS,/window\.__majinRefSequence/, 'same-DOM refs stay stable');
   assert.match(GROUND_JS,/out\.length >= 200/);
   assert.match(GROUND_JS,/rect\.top >= innerHeight/);
   assert.match(GROUND_JS,/rect\.left >= innerWidth/);
@@ -108,4 +109,55 @@ test('existing MAJIN composer visualizes browser grounding without another panel
   assert.match(app,/interactive controls found/);
   assert.match(html,/#composer #work-progress\[data-phase="grounded"\]/);
   assert.match(html,/prefers-reduced-motion/);
+});
+
+
+test('agent-browser style refs survive re-snapshot and never recycle removed DOM identities', async () => {
+  const vm = await import('node:vm');
+  const attrs = new Map();
+  const makeNode = (name) => ({
+    tagName: 'BUTTON',
+    type: 'button',
+    disabled: false,
+    name,
+    id: name,
+    href: '',
+    innerText: name,
+    getAttribute(k) { return k === 'data-majin-ref' ? attrs.get(this) || null : null; },
+    setAttribute(k,v) { if (k === 'data-majin-ref') attrs.set(this,v); },
+    removeAttribute(k) { if (k === 'data-majin-ref') attrs.delete(this); },
+    getBoundingClientRect() { return {width:80,height:30,left:1,right:81,top:1,bottom:31}; },
+    closest() { return null; },
+    matches() { return false; },
+  });
+  const one = makeNode('Save'), two = makeNode('Cancel');
+  let nodes = [one,two];
+  const document = {
+    title:'UI',
+    body:{appendChild(){}},
+    querySelectorAll(selector) {
+      if (selector === '.majin-mark') return [];
+      if (selector === '[data-majin-ref]') return [...attrs.keys()].filter(n=>nodes.includes(n));
+      return nodes;
+    },
+    createElement() { return {className:'',textContent:'',style:{cssText:''}}; }
+  };
+  const window = {scrollX:0,scrollY:0};
+  const context = vm.createContext({document,window,location:{href:'https://example.test'},
+    innerHeight:600,innerWidth:800,getComputedStyle:()=>({visibility:'visible',display:'block',opacity:'1'})});
+  const first=vm.runInContext(GROUND_JS,context);
+  assert.deepEqual(Array.from(first.elements,x=>String(x.ref)),['e1','e2']);
+  const repeated=vm.runInContext(GROUND_JS,context);
+  assert.deepEqual(Array.from(repeated.elements,x=>String(x.ref)),['e1','e2']);
+  const replacement=makeNode('Publish');
+  nodes=[replacement,two];
+  const after=vm.runInContext(GROUND_JS,context);
+  assert.deepEqual(Array.from(after.elements,x=>String(x.ref)),['e3','e2'],
+    'new DOM nodes must never silently inherit a stale removed button ref');
+});
+test('visual polish stays inside the single composer and honours reduced motion',()=>{
+  const html=fs.readFileSync('src/ui/index.html','utf8');
+  assert.match(html,/majin-mic-breathe/);
+  assert.match(html,/body\[data-voice-mode="listening"\] #composer \.composer-talk::after/);
+  assert.match(html,/prefers-reduced-motion:reduce/);
 });

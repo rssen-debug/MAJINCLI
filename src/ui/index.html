@@ -671,6 +671,27 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="obstructed"] .pulse{background:#ed94d8;box-shadow:0 0 9px rgba(229,111,199,.25);animation:none}
 #composer #work-progress[data-phase="obstructed"] #work-progress-symbol{color:#f3b7e8;filter:drop-shadow(0 0 4px rgba(222,118,210,.25))}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="obstructed"] *{animation:none!important}}
+
+/* Round: one expressive voice cue inside the EXISTING composer, no new panels. */
+#composer .composer-talk{position:relative;isolation:isolate}
+body[data-voice-mode="listening"] #composer .composer-talk::after,
+body[data-voice-mode="speaking"] #composer .composer-talk::after{
+  content:"";position:absolute;inset:2px;border-radius:13px;pointer-events:none;
+  border:1px solid rgba(255,150,224,.64);opacity:.8;
+  box-shadow:0 0 13px rgba(255,111,216,.2);
+  animation:majin-mic-breathe 1.8s ease-in-out infinite;
+}
+body[data-voice-mode="speaking"] #composer .composer-talk::after{
+  border-color:rgba(199,158,255,.75);animation-duration:1.1s;
+}
+@keyframes majin-mic-breathe{
+  0%,100%{transform:scale(.96);opacity:.34}
+  50%{transform:scale(1.07);opacity:.95}
+}
+@media(prefers-reduced-motion:reduce){
+  body[data-voice-mode="listening"] #composer .composer-talk::after,
+  body[data-voice-mode="speaking"] #composer .composer-talk::after{animation:none}
+}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
