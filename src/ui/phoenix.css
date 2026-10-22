@@ -631,3 +631,7 @@ body.simple .msg .appr :is(button,a):focus-visible { text-decoration:underline; 
 /* Aurora: show a readable active target on real permission controls. */
 body.simple .msg .appr :is(button,a):focus-visible { border-radius:6px; text-decoration-thickness:2px; }
 @media (max-width:520px) { body.simple .msg .appr :is(button,a) { min-height:44px; } }
+
+/* Aurora: avoid cropped keyboard outlines near the edges of approval cards. */
+body.simple .msg .appr { overflow:visible; }
+body.simple .msg .appr :is(button,a):focus-visible { outline-offset:3px; }
