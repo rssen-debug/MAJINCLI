@@ -495,6 +495,17 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 @media(prefers-reduced-motion:reduce){
   #composer #work-progress[data-phase="recover"] .pulse{animation:none!important;transform:none!important}
 }
+/* Round two: a tiny mint pulse when MAJIN sees changed page controls.
+   Stays in the existing composer; no popup, card or new floating widget. */
+#composer #work-progress[data-phase="delta"]{border-top-color:rgba(116,219,189,.19)}
+#composer #work-progress[data-phase="delta"] .pulse{
+  width:8px;height:8px;flex-shrink:0;background:#94e8d4;
+  box-shadow:0 0 0 3px rgba(141,235,205,.08),0 0 13px rgba(141,235,205,.22);
+  animation:majin-delta-glow 1.65s ease-in-out infinite;
+}
+#composer #work-progress[data-phase="delta"] #work-progress-label{color:#caeadd}
+@keyframes majin-delta-glow{50%{opacity:.45;transform:scale(.74)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="delta"] .pulse{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
