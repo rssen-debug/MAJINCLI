@@ -7,7 +7,7 @@ test('safeParse handles valid structured tool arguments', () => {
 });
 test('safeParse recovers a malformed escape without throwing', () => {
   assert.doesNotThrow(() => safeParse(String.raw`name: "bad\q", count: 2`));
-  assert.deepEqual(safeParse('name: "bad\\\\q", count: 2'), { name:'bad\\q',count:2 });
+  assert.deepEqual(safeParse(String.raw`name: "bad\q", count: 2`), { name:'bad\\q',count:2 });
 });
 test('safeParse retains numeric and boolean fallback arguments', () => {
   assert.deepEqual(safeParse('count: 3, enabled: false'), { count:3,enabled:false });
