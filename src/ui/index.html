@@ -720,6 +720,10 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 #composer #work-progress[data-phase="recovery"] #work-progress-symbol{display:inline-block;animation:majin-recovery-rotate 1.7s ease-in-out infinite}
 @keyframes majin-recovery-rotate{50%{transform:rotate(160deg)}100%{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recovery"] #work-progress-symbol{animation:none}}
+/* Calm amber progress feedback in the EXISTING status row. */
+#composer #work-progress[data-phase="stagnation"] .pulse{animation:majin-stagnation-soft-halo 2.4s ease-in-out infinite}
+@keyframes majin-stagnation-soft-halo{50%{box-shadow:0 0 0 4px rgba(255,186,101,.09),0 0 9px rgba(255,186,101,.3)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] .pulse{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
