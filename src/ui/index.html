@@ -728,6 +728,10 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 #composer #work-progress[data-phase="stagnation"] #work-progress-symbol{animation:majin-stagnation-orbit 2.6s ease-in-out infinite}
 @keyframes majin-stagnation-orbit{50%{opacity:.7;filter:drop-shadow(0 0 5px rgba(255,172,90,.3))}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] #work-progress-symbol{animation:none!important}}
+/* A small evidence cue in MAJIN's existing composer, no new panels. */
+#composer #work-progress[data-phase="verify"] #work-progress-symbol{animation:majin-strict-proof-cue 2.8s ease-in-out infinite}
+@keyframes majin-strict-proof-cue{50%{opacity:.72;text-shadow:0 0 7px rgba(219,147,245,.29)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verify"] #work-progress-symbol{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
