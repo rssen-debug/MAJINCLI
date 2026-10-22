@@ -17,11 +17,13 @@ import { OpenAICompatibleProvider } from '../src/v2/model/provider.js';
 import { TelemetryLedger } from '../src/v2/telemetry/ledger.js';
 import { loadConfig } from '../src/v2/config/config.js';
 import { aggregate, renderReport } from '../src/v2/telemetry/aggregate.js';
+import { AuditChain } from '../src/v2/audit/chain.js';
 
 const USAGE = `MAJIN V2
   majin-v2 "<objective>" --workspace <dir> [options]
   majin-v2 --gauntlet
   majin-v2 --telemetry-report [dir] [--days N]
+  majin-v2 --audit-verify <dir>
 
 Options:
   --workspace <dir>       where the objective may write (required for objectives)
@@ -35,8 +37,9 @@ Options:
   --days N                telemetry report window (default 7)
 `;
 
-const { values, positionals } = parseArgs({
-  allowPositionals: true,
+let values, positionals;
+try {
+  ({ values, positionals } = parseArgs({
   options: {
     workspace: { type: 'string' },
     'provider-url': { type: 'string' },
@@ -47,14 +50,22 @@ const { values, positionals } = parseArgs({
     'telemetry-dir': { type: 'string' },
     gauntlet: { type: 'boolean' },
     'telemetry-report': { type: 'string' },
+    'audit-verify': { type: 'string' },
     days: { type: 'string' },
     json: { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
   },
-});
+  allowPositionals: true,
+  }));
+} catch (err) {
+  // misuse is exit 2, never a crash — same contract as a missing --workspace
+  console.error(`majin-v2: ${err.message}`);
+  process.stdout.write(USAGE);
+  process.exit(2);
+}
 
 async function main() {
-  if (values.help || (!values.gauntlet && !values['telemetry-report'] && positionals.length === 0)) {
+  if (values.help || (!values.gauntlet && !values['telemetry-report'] && values['audit-verify'] === undefined && positionals.length === 0)) {
     process.stdout.write(USAGE);
     process.exit(positionals.length || values.help ? 0 : 2);
   }
@@ -75,6 +86,30 @@ async function main() {
     if (values.json) console.log(JSON.stringify(rep, null, 2));
     else process.stdout.write(renderReport(rep));
     process.exit(0);
+  }
+
+  if (values['audit-verify'] !== undefined) {
+    // independent verifier: fresh AuditChain instance, full walk + anchor check.
+    // AUDIT ok | AUDIT broken — no adjectives, machine-parseable (prior-art CLI shape).
+    const dir = path.resolve(values['audit-verify']);
+    if (!values['audit-verify']) {
+      console.error('AUDIT broken LINE=- REASON=USAGE (--audit-verify requires a directory)');
+      process.exit(2);
+    }
+    let verdict;
+    try {
+      verdict = new AuditChain(dir).verify();
+    } catch (err) {
+      // constructor-level fork/anchor disagreement is a broken verdict, not a crash
+      console.error(`AUDIT broken LINE=- REASON=${err.cls || 'FAILED'} (${err.message})`);
+      process.exit(1);
+    }
+    if (verdict.ok) {
+      console.log(`AUDIT ok ENTRIES=${verdict.entries} HEAD=${verdict.head.slice(0, 16)}`);
+      process.exit(0);
+    }
+    console.error(`AUDIT broken LINE=${verdict.brokenAt} REASON=${verdict.reason} (${verdict.detail})`);
+    process.exit(1);
   }
 
   const objective = positionals.join(' ').trim();
