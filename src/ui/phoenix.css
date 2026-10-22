@@ -588,3 +588,8 @@ body.simple .msg [data-recovery-status="inspect"] { border-width:2px; }
 body.simple .msg [data-recovery-status] { line-height:1.4; vertical-align:middle; }
 body.light.simple .msg [data-recovery-status="inspect"] { color:var(--ink); }
 @media(max-width:480px) { body.simple .msg [data-recovery-status] { white-space:normal; } }
+
+/* Aurora: actual approval cards support clear keyboard focus and readable controls. */
+body.simple .msg .appr { border-inline-start:3px solid var(--warn); }
+body.simple .msg .appr :is(button,a):focus-visible { outline:3px solid var(--warn);outline-offset:3px; }
+@media(max-width:600px) { body.simple .msg .appr button { min-height:44px; } }
