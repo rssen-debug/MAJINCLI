@@ -208,6 +208,8 @@ function workPulse(phase){
     bar.hidden=false;
     bar.dataset.phase=/verif|validat|check|kontroll/i.test(workPhase)?'verify':
       /fail|error|failed|block|stuck/i.test(workPhase)?'problem':'active';
+    const glyph=$('work-progress-symbol');
+    if(glyph)glyph.textContent=bar.dataset.phase==='verify'?'◇':bar.dataset.phase==='problem'?'!':'✦';
   }
 }
 setInterval(()=>{
@@ -220,6 +222,7 @@ setInterval(()=>{
   // The existing inline spirit ember changes colour only when event
   // evidence has gone quiet; it does not claim the operation has failed.
   if(stalled && bar.dataset.phase!=='problem')bar.dataset.phase='stalled';
+  if(stalled && $('work-progress-symbol'))$('work-progress-symbol').textContent='·';
   if($('work-progress-label'))$('work-progress-label').textContent=
     stalled ? workPhase+' · No update for '+silent+'s — still waiting for the current operation' : workPhase;
   if($('work-progress-timer'))$('work-progress-timer').textContent=total+'s';
@@ -243,6 +246,7 @@ function onEvent(ev) {
         if(verified){
           workPulse('Browser result verified');
           const bar=$('work-progress');if(bar)bar.dataset.phase='verified';
+          if($('work-progress-symbol'))$('work-progress-symbol').textContent='✓';
         } else if(!receipt || receipt.evidence!=='action_only'){
           workPulse('Click sent · checking its effect');
           const bar=$('work-progress');if(bar)bar.dataset.phase='action';
