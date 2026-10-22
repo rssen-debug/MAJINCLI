@@ -649,3 +649,8 @@ body.simple .msg .appr h4 { font-weight:700;line-height:1.45;letter-spacing:.01e
 /* Aurora: visible, compact permission header without new panels. */
 body.simple .msg .appr h4 { overflow-wrap:anywhere; margin-block-end:8px; }
 body.simple .msg .appr:focus-within h4 { text-decoration:underline;text-underline-offset:4px; }
+
+/* V1: make update discoverable and approval controls accessible on touch. */
+body.simple #c-update:not([hidden]) { min-height:36px;padding-inline:12px;font-weight:650; }
+body.simple #c-update:focus-visible { outline:3px solid var(--cy);outline-offset:3px; }
+@media(pointer:coarse){body.simple .msg .appr :is(button,a){min-height:44px;touch-action:manipulation}}
