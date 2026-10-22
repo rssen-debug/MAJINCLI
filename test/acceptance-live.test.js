@@ -21,7 +21,7 @@ async function mkrt() {
   const { createRuntime } = await import('../src/core/runtime.js');
   const rt = await createRuntime({ channels: false, scheduler: false });
   rt.cfg.patch({
-    models: { provider: 'opencode', routes: { tasks: 'opencode/longcat-2.5-preview-free', tools: 'opencode/longcat-2.5-preview-free', chat: 'opencode/longcat-2.5-preview-free' } },
+    models: { provider: 'opencode', routes: { tasks: process.env.MAJIN_LIVE_MODEL || 'opencode/longcat-2.5-preview-free', tools: process.env.MAJIN_LIVE_MODEL || 'opencode/longcat-2.5-preview-free', chat: process.env.MAJIN_LIVE_MODEL || 'opencode/longcat-2.5-preview-free' } },
     moa: { policy: 'off' }, guard: { mode: 'off' },
     missions: { repairRounds: 2, contractCmdTimeoutMs: 15000 },
     budget: { mode: 'track', monthlyUsd: 0, perTaskUsd: 0 },
