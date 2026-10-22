@@ -100,3 +100,15 @@ test('agent refuses persisted plan steps with prototype pollution keys',t=>{
  assert.equal(agent.loadPlan('demo'),null);
  assert.equal(agent.plans.size,0);
 });
+
+test('agent rejects constructor and prototype keys from a saved plan',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'majin-plan-special-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const agent=Object.create(Agent.prototype);agent.plans=new Map();
+ agent.planPath=()=>path.join(dir,'demo.plan.json');
+ for(const key of ['constructor','prototype']){
+   fs.writeFileSync(agent.planPath(),JSON.stringify({session:'demo',plan:[{id:'a',[key]:{unsafe:true}}]}));
+   assert.equal(agent.loadPlan('demo'),null);
+ }
+ assert.equal(agent.plans.size,0);
+});
