@@ -68,3 +68,15 @@ test('consolidated stagnation visual stays accessible and inline',()=>{
  assert.match(html,/majin-stagnation-orbit/);
  assert.match(html,/prefers-reduced-motion:reduce/);
 });
+
+test('enabling a previously disabled control counts as real page progress',()=>{
+ const s='enabled-control';
+ const controls=[{selector:'#submit',label:'Submit',checked:false,enabled:false}];
+ const state={...page(),controls};
+ observeBrowserPage(s,state);
+ for(let i=0;i<2;i++){noteBrowserAction(s);observeBrowserPage(s,state);}
+ assert.equal(observeBrowserPage(s,state).stagnant,true);
+ noteBrowserAction(s);
+ assert.equal(observeBrowserPage(s,{...state,controls:[{...controls[0],enabled:true}]}).stagnant,false);
+ clearBrowserStagnation(s);
+});
