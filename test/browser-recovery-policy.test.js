@@ -34,3 +34,14 @@ test('agent connects recovery guidance and subtle UI, no new overlays',()=>{
  assert.match(html,/#composer #work-progress\[data-phase="recover"\]/);
  assert.match(html,/prefers-reduced-motion:reduce/);
 });
+
+test('prototype and inherited error names never turn into recovery advice',()=>{
+ for(const code of ['__proto__','constructor','toString','valueOf']){
+   assert.equal(suggestBrowserRecovery('browser.click',{code}),null);
+ }
+});
+test('recovery glow stays in existing composer and respects reduced motion',()=>{
+ const html=fs.readFileSync('src/ui/index.html','utf8');
+ assert.match(html,/majin-recovery-spark/);
+ assert.match(html,/prefers-reduced-motion:reduce/);
+});
