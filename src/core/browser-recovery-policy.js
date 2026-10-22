@@ -16,7 +16,9 @@ const HELP = Object.freeze({
 export function suggestBrowserRecovery(tool,error){
   const name=String(tool||'');
   if(!name.startsWith('browser.'))return null;
-  const code=String(error?.code||'');
+  const rawCode=error?.code;
+  if(typeof rawCode!=='string')return null;
+  const code=rawCode;
   const match=Object.hasOwn(HELP,code)?HELP[code]:null;if(!match)return null;
   return {phase:match.phase,next:match.next,message:match.message,code,tool:name};
 }
