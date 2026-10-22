@@ -10,7 +10,7 @@ import http from 'node:http';
 import { Goal, newGoalId } from './goal.js';
 import { runGraph } from './scheduler.js';
 import { verifyAcceptance } from './verify-bridge.js';
-import { compileDeterministic } from '../compiler/goal-compiler.js';
+import { compileGoal } from '../compiler/router.js';
 import { plan } from '../supervisor/supervisor.js';
 
 /** deterministic deliverable templates; honest content placeholders for now */
@@ -57,13 +57,17 @@ function startPreviewServer(root) {
  * Retargets acceptance spec paths into the workspaceDir, and if any acceptance
  * needs http, starts a local preview and substitutes '<port>' in its url spec.
  */
-export async function runObjective(objectiveText, { workspaceDir, events = null, compiled = null } = {}) {
+export async function runObjective(objectiveText, { workspaceDir, events = null, compiled = null, provider = null, allowModel = true } = {}) {
   if (!workspaceDir) throw new Error('runObjective requires workspaceDir');
   fs.mkdirSync(workspaceDir, { recursive: true });
 
   const goal = new Goal({ id: newGoalId(), objective: objectiveText, events });
   goal.transition('PLANNING', 'compiled');
-  const goalObj = compiled || compileDeterministic(objectiveText);
+  let compileMeta = { source: 'deterministic' };
+  let goalObj = compiled;
+  if (!goalObj) {
+    ({ goal: goalObj, meta: compileMeta } = await compileGoal(objectiveText, { provider, allowModel }));
+  }
   goal.acceptance.push(...goalObj.acceptance.map((a) => ({ id: a.id, description: a.description })));
   goalObj.acceptance = goalObj.acceptance.map((a) => ({
     ...a,
@@ -80,7 +84,7 @@ export async function runObjective(objectiveText, { workspaceDir, events = null,
       : a);
   }
 
-  const summary = { goal: null, acceptance: goalObj.acceptance.length, produced: [], verification: [] };
+  const summary = { goal: null, compiler: compileMeta, acceptance: goalObj.acceptance.length, produced: [], verification: [] };
   try {
     const { graph } = plan(goalObj, { goalId: goal.id });
     goal.transition('READY', 'plan compiled'); goal.transition('RUNNING', 'execution');
