@@ -1,4 +1,5 @@
 import { withTimeout, withAbortDeadline, RepeatDetector, TurnClock } from './watchdog.js';
+import { startToolHeartbeat } from './tool-heartbeat.js';
 import { RecoveryBudget } from './strategy-recovery.js';
 /**
  * MAJIN — verktygsslingan.
@@ -420,10 +421,18 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
           wdRepeatBlocked = true;
         }
       } else {
+        // A slow tool should never leave the user staring at a silent composer.
+        // Heartbeats carry only a tool name and elapsed time; no args/secrets.
+        const heartbeat = startToolHeartbeat({
+          tool: c.name,
+          emit: (event) => onEvent({ ...event, label, step: steps, callId: c.id }),
+        });
         try {
           out = await withTimeout(registry.exec(c.name, args, { ...ctx, session: ctx?.session ?? 'desktop', step: steps, readOnly: Boolean(ctx?.readOnly) }), { ms: wdToolTimeoutMs, label: `tool ${c.name}` });
         } catch (werr) {
           out = { ok: false, ms: wdToolTimeoutMs, error: { code: werr.code === 'tool_timeout' ? 'tool_timeout' : werr.code || 'tool_error', message: werr.message } };
+        } finally {
+          heartbeat.stop();
         }
       }
       // args följer med i loggen: utan dem är en spårning värdelös som träningsdata
