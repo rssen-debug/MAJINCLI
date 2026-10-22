@@ -511,6 +511,14 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="action"] .pulse{background:#ffbd83;box-shadow:0 0 0 3px rgba(255,189,131,.08),0 0 12px rgba(255,189,131,.2);animation:majin-action-pulse 1.9s ease-in-out infinite}
 @keyframes majin-action-pulse{50%{transform:scale(.74);opacity:.5}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="action"] .pulse{animation:none}}
+
+/* Small phase glyph, not another status panel. */
+#composer #work-progress-symbol{font-size:12px;line-height:1;color:#e7aad9;opacity:.85;display:inline-block;width:14px;text-align:center;transition:transform .25s ease,color .25s ease}
+#composer #work-progress[data-phase="verify"] #work-progress-symbol{color:#d6adff;transform:rotate(-12deg)}
+#composer #work-progress[data-phase="verified"] #work-progress-symbol{color:#9ff3cb;transform:scale(1.05)}
+#composer #work-progress[data-phase="stalled"] #work-progress-symbol,
+#composer #work-progress[data-phase="problem"] #work-progress-symbol{color:#ffabb4}
+@media(prefers-reduced-motion:reduce){#composer #work-progress-symbol{transition:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
@@ -570,7 +578,7 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
       <div class="voice-stage-copy"><strong id="voice-stage-label">Listening</strong><small id="voice-caption">Speak naturally</small></div>
       <button id="voice-stage-stop" type="button" aria-label="End voice conversation" title="End voice call">×</button>
     </div>
-    <div id="work-progress" role="status" aria-live="polite" hidden><span class="pulse" aria-hidden="true"></span><span id="work-progress-label">Starting…</span><span id="work-progress-timer">0s</span></div>
+    <div id="work-progress" role="status" aria-live="polite" hidden><span class="pulse" aria-hidden="true"></span><span id="work-progress-symbol" aria-hidden="true">✦</span><span id="work-progress-label">Starting…</span><span id="work-progress-timer">0s</span></div>
   </div>
   <div class="crow"><span id="mic-state" aria-live="polite"></span><span class="grow" id="status" role="status" aria-live="polite">Ready</span><span id="drop" class="drop">drop a file → RE analysis</span></div>
 </footer></div>
