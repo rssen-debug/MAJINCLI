@@ -519,6 +519,16 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="stalled"] #work-progress-symbol,
 #composer #work-progress[data-phase="problem"] #work-progress-symbol{color:#ffabb4}
 @media(prefers-reduced-motion:reduce){#composer #work-progress-symbol{transition:none}}
+
+/* Round 2: a tiny, single-surface activity signal, not another panel. */
+#composer{transition:border-color .24s ease,box-shadow .24s ease}
+#composer:has(#work-progress:not([hidden])){border-color:rgba(250,130,222,.37);box-shadow:0 0 0 1px rgba(255,113,212,.07),0 0 24px rgba(225,81,194,.07)}
+#composer #work-progress[data-phase="stalled"]{color:var(--dim)}
+#composer #work-progress[data-phase="stalled"] .pulse{background:#ffbf87;animation-duration:2.4s}
+#composer #work-progress[data-phase="verify"] .pulse{background:#bba5ff}
+#composer #work-progress[data-phase="problem"] .pulse{background:#ff7b99}
+#composer:focus-within{border-color:rgba(248,126,216,.48);box-shadow:0 0 0 2px rgba(237,97,207,.09)}
+@media(prefers-reduced-motion:reduce){#composer,#composer .pulse{transition:none;animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>

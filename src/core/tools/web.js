@@ -252,7 +252,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     group: 'web',
     risk: 'read',
     desc: 'Read visible text from the page (or one selector) — the actual words on the page, capped.',
-    params: { selector: 'string: optional CSS selector — whole page when omitted', mode: 'string optional "structure" for compact accessibility outline without form values' },
+    params: { selector: 'string: optional CSS selector — whole page when omitted', mode: 'string optional "structure" for compact accessibility outline, or "main" to read primary content with nav/footer noise removed; default full page' },
     async run({ selector = '', mode = '' }, ctx) {
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
@@ -265,18 +265,37 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         journal.guard(session,'browser.read:structure');
         return {ok:true,result,meta:{url:payload.url,title:payload.title,mode:'structure',count:payload.elements?.length||0},summary:'Page structure observed ('+(payload.elements?.length||0)+' elements)'};
       }
+      const focused = String(mode).toLowerCase() === 'main' && !selector;
       const sel = JSON.stringify(String(selector || ''));
       const expr = `(() => {
+        if (${focused}) {
+          // Agent-browser inspired focused reading. Only visible content,
+          // never scrape form values, hidden panels or unrelated navigation.
+          const scope=document.querySelector('main,[role="main"],article') || document.body;
+          const walker=document.createTreeWalker(scope,NodeFilter.SHOW_TEXT);
+          const out=[];let total=0;let node;
+          while((node=walker.nextNode()) && total<12000){
+            const p=node.parentElement;
+            if(!p || p.closest('nav,header,footer,aside,script,style,noscript,template,[hidden],[aria-hidden="true"],[inert]'))continue;
+            const computed=getComputedStyle(p);
+            if(computed.display==='none'||computed.visibility==='hidden'||Number(computed.opacity)===0)continue;
+            const value=String(node.nodeValue||'').replace(/\\s+/g,' ').trim();
+            if(!value)continue;
+            out.push(value);total+=value.length+1;
+          }
+          const text=out.join(' ').slice(0,12000);
+          return {ok:true,url:location.href,title:document.title,text,focused:true};
+        }
         const t = ${sel} ? (document.querySelector(${sel})?.innerText ?? null) : null;
         const body = t == null ? (document.body ? document.body.innerText : '') : t;
         return { ok: ${sel} ? t != null : true, url: location.href, title: document.title, text: String(body).slice(0, 12000) };
       })()`;
       const r = await b.eval(expr);
-      journal.guard(session, `browser.read:${selector}`);
+      journal.guard(session, `browser.read:${selector}:${focused?'main':'all'}`);
       if (!r.ok && selector) return { ok: false, error: { code: 'no_such_element', message: `no element matches ${selector}` } };
       const controls = selector ? [] : await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
       return { ok: true, result: (r.text || '(page is empty)') + formatControlHints(controls),
-        meta: { url: r.url, title: r.title, chars: (r.text || '').length, groundedControls: Array.isArray(controls) ? controls.length : 0 },
+        meta: { url: r.url, title: r.title, mode: focused ? 'main' : 'all', chars: (r.text || '').length, groundedControls: Array.isArray(controls) ? controls.length : 0 },
         summary: `${(r.text || '').length} chars from ${r.title || r.url}` };
     },
   }),
