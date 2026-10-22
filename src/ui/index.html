@@ -739,6 +739,9 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 /* Better evidence visibility within the existing status row (no new overlay). */
 #composer #work-progress[data-phase="stagnation"]{text-underline-offset:3px}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"]{scroll-behavior:auto}}
+/* Calm lavender emphasis when MAJIN sees a form state change. */
+#composer #work-progress[data-phase="stagnation"] #work-progress-symbol{font-variant-numeric:tabular-nums;opacity:.96}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] #work-progress-symbol{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
