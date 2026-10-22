@@ -641,3 +641,7 @@ body.simple .msg .appr :is(button,a):focus-visible { outline-offset:3px; }
  body.simple .msg .appr { display:flow-root; }
  body.simple .msg .appr :is(button,a) { max-width:100%; overflow-wrap:anywhere; }
 }
+
+/* Aurora: a small readable approval heading helps explain why MAJIN paused. */
+body.simple .msg .appr h4 { font-weight:700;line-height:1.45;letter-spacing:.01em; }
+@media(max-width:560px){body.simple .msg .appr h4 {font-size:13px;}}
