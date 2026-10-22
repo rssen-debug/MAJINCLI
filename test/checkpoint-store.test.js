@@ -42,3 +42,10 @@ test('checkpoint loader rejects symlink files',t=>{
  catch (e) { if (e.code==='EPERM'||e.code==='EACCES') { t.skip('symlinks unavailable'); return; } throw e; }
  assert.throws(()=>loadCheckpoint(dir,'alias'),/Invalid checkpoint file size/);
 });
+
+test('checkpoint state rejects BigInt rather than creating a partial file',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'majin-checkpoint-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ assert.throws(()=>saveCheckpoint(dir,'bigint',{value:1n}),/BigInt unsupported/);
+ assert.deepEqual(fs.readdirSync(dir),[]);
+});
