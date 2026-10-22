@@ -728,6 +728,9 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 #composer #work-progress[data-phase="compact"] #work-progress-symbol{animation:majin-compact-proof-gleam 2.5s ease-in-out infinite}
 @keyframes majin-compact-proof-gleam{50%{opacity:.68;text-shadow:0 0 7px rgba(218,156,250,.35)}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="compact"] #work-progress-symbol{animation:none!important}}
+/* Round 13: clear yet quiet compact-result evidence cue. */
+#composer #work-progress[data-phase="compact"]{border-top-color:rgba(224,151,246,.25);transition:border-top-color .2s ease}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="compact"]{transition:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
