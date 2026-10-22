@@ -692,6 +692,14 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
   body[data-voice-mode="listening"] #composer .composer-talk::after,
   body[data-voice-mode="speaking"] #composer .composer-talk::after{animation:none}
 }
+
+/* Recovery stays in the existing one-line composer instead of opening a panel. */
+#composer #work-progress[data-phase="recovery"]{color:#e9cbff;border-top-color:rgba(217,155,255,.32)}
+#composer #work-progress[data-phase="recovery"] .pulse{background:#dca9ff;box-shadow:0 0 0 3px rgba(220,169,255,.12),0 0 12px rgba(220,169,255,.5)}
+#composer #work-progress[data-phase="recovery"]::after{background:linear-gradient(90deg,transparent,#dca9ff,transparent);animation-duration:1.65s}
+#composer #work-progress[data-phase="recovery"] #work-progress-symbol{display:inline-block;animation:majin-recovery-rotate 1.7s ease-in-out infinite}
+@keyframes majin-recovery-rotate{50%{transform:rotate(160deg)}100%{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recovery"] #work-progress-symbol{animation:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>

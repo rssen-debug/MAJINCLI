@@ -76,7 +76,25 @@ export async function withAbortDeadline(work, { ms, parentSignal, label = 'model
    within one turn = never silently retrying that wall again. */
 export class RepeatDetector {
   constructor(limit = 3) { this.limit = limit; this.lastKey = null; this.count = 0; }
-  key(name, args) { try { return `${name}:${JSON.stringify(args ?? {})}`; } catch { return `${name}:<unserializable>`; } }
+  key(name, args) {
+    // Normalize object key order so an LLM cannot evade repeat detection by
+    // emitting {a:1,b:2}, then {b:2,a:1}. Keep array order (meaningful).
+    // Never serialize cyclic values indefinitely; tool args must be JSON-like.
+    const seen = new WeakSet();
+    const canonical = (v, depth = 0) => {
+      if (depth > 20) return '[depth-limit]';
+      if (v === null || typeof v !== 'object') return v;
+      if (seen.has(v)) return '[circular]';
+      seen.add(v);
+      const normalized = Array.isArray(v)
+        ? v.map(x => canonical(x, depth + 1))
+        : Object.fromEntries(Object.keys(v).sort().map(k => [k, canonical(v[k], depth + 1)]));
+      seen.delete(v);
+      return normalized;
+    };
+    try { return `${name}:${JSON.stringify(canonical(args ?? {}))}`; }
+    catch { return `${name}:<unserializable>`; }
+  }
   hit(name, args) {
     const k = this.key(name, args);
     // A read of the same file after an intervening write is normal progress.
