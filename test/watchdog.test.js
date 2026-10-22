@@ -25,7 +25,7 @@ test('W13 withTimeout: a hanging promise ends as explicit tool_timeout, never si
     .catch((e) => ({ code: e.code, message: e.message }));
   const dt = Date.now() - t0;
   assert.equal(r.code, 'tool_timeout');
-  assert.match(r.message, /killed/);
+  assert.match(r.message, /deadline reached/);
   assert.ok(dt < 1000, `timeout must fire near its bound, got ${dt}ms`);
 });
 
