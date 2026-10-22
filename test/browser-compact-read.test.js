@@ -47,3 +47,17 @@ test('browser evidence UI uses only existing composer and reduced motion',()=>{
  assert.ok(html.includes('majin-compact-evidence-glow'));
  assert.match(html,/prefers-reduced-motion:reduce/);
 });
+
+test('compact browser does not merge distinct rows sharing a long prefix',()=>{
+ const prefix='Result '+('x'.repeat(190));
+ const source=prefix+' FAILED\\n'+prefix+' SAVED';
+ const out=compactBrowserText(source,{maxChars:1200});
+ assert.equal(out.uniqueLines,2);
+ assert.match(out.text,/FAILED/);
+ assert.match(out.text,/SAVED/);
+});
+test('compact evidence visual remains inside composer and supports reduced motion',()=>{
+ const html=fs.readFileSync('src/ui/index.html','utf8');
+ assert.match(html,/majin-compact-proof-gleam/);
+ assert.match(html,/prefers-reduced-motion:reduce/);
+});
