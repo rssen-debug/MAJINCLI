@@ -668,3 +668,8 @@ body.simple #composer #input{grid-column:2;grid-row:1;min-width:0;width:100%;ali
 body.simple #composer #send{grid-column:3;grid-row:1;align-self:center;justify-self:center;margin:0}
 @media(max-width:600px){body.simple footer{padding-inline:12px}body.simple #scroller{padding-inline:12px}body.simple #scroller>.msg{max-width:100%}}
 \n/* Neon inline mindmap — scrollable, responsive, keyboard-accessible. */\n.majin-mindmap{max-width:100%;border:1px solid #9e4c8f55;background:radial-gradient(ellipse at 15% 10%,#7a2c6944,transparent 55%),#120d17;border-radius:22px;padding:14px;margin:18px 0;box-shadow:0 12px 32px #0005}\n.majin-mindmap-title{font:650 10px/1.4 var(--sans);letter-spacing:.2em;color:#efa2d9;margin:0 0 11px 5px}\n.majin-mindmap-scroll{max-width:100%;overflow:auto;scrollbar-color:#9e4c8f55 transparent}\n.majin-mindmap-scroll svg{display:block;max-width:none}.majin-mindmap-scroll:focus-visible{outline:2px solid #efa2d9;outline-offset:2px}\n
+/* Voice UI: readable listening caption under the orb and stable composer geometry. */
+body.simple #composer #voice-stage{max-width:100%;min-width:0;box-sizing:border-box}
+body.simple #composer #voice-caption{color:var(--ink);overflow-wrap:anywhere;white-space:normal;max-width:min(65ch,100%)}
+body.simple[data-voice-mode="listening"] #composer .composer-talk{box-shadow:0 0 0 3px var(--cysoft),0 0 16px var(--cysoft)}
+@media(max-width:520px){body.simple #composer #voice-stage{flex-wrap:wrap}body.simple #composer .voice-stage-copy{min-width:0;flex:1}}

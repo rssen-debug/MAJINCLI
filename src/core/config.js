@@ -194,7 +194,7 @@ export const DEFAULTS = {
     title: 'MAJIN',
     tagline: 'everything on — always ready',
     theme: 'jarvis',
-    voice: { enabled: true, lang: 'en-US', wakeWord: 'majin', tts: true, ttsVoice: null, rate: 1.05, pitch: 0.95 },
+    voice: { enabled: true, lang: 'sv-SE', wakeWord: '', requireWakeWord: false, foregroundGate: false, tts: true, ttsVoice: null, rate: 1.05, pitch: 0.95 },
     transparency: { showTools: 'verbose', showThinking: 'summary', showTokens: true },
     density: 'comfortable',
     autoOpen: true,

@@ -1131,10 +1131,12 @@ function stopMic(){
   voiceState('idle','Voice ready');
 }
 function dispatchVoiceTurn(r){
-  if(voiceFinished||recog!==r||!S.handsFree||S.busy)return;
+  if(voiceFinished||recog!==r||!S.handsFree)return;
   let command=(voiceFinal||voiceTranscript).trim();
   const wake=String(S.st?.config?.ui?.voice?.wakeWord||'').trim();
-  if(wake){
+  // Manual tap-to-talk already authorizes the turn. Legacy wakeWord values
+  // must not silently discard speech; requireWakeWord is explicit opt-in.
+  if(wake && S.st?.config?.ui?.voice?.requireWakeWord === true){
     if(!command.toLowerCase().startsWith(wake.toLowerCase())){
       // A mismatched wake phrase must not strand the recognizer indefinitely.
       voiceFinished=true;S.handsFree=false;stopMic();
@@ -1146,7 +1148,7 @@ function dispatchVoiceTurn(r){
   if(!command)return;
   // Noisy TV chatter can produce a valid browser transcript. Only permit the
   // turn if near-mic activity was observed. This is NOT biometric speaker ID.
-  const gated = S.st?.config?.ui?.voice?.foregroundGate !== false;
+  const gated = S.st?.config?.ui?.voice?.foregroundGate === true;
   if(gated && voiceGateReady && voiceGate &&
      (!voiceGate.lastSpeech || Date.now()-voiceGate.lastSpeech>4500)){
     S.handsFree=false;
@@ -1159,13 +1161,25 @@ function dispatchVoiceTurn(r){
   try{r.abort();}catch{}
   // Spoken text belongs in the chat transcript, but must not insert itself
   // into the typed composer or start a second voice turn.
+  const intent=window.MAJIN_VOICE_INTENT?.classify(command,S.busy)||{kind:'send',text:command};
+  if(intent.kind==='cancel'||intent.kind==='replace'){
+    voiceState('thinking',intent.kind==='cancel'?'Stopping current task…':'Switching task…');
+    void (async()=>{
+      if(S.busy){try{await stopObservedTask(S.taskId,S.session);}
+        catch(e){voiceState('error','Could not confirm stop: '+e.message);return;}}
+      if(intent.kind==='replace'){await send(intent.text,{voiceTurn:true});}
+      else {S.handsFree=false;voiceState('paused','Stopped. Tap to speak again.');}
+    })();
+    return;
+  }
+  if(S.busy){voiceState('paused','Task running — say “stop” or “no, do something else”');S.handsFree=false;return;}
   voiceState('thinking','Got it — working on your answer');
   void send(command,{voiceTurn:true});
 }
 function startMic(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){S.handsFree=false;S.listening=false;voiceState('error','Speech recognition unavailable — use Chrome or Edge and allow microphone access');return;}
-  if(speechActive||S.busy||!S.handsFree||recog)return;
+  if(speechActive||!S.handsFree||recog)return;
   const r=new SR();recog=r;voiceArmed=true;voiceFinished=false;
   voiceTranscript='';voiceFinal='';S.listening=true;
   r.lang=S.st?.config?.ui?.voice?.lang||'sv-SE';
@@ -1228,8 +1242,7 @@ function micToggle(){
     speechActive=false;
     S.handsFree=true;S.voice=true;S.voiceTurn=false;
     $('b-voice')?.classList.add('on');
-    if (S.busy) voiceState('thinking','Finishing the current answer…');
-    else { voiceState('listening','Speak now'); startMic(); }
+    voiceState('listening','Speak now'); startMic();
   }
 }
 let currentVoiceAudio=null, voiceRequest=null;
