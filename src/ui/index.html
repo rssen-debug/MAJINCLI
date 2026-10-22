@@ -738,6 +738,9 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 #composer #work-progress[data-phase="verify"]{border-top-color:rgba(226,151,250,.3)}
 #composer #work-progress[data-phase="stagnation"]{border-top-color:rgba(250,180,99,.3)}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verify"],#composer #work-progress[data-phase="stagnation"]{transition:none!important}}
+/* Rebased progress visibility: gentle amber edge, no extra panel. */
+#composer #work-progress[data-phase="stagnation"]{border-top-color:rgba(255,187,113,.36)}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] *{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
