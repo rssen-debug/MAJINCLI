@@ -16,6 +16,7 @@ import { runWithRecovery } from '../src/v2/recover/outer-loop.js';
 import { OpenAICompatibleProvider } from '../src/v2/model/provider.js';
 import { TelemetryLedger } from '../src/v2/telemetry/ledger.js';
 import { loadConfig } from '../src/v2/config/config.js';
+import { resolveProfile } from '../src/v2/model/profiles.js';
 import { aggregate, renderReport } from '../src/v2/telemetry/aggregate.js';
 import { AuditChain } from '../src/v2/audit/chain.js';
 
@@ -28,6 +29,8 @@ const USAGE = `MAJIN V2
 
 Options:
   --workspace <dir>       where the objective may write (required for objectives)
+  --profile <name>        provider preset: opencode-go | opencode-zen | opencode-local
+                          (key comes ONLY from env var, e.g. OPENCODE_API_KEY — never args)
   --provider-url <url>    OpenAI-compatible endpoint (e.g. opencode serve)
   --model <id>            model id at that endpoint
   --api-key <key>         optional bearer key
@@ -43,6 +46,7 @@ try {
   ({ values, positionals } = parseArgs({
   options: {
     workspace: { type: 'string' },
+    profile: { type: 'string' },
     'provider-url': { type: 'string' },
     model: { type: 'string' },
     'api-key': { type: 'string' },
@@ -154,7 +158,18 @@ async function main() {
   const { config, warnings } = loadConfig(workspaceDir);
   for (const w of warnings) console.error(`config warning: ${w}`);
 
-  const provider = values['provider-url']
+  const provider = values.profile
+    ? (() => {
+        try {
+          const r = resolveProfile(values.profile, { baseUrl: values['provider-url'] || null, model: values.model || null });
+          console.error(`provider: profile ${r.name} → ${r.baseUrl} model=${r.model}` + (r.keyHash ? ` key=${r.keyRef} sha256:${r.keyHash}` : ' (no key needed)'));
+          return new OpenAICompatibleProvider({ name: r.name, baseUrl: r.baseUrl, apiKey: r.apiKey, model: r.model, extraHeaders: r.extraHeaders });
+        } catch (err) {
+          console.error(`majin-v2: ${err.message}`);
+          process.exit(2); // misconfiguration is misuse — honest exit 2, zero network traffic
+        }
+      })()
+    : values['provider-url']
     ? new OpenAICompatibleProvider({
         name: 'cli-provider', baseUrl: values['provider-url'],
         apiKey: values['api-key'] || null, model: values.model || 'default',

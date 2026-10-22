@@ -15,7 +15,7 @@ export class ModelError extends Error {
 export const ChatMessage = z.object({ role: z.enum(['system', 'user', 'assistant', 'tool']), content: z.string() });
 
 export class OpenAICompatibleProvider {
-  constructor({ name, baseUrl, apiKey = null, model, timeoutMs = 60_000 } = {}) {
+  constructor({ name, baseUrl, apiKey = null, model, timeoutMs = 60_000, extraHeaders = null } = {}) {
     if (!baseUrl) throw new Error('provider requires baseUrl');
     if (!model) throw new Error('provider requires model');
     this.name = name || baseUrl;
@@ -23,6 +23,9 @@ export class OpenAICompatibleProvider {
     this.apiKey = apiKey;
     this.model = model;
     this.timeoutMs = timeoutMs;
+    // gateway-required routing headers (e.g. opencode Go refuses without
+    // x-opencode-session — live-proven fact carried from V1 presets)
+    this.extraHeaders = extraHeaders;
   }
 
   /** chat(messages, {responseFormat, timeoutMs}) -> {text, usage, model, requestId, elapsedMs} */
@@ -43,6 +46,7 @@ export class OpenAICompatibleProvider {
         headers: {
           'content-type': 'application/json',
           ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {}),
+          ...(this.extraHeaders || {}),
         },
         body: JSON.stringify(body),
         signal: ctrl.signal,
