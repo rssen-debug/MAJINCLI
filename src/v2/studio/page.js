@@ -309,7 +309,7 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
           if(x.code!==200){dOut.className='err';dOut.textContent='REFUSED '+x.code+': '+esc(b.error||'');return}
           var lines=['VERDICT: '+b.verdict+' (core-fail '+b.summary.coreFailed+' · gated-optional '+b.summary.gatedOpt+')',''];
           for(var i=0;i<b.checks.length;i++){var c=b.checks[i];lines.push((c.state+'             ').slice(0,15)+' ['+c.req+'] '+c.name+' — '+c.detail)}
-          dOut.className=b.verdict==='NOT_READY'?'err':'ok2';dOut.textContent=lines.join('\n');
+          dOut.className=b.verdict==='NOT_READY'?'err':'ok2';dOut.textContent=lines.join('\\n');
         }).catch(function(e){dOut.className='err';dOut.textContent='doctor failed: '+e.message});
     });
   }
@@ -321,7 +321,7 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
       fetch('/api/bundle/export',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})
         .then(function(r){return r.json().then(function(b){return{code:r.status,body:b}})})
         .then(function(x){var b=x.body;
-          if(x.code===200){bShow('ok2','BUNDLE EXPORTED\nfiles: '+b.files+' · entries: '+b.stats.entries+' · anchors: '+b.stats.anchors+' · tsr: '+b.stats.tsr+'\ndestination: operator-fixed --bundle-dir')}
+          if(x.code===200){bShow('ok2','BUNDLE EXPORTED\\nfiles: '+b.files+' · entries: '+b.stats.entries+' · anchors: '+b.stats.anchors+' · tsr: '+b.stats.tsr+'\\ndestination: operator-fixed --bundle-dir')}
           else{bShow('err','EXPORT REFUSED '+x.code+': '+esc(b.cls||'')+' — '+esc(b.error||b.reason||''))}
         }).catch(function(e){bShow('err','export failed: '+e.message)});
     });
@@ -333,7 +333,7 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
           var lines=['verdict: '+b.cls];
           if(b.detail)lines.push(b.detail);
           if(b.cls==='BUNDLE_OK')lines.push('chain entries: '+b.chainEntries+' · anchors: '+b.anchors+' · tsr: '+b.tsr+(b.genTime?' · existence-in-time: '+b.genTime:''));
-          bShow(b.cls==='BUNDLE_OK'?'ok2':'err',lines.join('\n'));
+          bShow(b.cls==='BUNDLE_OK'?'ok2':'err',lines.join('\\n'));
         }).catch(function(e){bShow('err','verify failed: '+e.message)});
     });
   }
@@ -368,7 +368,7 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
           .then(function(x){var b=x.body;
             if(x.code===200){
               vTr.className=b.verdict==='capture'?'ok2':'';
-              vTr.textContent='verdict: '+b.verdict+' · provider '+esc(b.provider)+(b.verdict==='capture'?('\ntranscript: '+esc(b.transcript)):'\n(no speech captured — honest empty, nothing fabricated)');
+              vTr.textContent='verdict: '+b.verdict+' · provider '+esc(b.provider)+(b.verdict==='capture'?('\\ntranscript: '+esc(b.transcript)):'\\n(no speech captured — honest empty, nothing fabricated)');
             } else if(x.code===403&&b.pendingScope){
               vTr.className='err';vTr.textContent='consent required: grant "'+b.pendingScope+'" in the Consent panel';
             } else if(x.code===503){
@@ -393,7 +393,7 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
           var b=x.body;
           if(x.code===200){
             gOut.className=(b.state==='COMPLETED'||b.state==='DONE'||b.state===0)?'ok2':'';
-            gOut.textContent='state: '+b.state+(b.produced&&b.produced.length?'\nproduced: '+b.produced.join(', '):'')+(b.error?'\nerror: '+b.error:'')+'\nworkspace: '+b.workspaceFixed+(b.workspaceOverrideIgnored?' (body workspace ignored by construction)':'');
+            gOut.textContent='state: '+b.state+(b.produced&&b.produced.length?'\\nproduced: '+b.produced.join(', '):'')+(b.error?'\\nerror: '+b.error:'')+'\\nworkspace: '+b.workspaceFixed+(b.workspaceOverrideIgnored?' (body workspace ignored by construction)':'');
           } else if(x.code===403&&b.requiredScope){
             gOut.className='err';
             gOut.textContent='consent required: grant scope "'+b.requiredScope+'" in the Consent panel above (named human, mode "once" = approve this one run). Note: '+esc(b.note||'');
