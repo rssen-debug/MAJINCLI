@@ -10,7 +10,7 @@
 
 export const STUDIO_REVISION = 'studio-scaffold.r1'; // not product semver — the single VERSION literal rule lives in src/core/version.js
 
-export function renderStudioPage({ title = 'MAJIN V2 Studio' } = {}) {
+export function renderStudioPage({ title = 'MAJIN V2 Studio', enableWrites = false } = {}) {
   return `<!doctype html>
 <html lang="sv">
 <head>
@@ -39,6 +39,20 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
 #conn{font-size:11px;color:var(--warn)}
 #conn.live{color:var(--ok)}
 .empty{color:var(--dim);font-size:12px}
+#consent{grid-column:1/-1}
+#consent .mode{font-size:12px;margin-bottom:8px}
+#consent .mode.on{color:var(--warn)}
+#consent .mode.off{color:var(--dim)}
+#consent .form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-bottom:8px}
+#consent label{font-size:11px;color:var(--dim);display:flex;flex-direction:column;gap:2px}
+#consent input,#consent select{background:var(--bg);border:1px solid var(--line);border-radius:4px;color:var(--fg);padding:4px 6px;font:inherit;font-size:12px}
+#consent button{background:var(--accent);border:0;border-radius:4px;color:#0b0e12;padding:5px 10px;font:inherit;font-size:12px;cursor:pointer;font-weight:600}
+#consent button[disabled]{opacity:.4;cursor:not-allowed}
+#consent button.danger{background:var(--bad)}
+#consent button.danger.armed{outline:2px solid var(--warn)}
+#consent .rowform{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+#c-result,#c-status-out{font-size:12px;margin-top:6px;white-space:pre-wrap;word-break:break-all}
+#c-result.err{color:var(--bad)} #c-result.ok2{color:var(--ok)}
 </style>
 </head>
 <body>
@@ -55,6 +69,25 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
   <section id="telemetry">
     <h2>Telemetry (7 days)</h2>
     <div id="telemetry-body" class="empty">loading…</div>
+  </section>
+  <section id="consent">
+    <h2>Consent</h2>
+    <div id="consent-mode" class="mode ${enableWrites ? 'on">consent writes ENABLED — every grant/revoke lands in the audit chain' : 'off">read-only — consent writes disabled (no affordances shown; silence means NO)'}</div>
+    <div class="form" id="consent-formwrap" ${enableWrites ? '' : 'hidden'}>
+      <label>exact scope (Scoped Grant — nothing wider is ever granted)<input id="c-scope" placeholder="voice:external" maxlength="256"></label>
+      <label>operator (named human — no self-consent)<input id="c-user" placeholder="your name" maxlength="64"></label>
+      <label>mode <select id="c-mode"><option value="once" selected>once</option><option value="limited">limited</option><option value="session">session</option></select></label>
+      <label>max uses <input id="c-maxuses" type="number" value="1" min="1" max="99"></label>
+      <label>ttl seconds (0 = no expiry) <input id="c-ttl" type="number" value="0" min="0"></label>
+      <button id="c-grant" type="button">Grant this exact scope</button>
+    </div>
+    <div id="c-result"></div>
+    <div class="rowform" ${enableWrites ? '' : 'hidden'}>
+      <input id="c-status-scope" placeholder="scope to inspect" maxlength="256" style="flex:1;min-width:180px">
+      <button id="c-status" type="button">Check status</button>
+      <button id="c-revoke" type="button" class="danger">Revoke</button>
+    </div>
+    <div id="c-status-out"></div>
   </section>
   <section id="events">
     <h2>Live events</h2>
@@ -109,6 +142,56 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
       '<span class="k">'+esc(e.type)+'</span><span class="p">'+esc(p)+'</span>';
     evBody.insertBefore(row, evBody.firstChild);
     while(evBody.children.length>MAX_ROWS) evBody.removeChild(evBody.lastChild);
+  }
+
+  // ---- consent surface (only wired when the server says writes are on — WRITES
+  // is server-rendered ground truth, never guessed client-side) ----
+  var WRITES=${enableWrites ? 'true' : 'false'};
+  if(WRITES){
+    var cres=document.getElementById('c-result');
+    function showResult(msg,isErr){cres.textContent=msg;cres.className=isErr?'err':'ok2'}
+    document.getElementById('c-grant').addEventListener('click',function(){
+      var scope=document.getElementById('c-scope').value.trim();
+      var user=document.getElementById('c-user').value.trim();
+      if(!scope){showResult('scope is required — grants are always exact',1);return}
+      if(!user){showResult('operator name is required — no self-consent',1);return}
+      var payload={scope:scope,user:user,mode:document.getElementById('c-mode').value,
+        maxUses:Math.max(1,parseInt(document.getElementById('c-maxuses').value,10)||1),
+        ttlMs:Math.max(0,parseInt(document.getElementById('c-ttl').value,10)||0)*1000};
+      fetch('/api/consent',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)})
+        .then(function(r){return r.json().then(function(b){return{code:r.status,body:b}})})
+        .then(function(x){
+          if(x.code===201){showResult('granted '+x.body.granted+' (mode '+x.body.status.mode+', uses left '+x.body.status.usesLeft+') — mirrored to audit chain',0)}
+          else{showResult('rejected '+x.code+': '+esc(x.body.error||'unknown'),1)}
+        }).catch(function(e){showResult('network error: '+e.message,1)});
+    });
+    var revokeBtn=document.getElementById('c-revoke');
+    var armed=false, armTimer=null;
+    revokeBtn.addEventListener('click',function(){ // Irreversibility Gate: first click arms, second executes
+      var scope=document.getElementById('c-status-scope').value.trim();
+      if(!scope){showResult('enter the scope to revoke first',1);return}
+      if(!armed){
+        armed=true;revokeBtn.className='danger armed';revokeBtn.textContent='Click again to revoke "'+scope.slice(0,32)+'"';
+        armTimer=setTimeout(function(){armed=false;revokeBtn.className='danger';revokeBtn.textContent='Revoke'},3500);
+        return;
+      }
+      clearTimeout(armTimer);armed=false;revokeBtn.className='danger';revokeBtn.textContent='Revoke';
+      fetch('/api/consent?scope='+encodeURIComponent(scope),{method:'DELETE'})
+        .then(function(r){return r.json()})
+        .then(function(b){showResult(b.existed?'revoked '+b.revoked:'revoked '+b.revoked+' (nothing was granted)',0)})
+        .catch(function(e){showResult('network error: '+e.message,1)});
+    });
+    document.getElementById('c-status').addEventListener('click',function(){
+      var scope=document.getElementById('c-status-scope').value.trim();
+      if(!scope){document.getElementById('c-status-out').textContent='enter a scope';return}
+      fetch('/api/consent/status?scope='+encodeURIComponent(scope))
+        .then(function(r){return r.json()})
+        .then(function(b){
+          document.getElementById('c-status-out').textContent=b.granted
+            ?('granted · mode '+b.mode+' · user '+b.user+' · uses left '+b.usesLeft+(b.expiresAt?' · expires '+new Date(b.expiresAt).toISOString():''))
+            :(b.expired?'expired':'not granted');
+        }).catch(function(e){document.getElementById('c-status-out').textContent='error: '+e.message});
+    });
   }
 
   var es=new EventSource('/api/events');

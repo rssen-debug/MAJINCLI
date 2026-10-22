@@ -19,6 +19,10 @@ import http from 'node:http';
 import { AuditChain } from '../audit/chain.js';
 import { aggregate } from '../telemetry/aggregate.js';
 import { EVENT_NAMES } from '../runtime/events.js';
+
+// consent lifecycle travels on these names (approvals.js emits them; EVENT_NAMES
+// is the kernel-centric list — operator surfaces need both)
+const STUDIO_EVENT_NAMES = [...new Set([...EVENT_NAMES, 'task.updated', 'consent.revoked', 'consent.expired', 'approval.required'])];
 import { renderStudioPage } from './page.js';
 
 const HEARTBEAT_MS = 15000;
@@ -28,7 +32,7 @@ export function createStudioServer({
   bus,
   telemetryDir,
   auditDir,
-  page = renderStudioPage(),
+  page = null, // default built AFTER enableWrites is known — the UI never lies about the gate
   approvals = null,      // Approvals instance — required when enableWrites
   enableWrites = false,  // consent write surface; OFF unless explicitly enabled
 } = {}) {
@@ -36,9 +40,10 @@ export function createStudioServer({
   if (!telemetryDir) throw new Error('studio requires telemetryDir');
   if (!auditDir) throw new Error('studio requires auditDir');
   if (enableWrites && !approvals) throw new Error('enableWrites requires an Approvals instance');
+  if (page == null) page = renderStudioPage({ enableWrites });
 
   const clients = new Set();
-  const unsubs = EVENT_NAMES.map((name) =>
+  const unsubs = STUDIO_EVENT_NAMES.map((name) =>
     bus.on(name, (event) => {
       const frame = `data: ${JSON.stringify(event)}\n\n`;
       for (const res of clients) {

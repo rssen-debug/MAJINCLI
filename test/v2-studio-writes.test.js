@@ -167,3 +167,53 @@ test('9. CLI --studio --enable-writes: real child, real grant over HTTP, audit c
   assert.ok(grant, 'grant mirrored into the chain');
   assert.equal(grant.payload.to, 'granted');
 });
+
+test('10. page reflects the gate honestly: writes ON → live form + WRITES=true; OFF → hidden + no affordance', async () => {
+  const on = await boot({ enableWrites: true });
+  const htmlOn = await (await fetch(on.bound.url + '/')).text();
+  assert.match(htmlOn, /var WRITES=true;/);
+  assert.match(htmlOn, /id="c-grant"/);
+  assert.match(htmlOn, /consent writes ENABLED/);
+  await on.cleanup();
+
+  const offDir = tmp();
+  const off = createStudioServer({ bus: new EventBus(), telemetryDir: offDir, auditDir: offDir });
+  const bOff = await off.listen({ port: 0 });
+  const htmlOff = await (await fetch(bOff.url + '/')).text();
+  assert.match(htmlOff, /var WRITES=false;/);
+  assert.match(htmlOff, /silence means NO/);
+  assert.match(htmlOff, /consent-formwrap" hidden/);
+  assert.equal(/(src|href)\s*=\s*"https?:/i.test(htmlOff), false, 'zero external assets with the panel too');
+  await off.close();
+});
+
+test('11. SSE delivers consent lifecycle LIVE: the exact loop the consent panel listens on', async () => {
+  const { bound, cleanup } = await boot({ enableWrites: true });
+  const res = await fetch(bound.url + '/api/events');
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  // wait for server.connected so the subscription is active
+  for (;;) {
+    const { value } = await reader.read();
+    if (decoder.decode(value).includes('server.connected')) break;
+  }
+  await fetch(bound.url + '/api/consent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: grantBody({ scope: 'shell:hold', mode: 'limited', maxUses: 2 }) });
+  const seen = await Promise.race([
+    (async () => {
+      let buf = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) return null;
+        buf += decoder.decode(value, { stream: true });
+        for (const line of buf.split('\n')) {
+          if (line.startsWith('data: ') && line.includes('task.updated') && line.includes('consent:shell:hold')) return JSON.parse(line.slice(6));
+        }
+      }
+    })(),
+    new Promise((_, rej) => setTimeout(() => rej(new Error('consent frame timeout')), 4000)),
+  ]);
+  assert.equal(seen.taskId, 'consent:shell:hold');
+  assert.equal(seen.to, 'granted');
+  await reader.cancel().catch(() => {});
+  await cleanup();
+});
