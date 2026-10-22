@@ -7,6 +7,7 @@ export function recoveryPreview(checkpoint) {
   const steps = checkpoint.state.steps;
   if (!Array.isArray(steps)) return { ready:false, reason:'no-steps', steps:[] };
   if (steps.length > 1000) return { ready:false, reason:'too-many-steps', steps:[] };
+  if (steps.length === 0) return { ready:false, reason:'empty-steps', steps:[] };
   const seen = new Set();
   const results = [];
   for (const [index, step] of steps.entries()) {
