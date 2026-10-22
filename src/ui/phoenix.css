@@ -285,3 +285,20 @@ body.light .model-detail-use,body.light .ob-go{color:#fff}
 
 body.simple .msg .tools,body.simple .msg .trace,body.simple .msg .gauge{display:none}
 body:is([data-run-state=connecting],[data-run-state=thinking],[data-run-state=working]) #status{visibility:hidden}
+
+
+/* Aurora pulse refinement: subtle active run indicator with accessible reduced motion. */
+body[data-run-state="working"] #status,
+body[data-run-state="thinking"] #status { visibility:visible; opacity:.85; color:var(--cy); }
+body[data-run-state="working"] #status::before,
+body[data-run-state="thinking"] #status::before {
+ content:""; display:inline-block; width:6px; height:6px; margin-right:8px;
+ vertical-align:middle; border-radius:50%; background:var(--cy);
+ box-shadow:0 0 0 3px var(--cysoft),0 0 14px var(--cy);
+ animation:majin-work-pulse 2.2s ease-in-out infinite;
+}
+@keyframes majin-work-pulse { 50% { opacity:.45; box-shadow:0 0 0 6px transparent; } }
+@media (prefers-reduced-motion:reduce) {
+ body[data-run-state="working"] #status::before,
+ body[data-run-state="thinking"] #status::before { animation:none; }
+}
