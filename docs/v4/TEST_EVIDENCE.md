@@ -18,15 +18,15 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 64
-# pass 64
+# tests 74
+# pass 74
 # fail 0
 # skipped 0
 ```
 
 | File | Tests | Covers |
 |---|---:|---|
-| `test/v4/security.test.js` | 21 | pairing, sessions, expiry, revocation, CSRF, origin, host allowlist, rate limit, body caps, CSP, traversal, overwrite, static escape |
+| `test/v4/security.test.js` | 22 | pairing, sessions, expiry, revocation, CSRF, origin, host allowlist, rate limit, body caps, CSP, traversal, overwrite, static escape |
 | `test/v4/conversation.test.js` | 12 | streaming, persistence, idempotent replay, cancellation, scoping, deletion, goal states, receipts with SHA-256, crash reconciliation |
 | `test/v4/models.test.js` | 9 | V1 config discovery, secret-free projection, unknown model refusal, per-conversation scope, broken config, demo labelling |
 | `test/v4/ui.test.js` | 12 | manifest/icons, safe areas, responsive, a11y, SW policy, asset content types, voice policy units |
