@@ -621,3 +621,9 @@ body.simple .msg .appr:focus-within { box-shadow:inset 3px 0 0 var(--warn),0 0 0
 /* Aurora: support keyboard navigation without making permission cards visually noisy. */
 body.simple .msg .appr :is(button,a):focus-visible { text-decoration:underline; text-underline-offset:3px; }
 @media (prefers-contrast:more) { body.simple .msg .appr :is(button,a):focus-visible { outline-width:4px; } }
+
+/* Aurora: approved action surfaces remain tappable and readable in forced-colors mode. */
+@media (forced-colors:active) {
+  body.simple .msg .appr { border:2px solid CanvasText; }
+  body.simple .msg .appr :is(button,a):focus-visible { outline:3px solid Highlight; }
+}
