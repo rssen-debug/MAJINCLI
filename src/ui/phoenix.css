@@ -396,3 +396,13 @@ body.simple .msg .appr button:hover {
 @media(prefers-reduced-motion:reduce) {
   body.simple .msg .appr button { transition:none!important; }
 }
+
+/* Aurora: approval choices stay readable and reachable on compact displays. */
+@media(max-width:600px) {
+ body.simple .msg .appr { padding:12px; overflow-wrap:anywhere; }
+ body.simple .msg .appr button { min-height:44px; margin-block:3px; }
+}
+body.simple .msg .appr button:focus-visible {
+ outline:2px solid var(--warn);outline-offset:4px;
+ box-shadow:0 0 0 4px var(--cysoft);
+}
