@@ -601,3 +601,11 @@ body.simple .msg .appr :is(button,a):focus-visible{outline:3px solid var(--warn)
 /* Aurora: warn before irreversible tool approvals, without extra UI panels. */
 body.simple .msg .appr { box-shadow: inset 3px 0 0 var(--warn); }
 @media (prefers-contrast: more) { body.simple .msg .appr { border-width:2px; } }
+
+/* Aurora: restrained and accessible keyboard affordance on existing approval cards. */
+@media (hover:hover) {
+  body.simple .msg .appr button:not(:disabled):hover { filter:brightness(1.06); }
+}
+@media (prefers-reduced-motion:reduce) {
+  body.simple .msg .appr button { animation:none!important; }
+}
