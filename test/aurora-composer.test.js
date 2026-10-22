@@ -18,3 +18,7 @@ test('Aurora honors reduced motion preferences', () => {
   assert.match(aurora, /transition:none!important/);
   assert.match(aurora, /transform:none/);
 });
+test('Send button preserves the Phoenix circular control contract', () => {
+  assert.match(aurora, /#composer #send\{width:44px;min-width:44px;height:44px;min-height:44px/);
+  assert.match(aurora, /#composer #send\{width:44px;min-width:44px;padding:0/);
+});
