@@ -69,6 +69,7 @@ export function createStudioServer({
   approvals = null,      // Approvals instance — required when enableWrites/enableGoals
   enableWrites = false,  // consent write surface; OFF unless explicitly enabled
   enableGoals = null,    // { workspaceDir, provider? } — objective runs; OFF unless explicitly enabled
+  voice = null,          // { outDir, tts?, stt? } — speak/listen surfaces; OFF unless explicitly enabled
 } = {}) {
   if (!bus) throw new Error('studio requires an EventBus');
   if (!telemetryDir) throw new Error('studio requires telemetryDir');
@@ -81,7 +82,8 @@ export function createStudioServer({
   const goals = enableGoals
     ? { workspaceDir: enableGoals.workspaceDir, provider: enableGoals.provider || null, busy: false, current: null }
     : null;
-  if (page == null) page = renderStudioPage({ enableWrites, enableGoals: !!enableGoals });
+  if (voice && !voice.outDir) throw new Error('voice requires outDir');
+  if (page == null) page = renderStudioPage({ enableWrites, enableGoals: !!enableGoals, enableVoice: !!voice });
 
   const clients = new Set();
   const unsubs = STUDIO_EVENT_NAMES.map((name) =>
@@ -106,7 +108,7 @@ export function createStudioServer({
     res.end(JSON.stringify(body));
   };
 
-  function readBody(req) {
+  function readBody(req, cap = MAX_BODY) {
     return new Promise((resolve, reject) => {
       // drain-and-discard past the cap: destroying the socket mid-upload would
       // give the client ECONNRESET and no answer; a 413 must always LAND.
@@ -115,7 +117,7 @@ export function createStudioServer({
       const chunks = [];
       req.on('data', (c) => {
         size += c.length;
-        if (size > MAX_BODY) { tooLarge = true; return; }
+        if (size > cap) { tooLarge = true; return; }
         if (!tooLarge) chunks.push(c);
       });
       req.on('end', () => {
@@ -128,6 +130,107 @@ export function createStudioServer({
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://studio.local');
+
+    // ---- voice surfaces (speak/listen lanes with consent paths intact) ----
+    if (url.pathname === '/api/voice/speak' && req.method === 'POST') {
+      if (!voice?.tts) {
+        json(res, 403, { error: 'voice surface disabled', detail: 'start studio with --enable-voice --voice-dir — disabled means SILENCE, no hidden synthesis' });
+        return;
+      }
+      let body;
+      try {
+        const raw = await readBody(req);
+        body = raw ? JSON.parse(raw) : {};
+      } catch (err) {
+        json(res, err.code === 413 ? 413 : 400, { error: err.code === 413 ? 'body too large' : 'invalid JSON body' });
+        return;
+      }
+      const text = typeof body.text === 'string' ? body.text.trim() : '';
+      if (!text || text.length > 4000) {
+        json(res, 400, { error: 'text must be a non-empty string (max 4000 chars)' });
+        return;
+      }
+      try {
+        const { speak } = await import('../voice/speak.js');
+        const crypto = await import('node:crypto');
+        const ext = voice.tts.formatHint || (voice.tts.name === 'buffer' ? 'wav' : 'mp3');
+        const outPath = path.join(voice.outDir, `speak-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`);
+        const ledger = new (await import('../telemetry/ledger.js')).TelemetryLedger(telemetryDir);
+        const r = await speak(text, { provider: voice.tts, approvals, telemetry: ledger, events: bus, outPath });
+        if (!r.ok && r.decision === 'waiting') {
+          json(res, 403, { decision: 'waiting', pendingScope: r.pendingScope, reason: r.reason, hint: 'grant scope voice:external via the Consent panel — external synthesis never runs silently' });
+          return;
+        }
+        json(res, 200, { ok: true, audio: `/api/voice/audio/${path.basename(r.audioPath)}`, bytes: r.bytes, format: r.format || ext, verified: r.verified, provider: r.provider, durationMs: r.durationMs });
+      } catch (err) {
+        json(res, err.cls === 'DEPENDENCY_MISSING' ? 503 : 400, { error: String(err.message || err).slice(0, 300), cls: err.cls || 'ERROR' });
+      }
+      return;
+    }
+
+    if (url.pathname.startsWith('/api/voice/audio/') && req.method === 'GET') {
+      if (!voice) { json(res, 404, { error: 'voice disabled' }); return; }
+      const name = decodeURIComponent(url.pathname.slice('/api/voice/audio/'.length));
+      if (!/^[\w.-]{1,128}$/.test(name)) {
+        json(res, 400, { error: 'invalid audio name (path traversal is refused, not sanitized)' });
+        return;
+      }
+      const full = path.join(voice.outDir, name);
+      if (!full.startsWith(path.resolve(voice.outDir) + path.sep) && full !== path.join(voice.outDir, name)) { /* resolved-outDir check below */ }
+      const resolved = path.resolve(full);
+      if (!resolved.startsWith(path.resolve(voice.outDir) + path.sep)) {
+        json(res, 400, { error: 'refused: outside voice outDir' });
+        return;
+      }
+      if (!fs.existsSync(resolved)) { json(res, 404, { error: 'no such audio' }); return; }
+      const mime = resolved.endsWith('.mp3') ? 'audio/mpeg' : resolved.endsWith('.wav') ? 'audio/wav' : 'application/octet-stream';
+      res.writeHead(200, { 'content-type': mime, 'content-length': fs.statSync(resolved).size });
+      fs.createReadStream(resolved).pipe(res);
+      return;
+    }
+
+    if (url.pathname === '/api/voice/listen' && req.method === 'POST') {
+      if (!voice?.stt) {
+        json(res, 403, { error: 'stt surface disabled', detail: 'configure a stt provider (--voice-stt-command) — no provider means honest NOTHING, no fabricated transcript' });
+        return;
+      }
+      let body;
+      try {
+        const raw = await readBody(req, 25 * 1024 * 1024); // audio is big; the 8KB text cap does not apply
+        body = raw ? JSON.parse(raw) : {};
+      } catch (err) {
+        json(res, err.code === 413 ? 413 : 400, { error: err.code === 413 ? 'audio too large (max 25MB)' : 'invalid JSON body' });
+        return;
+      }
+      let wav;
+      try {
+        wav = Buffer.from(String(body.wavBase64 || ''), 'base64');
+        if (wav.length < 44) throw new Error('too small');
+      } catch {
+        json(res, 400, { error: 'wavBase64 must decode to a real WAV payload (>= 44 bytes)' });
+        return;
+      }
+      const crypto = await import('node:crypto');
+      const wavPath = path.join(voice.outDir, `listen-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.wav`);
+      fs.mkdirSync(voice.outDir, { recursive: true });
+      fs.writeFileSync(wavPath, wav);
+      try {
+        const { listen } = await import('../voice/listen.js');
+        const ledger = new (await import('../telemetry/ledger.js')).TelemetryLedger(telemetryDir);
+        const r = await listen(wavPath, { provider: voice.stt, approvals, telemetry: ledger, events: bus });
+        if (!r.ok && r.decision === 'waiting') {
+          json(res, 403, { decision: 'waiting', pendingScope: r.pendingScope, reason: r.reason, hint: 'grant scope voice:external via the Consent panel' });
+          return;
+        }
+        // honest verdict: transcript never fabricated by us — provider truth passes through
+        json(res, 200, { ok: true, verdict: r.transcript && r.transcript !== '' ? 'capture' : 'inconclusive', transcript: r.transcript ?? '', provider: r.provider, bytes: wav.length });
+      } catch (err) {
+        json(res, err.cls === 'DEPENDENCY_MISSING' ? 503 : err.cls === 'PERMISSION_DENIED' ? 403 : 500, { error: String(err.message || err).slice(0, 300), cls: err.cls || 'ERROR' });
+      } finally {
+        fs.rmSync(wavPath, { force: true }); // uploads are transient; the verdict is the artifact
+      }
+      return;
+    }
 
     // ---- consent write surface ( Approvals is the only authority; studio is a gate ) ----
     if (req.method === 'POST' && url.pathname === '/api/consent') {
