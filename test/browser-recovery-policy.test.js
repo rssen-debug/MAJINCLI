@@ -34,3 +34,7 @@ test('agent connects recovery guidance and subtle UI, no new overlays',()=>{
  assert.match(html,/#composer #work-progress\[data-phase="recover"\]/);
  assert.match(html,/prefers-reduced-motion:reduce/);
 });
+
+test('inherited prototype error codes never produce fabricated recovery advice',()=>{
+ for(const code of ['__proto__','constructor','toString','valueOf']) assert.equal(suggestBrowserRecovery('browser.click',{code}),null);
+});
