@@ -23,6 +23,10 @@ on:
         type: boolean
         default: true
 
+concurrency:
+  group: build-exe-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: write
   issues: write
