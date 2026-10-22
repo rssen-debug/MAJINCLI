@@ -77,7 +77,7 @@ export function diffGroundSnapshot(session,payload,{query='',reset=false,cap=60}
   const fullSize=JSON.stringify(elements).length;
   const deltaSize=JSON.stringify(changed).length+JSON.stringify(removed).length;
   if(!changed.length&&!removed.length)return {mode:'unchanged',changes:[],removed:[],count:elements.length};
-  if(deltaSize>=fullSize*.85)return {mode:'full',changes:elements.slice(0,cap),removed:[],count:elements.length};
+  if(elements.length>5 && deltaSize>=fullSize*.85)return {mode:'full',changes:elements.slice(0,cap),removed:[],count:elements.length};
   return {mode:'delta',changes:changed.slice(0,cap),removed,count:elements.length};
 }
 export function clearGroundSnapshot(session){
