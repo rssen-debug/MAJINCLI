@@ -124,9 +124,16 @@ completely, plugins are opt-in (`MAJIN_V4_PLUGINS=1`), allowlistable
 (`MAJIN_V4_PLUGIN_ALLOW=a,b`), and experimental plugins stay behind
 `MAJIN_V4_FLAGS=experimental-plugins=1`.
 
-**Not claimed:** plugins are not a security sandbox. They run in-process with
-the host's privileges. Process isolation is an explicit roadmap item
-(`PLATFORM` P6 in the acceptance matrix), not a shipped feature.
+**Isolation (shipped):** the host runs each plugin in its own child process
+(`src/v4/sandbox.js` + `plugin-worker.js`) with an env allowlist (no keys, no
+`NODE_OPTIONS`), an activation timeout, a per-call timeout, stdout/stderr drained,
+and ordered shutdown. A crash, a hang or a flood is contained; the host keeps
+serving. A plugin that fails during activation is moved to
+`v4/plugins-quarantine/<name>-<stamp>/` with a `QUARANTINE.json` explaining why,
+so the next boot does not retry it (`npm run v4:plugins` to inspect/restore).
+
+**Not claimed:** this is process isolation, not a security sandbox. Same OS user,
+same filesystem access. A hard boundary needs a separate account or a container.
 
 ## 7. Feature flags
 

@@ -10,7 +10,7 @@
 | A malicious page in the owner's browser | cross-site POST | `Origin`/`Referer` must match; `X-MAJIN-CSRF: 1` required; cookies are `SameSite=Strict` |
 | DNS rebinding | forged Host header | allowlist + optional `MAJIN_V4_PUBLIC_ORIGIN` match |
 | A prompt-injected model | tries `../` paths or a shell | tools are typed, no shell tool exists, filenames are leaf-only, writes are `wx` create-only |
-| A malicious plugin | arbitrary code | **not sandboxed** — opt-in, allowlisted, permission-declared, rollback on failure |
+| A malicious plugin | arbitrary code | **not sandboxed from the OS user** — opt-in, allowlisted, permission-declared, run in a supervised child process, quarantined on failure |
 | XSS in a rendered answer | script execution | the client renders markdown manually (text nodes), CSP forbids inline and third-party script |
 | Stolen phone, unlocked | read access | sessions are revocable (`/api/sessions` view, logout revokes immediately), 30-day expiry |
 
@@ -37,8 +37,12 @@
 
 ## Known gaps (do not treat as solved)
 
-1. **Plugin isolation:** in-process, no seccomp/container. Roadmap item P6.
+1. **Plugin isolation is process-level, not a security sandbox.** Plugins run in a
+   separate Node process with a stripped environment, per-call timeouts and crash
+   containment (`src/v4/sandbox.js`). They still run as the same OS user and can read what
+   that user can read. A true boundary needs a separate account or a container.
 2. **Single-host session store:** a JSON file; no clustering, no distributed revocation.
+   Sessions do survive a restart, which is what the product needs.
 3. **No 2FA/passkey yet:** pairing code + device session. Passkeys are a planned upgrade,
    not a shipped claim.
 4. **No audit export UI:** receipts exist per goal; there is no operator audit console.

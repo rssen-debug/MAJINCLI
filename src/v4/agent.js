@@ -12,12 +12,15 @@
  * the V2 file verifier re-read the file from disk and matched its SHA-256.
  * The model's own words are never the evidence.
  */
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { Approvals } from '../v2/safety/approvals.js';
 import { Goal } from '../v2/runtime/goal.js';
 import { STATES } from '../v2/runtime/states.js';
 import { runVerifier } from '../v2/runtime/verifiers.js';
 import { runTool } from '../v2/tools/runner.js';
-import { TOOL_SCHEMAS } from './tools.js';
+import { TOOL_SCHEMAS, safeFileName } from './tools.js';
 import { publicGoal, newId } from './store.js';
 import { explainModelError } from './model.js';
 import { t } from './ui/strings.js';
@@ -62,6 +65,24 @@ function parseArgs(json) {
   }
 }
 
+/**
+ * True when this message continues the same work rather than starting
+ * something else: same artifact, an explicit correction word, or a short
+ * follow-up. Deliberately conservative — a wrong "correction" would hide a
+ * genuinely new task.
+ */
+export function looksLikeCorrection(message, priorGoal) {
+  const text = String(message || '').toLowerCase();
+  if (!priorGoal) return false;
+  const artifacts = (priorGoal.acceptance || [])
+    .map((a) => String(a.id).replace(/^artifact:/, '').toLowerCase())
+    .filter(Boolean);
+  const mentionsArtifact = artifacts.some((name) => name && text.includes(name));
+  const correctionWord = /\b(nej|inte|rätt|ändra|istället|i stället|glöm|instead|actually|no,|rather|change|fix)\b/.test(text);
+  const followUp = /\b(igen|också|too|again|also|continue|fortsätt)\b/.test(text);
+  return mentionsArtifact || correctionWord || followUp;
+}
+
 function safeJson(value) {
   try {
     return JSON.stringify(value);
@@ -82,6 +103,7 @@ export function createAgent({ config, conversations, goals, tools, model }) {
   }
 
   const running = new Map(); // conversationId -> AbortController
+  const lastGoal = new Map(); // conversationId -> goalId (the goal the user is working on)
   // Idempotency survives a dropped connection: the same requestId returns the
   // stored turn instead of running tools twice. Bounded and ordered.
   const recentRequests = new Map();
@@ -112,18 +134,38 @@ export function createAgent({ config, conversations, goals, tools, model }) {
     emit('tool_start', { id: call.id, name: toolName, input: redactInput(toolName, args) });
 
     goal.transition(STATES.WAITING_FOR_TOOL, `tool ${toolName}`);
-    const result = await runTool(
-      { tool: toolName, input: args, callId: call.id },
-      {
-        registry: tools.registry,
-        approvals,
-        mode: 'balanced',
-        timeoutMs: config.limits.toolTimeoutMs,
-        events: bus,
-      },
-    );
+    let result;
+    try {
+      result = await runTool(
+        { tool: toolName, input: args, callId: call.id },
+        {
+          registry: tools.registry,
+          approvals,
+          mode: 'balanced',
+          timeoutMs: config.limits.toolTimeoutMs,
+          events: bus,
+        },
+      );
+    } catch (err) {
+      // The runner throws classified ToolErrors (unknown tool, schema mismatch,
+      // timeout, executor crash). The goal must leave WAITING_FOR_TOOL, record
+      // the failure and keep the turn honest — never stay mid-flight.
+      const cls = err?.cls || 'UNKNOWN';
+      goal.transition(STATES.RUNNING, `tool ${toolName} threw ${cls}`);
+      goal.addReceipt({
+        action: `tool:${toolName}`,
+        target: args.fileName || null,
+        result: 'failure',
+        errorClass: cls,
+      });
+      emit('tool_result', { id: call.id, name: toolName, ok: false, verified: false, summary: cls, error: String(err?.message || err) });
+      return { ok: false, error: err?.message || String(err), code: cls, name: toolName };
+    }
 
     if (!result.ok && result.decision === 'waiting') {
+      // WAITING_FOR_TOOL can only go back to RUNNING; the approval wait is
+      // entered from RUNNING. Skipping the hop left the goal stuck.
+      goal.transition(STATES.RUNNING, 'tool requires consent');
       goal.transition(STATES.WAITING_FOR_APPROVAL, `consent required for ${toolName}`);
       return { ok: false, waiting: true, scope: result.pendingScope, reason: result.reason, name: toolName, input: args, call };
     }
@@ -131,8 +173,10 @@ export function createAgent({ config, conversations, goals, tools, model }) {
     goal.transition(STATES.RUNNING, `tool ${toolName} finished`);
 
     if (!result.ok) {
-      goal.addReceipt({ action: `tool:${toolName}`, target: args.fileName || null, result: 'failure', errorClass: 'TOOL_FAILURE' });
-      return { ok: false, error: result.error || 'tool failed', code: result.code || 'TOOL_FAILURE', name: toolName };
+      const cls = result.error?.cls || 'TOOL_FAILURE';
+      goal.addReceipt({ action: `tool:${toolName}`, target: args.fileName || null, result: 'failure', errorClass: cls });
+      emit('tool_result', { id: call.id, name: toolName, ok: false, verified: false, summary: cls });
+      return { ok: false, error: result.error || 'tool failed', code: cls, name: toolName };
     }
 
     const data = result.data;
@@ -163,6 +207,37 @@ export function createAgent({ config, conversations, goals, tools, model }) {
           acceptanceId: `artifact:${data.fileName}`,
         });
       }
+    } else if (toolName === 'workspace_read' && data?.content != null) {
+      // Verify a read against the file itself: same size, same bytes.
+      const target = path.join(tools.root, safeFileName(data.fileName));
+      const check = await runVerifier('file', {
+        path: target,
+        minBytes: data.bytes,
+        hash: crypto.createHash('sha256').update(Buffer.from(data.content, 'utf8')).digest('hex'),
+      });
+      if (check.verified) {
+        goal.verifyReceipt(receipt.id, { ...check.evidence, verifier: 'v2.file', kindOfRead: true });
+        verified = true;
+      }
+    } else if (toolName === 'workspace_list' && Array.isArray(data?.files)) {
+      // Verify a listing against the directory: same names, same count.
+      const actual = fs.readdirSync(tools.root, { withFileTypes: true })
+        .filter((e) => e.isFile()).map((e) => e.name).sort();
+      const claimed = data.files.map((f) => f.name).sort();
+      if (actual.length === claimed.length && actual.every((n, i) => n === claimed[i])) {
+        goal.verifyReceipt(receipt.id, { kind: 'listing', entries: actual.length, verifier: 'v4.workspace-list' });
+        verified = true;
+      }
+    } else if (toolName === 'memory_save' && data?.saved) {
+      const stored = tools.memory ? tools.memory.get('preference', data.key) : null;
+      if (stored) {
+        goal.verifyReceipt(receipt.id, { kind: 'memory', key: data.key, at: stored.at });
+        verified = true;
+      }
+    } else if (!data?.path && !data?.fileName) {
+      // Nothing external happened (e.g. a search): the receipt stays unverified
+      // on purpose rather than being marked verified without a check.
+      verified = false;
     }
 
     emit('tool_result', {
@@ -229,6 +304,15 @@ export function createAgent({ config, conversations, goals, tools, model }) {
     conversations.appendMessage(conversation.id, { role: 'user', content: message });
     emit('user', { content: message });
 
+    // A correction is not a new task. When the previous goal in this
+    // conversation is still the user's active context, the new turn is recorded
+    // as a revision of it so history shows one thread instead of orphans.
+    const priorGoalId = lastGoal.get(conversation.id) || null;
+    const priorGoal = priorGoalId ? goals.get(priorGoalId) : null;
+    const lineage = priorGoal && looksLikeCorrection(message, priorGoal)
+      ? { revisionOf: priorGoal.id, revision: (priorGoal.revision || 0) + 1 }
+      : null;
+
     const goal = goals.track(new Goal({
       objective: message.slice(0, 500),
       acceptance: [],
@@ -236,7 +320,10 @@ export function createAgent({ config, conversations, goals, tools, model }) {
       permissions: ['workspace.file:create', 'workspace.file:read', 'memory.preference:write'],
       budgets: { toolCalls: config.limits.maxToolCallsPerTurn, modelRounds: config.limits.maxModelRounds },
     }));
-    goal.transition(STATES.PLANNING, 'turn accepted');
+    goal.revisionOf = lineage?.revisionOf || null;
+    goal.revision = lineage?.revision || 0;
+    lastGoal.set(conversation.id, goal.id);
+    goal.transition(STATES.PLANNING, lineage ? `revision ${goal.revision} of ${lineage.revisionOf}` : 'turn accepted');
     goals.save(goal);
     emit('goal', publicGoal(goal));
 
@@ -249,6 +336,11 @@ export function createAgent({ config, conversations, goals, tools, model }) {
     let toolCallsUsed = 0;
     let rounds = 0;
     let assistantMessageId = null;
+    // A turn may not end in a confident sentence after an unrecovered tool
+    // failure. The last tool outcome decides whether the answer is allowed to
+    // be treated as a success.
+    let lastOutcome = null;
+    let lastRefusal = null;
 
     try {
       goal.transition(STATES.READY, 'model route resolved');
@@ -273,6 +365,7 @@ export function createAgent({ config, conversations, goals, tools, model }) {
         });
 
         if (response.text) finalText += response.text;
+        if (response.refused) lastRefusal = response.refused;
 
         if (!response.toolCalls?.length) break;
 
@@ -288,6 +381,7 @@ export function createAgent({ config, conversations, goals, tools, model }) {
           goals.save(goal);
           emit('goal', publicGoal(goal));
 
+          lastOutcome = outcome;
           if (outcome.waiting) {
             conversation.pendingApproval = {
               turnId: newId('turn'),
@@ -320,6 +414,20 @@ export function createAgent({ config, conversations, goals, tools, model }) {
 
         modelMessages.push({ role: 'assistant', content: response.text || null, tool_calls: response.toolCalls });
         modelMessages.push(...toolMessages);
+      }
+
+      if (lastRefusal && toolCallsUsed === 0) {
+        throw Object.assign(new Error(lastRefusal.reason || t('common.toolFailed')), {
+          code: 'REQUEST_REFUSED',
+          cls: lastRefusal.code || 'INVALID_TOOL_INPUT',
+        });
+      }
+
+      if (lastOutcome && !lastOutcome.ok && !lastOutcome.verified) {
+        throw Object.assign(new Error(lastOutcome.error || t('common.toolFailed')), {
+          code: 'TOOL_FAILED_UNRECOVERED',
+          cls: lastOutcome.code || 'TOOL_FAILURE',
+        });
       }
 
       if (!finalText.trim()) {
@@ -411,6 +519,95 @@ export function createAgent({ config, conversations, goals, tools, model }) {
       emit('done', { status: aborted ? 'cancelled' : 'failed', conversationId: conversation.id, goalId: goal.id });
       return { status: aborted ? 'cancelled' : 'failed', conversationId: conversation.id, goalId: goal.id };
     }
+  }
+
+  /**
+   * Resume a goal that the host marked BLOCKED (crash, restart, or a failed
+   * verification). The resume is evidence-driven: every acceptance item that
+   * can be re-checked is re-checked against reality. If all of them pass, the
+   * goal completes. If not, it stays BLOCKED with the reason — a resume never
+   * turns into a silent success.
+   */
+  async function resumeGoal({ goalId, emit = () => {} }) {
+    const goal = goals.get(goalId);
+    if (!goal) throw Object.assign(new Error('goal not found'), { status: 404 });
+    if (![STATES.BLOCKED, STATES.RECOVERING].includes(goal.state)) {
+      throw Object.assign(new Error(`goal is ${goal.state}, only BLOCKED goals can be resumed`), { status: 409 });
+    }
+
+    goal.transition(STATES.RUNNING, 'owner requested resume');
+    goals.save(goal);
+    emit('goal', publicGoal(goal));
+
+    const results = [];
+    for (const item of goal.acceptance) {
+      const name = String(item.id).startsWith('artifact:') ? item.id.slice('artifact:'.length) : null;
+      if (!name) {
+        results.push({ id: item.id, verified: false, reason: 'no independent verifier for this item' });
+        continue;
+      }
+      let fileName;
+      try {
+        fileName = safeFileName(name);
+      } catch (err) {
+        results.push({ id: item.id, verified: false, reason: err.message });
+        continue;
+      }
+      const target = path.join(tools.root, fileName);
+      if (!fs.existsSync(target)) {
+        results.push({ id: item.id, verified: false, reason: 'artifact is missing on disk' });
+        continue;
+      }
+      // Compare against the hash recorded when the work was done. Hashing the
+      // file and comparing it with itself would always pass and prove nothing.
+      const recorded = [...goal.receipts]
+        .reverse()
+        .find((r) => r.verified && r.acceptanceId === item.id && r.evidence?.sha256);
+      const expectedSha = recorded?.evidence?.sha256 || null;
+      const expectedBytes = Number(recorded?.evidence?.bytes ?? 0);
+      if (!expectedSha) {
+        results.push({ id: item.id, verified: false, reason: 'no recorded hash to compare against' });
+        continue;
+      }
+      const verification = await runVerifier('file', { path: target, minBytes: expectedBytes, hash: expectedSha });
+      if (!verification.verified) {
+        results.push({ id: item.id, verified: false, reason: verification.error?.message || 'verification failed' });
+        continue;
+      }
+      // Receipts are legal in RUNNING, so the goal stays in one state while
+      // every acceptance item is re-checked. Only the final hop is VERIFYING.
+      const receipt = goal.addReceipt({
+        action: 'resume.verify',
+        target: fileName,
+        result: 'success',
+        evidence: { ...verification.evidence, verifier: 'v2.file', resumed: true },
+        acceptanceId: item.id,
+      });
+      goal.verifyReceipt(receipt.id, { ...verification.evidence, verifier: 'v2.file', resumed: true });
+      results.push({ id: item.id, verified: true, sha256: expectedSha });
+    }
+    goals.save(goal);
+
+    const missing = goal.uncoveredAcceptance();
+    // Old receipts are history, not proof that the world still looks the same.
+    // A resume only succeeds when EVERY acceptance item was re-verified in this
+    // pass, even if a previous run had already marked it covered.
+    const allFresh = results.length > 0 && results.every((r) => r.verified);
+    if (missing.length === 0 && allFresh) {
+      goal.transition(STATES.VERIFYING, 'all acceptance items re-verified after resume');
+      goal.complete();
+      goals.save(goal);
+      emit('goal', publicGoal(goal));
+      return { status: 'completed', goal: publicGoal(goal), results };
+    }
+
+    const failed = results.filter((r) => !r.verified).map((r) => r.id);
+    // "missing" answers one question: what is not verified right now?
+    const notVerified = [...new Set([...missing.map((m) => m.id), ...failed])];
+    goal.transition(STATES.BLOCKED, `resume could not verify: ${notVerified.join(', ')}`.slice(0, 180));
+    goals.save(goal);
+    emit('goal', publicGoal(goal));
+    return { status: 'blocked', goal: publicGoal(goal), results, missing: notVerified };
   }
 
   /** Resolve a pending strict-policy approval for a conversation. */
@@ -508,6 +705,7 @@ export function createAgent({ config, conversations, goals, tools, model }) {
     approvals,
     bus,
     setConversationModel,
+    resumeGoal,
     runTurn,
     resolveApproval,
     beginTurn,

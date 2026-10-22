@@ -237,5 +237,6 @@ export function publicGoal(goal) {
       at: r.at,
     })),
     history: json.history,
+    ...(goal.revisionOf ? { revisionOf: goal.revisionOf, revision: goal.revision || 0 } : {}),
   };
 }

@@ -29,12 +29,21 @@ not a silent change.
 
 ```
 scan dir → validate manifest → permission check → flag check → API check
-        → import + activate → capabilities registered (frozen)
-        ↳ any failure: every registration rolled back, plugin marked failed
+        → spawn worker (stripped env) → activate → capabilities registered
+        ↳ any failure: worker stopped, registrations rolled back,
+          directory moved to plugins-quarantine/ with a written reason
 ```
 
 Statuses in `GET /api/kernel`: `active`, `failed`, `rejected`, `incompatible`,
-`flagged-off`.
+`flagged-off`. Management: `npm run v4:plugins` (list), `... quarantine`,
+`... restore <name>`.
+
+## Measured quality
+
+`npm run v4:bench` runs seven fixed scenarios and records pass rate, p50/p95
+latency, tool calls and receipt coverage to `docs/v4/benchmarks/<date>-<mode>.json`.
+`--compare <file>` prints a regression diff against an earlier run. The report
+states plainly that latency is local host overhead, not model latency.
 
 ## Scaling rules
 

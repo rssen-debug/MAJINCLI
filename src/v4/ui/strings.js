@@ -91,6 +91,7 @@ export const SV = {
   'conn.connecting': 'ansluter…',
   'common.done': 'Klart.',
   'common.unknownError': 'okänt fel',
+  'common.toolFailed': 'verktyget misslyckades',
   'agent.files': '{count} fil(er)',
   'agent.matches': '{count} träff(ar)',
   'agent.summaryDone': 'klart',

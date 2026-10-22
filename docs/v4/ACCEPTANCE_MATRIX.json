@@ -217,10 +217,9 @@
         {
           "id": "S13",
           "weight": 1,
-          "status": "PARTIAL",
-          "title": "Prompt-injection resistance for untrusted content",
-          "evidence": "test/v4/conversation.test.js",
-          "note": "System prompt states the rule and tools are typed, but no adversarial corpus is run yet."
+          "status": "VERIFIED",
+          "title": "Prompt-injection corpus cannot escape the workspace, schema or approval layer",
+          "evidence": "test/v4/agent-failures.test.js"
         },
         {
           "id": "S14",
@@ -286,16 +285,16 @@
         {
           "id": "C8",
           "weight": 1,
-          "status": "PARTIAL",
-          "title": "Mid-task correction updates the existing goal instead of creating a new one",
-          "evidence": "test/v4/conversation.test.js",
-          "note": "Conversation context is continuous and follow-ups reuse it; explicit goal re-planning is not implemented."
+          "status": "VERIFIED",
+          "title": "A correction is linked to the previous goal as a revision, not an orphan",
+          "evidence": "test/v4/resume.test.js"
         },
         {
           "id": "C9",
           "weight": 1,
-          "status": "NOT_STARTED",
-          "title": "Cross-device resume of an in-flight task on the phone"
+          "status": "VERIFIED",
+          "title": "A second paired device sees the same conversation and goal state",
+          "evidence": "test/v4/resume.test.js"
         }
       ]
     },
@@ -341,16 +340,16 @@
         {
           "id": "G6",
           "weight": 2,
-          "status": "PARTIAL",
-          "title": "Tool failures fail the turn with a classified reason and no false success",
-          "evidence": "test/v4/conversation.test.js",
-          "note": "Failure paths are covered for invalid input; network tool failures are not yet simulated end to end."
+          "status": "VERIFIED",
+          "title": "Tool throw, schema break, timeout and budget all fail the turn honestly",
+          "evidence": "test/v4/agent-failures.test.js"
         },
         {
           "id": "G7",
           "weight": 1,
-          "status": "NOT_STARTED",
-          "title": "Resume a BLOCKED goal after user confirmation"
+          "status": "VERIFIED",
+          "title": "Resume re-verifies every acceptance item against recorded hashes before completing",
+          "evidence": "test/v4/resume.test.js"
         },
         {
           "id": "G8",
@@ -510,22 +509,23 @@
         {
           "id": "P5",
           "weight": 2,
-          "status": "PARTIAL",
-          "title": "Broken plugins are quarantined without stopping the host",
-          "evidence": "test/v4/kernel.test.js",
-          "note": "Failed plugins are contained and reported; automatic directory quarantine is not implemented."
+          "status": "VERIFIED",
+          "title": "Failing plugin is quarantined with a written reason and not retried",
+          "evidence": "test/v4/sandbox.test.js"
         },
         {
           "id": "P6",
           "weight": 2,
-          "status": "NOT_STARTED",
-          "title": "Process-level sandbox for third-party plugins"
+          "status": "VERIFIED",
+          "title": "Plugins run in a supervised child process with stripped env and call timeouts",
+          "evidence": "test/v4/sandbox.test.js"
         },
         {
           "id": "P7",
           "weight": 1,
-          "status": "NOT_STARTED",
-          "title": "Continuous benchmark harness comparing releases"
+          "status": "VERIFIED",
+          "title": "Benchmark harness measures pass rate, latency, receipts and replays",
+          "evidence": "test/v4/benchmark.test.js"
         }
       ]
     },

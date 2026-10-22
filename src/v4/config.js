@@ -231,6 +231,10 @@ export function loadConfig({ env = process.env, argv = [], platform = process.pl
       pluginsEnabled: bool(env.MAJIN_V4_PLUGINS, false),
       pluginAllowlist: splitList(env.MAJIN_V4_PLUGIN_ALLOW),
       pluginsDir: path.join(paths.root, 'plugins'),
+      pluginQuarantineDir: path.join(paths.root, 'plugins-quarantine'),
+      // Process isolation is the default; MAJIN_V4_PLUGIN_ISOLATE=0 keeps a
+      // plugin in-process for debugging. Isolation is not a security sandbox.
+      pluginIsolate: bool(env.MAJIN_V4_PLUGIN_ISOLATE, true),
     },
   };
 }

@@ -139,6 +139,8 @@ export function createV4Server({ config }) {
     features: config.platform?.features || {},
     pluginsEnabled: config.platform?.pluginsEnabled || false,
     allowlist: config.platform?.pluginAllowlist || [],
+    isolate: config.platform?.pluginIsolate !== false,
+    quarantineDir: config.platform?.pluginQuarantineDir || null,
   });
   // Plugin tools join the same registry the built-ins use, so they inherit
   // schema validation, approval policy and receipts. A plugin that cannot be
@@ -391,6 +393,23 @@ export function createV4Server({ config }) {
       sendJson(res, 200, { ok: true, cancelled });
     },
 
+    'POST /api/goal/resume': async (req, res) => {
+      requireSession(req);
+      assertCsrfHeader(req);
+      const body = await readJsonBody(req, 4096);
+      const goalId = String(body.goalId || '');
+      if (!goalId) throw new HttpError(400, 'GOAL_ID_REQUIRED', 'goalId is required.');
+      const sse = startSse(res);
+      try {
+        const result = await agent.resumeGoal({ goalId, emit: (type, data) => sse.send(type, data) });
+        sse.send('resume_result', { status: result.status, missing: result.missing || [], results: result.results });
+      } catch (err) {
+        sse.send('error', { message: err.message || 'resume failed', code: err.code || null });
+      } finally {
+        sse.close();
+      }
+    },
+
     'POST /api/approve': async (req, res) => {
       requireSession(req);
       assertCsrfHeader(req);
@@ -443,6 +462,7 @@ export function createV4Server({ config }) {
           version: conv.version,
           updatedAt: conv.updatedAt,
           messages: conv.messages,
+          goals: goalsIn(conv),
           pendingApproval: conv.pendingApproval ? { tool: conv.pendingApproval.tool, scope: conv.pendingApproval.scope } : null,
         },
       });
@@ -460,6 +480,20 @@ export function createV4Server({ config }) {
       sendJson(res, 200, { ok: true, sessions: sessions.list() });
     },
   };
+
+  /** Goal ids referenced by a conversation's messages, with live state. */
+  function goalsIn(conv) {
+    const ids = [...new Set(conv.messages.map((m) => m.meta?.goalId).filter(Boolean))];
+    return ids
+      .map((id) => goals.get(id))
+      .filter(Boolean)
+      .map((g) => ({
+        id: g.id,
+        state: g.state,
+        objective: g.objective,
+        ...(g.revisionOf ? { revisionOf: g.revisionOf, revision: g.revision } : {}),
+      }));
+  }
 
   function listWorkspace(root) {
     try {
@@ -508,6 +542,10 @@ export function createV4Server({ config }) {
       fail(res, 500, 'INTERNAL_ERROR', 'The request could not be completed.');
     }
   });
+
+  // Workers are killed when the listener closes, so a stopped host leaves no
+  // orphaned plugin processes behind.
+  server.on('close', () => kernel.shutdownWorkers());
 
   return {
     server,

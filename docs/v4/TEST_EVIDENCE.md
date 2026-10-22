@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 81
-# pass 81
+# tests 111
+# pass 111
 # fail 0
 # skipped 0
 ```
@@ -32,15 +32,19 @@ $ npm run v4:test
 | `test/v4/ui.test.js` | 12 | manifest/icons, safe areas, responsive, a11y, SW policy, asset content types, voice policy units |
 | `test/v4/kernel.test.js` | 10 | manifest validation, declared permissions, rollback, opt-in, allowlist, flags |
 | `test/v4/progress.test.js` | 9 | matrix structure, weights = 100, evidence required, derived score, PROGRESS.md agreement |
+| `test/v4/sandbox.test.js` | 9 | env stripping, child-process tools, crash/hang containment, quarantine, permission refusal, honest tool errors |
+| `test/v4/resume.test.js` | 9 | resume against recorded hashes, deleted/tampered artifacts stay BLOCKED, correction lineage, cross-device read |
+| `test/v4/agent-failures.test.js` | 9 | throwing/schema-breaking/hanging tools, budget stop, strict-policy pause, prompt-injection corpus |
+| `test/v4/benchmark.test.js` | 3 | benchmark pass rate, duplicate replay, refusal is FAILED |
 
 ## 2. Repository gates
 
 ```
 $ npm run check
-478/478 files parse cleanly.
+486/486 files parse cleanly.
 
 $ npm run i18n
-0 Swedish string literal(s) in 255 files
+0 Swedish string literal(s) in 259 files
 
 $ npm run v4:progress --check
 67.5/100 verified points, matrix valid (exit 0)

@@ -7,19 +7,19 @@
 
 ## Score
 
-- **Verified:** **68.5/100** points (**68.5%**)
-- **Criteria:** 75 → 53 VERIFIED · 5 PARTIAL · 14 NOT_STARTED · 3 BLOCKED
+- **Verified:** **76.5/100** points (**76.5%**)
+- **Criteria:** 75 → 61 VERIFIED · 1 PARTIAL · 10 NOT_STARTED · 3 BLOCKED
 
 | Area | Earned | Weight | What is actually proven |
 |---|---:|---:|---|
 | BASELINE | 4 | 4 | refs recorded, protected branches untouched, no secrets, matrix validated by code |
 | MOBILE | 9.5 | 12 | manifest + icons, safe areas, responsive, reduced motion, 42px targets, SW shell-only, model picker |
-| SECURITY | 12.5 | 14 | pairing, sessions, revocation, CSRF, origin/host, rate limits, CSP, traversal, no keys to client |
-| CONVERSATION | 7.5 | 9 | streaming, persistence, idempotent retry, cancellation, scoping, deletion, honest errors |
-| GOALS | 10 | 14 | V2 state machine, SHA-256 verification, receipts, crash→BLOCKED, no completion without evidence |
+| SECURITY | 13 | 14 | pairing, sessions, revocation, CSRF, origin/host, rate limits, CSP, traversal, no keys to client |
+| CONVERSATION | 9 | 9 | streaming, persistence, idempotent retry, cancellation, scoping, deletion, honest errors, corrections linked as revisions, cross-device read |
+| GOALS | 12 | 14 | V2 state machine, SHA-256 verification, receipts, crash→BLOCKED, resume re-verifies against recorded hashes, tool failures classified |
 | MODELS | 12 | 14 | V1 config reuse, V1 live catalog discovery (TTL cache + refresh), no secrets, id scoping, demo degradation |
 | VOICE | 5 | 9 | honest capability model, language, error copy, auto-send rules, speech text |
-| PLATFORM | 8 | 12 | versioned kernel, manifest validation, rollback, opt-in + allowlist + flags |
+| PLATFORM | 12 | 12 | versioned kernel, manifest validation, rollback, opt-in + allowlist + flags |
 | HOST | 0 | 12 | nothing verified — no Windows host and no tunnel in this environment |
 
 ## What works right now (evidence-backed)
@@ -34,7 +34,28 @@
 7. Model choice is scoped to one conversation and validated server-side.
 8. Without a configured provider the app runs a labelled demo brain — it cannot pretend to be an LLM.
 9. PWA shell is installable (manifest + 192/512/maskable icons) and never caches API data.
-10. Plugin kernel validates manifests, enforces declared permissions and rolls back failed activations.
+10. Plugin kernel validates manifests, enforces declared permissions, rolls back failed activations,
+    quarantines a broken plugin with a written reason, and runs plugins in a supervised child
+    process with a stripped environment and per-call timeouts.
+11. Resume of a BLOCKED goal re-verifies every artifact against the hash recorded when it was
+    written; a deleted or tampered file keeps the goal BLOCKED instead of "completing".
+12. A correction ("nej, ändra X") is recorded as a revision of the previous goal, not an orphan task.
+13. A second paired device sees the same conversation and the same goal state.
+14. A prompt-injection corpus (path escapes, role tags, huge payloads, reserved names) cannot
+    leave the workspace, break a schema or skip approvals.
+15. `npm run v4:bench` measures pass rate, p50/p95 latency, tool calls and receipt coverage,
+    and detects duplicate-request replay.
+
+## Remaining by area (10 NOT_STARTED + 1 PARTIAL + 3 BLOCKED)
+
+| Area | Points left | What it needs |
+|---|---:|---|
+| HOST | 12 | the Windows machine, the tunnel and a phone |
+| VOICE | 4 | a real device: measured TTS latency and barge-in; server-side STT/TTS |
+| MOBILE | 2.5 | physical-device walkthrough, Playwright visual regression, spirit polish |
+| GOALS | 2 | multi-step browser goal on the host |
+| MODELS | 2 | real inference (blocked: no provider key here) |
+| SECURITY | 1 | external penetration test |
 
 ## Open blockers
 

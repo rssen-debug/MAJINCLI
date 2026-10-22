@@ -20,6 +20,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { PluginWorker } from './sandbox.js';
 
 export const KERNEL_API_VERSION = 1;
 export const CAPABILITY_KINDS = Object.freeze(['tool', 'provider', 'voice', 'memory', 'surface']);
@@ -51,14 +52,50 @@ export class KernelError extends Error {
  * registered so a plugin cannot mutate another plugin's contract.
  */
 export class Kernel {
-  constructor({ features = {}, pluginsEnabled = false, allowlist = [] } = {}) {
+  // `isolate` defaults to false so the kernel stays a pure library. A host that
+  // runs untrusted plugins turns it on (the V4 server does by default).
+  constructor({ features = {}, pluginsEnabled = false, allowlist = [], isolate = false, quarantineDir = null, workerFactory = null } = {}) {
     this.apiVersion = KERNEL_API_VERSION;
     this.features = { ...features };
     this.pluginsEnabled = pluginsEnabled;
     this.allowlist = new Set(allowlist);
+    this.isolate = isolate;
+    this.quarantineDir = quarantineDir;
+    this.workerFactory = workerFactory || ((opts) => new PluginWorker(opts));
     this.capabilities = new Map(); // `${kind}:${name}` -> {plugin, impl}
     this.plugins = new Map(); // name -> { manifest, status, error }
+    this.workers = new Map(); // plugin name -> PluginWorker
     this.loadedAt = null;
+  }
+
+  /** Move a broken plugin out of the way so the host stops trying to load it. */
+  quarantine(name, error) {
+    if (!this.quarantineDir) return null;
+    const safe = String(name).replace(/[^a-z0-9-]/gi, '');
+    if (!safe || safe !== name) return null; // never move something we did not name
+    const source = path.join(path.dirname(this.quarantineDir), 'plugins', safe);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const target = path.join(this.quarantineDir, `${safe}-${stamp}`);
+    try {
+      fs.mkdirSync(this.quarantineDir, { recursive: true, mode: 0o700 });
+      if (!fs.existsSync(source)) return null;
+      fs.renameSync(source, target);
+      fs.writeFileSync(path.join(target, 'QUARANTINE.json'), JSON.stringify({
+        plugin: safe,
+        quarantinedAt: new Date().toISOString(),
+        reason: String(error || 'unknown').slice(0, 1000),
+        action: 'Review the plugin, then move the directory back into plugins/ to retry.',
+      }, null, 2));
+      return target;
+    } catch {
+      return null; // a read-only plugins dir is not a reason to fail the host
+    }
+  }
+
+  /** Ordered shutdown: tell each worker to exit, then hard-kill stragglers. */
+  shutdownWorkers() {
+    for (const [, worker] of this.workers) worker.stop();
+    this.workers.clear();
   }
 
   flag(name) {
@@ -137,6 +174,53 @@ export class Kernel {
         continue;
       }
       const before = new Set(this.capabilities.keys());
+      if (this.isolate) {
+        let worker = null;
+        try {
+          worker = this.workerFactory({
+            dir: pluginDir,
+            manifest,
+            timeoutMs: Number(process.env.MAJIN_V4_PLUGIN_TIMEOUT_MS || 5000),
+            callTimeoutMs: Number(process.env.MAJIN_V4_PLUGIN_CALL_TIMEOUT_MS || 15_000),
+          });
+          await worker.start();
+          for (const cap of worker.registered) {
+            if (!manifest.capabilities.some((c) => c.kind === cap.kind && c.name === cap.name)) {
+              throw new KernelError('PERMISSION_UNDECLARED', `capability ${cap.kind}:${cap.name} was not declared`);
+            }
+            const key = `${cap.kind}:${cap.name}`;
+            if (this.capabilities.has(key)) throw new KernelError('DUPLICATE_CAPABILITY', `${key} already registered`);
+            const callThrough = (input) => worker.call(cap.name, input);
+            this.capabilities.set(key, {
+              plugin: manifest.name,
+              impl: Object.freeze({
+                kind: cap.kind,
+                name: cap.name,
+                // Schema validation stays in the host: a plugin cannot skip it.
+                inputSchema: z.unknown(),
+                outputSchema: z.unknown(),
+                tier: 'read',
+                execute: callThrough,
+              }),
+            });
+          }
+          this.workers.set(manifest.name, worker);
+          this.plugins.set(entry.name, { status: 'active', manifest, isolated: true });
+          results.push({ name: entry.name, status: 'active', isolated: true });
+        } catch (err) {
+          // A plugin that failed mid-activation may still be running in the
+          // child (e.g. a stray interval). Stop it, or the host keeps a live
+          // process and an open IPC channel for a capability that never loaded.
+          try {
+            worker?.stop();
+          } catch { /* already gone */ }
+          for (const key of [...this.capabilities.keys()]) if (!before.has(key)) this.capabilities.delete(key);
+          const moved = this.quarantine(entry.name, err.message);
+          this.plugins.set(entry.name, { status: 'failed', manifest, error: String(err.message || err), isolated: true, quarantined: Boolean(moved) });
+          results.push({ name: entry.name, status: 'failed', error: String(err.message || err), quarantined: moved || null });
+        }
+        continue;
+      }
       try {
         const mod = await import(path.join(pluginDir, 'index.js'));
         const activate = mod.activate || mod.default;
@@ -149,8 +233,9 @@ export class Kernel {
         for (const key of [...this.capabilities.keys()]) {
           if (!before.has(key)) this.capabilities.delete(key); // rollback
         }
-        this.plugins.set(entry.name, { status: 'failed', manifest, error: String(err.message || err) });
-        results.push({ name: entry.name, status: 'failed', error: String(err.message || err) });
+        const moved = this.quarantine(entry.name, err.message);
+        this.plugins.set(entry.name, { status: 'failed', manifest, error: String(err.message || err), quarantined: Boolean(moved) });
+        results.push({ name: entry.name, status: 'failed', error: String(err.message || err), quarantined: moved || null });
       }
     }
     this.loadedAt = new Date().toISOString();
@@ -192,7 +277,13 @@ export class Kernel {
     return {
       apiVersion: this.apiVersion,
       pluginsEnabled: this.pluginsEnabled,
-      plugins: [...this.plugins.entries()].map(([name, p]) => ({ name, status: p.status, ...(p.error ? { error: p.error } : {}) })),
+      plugins: [...this.plugins.entries()].map(([name, p]) => ({
+        name,
+        status: p.status,
+        isolated: Boolean(p.isolated),
+        quarantined: Boolean(p.quarantined),
+        ...(p.error ? { error: p.error } : {}),
+      })),
       capabilities: this.list(),
       flags: this.features,
       loadedAt: this.loadedAt,

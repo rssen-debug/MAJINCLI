@@ -68,6 +68,15 @@ export async function startTestServer(overrides = {}) {
     context,
     pairingFile,
     pair,
+    /**
+     * A cookie for an already-paired device, e.g. the phone's session that the
+     * host remembers across a restart. Used to test "second device / after
+     * restart" scenarios without minting a new pairing code.
+     */
+    existingSession() {
+      const { token } = context.sessions.create({ ip: 'test', userAgent: 'test-device' });
+      return `${config.auth.cookieName}=${encodeURIComponent(token)}`;
+    },
     async close() {
       await new Promise((resolve) => server.close(resolve));
       fs.rmSync(home, { recursive: true, force: true });

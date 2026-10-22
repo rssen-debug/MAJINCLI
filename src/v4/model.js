@@ -119,7 +119,13 @@ async function demoBrain({ messages, workspaceDir, onEvent }) {
     } catch (err) {
       const answer = t(sv ? 'demo.badNameSv' : 'demo.badNameEn', { error: err.message });
       await streamDemo(answer, onEvent);
-      return { text: answer, toolCalls: [], usage: { input: 0, output: 0, reported: false } };
+      // An actionable request that was refused is not a completed task.
+      return {
+        text: answer,
+        toolCalls: [],
+        refused: { reason: err.message, code: 'INVALID_FILENAME' },
+        usage: { input: 0, output: 0, reported: false },
+      };
     }
     onEvent?.({ type: 'tool', name: 'workspace_write' });
     return {
@@ -129,7 +135,7 @@ async function demoBrain({ messages, workspaceDir, onEvent }) {
     };
   }
 
-  if (/\b(lista|list|visa)\b[\s\S]*\b(filer|files|workspace|arbetsyta)\b/i.test(text)) {
+  if (/\b(lista|list|visa)\b[\s\S]*\b(filer|filerna|files|workspace|arbetsyta)\b/i.test(text)) {
     onEvent?.({ type: 'tool', name: 'workspace_list' });
     return {
       text: '',
