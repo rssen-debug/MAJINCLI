@@ -27,6 +27,24 @@ export function clientKey(req, { trustProxy = false } = {}) {
   return req.socket?.remoteAddress || 'unknown';
 }
 
+/**
+ * Match a hostname against an allowlist entry. An entry may be exact
+ * ("majin.example.com") or a subdomain rule ("*.example.com"), which is how a
+ * tunnel with rotating subdomains is allowed without allowing the whole world.
+ * A wildcard never matches the bare apex of another domain: "*.example.com"
+ * matches "a.example.com" but not "example.com" and not "evilexample.com".
+ */
+export function hostMatches(hostname, entry) {
+  const host = String(hostname).toLowerCase();
+  const rule = String(entry).toLowerCase().trim();
+  if (!rule) return false;
+  if (rule.startsWith('*.')) {
+    const suffix = rule.slice(1); // ".example.com"
+    return host.endsWith(suffix) && host.length > suffix.length;
+  }
+  return host === rule;
+}
+
 /** Host header must be one we answer for, otherwise DNS rebinding applies. */
 export function assertHostAllowed(req, config) {
   const raw = String(req.headers.host || '');
@@ -37,10 +55,10 @@ export function assertHostAllowed(req, config) {
       if (new URL(config.publicOrigin).hostname.toLowerCase() === hostname) return hostname;
     } catch { /* fall through to allowlist */ }
   }
-  if (!config.allowedHosts.has(hostname)) {
-    throw new HttpError(403, 'HOST_REJECTED', 'This host header is not allowed.');
+  for (const entry of config.allowedHosts) {
+    if (hostMatches(hostname, entry)) return hostname;
   }
-  return hostname;
+  throw new HttpError(403, 'HOST_REJECTED', 'This host header is not allowed.');
 }
 
 /**

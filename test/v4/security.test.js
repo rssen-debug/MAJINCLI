@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { RateLimiter, HttpError, assertCsrfHeader } from '../../src/v4/security.js';
+import { RateLimiter, HttpError, assertCsrfHeader, hostMatches } from '../../src/v4/security.js';
 import { formatCode, hmac, safeEqual, SessionStore, loadSecret, verifyPairing, ensurePairing } from '../../src/v4/auth.js';
 import { safeFileName, WorkspaceError } from '../../src/v4/tools.js';
 import { startTestServer, tempHome, postChat } from './helpers.mjs';
@@ -325,4 +325,15 @@ test('security: static serving cannot escape the UI directory', async () => {
   } finally {
     await s.close();
   }
+});
+
+test('security: subdomain allowlist matches only real subdomains', () => {
+  assert.equal(hostMatches('a.example.com', '*.example.com'), true);
+  assert.equal(hostMatches('deep.a.example.com', '*.example.com'), true);
+  assert.equal(hostMatches('example.com', '*.example.com'), false);
+  assert.equal(hostMatches('evilexample.com', '*.example.com'), false);
+  assert.equal(hostMatches('example.com.evil.net', '*.example.com'), false);
+  assert.equal(hostMatches('majin.example.com', 'majin.example.com'), true);
+  assert.equal(hostMatches('MAJIN.EXAMPLE.COM', 'majin.example.com'), true);
+  assert.equal(hostMatches('other.example.com', 'majin.example.com'), false);
 });

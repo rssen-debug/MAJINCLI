@@ -81,6 +81,15 @@ setx MAJIN_V4_TRUST_PROXY "1"
 
 Restart the host task. `npm run v4:doctor` should now show `public_origin OK`.
 
+If your tunnel uses rotating subdomains, allow the family instead of one name:
+
+```powershell
+setx MAJIN_V4_ALLOWED_HOSTS "*.din-doman.se"
+```
+
+A wildcard entry only matches real subdomains — `*.din-doman.se` matches
+`majin.din-doman.se` but never `din-doman.se` or `evildin-doman.se`.
+
 ## 4. Put an identity gate in front (Cloudflare Access) ⚠
 
 Cloudflare dashboard → Zero Trust → Access → Applications → **Add an application
