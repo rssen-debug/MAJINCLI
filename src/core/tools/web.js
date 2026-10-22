@@ -13,6 +13,7 @@ import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElements
 import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
 import { SEMANTIC_SNAPSHOT_JS, formatSemanticSnapshot } from '../browser-semantic.js';
 import { VERIFY_JS, verificationCriteria, verifyObserved } from '../browser-evidence.js';
+import { browserActionReceipt } from '../browser-action-receipt.js';
 
 const followedSafe = (fol) => (fol && fol.followed === true ? true : false);
 
@@ -391,7 +392,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           reason:hit.blocked,coveringTag:hit.coveringTag||null,
           coveringRole:hit.coveringRole||null,coveringId:hit.coveringId||null,
           recovery:'browser.elements({refresh:"true"}) then choose a NEW grounded action'},
-          meta:{blocked:hit.blocked,tag:hit.tag,text:hit.text},
+          meta:{blocked:hit.blocked,tag:hit.tag,text:hit.text,receipt:browserActionReceipt({reason:hit.blocked})},
           summary:'click blocked: '+hit.blocked};
       }
       if (!hit.found) {
@@ -421,7 +422,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           let observed;
           try{observed=await b.eval(script);}
           catch(e){return {ok:false,error:{code:'post_click_verify_error',message:String(e?.message||e)},
-            meta:{clicked:hit.text,urlAfter:after.url}};}
+            meta:{clicked:hit.text,urlAfter:after.url,receipt:browserActionReceipt({dispatched:true,uncertain:true,reason:'verification_exception'})}};}
           attempts++;
           proof=verifyObserved(expected,observed);
           if(proof.ok || !observed?.valid || Date.now()>=deadline)break;
@@ -431,14 +432,15 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           code:'post_click_assertion_failed',
           message:'The click happened but its requested effect was NOT verified. Re-observe the page before trying a different approach.',
           failures:proof.failures
-        },meta:{clicked:hit.text,attempts,observed:proof.observed},summary:'click outcome NOT verified'};
+        },meta:{clicked:hit.text,attempts,observed:proof.observed,receipt:browserActionReceipt({dispatched:true,reason:'assertion_failed'})},summary:'click outcome NOT verified'};
       }
       return {
         ok: true,
         result: `Click dispatched on ${hit.tag} "${hit.text}"${typeof hit.checked === 'boolean' ? (hit.checked ? ' — checkbox CHECKED' : ' — checkbox UNCHECKED') : ''}${fol.followed ? ' (new tab followed)' : ''} — page now: "${after.title}" at ${after.url}${proof?.ok ? ' — EXPECTED OUTCOME VERIFIED' : ' — OUTCOME NOT VERIFIED: call browser.verify before declaring task done'}`,
         meta: { tag: hit.tag, text: hit.text, checked: hit.checked, checkboxChanged: hit.changed,
           urlAfter: after.url, title: after.title, openedNewTab: fol.followed,
-          verified: proof?.ok === true, outcomeEvidence: proof?.ok ? 'postcondition' : 'action_only', verificationAttempts: attempts },
+          verified: proof?.ok === true, outcomeEvidence: proof?.ok ? 'postcondition' : 'action_only', verificationAttempts: attempts,
+          receipt:browserActionReceipt({dispatched:true,verified:proof?.ok===true}) },
         summary: `${proof?.ok ? 'verified' : 'action only'} · clicked "${hit.text}"${typeof hit.checked === 'boolean' ? (hit.checked ? ' (checked)' : ' (unchecked)') : ''}`,
       };
     },
