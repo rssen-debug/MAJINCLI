@@ -59,7 +59,7 @@ export function verificationCriteria(input = {}) {
   // as ?next=/dashboard from masquerading as a successful navigation.
   const urlPath = String(input.urlPath || '').trim().slice(0, 350);
   const urlOrigin = String(input.urlOrigin || '').trim().slice(0, 350);
-  if(urlPath && (!urlPath.startsWith('/') || urlPath.startsWith('//') || urlPath.includes('?') || urlPath.includes('#')))
+  if(urlPath && (!urlPath.startsWith('/') || urlPath.startsWith('//') || urlPath.includes('?') || urlPath.includes('#') || /[\u0000-\u001f\u007f]/.test(urlPath)))
     return {ok:false,reason:'urlPath must be an absolute pathname (for example /dashboard), with no query or fragment'};
   if(urlOrigin){
     try {
