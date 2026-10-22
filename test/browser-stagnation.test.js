@@ -68,3 +68,14 @@ test('consolidated stagnation visual stays accessible and inline',()=>{
  assert.match(html,/majin-stagnation-orbit/);
  assert.match(html,/prefers-reduced-motion:reduce/);
 });
+
+test('newly enabled submit control resets stagnation warning',()=>{
+ const session='enable-control-consolidated';
+ const state={...page(),controls:[{selector:'#submit',label:'Submit',enabled:false,checked:false}]};
+ observeBrowserPage(session,state);
+ for(let i=0;i<2;i++){noteBrowserAction(session);observeBrowserPage(session,state)}
+ assert.equal(observeBrowserPage(session,state).stagnant,true);
+ noteBrowserAction(session);
+ assert.equal(observeBrowserPage(session,{...state,controls:[{...state.controls[0],enabled:true}]}).stagnant,false);
+ clearBrowserStagnation(session);
+});
