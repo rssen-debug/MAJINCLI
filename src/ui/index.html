@@ -578,6 +578,28 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="navigation"] .pulse{background:#f4a6de;box-shadow:0 0 9px rgba(244,166,222,.33)}
 @keyframes majin-navigation-seek{50%{transform:translate(2px,-2px);opacity:.6}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="navigation"] #work-progress-symbol{animation:none}}
+
+/* Quiet heartbeat rail: a single hairline inside the EXISTING chat composer.
+   Inspired by local-first agent trace timelines; no dashboard or extra panel. */
+#composer{position:relative;isolation:isolate}
+#composer:has(#work-progress:not([hidden]))::after{
+  content:'';position:absolute;pointer-events:none;left:18px;right:18px;bottom:0;
+  height:2px;border-radius:10px;opacity:.75;
+  background:linear-gradient(90deg,transparent 0%,#c36eff 26%,#ff98cb 50%,#c36eff 74%,transparent 100%);
+  background-size:220% 100%;animation:majin-trace-flow 2.5s linear infinite;
+}
+#composer:has(#work-progress[data-phase="waiting"]:not([hidden]))::after{
+  background:linear-gradient(90deg,transparent,#efb0d2,#f8d6ed,#efb0d2,transparent);
+  background-size:220% 100%;animation-duration:4.4s;opacity:.55;
+}
+#composer:has(#work-progress[data-phase="stalled"]:not([hidden]))::after{
+  background:rgba(255,168,143,.8);animation:none;opacity:.65;
+}
+@keyframes majin-trace-flow{from{background-position:100% 0}to{background-position:-120% 0}}
+@media(prefers-reduced-motion:reduce){
+  #composer:has(#work-progress:not([hidden]))::after{animation:none}
+}
+
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
