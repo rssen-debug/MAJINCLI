@@ -724,6 +724,10 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 #composer #work-progress[data-phase="compact"] .pulse{animation:majin-compact-evidence-glow 2.1s ease-in-out infinite;box-shadow:0 0 9px rgba(223,148,248,.23)}
 @keyframes majin-compact-evidence-glow{50%{opacity:.62;transform:scale(.85)}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="compact"] .pulse{animation:none!important;transform:none!important}}
+/* One calm visual improvement: a restrained amber glow on existing stagnation status. */
+#composer #work-progress[data-phase="stagnation"] #work-progress-symbol{animation:majin-stagnation-orbit 2.6s ease-in-out infinite}
+@keyframes majin-stagnation-orbit{50%{opacity:.7;filter:drop-shadow(0 0 5px rgba(255,172,90,.3))}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] #work-progress-symbol{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
