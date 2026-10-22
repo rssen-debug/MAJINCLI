@@ -16,6 +16,8 @@ export function recoveryPreview(checkpoint) {
     const id = typeof step?.id === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(step.id) ? step.id : null;
     if (!id || seen.has(id)) return { ready:false, reason:'invalid-or-duplicate-step-id', steps:[] };
     seen.add(id);
+    // Never allow an inherited field to spoof a checkpoint step's identity.
+    if (!Object.hasOwn(step, 'id')) return { ready:false, reason:'invalid-step', steps:[] };
     const decision = recoveryDecision(step);
     // Never trust an unrecognized policy verdict as authorization to resume.
     if (!['resume', 'skip', 'inspect', 'approval'].includes(decision?.action)) return { ready:false, reason:'unknown-recovery-action', steps:[] };
