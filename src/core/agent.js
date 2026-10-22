@@ -82,7 +82,12 @@ export class Agent {
       try {
         const stat = fs.lstatSync(file);
         if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024) return null;
-        data = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+        try {
+          const opened = fs.fstatSync(fd);
+          if (!opened.isFile() || opened.size > 1024 * 1024) return null;
+          data = JSON.parse(fs.readFileSync(fd, 'utf8'));
+        } finally { fs.closeSync(fd); }
       } catch { return null; }
       // Reject stale/mismatched journals instead of importing another session's plan.
       if (data?.session !== session) return null;
