@@ -692,6 +692,23 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
   body[data-voice-mode="listening"] #composer .composer-talk::after,
   body[data-voice-mode="speaking"] #composer .composer-talk::after{animation:none}
 }
+
+/* Round 2026-10-22: one subtle "verification" shimmer in EXISTING chat status.
+   No additional cards, popups or visual clutter. */
+#composer #work-progress[data-phase="verify"]{
+  position:relative;isolation:isolate;overflow:hidden;
+  color:#e9cbed;border-top-color:rgba(251,128,209,.28);
+}
+#composer #work-progress[data-phase="verify"]::before{
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:-1;
+  background:linear-gradient(92deg,transparent 15%,rgba(234,99,205,.11) 47%,rgba(169,125,255,.1) 54%,transparent 85%);
+  background-size:240% 100%;animation:majin-verify-sweep 2.6s linear infinite;
+}
+#composer #work-progress[data-phase="verify"] #work-progress-symbol{
+  color:#ff93dc;text-shadow:0 0 10px rgba(255,127,216,.55);
+}
+@keyframes majin-verify-sweep{from{background-position:110% 0}to{background-position:-110% 0}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verify"]::before{animation:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
