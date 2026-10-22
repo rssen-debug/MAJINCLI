@@ -25,5 +25,7 @@ export function recoveryPreview(checkpoint) {
     counts[decision.action]++;
     results.push({ index, id, action: decision.action, reason: String(decision.reason || 'unspecified') });
   }
-  return { ready:true, counts, steps:results };
+  // A ready preview may still need human review; never equate ready with auto-resumable.
+  const needsAttention = counts.inspect > 0 || counts.approval > 0;
+  return { ready:true, needsAttention, counts, steps:results };
 }
