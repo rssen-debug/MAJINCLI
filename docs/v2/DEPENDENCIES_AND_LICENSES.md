@@ -31,6 +31,7 @@ Repo philosophy measured: ONE runtime dep today (chokidar). Every new dep must e
 | Telemetry/ledger for goals+calls (122-124) | **hand-rolled minimal local JSONL shards + aggregation** | n/a | Evaluated 2026-10-22: OpenTelemetry SDK (correct canonical answer for production infra; too heavy for v2-alpha sandbox, DEFER to Studio/GUI lane), pi-telemetry family (pi-specific, tiny audience). Chosen pattern mirrors the proven local-JSONL shapes: per-day shards, privacy-by-construction field allowlist, locale-independent percentile aggregation. +0 deps |
 \ n
 | Multi-provider routing/fallback (59-61) | **V2 ProviderChain hand-rolled** (priority order, per-provider circuit breaker, retry-safe classes only, telemetry) | n/a | Evaluated 2026-10-22: LiteLLM (canonical answer but python gateway service), llm-fallback-router/llm-fallback-gateway/modelchain/prio-llm-router (all young 2026 packages; fit is wrong against the receipts discipline). Defer re-eval on stabilization. +0 deps |
+| Config loader (40-45) | **hand-rolled JSON-only (majin.json + majin.local.json)** | n/a | Evaluated 2026-10-22: cosmiconfig (MIT, 4.2k stars, ~100M dl/wk) is the right general answer BUT ships .js-eval/yaml loaders we explicitly refuse at config time, plus 4 transitive deps for a 60-key schema. Hand-rolled JSON-only = no code-exec at config time, no yaml. +0 deps |
 
 ## Policy from here
 

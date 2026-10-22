@@ -32,3 +32,5 @@
 | Supervisor: model-planner with framework-owned verifiers | VERIFIED | test/v2-planner-model.test.js 4/4: model verify-attempts filtered, verifiers ALWAYS built from compiled goal by framework (section 22 independence), loud template fallback on garbage, roleCall schema gates |
 | Outer recovery loop 106-117 | VERIFIED | test/v2-outer-loop.test.js 5/5: bounded replan injection, retry/replan executed, co-worker-needed steps BLOCKED honestly (never simulated), recovered-flag exact, budget exhaustion definite |
 | Provider chain: failover + breakers + telemetry | VERIFIED | test/v2-provider-chain.test.js 5/5: retry-safe only, AUTH fails fast, breaker accumulates across requests, half-open probes, cap honored |
+| Config layer 40-45 | VERIFIED | test/v2-config-context.test.js 7/7: defaults<repo<local merge, corrupt JSON errors with filename, partial-broken warn-and-survive, untrusted repos can only tighten safety |
+| Context engine -> roleCall integration | VERIFIED | same file: sections packed inside token budget with truncation markers intact; no-sections path unchanged |
