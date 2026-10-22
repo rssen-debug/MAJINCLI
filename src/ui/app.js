@@ -72,7 +72,10 @@ function md(t) {
 /* ------------------------------- transcript ----------------------------- */
 function scroll(force = false) {
   const s = $('scroller');
-  if (force || !S.readingHistory) s.scrollTop = s.scrollHeight;
+  if (!force && S.readingHistory) return;
+  // V1: avoid redundant scroll writes during streamed responses.
+  const target = s.scrollHeight;
+  if (force || s.scrollTop + s.clientHeight < target - 1) s.scrollTop = target;
 }
 $('scroller').addEventListener('scroll', () => {
   const n = $('scroller'); S.readingHistory = n.scrollHeight - n.clientHeight - n.scrollTop > 100;
