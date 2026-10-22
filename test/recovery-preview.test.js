@@ -46,3 +46,8 @@ test('preview rejects array and scalar checkpoint states',()=>{
   assert.equal(recoveryPreview({schema:1,id:'valid',state}).ready,false);
  }
 });
+
+test('preview safely handles missing and null state',()=>{
+ assert.equal(recoveryPreview({schema:1,id:'demo'}).reason,'invalid-state');
+ assert.equal(recoveryPreview({schema:1,id:'demo',state:null}).reason,'invalid-state');
+});
