@@ -30,6 +30,7 @@ const USAGE = `MAJIN V2
   majin-v2 --audit-anchor <dir>
   majin-v2 --studio [--port N] [--host H] [--telemetry-dir D] [--audit-dir D] [--enable-writes]
            [--enable-goals --goal-workspace <dir> --profile opencode-go]
+           [--enable-voice --voice-dir <dir> --voice-tts buffer|edge --voice-stt-command '<tpl>']
 
 Options:
   --workspace <dir>       where the objective may write (required for objectives)
@@ -67,6 +68,10 @@ try {
     'enable-writes': { type: 'boolean' },
     'enable-goals': { type: 'boolean' },
     'goal-workspace': { type: 'string' },
+    'enable-voice': { type: 'boolean' },
+    'voice-dir': { type: 'string' },
+    'voice-tts': { type: 'string' },
+    'voice-stt-command': { type: 'string' },
     port: { type: 'string' },
     host: { type: 'string' },
     'audit-dir': { type: 'string' },
@@ -168,6 +173,26 @@ async function main() {
     let approvals = null;
     let auditBind = null;
     let goalOpts = null;
+    let voiceOpts = null;
+    if (values['enable-voice']) {
+      if (!values['voice-dir']) { console.error('majin-v2: --enable-voice requires --voice-dir <dir>'); process.exit(2); }
+      const voiceDir = path.resolve(values['voice-dir']);
+      const ttsKind = values['voice-tts'] || 'buffer';
+      let tts = null;
+      if (ttsKind === 'buffer') {
+        const { BufferTtsProvider } = await import('../src/v2/voice/tts.js');
+        tts = new BufferTtsProvider();
+      } else if (ttsKind === 'edge') {
+        const { EdgeTtsProvider } = await import('../src/v2/voice/tts.js');
+        tts = new EdgeTtsProvider({});
+      } else { console.error(`majin-v2: unknown --voice-tts '${ttsKind}' (buffer|edge)`); process.exit(2); }
+      let stt = null;
+      if (values['voice-stt-command']) {
+        const { CommandSttProvider } = await import('../src/v2/voice/stt.js');
+        stt = new CommandSttProvider({ commandTemplate: values['voice-stt-command'] });
+      }
+      voiceOpts = { outDir: voiceDir, tts, stt };
+    }
     if (values['enable-goals']) {
       if (!values['goal-workspace']) { console.error('majin-v2: --enable-goals requires --goal-workspace <dir> (runs may only write to an operator-fixed workspace)'); process.exit(2); }
       const { resolveProfile } = await import('../src/v2/model/profiles.js');
@@ -191,7 +216,7 @@ async function main() {
       auditBind = new AuditBind(new AuditChain(auditDir));
       auditBind.attach(bus);
     }
-    const studio = createStudioServer({ bus, telemetryDir, auditDir, approvals, enableWrites: !!values['enable-writes'], enableGoals: goalOpts });
+    const studio = createStudioServer({ bus, telemetryDir, auditDir, approvals, enableWrites: !!values['enable-writes'], enableGoals: goalOpts, voice: voiceOpts });
     const bound = await studio.listen({ port: Number(values.port) || 0, host: values.host || '127.0.0.1' });
     console.log(`MAJIN V2 Studio ${goalOpts ? '(goal runs ENABLED — every run consumes a studio:run-goals grant; workspace ' + goalOpts.workspaceDir + (goalOpts.provider ? ', provider ' + goalOpts.provider.name : '' ) + ')' : values['enable-writes'] ? '(consent writes ENABLED — every grant/revoke audit-chained)' : '(read-only scaffold)'} at ${bound.url}`);
     console.log(`observing: telemetry=${telemetryDir} audit=${auditDir}`);

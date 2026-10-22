@@ -10,7 +10,7 @@
 
 export const STUDIO_REVISION = 'studio-scaffold.r1'; // not product semver — the single VERSION literal rule lives in src/core/version.js
 
-export function renderStudioPage({ title = 'MAJIN V2 Studio', enableWrites = false, enableGoals = false } = {}) {
+export function renderStudioPage({ title = 'MAJIN V2 Studio', enableWrites = false, enableGoals = false, enableVoice = false } = {}) {
   return `<!doctype html>
 <html lang="sv">
 <head>
@@ -55,6 +55,11 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
 #c-result.err{color:var(--bad)} #c-result.ok2{color:var(--ok)}
 #receipts{grid-column:1/-1;max-height:32vh;overflow:auto}
 #goals{grid-column:1/-1}
+#voice{grid-column:1/-1}
+#voice input[type=text],#voice input:not([type]){background:var(--bg);border:1px solid var(--line);border-radius:4px;color:var(--fg);padding:4px 6px;font:inherit;font-size:12px}
+#voice button{background:var(--accent);border:0;border-radius:4px;color:#0b0e12;padding:5px 10px;font:inherit;font-size:12px;cursor:pointer;font-weight:600}
+#voice audio{width:100%;margin-top:6px}
+#v-out.err,#v-transcript.err{color:var(--bad)} #v-out.ok2,#v-transcript.ok2{color:var(--ok)}
 #goals input{background:var(--bg);border:1px solid var(--line);border-radius:4px;color:var(--fg);padding:4px 6px;font:inherit;font-size:12px}
 #goals button{background:var(--accent);border:0;border-radius:4px;color:#0b0e12;padding:5px 10px;font:inherit;font-size:12px;cursor:pointer;font-weight:600}
 #g-out.err{color:var(--bad)} #g-out.ok2{color:var(--ok)}
@@ -101,6 +106,22 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
       <button id="c-revoke" type="button" class="danger">Revoke</button>
     </div>
     <div id="c-status-out"></div>
+  </section>
+  <section id="voice">
+    <h2>Voice</h2>
+    <div class="mode ${enableVoice ? 'on">voice ENABLED — external providers pay voice:external consent per call; evidence is sha256-verified, never provider claims' : 'off">voice disabled (start with --enable-voice --voice-dir; disabled means SILENCE)'}</div>
+    <div ${enableVoice ? '' : 'hidden'}>
+      <div class="rowform">
+        <input id="v-text" placeholder="text to speak (max 4000 chars)" maxlength="4000" style="flex:1;min-width:200px">
+        <button id="v-speak" type="button">Speak</button>
+      </div>
+      <div id="v-out" style="font-size:12px;margin-top:6px;white-space:pre-wrap"></div>
+      <div class="rowform" style="margin-top:8px">
+        <label style="font-size:11px;color:var(--dim)">listen: choose a WAV file <input id="v-file" type="file" accept=".wav,audio/wav"></label>
+        <button id="v-listen" type="button">Transcribe</button>
+      </div>
+      <div id="v-transcript" style="font-size:12px;margin-top:6px;white-space:pre-wrap"></div>
+    </div>
   </section>
   <section id="goals">
     <h2>Goal runs</h2>
@@ -251,6 +272,50 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
   }
   document.getElementById('r-refresh').addEventListener('click',loadReceipts);
   loadReceipts();
+
+  var VOICE=${enableVoice ? 'true' : 'false'};
+  if(VOICE){
+    var vOut=document.getElementById('v-out'), vTr=document.getElementById('v-transcript');
+    document.getElementById('v-speak').addEventListener('click',function(){
+      var text=document.getElementById('v-text').value.trim();
+      if(!text){vOut.className='err';vOut.textContent='text is required';return}
+      vOut.className='';vOut.textContent='synthesizing…';
+      fetch('/api/voice/speak',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:text})})
+        .then(function(r){return r.json().then(function(b){return{code:r.status,body:b}})})
+        .then(function(x){var b=x.body;
+          if(x.code===200){
+            vOut.className='ok2';
+            vOut.innerHTML='evidence: '+b.bytes+' bytes · '+esc(b.format)+' · '+(b.verified?'sha256-verified ✓':'unverified')+' · provider '+esc(b.provider)+'<br><audio controls src="'+encodeURI(b.audio)+'"></audio>';
+          } else if(x.code===403&&b.pendingScope){
+            vOut.className='err';vOut.textContent='consent required: grant "'+b.pendingScope+'" in the Consent panel (external synthesis never runs silently)';
+          } else if(x.code===503){
+            vOut.className='err';vOut.textContent='dependency missing: '+esc(b.error||'');
+          } else {vOut.className='err';vOut.textContent='rejected '+x.code+': '+esc(b.error||'unknown')}
+        }).catch(function(e){vOut.className='err';vOut.textContent='network error: '+e.message});
+    });
+    document.getElementById('v-listen').addEventListener('click',function(){
+      var f=document.getElementById('v-file').files[0];
+      if(!f){vTr.className='err';vTr.textContent='choose a WAV file first';return}
+      var rd=new FileReader();
+      rd.onload=function(){
+        var b64=btoa(String.fromCharCode.apply(null,new Uint8Array(rd.result)));
+        vTr.className='';vTr.textContent='transcribing…';
+        fetch('/api/voice/listen',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({wavBase64:b64})})
+          .then(function(r){return r.json().then(function(b){return{code:r.status,body:b}})})
+          .then(function(x){var b=x.body;
+            if(x.code===200){
+              vTr.className=b.verdict==='capture'?'ok2':'';
+              vTr.textContent='verdict: '+b.verdict+' · provider '+esc(b.provider)+(b.verdict==='capture'?('\ntranscript: '+esc(b.transcript)):'\n(no speech captured — honest empty, nothing fabricated)');
+            } else if(x.code===403&&b.pendingScope){
+              vTr.className='err';vTr.textContent='consent required: grant "'+b.pendingScope+'" in the Consent panel';
+            } else if(x.code===503){
+              vTr.className='err';vTr.textContent='dependency missing (no whisper binary on this host): '+esc(b.error||'');
+            } else {vTr.className='err';vTr.textContent='rejected '+x.code+': '+esc(b.error||'unknown')}
+          }).catch(function(e){vTr.className='err';vTr.textContent='network error: '+e.message});
+      };
+      rd.readAsArrayBuffer(f);
+    });
+  }
 
   var GOALS=${enableGoals ? 'true' : 'false'};
   if(GOALS){
