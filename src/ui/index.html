@@ -738,6 +738,9 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 #composer #work-progress[data-phase="verify"]{border-top-color:rgba(226,151,250,.3)}
 #composer #work-progress[data-phase="stagnation"]{border-top-color:rgba(250,180,99,.3)}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verify"],#composer #work-progress[data-phase="stagnation"]{transition:none!important}}
+/* Subtle visible recovery edge without additional interface chrome. */
+#composer #work-progress[data-phase="recover"]{border-top-color:rgba(212,151,247,.34)}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recover"] *{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
