@@ -13,5 +13,7 @@ export function recoveryPreview(checkpoint) {
     const decision = recoveryDecision(step);
     results.push({ index, id, action: decision.action, reason: decision.reason });
   }
-  return { ready:true, steps:results };
+  const counts = { resume:0, skip:0, inspect:0, approval:0 };
+  for (const step of results) counts[step.action]++;
+  return { ready:true, counts, steps:results };
 }
