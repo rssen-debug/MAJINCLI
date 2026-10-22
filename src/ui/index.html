@@ -467,6 +467,11 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 @media(prefers-reduced-motion:reduce){
   #composer #work-progress[data-phase="action"]::after{animation:none!important}
 }
+/* Structure discovery: one subtle visual cue inside the EXISTING composer. */
+#composer #work-progress[data-phase="structure"]{--trace:linear-gradient(90deg,transparent,#ba92ff 35%,#ff8bcf 70%,transparent);border-top-color:rgba(189,143,255,.18)}
+#composer #work-progress[data-phase="structure"] .pulse{background:#bc95ff;box-shadow:0 0 0 3px rgba(188,149,255,.09),0 0 15px rgba(188,149,255,.32);animation-duration:1.9s}
+#composer #work-progress[data-phase="structure"] #work-progress-label{color:#e1c9f6}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="structure"] .pulse{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>

@@ -11,6 +11,7 @@ import { bus } from '../log.js';
 import { openFor, closeFor, isOpen, journal } from '../browser.js';
 import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, findGroundedControls, VERSION as GROUND_V } from '../browser-ground.js';
 import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
+import { SEMANTIC_SNAPSHOT_JS, formatSemanticSnapshot } from '../browser-semantic.js';
 import { VERIFY_JS, verificationCriteria, verifyObserved } from '../browser-evidence.js';
 
 const followedSafe = (fol) => (fol && fol.followed === true ? true : false);
@@ -250,12 +251,19 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     group: 'web',
     risk: 'read',
     desc: 'Read visible text from the page (or one selector) — the actual words on the page, capped.',
-    params: { selector: 'string: optional CSS selector — whole page when omitted' },
-    async run({ selector = '' }, ctx) {
+    params: { selector: 'string: optional CSS selector — whole page when omitted', mode: 'string optional "structure" for compact accessibility outline without form values' },
+    async run({ selector = '', mode = '' }, ctx) {
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
       const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) }).catch(() => null);
       if (!b) return { ok: false, error: { code: 'browser_closed', message: 'browser is not open' } };
+      if(String(mode).toLowerCase()==='structure'){
+        const payload=await b.eval(SEMANTIC_SNAPSHOT_JS).catch(e=>({error:String(e?.message||e)}));
+        if(payload?.error)return {ok:false,error:{code:'structure_failed',message:payload.error}};
+        const result=formatSemanticSnapshot(payload);
+        journal.guard(session,'browser.read:structure');
+        return {ok:true,result,meta:{url:payload.url,title:payload.title,mode:'structure',count:payload.elements?.length||0},summary:'Page structure observed ('+(payload.elements?.length||0)+' elements)'};
+      }
       const sel = JSON.stringify(String(selector || ''));
       const expr = `(() => {
         const t = ${sel} ? (document.querySelector(${sel})?.innerText ?? null) : null;
