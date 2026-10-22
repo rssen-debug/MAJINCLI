@@ -91,3 +91,11 @@ test('middle form progress and inserted controls alter bounded page fingerprint'
  noteBrowserAction(s);assert.equal(observeBrowserPage(s,{...state,controls:[...controls.slice(0,25),{selector:'#extra',label:'Extra'},...controls.slice(25)]}).stagnant,false);
  clearBrowserStagnation(s);
 });
+
+test('session identifiers cannot execute untrusted coercion while tracking progress',()=>{
+ const hostile={toString(){throw Error('unsafe conversion')}};
+ observeBrowserPage(hostile,page());
+ noteBrowserAction(hostile);
+ assert.equal(observeBrowserPage(hostile,page()).unchangedActions,1);
+ clearBrowserStagnation(hostile);
+});
