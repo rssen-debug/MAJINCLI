@@ -58,9 +58,11 @@ export class Agent {
       const file = this.planPath(session);
       if (!file) return false;
       // Unique per-write temporary files prevent concurrent sessions colliding.
+      const payload = JSON.stringify({ session, plan: this.plans.get(session) || [], updated: Date.now() }) + '\n';
+      if (Buffer.byteLength(payload, 'utf8') > 1024 * 1024) throw Object.assign(new Error('plan journal exceeds 1 MiB limit'), { code: 'EPLAN_TOO_LARGE' });
       const tmp = `${file}.${randomUUID()}.tmp`;
       try {
-        fs.writeFileSync(tmp, JSON.stringify({ session, plan: this.plans.get(session) || [], updated: Date.now() }) + '\n', { flag: 'wx', mode: 0o600 });
+        fs.writeFileSync(tmp, payload, { flag: 'wx', mode: 0o600 });
         fs.renameSync(tmp, file);
       } finally {
         try { fs.unlinkSync(tmp); } catch (e) { if (e.code !== 'ENOENT') throw e; }
