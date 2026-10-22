@@ -406,3 +406,14 @@ body.simple .msg .appr button:focus-visible {
  outline:2px solid var(--warn);outline-offset:4px;
  box-shadow:0 0 0 4px var(--cysoft);
 }
+
+/* Aurora: legible recovery and approval states without heavy alert surfaces. */
+body.simple .msg .appr {
+  box-shadow:inset 3px 0 0 var(--warn);
+}
+body.simple .msg .appr button:not(:disabled):active {
+  filter:brightness(1.08);
+}
+@media(hover:none) {
+  body.simple .msg .appr button:hover { box-shadow:none; }
+}
