@@ -313,3 +313,18 @@ body.simple .chat-open-file {
 body.simple .chat-open-file:hover { border-color:var(--cy);box-shadow:0 0 12px var(--cysoft); }
 body.simple .chat-open-file:focus-visible { outline:2px solid var(--cy);outline-offset:3px; }
 @media(prefers-reduced-motion:reduce) { body.simple .chat-open-file { transition:none!important; } }
+
+/* Aurora: file-preview actions feel tactile while remaining quiet. */
+body.simple .chat-open-file {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:36px;
+  max-width:100%;
+  overflow-wrap:anywhere;
+  transition:border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+body.simple .chat-open-file:not(:disabled):active { transform:scale(.98); }
+@media(prefers-reduced-motion:reduce) {
+  body.simple .chat-open-file:not(:disabled):active { transform:none; }
+}
