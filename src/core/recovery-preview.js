@@ -10,6 +10,7 @@ export function recoveryPreview(checkpoint) {
   if (steps.length === 0) return { ready:false, reason:'empty-steps', steps:[] };
   const seen = new Set();
   const results = [];
+  const counts = { resume:0, skip:0, inspect:0, approval:0 };
   for (const [index, step] of steps.entries()) {
     // Reject malformed entries before asking the recovery policy to classify them.
     if (!step || typeof step !== 'object' || Array.isArray(step)) return { ready:false, reason:'invalid-step', steps:[] };
@@ -23,12 +24,8 @@ export function recoveryPreview(checkpoint) {
     const decision = recoveryDecision(step);
     // Never trust an unrecognized policy verdict as authorization to resume.
     if (!['resume', 'skip', 'inspect', 'approval'].includes(decision?.action)) return { ready:false, reason:'unknown-recovery-action', steps:[] };
+    counts[decision.action]++;
     results.push({ index, id, action: decision.action, reason: String(decision.reason || 'unspecified') });
-  }
-  const counts = { resume:0, skip:0, inspect:0, approval:0 };
-  for (const step of results) {
-    if (!Object.hasOwn(counts, step.action)) return { ready:false, reason:'unknown-recovery-action', steps:[] };
-    counts[step.action]++;
   }
   return { ready:true, counts, steps:results };
 }
