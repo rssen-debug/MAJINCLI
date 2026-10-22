@@ -3,7 +3,9 @@
  * MAJIN V2 console entry — ties the whole stack into one honest command:
  *   majin-v2 "<objective>" --workspace <dir> [--provider-url <url> --model <m>]
  *   majin-v2 --gauntlet
-  majin-v2 --doctor [--runner-url http://host:port] [--doctor-whisper-bin <path>] [--port N] | --telemetry-report [dir] [--days N]
+  majin-v2 --doctor
+  majin-v2 --audit-anchor <dir> [--anchor-tsa <rfc3161-url>]
+  majin-v2 --audit-verify <dir> --with-anchor --with-tsr [--tsa-ca cafile.pem --tsa-untrusted tsa.crt] [--runner-url http://host:port] [--doctor-whisper-bin <path>] [--port N] | --telemetry-report [dir] [--days N]
  *
  * Exit 0 only when the objective COMPLETED with verified evidence (or the
  * subsidiary command succeeded). Failed goals exit 1. Argparse: node:util
@@ -21,11 +23,14 @@ import { resolveProfile } from '../src/v2/model/profiles.js';
 import { aggregate, renderReport } from '../src/v2/telemetry/aggregate.js';
 import { AuditChain } from '../src/v2/audit/chain.js';
 import { keygen as auditKeygen, anchor as auditAnchor, verifyAnchor } from '../src/v2/audit/anchor.js';
+import { requestTimestamp, verifyTimestamp } from '../src/v2/audit/timestamp.js';
 
 const USAGE = `MAJIN V2
   majin-v2 "<objective>" --workspace <dir> [options]
   majin-v2 --gauntlet
-  majin-v2 --doctor [--runner-url http://host:port] [--doctor-whisper-bin <path>] [--port N]
+  majin-v2 --doctor
+  majin-v2 --audit-anchor <dir> [--anchor-tsa <rfc3161-url>]
+  majin-v2 --audit-verify <dir> --with-anchor --with-tsr [--tsa-ca cafile.pem --tsa-untrusted tsa.crt] [--runner-url http://host:port] [--doctor-whisper-bin <path>] [--port N]
   majin-v2 --telemetry-report [dir] [--days N]
   majin-v2 --audit-verify <dir> [--with-anchor]
   majin-v2 --audit-keygen <dir>
@@ -67,6 +72,10 @@ try {
     'telemetry-report': { type: 'string' },
     'audit-verify': { type: 'string' },
     'with-anchor': { type: 'boolean' },
+    'with-tsr': { type: 'boolean' },
+    'anchor-tsa': { type: 'string' },
+    'tsa-ca': { type: 'string' },
+    'tsa-untrusted': { type: 'string' },
     'audit-keygen': { type: 'string' },
     'audit-anchor': { type: 'string' },
     studio: { type: 'boolean' },
@@ -156,6 +165,12 @@ async function main() {
       console.log(`ANCHOR ${av.cls}${av.fingerprint ? ` FP=${av.fingerprint}` : ''}${av.detail ? ` (${av.detail})` : ''}`);
       if (!av.ok) process.exit(1); // SIG_INVALID / ANCHOR_MISMATCH / CHAIN_BROKEN
     }
+    if (values['with-tsr']) {
+      // existence-in-time check: proves an anchor predates a moment independent of our clock
+      const tv = verifyTimestamp(dir, { caFile: values['tsa-ca'] || null, untrusted: values['tsa-untrusted'] || null });
+      console.log(`TSR ${tv.cls}${tv.genTime ? ` TIME="${tv.genTime}"` : ''}${tv.detail ? ` (${tv.detail})` : ''}`);
+      if (!tv.ok) process.exit(1); // MISMATCH / UNPARSEABLE / TRUST_FAILED
+    }
     process.exit(0);
   }
 
@@ -173,6 +188,11 @@ async function main() {
     try {
       const rec = auditAnchor(path.resolve(dir));
       console.log(`AUDIT anchored SEQ=${rec.chainSeq} HEAD=${rec.chainHead.slice(0, 16)} ASEq=${rec.aseq} FP=${rec.fingerprint}`);
+      if (values['anchor-tsa']) {
+        // deliberate, operator-driven trusted timestamp of the anchor just made
+        const t = await requestTimestamp(path.resolve(dir), values['anchor-tsa']);
+        console.log(`AUDIT timestamped ASEq=${t.aseq} TIME="${t.genTime}" BYTES=${t.bytes} (${t.url})`);
+      }
       process.exit(0);
     } catch (err) {
       console.error(`AUDIT anchor failed REASON=${err.cls || 'FAILED'} (${err.message})`);
