@@ -75,7 +75,7 @@ export function verificationCriteria(input = {}) {
   // Explicit list/card count assertions: unlike clicks, lists can legitimately
   // contain many matches. Stay read-only and don't inspect element values.
   const countRaw = input.count;
-  const hasCount = countRaw !== undefined && countRaw !== null && String(countRaw).trim() !== '';
+  const hasCount = countRaw !== undefined && countRaw !== null && (typeof countRaw !== 'string' || countRaw.trim() !== '');
   const count = hasCount ? Number(countRaw) : null;
   if(hasCount && !['string','number'].includes(typeof countRaw))
     return {ok:false,reason:'count must be a numeric string or number'};
