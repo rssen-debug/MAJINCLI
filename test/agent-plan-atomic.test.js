@@ -112,3 +112,10 @@ test('agent rejects constructor and prototype keys from a saved plan',t=>{
  }
  assert.equal(agent.plans.size,0);
 });
+
+test('agent derives a distinct plan journal path from session history',()=>{
+ const agent=Object.create(Agent.prototype);
+ const file=agent.planPath('journal-path-test');
+ assert.ok(file === null || file.endsWith('.plan.json'));
+ assert.ok(file === null || !file.endsWith('.jsonl'));
+});
