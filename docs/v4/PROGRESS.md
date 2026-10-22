@@ -107,6 +107,26 @@ No browser binary can be obtained in this environment: Playwright's CDN, Google'
 ≥ 3.30 which the image does not have. So M11 stays unearned rather than being replaced by a
 claim. On the Windows host: `npx playwright install chromium && npm run v4:e2e`.
 
+## One command that proves (or refuses) the release
+
+`npm run v4:accept` exercises a real host on this machine and prints PASS/FAIL for every
+automated gate: health, anonymous access refused, pairing works, cookie is HttpOnly +
+SameSite=Strict, CSRF required, cross-origin refused, chat streams, the tool result is
+**verified**, the file is on disk with the right bytes, the conversation reloads, and a
+**second host process on the same data dir still sees the finished goal**.
+
+Add `-- --url https://your-tunnel` and it also checks the public URL is HTTPS and refuses
+anonymous reads. `--write` stores the run under `docs/v4/evidence/`.
+
+The runner cannot flatter the project: it exits non-zero when any check fails, and it reports
+`model.configured: FAIL` while no provider is configured — a demo brain is not a model.
+Acceptance points are still written by hand, from that output.
+
+`npm run v4:serve:supervised` runs the host under `src/v4/supervisor.js`: health probing every
+15 s, restart with exponential backoff, a hard cap so a crash loop fails loudly instead of
+spinning, and one JSON line per lifecycle event in
+`v4/logs/supervisor-<date>.jsonl`. Tested with real child processes that are killed.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in

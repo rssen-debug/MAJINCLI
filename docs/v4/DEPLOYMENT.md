@@ -105,6 +105,16 @@ the PC and phone, keep MAJIN bound to `127.0.0.1`, and reach it over the tailnet
 (`http://<pc-name>:7373`). Tailscale-only means no public URL at all — that is a
 feature for a private release, not a limitation to hide.
 
+## 4.5 Run it supervised (recommended)
+
+```powershell
+npm run v4:serve:supervised
+```
+
+The supervisor restarts the host after a crash with backoff, gives up loudly after five
+restarts inside ten minutes, and writes one JSON line per event to
+`%LOCALAPPDATA%\MAJIN\v4\logs\supervisor-<date>.jsonl`. Ctrl+C stops it for good.
+
 ## 5. First phone run (acceptance)
 
 1. Open `https://majin.DIN-DOMAN.se` in Safari/Chrome.
@@ -115,8 +125,14 @@ feature for a private release, not a limitation to hide.
 6. Expect a tool card that turns green **verified on disk**, then the answer.
 7. Lock the phone, reopen: the conversation is still there.
 
-Record the result in `docs/v4/TEST_EVIDENCE.md`; the matrix points H3/H4 stay
-unearned until that evidence exists.
+Then run the automated gate and paste its output into `docs/v4/TEST_EVIDENCE.md`:
+
+```powershell
+npm run v4:accept -- --url https://majin.DIN-DOMAN.se --write
+```
+
+It exits non-zero if anything fails, and it will not claim a model while none is configured.
+The matrix points H3/H4 stay unearned until that evidence exists.
 
 ## 6. Backup, update, rollback
 

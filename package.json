@@ -53,7 +53,9 @@
     "v4:progress": "node ./scripts/v4/progress.mjs",
     "v4:bench": "node ./scripts/v4/benchmark.mjs --write",
     "v4:plugins": "node ./scripts/v4/plugin.mjs",
-    "v4:e2e": "node --test test/v4/e2e.browser.test.js"
+    "v4:e2e": "node --test test/v4/e2e.browser.test.js",
+    "v4:accept": "node ./scripts/v4/accept.mjs",
+    "v4:serve:supervised": "node ./scripts/v4/supervise.mjs"
   },
   "optionalDependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",

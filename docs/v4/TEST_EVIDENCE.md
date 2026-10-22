@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 144
-# pass 143
+# tests 154
+# pass 153
 # skipped 1
 # fail 0
 # skipped 0
@@ -41,15 +41,17 @@ $ npm run v4:test
 | `test/v4/voice-server.test.js` | 13 | auth/CSRF, verified WAV from the V2 lane, temp cleanup, input limits, honest capabilities, a **real local subprocess** for TTS and STT, pipeline refusal, missing-binary failure |
 | `test/v4/turns.test.js` | 9 | sequence ids, replay from a cursor, bounded buffer, reattach after a dropped socket, work survives a hang-up |
 | `test/v4/e2e.browser.test.js` | 0 run | real-browser acceptance on 5 viewports — **skips** here, no browser binary (see below) |
+| `test/v4/supervisor.test.js` | 6 | real child process: healthy start, crash → restart, crash loop gives up loudly, never-healthy host, health-failure restart, window expiry |
+| `test/v4/accept.test.js` | 4 | the acceptance runner reports every real gate, refuses to claim a model without one, and its exit code follows the failures |
 
 ## 2. Repository gates
 
 ```
 $ npm run check
-494/494 files parse cleanly.
+496/496 files parse cleanly.
 
 $ npm run i18n
-0 Swedish string literal(s) in 263 files
+0 Swedish string literal(s) in 266 files
 
 $ npm run v4:progress --check
 67.5/100 verified points, matrix valid (exit 0)
@@ -94,6 +96,32 @@ Three routes were tried for a real browser and all failed for environmental reas
 The portable test therefore skips with a clear reason and the exact command to run it
 elsewhere. That is the honest outcome; a screenshot from a phone is not something this
 sandbox can produce.
+
+## 3.3 Acceptance runner output (this machine, demo lane)
+
+```
+$ npm run v4:accept
+  PASS  host.health                  200 4.0.0-alpha
+  PASS  auth.refuses_anonymous       unauthenticated /api/state -> 401
+  PASS  auth.pairing_works           pair -> 200
+  PASS  auth.cookie_hardened         Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000
+  PASS  auth.csrf_required           chat without CSRF -> 403
+  PASS  auth.cross_origin_refused    cross-origin -> 403
+  PASS  chat.streams                 19 events in 72ms
+  PASS  goal.tool_verified           tool result carried verified:true
+  PASS  chat.completes               status completed
+  PASS  goal.file_on_disk            "acceptanskörning"
+  PASS  chat.conversation_id         conv_…
+  PASS  persist.conversation_reloads 2 messages
+  PASS  restart.goal_survives        1 goal(s) after restart
+  PASS  restart.file_survives        <tmp>/workspace/accept.txt
+  FAIL  model.configured             no provider configured (running the demo brain)
+  PASS  tunnel.skipped               no --url given; public access not checked
+  15/16 checks passed — exit 1
+```
+
+That `FAIL` is the honest state of the model lane here, and it is why `A7` keeps its
+`BLOCKED` status.
 
 ## 4. What is NOT tested here
 
