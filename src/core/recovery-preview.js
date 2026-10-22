@@ -11,6 +11,8 @@ export function recoveryPreview(checkpoint) {
   const seen = new Set();
   const results = [];
   for (const [index, step] of steps.entries()) {
+    // Reject malformed entries before asking the recovery policy to classify them.
+    if (!step || typeof step !== 'object' || Array.isArray(step)) return { ready:false, reason:'invalid-step', steps:[] };
     const id = typeof step?.id === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(step.id) ? step.id : null;
     if (!id || seen.has(id)) return { ready:false, reason:'invalid-or-duplicate-step-id', steps:[] };
     seen.add(id);
