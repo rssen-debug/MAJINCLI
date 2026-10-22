@@ -264,6 +264,17 @@ function onEvent(ev) {
           bar.title='MAJIN will re-observe the page rather than repeatedly clicking a blocked control';}
       } else workPulse(ev.ok?'Tool finished · checking result':'Tool failed · adjusting approach');
     }
+    else if (ev.type === 'browser_recovery') {
+      const names={refresh_page:'Refreshing page controls',inspect_blocker:'Inspecting a blocked element',
+        verify_failed:'Checking why the result differs',reconnect:'Checking browser connection',
+        outcome_unknown:'Checking whether the action actually finished',stop_repeat:'Changing strategy'};
+      const stage=names[ev.phase]||'Recovering safely';
+      const tool=String(ev.next||'').replace(/[^a-zA-Z0-9._-]/g,'').slice(0,32);
+      workPulse(tool?stage+' · '+tool:stage);
+      const bar=$('work-progress');
+      if(bar){bar.dataset.phase='recover';bar.dataset.recovery=String(ev.phase||'').slice(0,35);
+        bar.title='MAJIN is inspecting the current page instead of blindly repeating the previous action';}
+    }
     else if (ev.type === 'agent_recovery') {
       const stage = ev.phase === 'blocked' ? 'Stopped a repeating action' : 'Switching strategy after a failed action';
       const tool = String(ev.tool || '').replace(/[^a-zA-Z0-9._-]/g,'').slice(0,48);
