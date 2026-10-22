@@ -33,7 +33,7 @@ export function compactBrowserText(input,{maxChars=2600}={}){
     used+='… [middle page content omitted]'.length+1;
     for(const row of tail)append(row.slice(0,110),budget);
   }
-  const result=selected.join('\\n').slice(0,cap);
+  const result=selected.join('\n').slice(0,cap);
   return {text:result,originalChars:String(input||'').length,outputChars:result.length,
     linesRead:rows.length,uniqueLines:unique.length,truncated:result.length<String(input||'').length};
 }
