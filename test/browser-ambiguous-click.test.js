@@ -8,7 +8,7 @@ test('browser.click rejects ambiguous selectors BEFORE clicking',()=>{
  const end=s.indexOf("name: 'browser.fill'",start);
  const click=s.slice(start,end);
  assert.ok(start>=0 && end>start);
- assert.match(click,/document\.querySelectorAll\(/);
+ assert.match(click,/const queryDeep=\(css\)=>/);
  assert.match(click,/matches\.length > 1/);
  assert.match(click,/blocked:'ambiguous_target'/);
  assert.ok(click.indexOf("blocked:'ambiguous_target'")<click.indexOf('el.click()'),'must reject ambiguity before side effects');
