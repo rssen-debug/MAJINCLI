@@ -68,3 +68,16 @@ test('consolidated stagnation visual stays accessible and inline',()=>{
  assert.match(html,/majin-stagnation-orbit/);
  assert.match(html,/prefers-reduced-motion:reduce/);
 });
+
+test('adding a middle control resets stagnation even when sampled edges match',()=>{
+ const s='middle-control-insertion';
+ const controls=Array.from({length:55},(_,i)=>({selector:'#f-'+i,label:'Field '+i,checked:false}));
+ const state={...page(),controls};
+ observeBrowserPage(s,state);
+ for(let i=0;i<2;i++){noteBrowserAction(s);observeBrowserPage(s,state);}
+ assert.equal(observeBrowserPage(s,state).stagnant,true);
+ const changed=[...controls.slice(0,25),{selector:'#new-middle',label:'New required field',checked:false},...controls.slice(25)];
+ noteBrowserAction(s);
+ assert.equal(observeBrowserPage(s,{...state,controls:changed}).stagnant,false);
+ clearBrowserStagnation(s);
+});
