@@ -8,10 +8,24 @@ export const VERIFY_JS = String.raw`((args) => {
   let el = null, count = 0;
   try {
     if (selector) {
-      const matches = document.querySelectorAll(selector);
-      count = matches.length;
-      // A non-unique selector cannot prove which element the agent observed.
-      if (count === 1) el = matches[0];
+      // Same bounded open-shadow-root traversal as MAJIN's click path.
+      // A verifier must be able to observe the control the agent just clicked.
+      // Closed shadow roots remain inaccessible and are never assumed to pass.
+      const roots=[document],matches=[];
+      let scanned=0;
+      for(let i=0;i<roots.length && i<16 && scanned<350;i++){
+        const root=roots[i];
+        matches.push(...root.querySelectorAll(selector));
+        const candidates=root.querySelectorAll('*');
+        for(const node of Array.from(candidates).slice(0,350-scanned)){
+          scanned++;
+          if(node.shadowRoot && roots.length<16 && !roots.includes(node.shadowRoot))
+            roots.push(node.shadowRoot);
+        }
+      }
+      count=matches.length;
+      // Never silently validate the first of multiple matching controls.
+      if(count===1)el=matches[0];
     }
   } catch { return { valid: false, reason: 'invalid_selector' }; }
   const visible = (node) => {
