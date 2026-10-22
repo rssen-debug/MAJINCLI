@@ -477,3 +477,16 @@ body.simple .msg .appr button:focus-visible {
   outline:2px solid var(--warn);
   outline-offset:4px;
 }
+
+/* Aurora: approval choices are visually distinct for keyboard and touch. */
+body.simple .msg .appr button:not(:disabled):focus-visible {
+  outline:3px solid var(--warn);
+  outline-offset:4px;
+}
+body.simple .msg .appr button:disabled {
+  cursor:not-allowed;
+  opacity:.55;
+}
+@media(prefers-reduced-motion:reduce) {
+  body.simple .msg .appr button { animation:none!important; transition:none!important; }
+}
