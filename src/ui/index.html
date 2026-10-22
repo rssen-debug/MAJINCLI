@@ -728,6 +728,9 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 #composer #work-progress[data-phase="stagnation"] #work-progress-symbol{animation:majin-stagnation-orbit 2.6s ease-in-out infinite}
 @keyframes majin-stagnation-orbit{50%{opacity:.7;filter:drop-shadow(0 0 5px rgba(255,172,90,.3))}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] #work-progress-symbol{animation:none!important}}
+/* One visual improvement: quiet amber signal on existing stagnation activity. */
+#composer #work-progress[data-phase="stagnation"]{border-top-color:rgba(255,184,109,.32);transition:border-top-color .2s ease}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"]{transition:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
