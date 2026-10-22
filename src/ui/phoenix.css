@@ -459,3 +459,12 @@ body.simple .msg .appr button:disabled {
  body.simple .msg .appr { border-width:2px; }
  body.simple .msg .appr button:focus-visible { outline-width:3px; }
 }
+
+/* Aurora: predictable approval button hover for pointer-capable devices only. */
+@media(hover:hover) and (pointer:fine) {
+ body.simple .msg .appr button:not(:disabled):hover {
+   box-shadow:0 0 0 2px var(--cysoft);
+   border-color:var(--cy);
+ }
+}
+body.simple .msg .appr button:focus-visible { outline-offset:4px; }
