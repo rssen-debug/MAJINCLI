@@ -299,13 +299,14 @@ function onEvent(ev) {
         }
         const glyph=$('work-progress-symbol');if(glyph)glyph.textContent=navigation?'↗':'↻';
       } else if(ev.tool==='browser.verify' && ev.ok){
-        workPulse('Browser result verified');
+        const shadow=ev.meta?.observed?.fromShadowRoot===true;
+        workPulse(shadow?'Shadow DOM control verified':'Browser result verified');
         const bar=$('work-progress');
         if(bar){
-          bar.dataset.phase='verified';
-          bar.title='Confirmed against the live page — not just a successful click';
+          bar.dataset.phase=shadow?'shadow-verified':'verified';
+          bar.title=shadow?'Verified a unique accessible control inside an open shadow root':'Confirmed against the live page — not just a successful click';
         }
-        const glyph=$('work-progress-symbol');if(glyph)glyph.textContent='✓';
+        const glyph=$('work-progress-symbol');if(glyph)glyph.textContent=shadow?'✧':'✓';
       } else if(ev.tool==='browser.read' && ev.ok && ev.meta?.mode==='structure'){
         const count=Math.max(0,Number(ev.meta?.count)||0);
         workPulse('Mapping page structure · '+count+' accessible elements');
