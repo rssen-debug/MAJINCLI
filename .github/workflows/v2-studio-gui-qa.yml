@@ -74,7 +74,7 @@ jobs:
             Add-Content $GITHUB_STEP_SUMMARY ""
             Add-Content $GITHUB_STEP_SUMMARY ("**Kanal:** " + $r.channel + " | **Headless:** " + $r.headless + " | **Run:** " + $env:GITHUB_RUN_ID)
           } else {
-            Add-Content $GITHUB_STEP_SUMMARY "## GUI-QA: harness dog tidigt — se artifact-upload + logg"
+            Add-Content $GITHUB_STEP_SUMMARY "## GUI-QA: harness dog tidigt - se artifact-upload + logg"
           }
 
       - name: Upload evidence (results JSON + full-page screenshot)
