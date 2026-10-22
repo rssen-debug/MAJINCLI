@@ -15,7 +15,7 @@ function hashPage({url='',title='',text='',controls=[]}={}){
   h.update(JSON.stringify([
     String(url).slice(0,1500),String(title).slice(0,300),
     String(text).slice(0,12000),
-    Array.isArray(controls)?controls.slice(0,30).map(c=>[
+    Array.isArray(controls)?(controls.length>30?[...controls.slice(0,20),...controls.slice(-10)]:controls).map(c=>[
       String(c.selector||'').slice(0,100),
       String(c.label||'').slice(0,100),Boolean(c.checked)
     ]):[]
