@@ -29,3 +29,7 @@ test('checkpoint metadata cannot mark a write or external action as safe to skip
   assert.notEqual(decision.action,'skip');
  }
 });
+
+test('missing risk/status and array steps cannot resume automatically',()=>{
+ for (const step of [{status:'pending'}, {risk:'read'}, []]) assert.equal(recoveryDecision(step).action,'inspect');
+});
