@@ -490,3 +490,12 @@ body.simple .msg .appr button:disabled {
 @media(prefers-reduced-motion:reduce) {
   body.simple .msg .appr button { animation:none!important; transition:none!important; }
 }
+
+/* Aurora: stable keyboard and touch feedback on permission prompts. */
+body.simple .msg .appr button:not(:disabled):active { transform:translateY(1px); }
+@media(prefers-reduced-motion:reduce) {
+ body.simple .msg .appr button:not(:disabled):active { transform:none; }
+}
+@media(prefers-contrast:more) {
+ body.simple .msg .appr button:not(:disabled):focus-visible { outline-width:4px; }
+}
