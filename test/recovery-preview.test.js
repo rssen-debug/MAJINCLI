@@ -56,3 +56,11 @@ test('empty checkpoint cannot be presented as resumable',()=>{
  const result=recoveryPreview({schema:1,id:'empty',state:{steps:[]}});
  assert.deepEqual(result,{ready:false,reason:'empty-steps',steps:[]});
 });
+
+test('recovery preview rejects malformed step records',()=>{
+ for (const step of [null,42,'invalid',[],{id:'fine',risk:'read',status:'pending'},]) {
+  const result=recoveryPreview({schema:1,id:'demo',state:{steps:[step]}});
+  if (step && !Array.isArray(step) && typeof step==='object') assert.equal(result.ready,true);
+  else assert.equal(result.reason,'invalid-step');
+ }
+});
