@@ -26,3 +26,10 @@ test('checkpoint size and schema are bounded',t=>{
  fs.writeFileSync(checkpointPath(dir,'bad'),JSON.stringify({schema:4,id:'bad',state:{}}));
  assert.throws(()=>loadCheckpoint(dir,'bad'),/Invalid checkpoint schema/);
 });
+
+test('checkpoint rejects oversize input before reading or parsing',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'majin-checkpoint-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ fs.writeFileSync(checkpointPath(dir,'too_big'),'x'.repeat(1100000));
+ assert.throws(()=>loadCheckpoint(dir,'too_big'),/Invalid checkpoint file size/);
+});
