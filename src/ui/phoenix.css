@@ -285,3 +285,17 @@ body.light .model-detail-use,body.light .ob-go{color:#fff}
 
 body.simple .msg .tools,body.simple .msg .trace,body.simple .msg .gauge{display:none}
 body:is([data-run-state=connecting],[data-run-state=thinking],[data-run-state=working]) #status{visibility:hidden}
+
+/* Aurora polish: subtle, readable keyboard interaction on chat actions. */
+body.simple .msg button:focus-visible,
+body.simple .msg a:focus-visible {
+  outline:2px solid var(--cy);
+  outline-offset:3px;
+  border-radius:8px;
+}
+body.simple .msg button:not(:disabled):hover {
+  box-shadow:0 0 0 1px var(--cysoft);
+}
+@media (prefers-reduced-motion:reduce) {
+  body.simple .msg button { transition:none!important; }
+}
