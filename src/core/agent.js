@@ -80,6 +80,8 @@ export class Agent {
       if (!file) return null;
       let data;
       try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+      // Reject stale/mismatched journals instead of importing another session's plan.
+      if (data?.session !== session) return null;
       if (Array.isArray(data.plan) && data.plan.length) {
         this.plans.set(session, data.plan);
         return data.plan;
