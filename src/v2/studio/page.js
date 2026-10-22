@@ -8,7 +8,7 @@
  * a later lane behind the existing consent gate (never silently here).
  */
 
-export const STUDIO_VERSION = '0.1.0-scaffold';
+export const STUDIO_REVISION = 'studio-scaffold.r1'; // not product semver — the single VERSION literal rule lives in src/core/version.js
 
 export function renderStudioPage({ title = 'MAJIN V2 Studio' } = {}) {
   return `<!doctype html>
@@ -44,7 +44,7 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
 <body>
 <header>
   <h1>MAJIN V2 Studio</h1>
-  <span class="tag">read-only scaffold v${STUDIO_VERSION} · observing real kernel surfaces</span>
+  <span class="tag">read-only scaffold ${STUDIO_REVISION} · observing real kernel surfaces</span>
   <span id="conn">connecting…</span>
 </header>
 <main>
