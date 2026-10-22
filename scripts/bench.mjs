@@ -114,6 +114,28 @@ const SCENARIOS = [
   },
 ];
 
+// 50 distinct file-task fixtures run through the real agent/tool loop with a scripted mock model.
+// This is a plumbing test, not a claim about unscripted task-planning intelligence.
+if (flag('matrix50', false)) {
+  SCENARIOS.length = 0;
+  for (let i = 0; i < 50; i++) {
+    const id = String(i+1).padStart(2,'0');
+    const name = 'quality-'+id+'.txt';
+    const text = 'verified-content-'+id;
+    if (i % 2 === 0) SCENARIOS.push({
+      name:'quality-write-'+id, job:'tasks',
+      input:'create '+name+' with '+text,
+      steps:[{text:'Writing.',toolCalls:[{name:'fs.write',args:{path:name,content:text}}]},{text:'Created '+name}],
+      expect:{tool:/^fs\\.write$/,file:{path:name,contains:text},events:['tool_result','answer']}
+    });
+    else SCENARIOS.push({
+      name:'quality-read-'+id, job:'tasks',input:'read '+name+' and summarize it',
+      seed:{[name]:text},steps:[{text:'Reading.',toolCalls:[{name:'fs.read',args:{path:name}}]},{text:'Read '+text}],
+      expect:{tool:/^fs\\.read$/,answer:new RegExp(text),events:['tool_result','answer']}
+    });
+  }
+}
+
 const JOBS = ['tasks', 'tools', 're', 'chat', 'code', 'research', 'analysis', 'summarize', 'plan', 'final'];
 
 function percentile(values, p) {
