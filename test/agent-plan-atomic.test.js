@@ -19,3 +19,14 @@ test('agent plan persistence replaces journal atomically without stray temp file
  assert.deepEqual(fs.readdirSync(dir),['demo.plan.json']);
  assert.equal(agent.lastPlanPersistError,null);
 });
+
+test('agent refuses a plan journal belonging to another session', t => {
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'majin-plan-owner-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const agent=Object.create(Agent.prototype);
+ agent.plans=new Map();
+ agent.planPath=()=>path.join(dir,'session.plan.json');
+ fs.writeFileSync(agent.planPath(),JSON.stringify({session:'other',plan:[{id:'foreign'}]}));
+ assert.equal(agent.loadPlan('current'),null);
+ assert.equal(agent.plans.size,0);
+});
