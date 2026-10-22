@@ -76,3 +76,9 @@ test('preview returns string reasons suitable for UI rendering',()=>{
  assert.equal(r.ready,true);
  assert.equal(typeof r.steps[0].reason,'string');
 });
+
+test('inherited checkpoint step ids cannot impersonate valid steps',()=>{
+ const inherited=Object.create({id:'trusted'});
+ inherited.status='pending'; inherited.risk='read';
+ assert.equal(recoveryPreview({schema:1,id:'safe',state:{steps:[inherited]}}).ready,false);
+});
