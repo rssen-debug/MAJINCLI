@@ -170,3 +170,22 @@ test('UI shows a lightweight navigation investigation state without another pane
  assert.match(app,/bar\.dataset\.phase=navigation\?'navigation':'recovery'/);
  assert.match(html,/work-progress\[data-phase="navigation"\]/);
 });
+
+test('verify an exact count of page cards without requiring a unique selector',()=>{
+ const c=verificationCriteria({selector:'.search-result',count:'12'});
+ assert.equal(c.ok,true);
+ const yes=verifyObserved(c,{valid:true,matchCount:12,exists:true,unique:false,visible:false,url:'https://example.test',title:'Results'});
+ assert.equal(yes.ok,true);
+ assert.equal(yes.assertions.some(x=>x.name==='element_unique'),false);
+ const no=verifyObserved(c,{valid:true,matchCount:11,exists:true,unique:false,visible:false,url:'https://example.test',title:'Results'});
+ assert.equal(no.ok,false);
+ assert.equal(no.failures[0].name,'element_count_exact');
+});
+test('count validation rejects invalid and conflicting expectations',()=>{
+ for(const count of ['-1','1.5','NaN','1001','Infinity']){
+   assert.equal(verificationCriteria({selector:'.row',count}).ok,false);
+ }
+ assert.equal(verificationCriteria({count:'3'}).ok,false);
+ assert.equal(verificationCriteria({selector:'.row',count:'3',text:'hello'}).ok,false);
+ assert.equal(verificationCriteria({selector:'.row',count:'0'}).ok,true);
+});
