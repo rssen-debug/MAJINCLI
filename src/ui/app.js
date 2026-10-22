@@ -1134,7 +1134,9 @@ function dispatchVoiceTurn(r){
   if(voiceFinished||recog!==r||!S.handsFree||S.busy)return;
   let command=(voiceFinal||voiceTranscript).trim();
   const wake=String(S.st?.config?.ui?.voice?.wakeWord||'').trim();
-  if(wake){
+  // Manual tap-to-talk already authorizes the turn. Legacy wakeWord values
+  // must not silently discard speech; requireWakeWord is explicit opt-in.
+  if(wake && S.st?.config?.ui?.voice?.requireWakeWord === true){
     if(!command.toLowerCase().startsWith(wake.toLowerCase())){
       // A mismatched wake phrase must not strand the recognizer indefinitely.
       voiceFinished=true;S.handsFree=false;stopMic();
@@ -1146,7 +1148,7 @@ function dispatchVoiceTurn(r){
   if(!command)return;
   // Noisy TV chatter can produce a valid browser transcript. Only permit the
   // turn if near-mic activity was observed. This is NOT biometric speaker ID.
-  const gated = S.st?.config?.ui?.voice?.foregroundGate !== false;
+  const gated = S.st?.config?.ui?.voice?.foregroundGate === true;
   if(gated && voiceGateReady && voiceGate &&
      (!voiceGate.lastSpeech || Date.now()-voiceGate.lastSpeech>4500)){
     S.handsFree=false;
