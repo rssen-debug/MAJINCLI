@@ -251,6 +251,19 @@ function onEvent(ev) {
           workPulse('Click sent · checking its effect');
           const bar=$('work-progress');if(bar)bar.dataset.phase='action';
         }
+      } else if(ev.tool==='browser.verify' && !ev.ok && ev.error?.code==='assertion_failed'){
+        // One small inline recovery signal. The full explanation stays in
+        // the activity log and tooltip, not an additional panel.
+        const failed=ev.error?.failures?.[0]?.name || 'assertion';
+        const labels={element_unique:'Multiple matching buttons',element_present:'Control not found',
+          element_visible:'Control hidden',element_enabled:'Control unavailable',
+          checkbox_checked:'Checkbox state unchanged',url_contains:'Navigation not confirmed',
+          title_contains:'Page title unchanged',stable_duration:'Page is still changing',
+          element_text_contains:'Expected text missing'};
+        workPulse((labels[failed]||'Result not verified')+' · checking another approach');
+        const bar=$('work-progress');
+        if(bar){bar.dataset.phase='recovery';bar.title=String(ev.error?.recoveryHint||'Checking the page again').slice(0,220);}
+        if($('work-progress-symbol'))$('work-progress-symbol').textContent='↺';
       } else if(ev.tool==='browser.verify' && ev.ok){
         workPulse('Browser result verified');
         const bar=$('work-progress');if(bar)bar.dataset.phase='verified';
