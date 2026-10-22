@@ -310,3 +310,7 @@ body[data-run-state="thinking"] #b-stop:focus-visible {
   body[data-run-state="working"] #b-stop,
   body[data-run-state="thinking"] #b-stop { transition:none; }
 }
+
+/* The simplified layout normally hides Stop: surface it only while busy. */
+body.simple[data-run-state="working"] #b-stop,
+body.simple[data-run-state="thinking"] #b-stop { display:inline-flex; align-items:center; justify-content:center; }
