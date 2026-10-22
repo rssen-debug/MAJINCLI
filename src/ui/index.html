@@ -721,9 +721,9 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 @keyframes majin-recovery-rotate{50%{transform:rotate(160deg)}100%{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recovery"] #work-progress-symbol{animation:none}}
 /* Minimal page-outline activity cue within existing composer. */
-#composer #work-progress[data-phase="outline"] .pulse{animation:majin-outline-glow 2.2s ease-in-out infinite}
+#composer #work-progress[data-phase="navigation"] .pulse{animation:majin-outline-glow 2.2s ease-in-out infinite}
 @keyframes majin-outline-glow{50%{opacity:.65;box-shadow:0 0 12px rgba(220,138,255,.25)}}
-@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="outline"] .pulse{animation:none!important}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="navigation"] .pulse{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
