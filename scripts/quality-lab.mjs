@@ -15,6 +15,8 @@ const checks=[
   {name:'Static syntax',command:['npm','run','check'],timeout:60000,kind:'automated'},
   {name:'Localization',command:['npm','run','i18n'],timeout:60000,kind:'automated'},
   {name:'Agent deterministic benchmark',command:['node','scripts/bench.mjs','--json'],timeout:180000,kind:'mock-model'},
+  {name:'100 simulated voice transcripts',command:['node','scripts/voice100.mjs'],timeout:60000,kind:'classifier-simulation'},
+  {name:'50 scripted end-to-end agent tasks',command:['node','scripts/bench.mjs','--matrix50','--json'],timeout:180000,kind:'mock-agent-50-distinct-fixtures'},
   ...(!quick?[{name:'Real Chromium UI',command:['npm','run','test:ui'],timeout:180000,kind:'headless-browser'}]:[]),
 ];
 const manuallyRequired=[
