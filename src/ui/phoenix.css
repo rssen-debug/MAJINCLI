@@ -367,3 +367,18 @@ body.simple .msg .chat-open-file:focus-visible {
 @media(prefers-reduced-motion:reduce) {
   body.simple .msg .chat-open-file { transition:none!important; }
 }
+
+/* Aurora: clearly distinguish an approval request within an otherwise quiet chat. */
+body.simple .msg .appr {
+  border:1px solid var(--warn);
+  border-radius:14px;
+  background:var(--bg2);
+  padding:14px 16px;
+}
+body.simple .msg .appr button:focus-visible {
+  outline:2px solid var(--warn);
+  outline-offset:3px;
+}
+@media(max-width:600px) {
+  body.simple .msg .appr button { min-height:44px; }
+}
