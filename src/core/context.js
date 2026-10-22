@@ -108,7 +108,10 @@ export async function compact({ cfg, messages, brief }) {
     };
   } catch (err) {
     bus.warn('context.compact.failed', { error: err.message });
-    return { messages: [...anchors, ...anchoredTail], brief, compacted: true, tokens: messagesTokens(anchors) + messagesTokens(anchoredTail) };
+    // V1: keep the existing working-memory brief if the summarizer fails.
+    const fallbackBrief = brief ? [{ role: 'system', content: `WORKING MEMORY BRIEF (from MAJIN, previous summary):\n${brief}` }] : [];
+    const fallbackMessages = [...anchors, ...fallbackBrief, ...anchoredTail];
+    return { messages: fallbackMessages, brief, compacted: true, tokens: messagesTokens(fallbackMessages) };
   }
 }
 
