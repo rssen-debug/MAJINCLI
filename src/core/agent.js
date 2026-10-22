@@ -79,7 +79,11 @@ export class Agent {
       const file = this.planPath(session);
       if (!file) return null;
       let data;
-      try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+      try {
+        const stat = fs.lstatSync(file);
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024) return null;
+        data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      } catch { return null; }
       // Reject stale/mismatched journals instead of importing another session's plan.
       if (data?.session !== session) return null;
       if (Array.isArray(data.plan) && data.plan.length) {
