@@ -299,3 +299,17 @@ body.simple .msg button:not(:disabled):hover {
 @media (prefers-reduced-motion:reduce) {
   body.simple .msg button { transition:none!important; }
 }
+
+/* Aurora: compact file previews remain easy to inspect without busy panels. */
+body.simple .chat-open-file {
+  min-height:32px;
+  padding:5px 10px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:var(--cysoft);
+  color:var(--cy);
+  font-weight:600;
+}
+body.simple .chat-open-file:hover { border-color:var(--cy);box-shadow:0 0 12px var(--cysoft); }
+body.simple .chat-open-file:focus-visible { outline:2px solid var(--cy);outline-offset:3px; }
+@media(prefers-reduced-motion:reduce) { body.simple .chat-open-file { transition:none!important; } }
