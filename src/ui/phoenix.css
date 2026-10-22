@@ -736,7 +736,7 @@ body.simple footer #composer:focus-within{border-color:#98728c;box-shadow:0 0 0 
 body.simple #composer #input{font-size:14px;min-height:40px;padding:9px 8px}
 body.simple #composer #mic{border-radius:50%;color:var(--cy);background:transparent;box-shadow:none}
 body.simple #composer #mic:hover{background:var(--cysoft)}
-body.simple #composer #send{width:38px;height:38px;min-width:38px;min-height:38px;background:#efeaee;border-radius:50%;color:#252329;box-shadow:none}
+body.simple #composer #send{width:44px;height:44px;min-width:44px;min-height:44px;background:#efeaee;border-radius:50%;color:#252329;box-shadow:none}
 body.simple #composer #send:disabled{opacity:.38}
 body.simple .crow{font-size:10px;color:var(--muted)}
 body.simple #run-state{border:0;background:transparent;box-shadow:none;padding-block:6px}
