@@ -640,7 +640,13 @@ export function safeParse(s) {
       const kv = {};
       for (const m of String(s).matchAll(/(\w+)\s*:\s*("(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?|true|false|null)/g)) {
         const v = m[2];
-        kv[m[1]] = /^".*"$/.test(v) ? JSON.parse(v) : v === 'true' ? true : v === 'false' ? false : v === 'null' ? null : Number(v);
+        // A malformed quoted escape must not crash the entire recovery path.
+        if (/^".*"$/.test(v)) {
+          try { kv[m[1]] = JSON.parse(v); }
+          catch { kv[m[1]] = v.slice(1, -1); }
+        } else {
+          kv[m[1]] = v === 'true' ? true : v === 'false' ? false : v === 'null' ? null : Number(v);
+        }
       }
       return kv;
     }
