@@ -149,7 +149,7 @@ test('failed browser verification is visible via ONE inline MAJIN status',async(
   assert.match(src,/browserRecoveryAdvice\(verdict,criteria,controls\)/);
   assert.match(src,/recovery},meta:\{assertions:verdict.assertions/);
   assert.match(app,/ev.tool==='browser.verify' && !ev.ok/);
-  assert.match(app,/bar.dataset.phase='recovery'/);
+  assert.match(app,/bar\.dataset\.phase=navigation\?'navigation':'recovery'/);
   assert.match(html,/#composer #work-progress\[data-phase="recovery"\]/);
   assert.match(html,/prefers-reduced-motion:reduce/);
 });
