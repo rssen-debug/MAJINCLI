@@ -613,3 +613,7 @@ body.simple .msg .appr { box-shadow: inset 3px 0 0 var(--warn); }
 /* Aurora: keep approval actions usable when keyboard focus moves across choices. */
 body.simple .msg .appr:focus-within { border-color:var(--warn); }
 @media (max-width:560px) { body.simple .msg .appr button { line-height:1.4; } }
+
+/* Aurora: clear active approval choice in the real chat permission card. */
+body.simple .msg .appr:focus-within { box-shadow:inset 3px 0 0 var(--warn),0 0 0 2px var(--cysoft); }
+@media(prefers-contrast:more){body.simple .msg .appr:focus-within{outline:2px solid currentColor;outline-offset:2px}}
