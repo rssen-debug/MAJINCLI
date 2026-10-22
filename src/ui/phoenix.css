@@ -627,3 +627,7 @@ body.simple .msg .appr :is(button,a):focus-visible { text-decoration:underline; 
   body.simple .msg .appr { border:2px solid CanvasText; }
   body.simple .msg .appr :is(button,a):focus-visible { outline:3px solid Highlight; }
 }
+
+/* Aurora: show a readable active target on real permission controls. */
+body.simple .msg .appr :is(button,a):focus-visible { border-radius:6px; text-decoration-thickness:2px; }
+@media (max-width:520px) { body.simple .msg .appr :is(button,a) { min-height:44px; } }
