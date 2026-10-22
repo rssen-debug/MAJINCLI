@@ -315,7 +315,12 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       }
       const expectedIdentity=JSON.stringify(identity);
       const hit = await b.eval(`(() => {
-        const el = document.querySelector(${sel});
+        // Playwright-MCP-style unique target selection: acting on the first
+        // of multiple matching buttons is unsafe, especially Submit/Buy.
+        const matches = document.querySelectorAll(${sel});
+        if (matches.length > 1) return {found:true,blocked:'ambiguous_target',
+          matchCount:matches.length,tag:'',text:'Multiple matching controls'};
+        const el = matches[0];
         if (!el) return { found: false };
         const expected = ${expectedIdentity};
         if (expected) {
