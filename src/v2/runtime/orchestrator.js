@@ -1,0 +1,128 @@
+/**
+ * V2 orchestrator (master brief sections 15-24): the single entry point that
+ * runs a natural-language objective through the whole stack — compile ->
+ * plan -> schedule -> build -> verify -> receipted completion (or honest
+ * failure) — with no layer allowed to skip the next one's evidence gate.
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import http from 'node:http';
+import { Goal, newGoalId } from './goal.js';
+import { runGraph } from './scheduler.js';
+import { verifyAcceptance } from './verify-bridge.js';
+import { compileDeterministic } from '../compiler/goal-compiler.js';
+import { plan } from '../supervisor/supervisor.js';
+
+/** deterministic deliverable templates; honest content placeholders for now */
+const TEMPLATES = [
+  {
+    match: /website|portfolio|landing|webbplats/,
+    files: {
+      'index.html': '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Portfolio</title><link rel="stylesheet" href="styles.css"></head><body><header><h1>Portfolio</h1></header><main><section id="intro">Built by MAJIN V2 orchestrator.</section></main><script src="script.js"></script></body></html>',
+      'styles.css': ':root{color-scheme:light dark}body{font-family:system-ui;margin:0}header{padding:2rem;background:#111;color:#fff}main{padding:2rem}',
+      'script.js': '// generated placeholder; interactive features arrive with the studio lane\nconsole.log("majin v2 site alive");\n',
+    },
+  },
+  { match: /research|report/, files: { 'report.md': '# Research Report\n\n## Findings\nPending the research lane.\n\n## Sources\n(to be filled during research execution)\n' } },
+  { match: /blender|scatter|3d/, files: { 'scene.py': 'import bpy\n"""MAJIN V2 scene builder placeholder; actual scene ops land with the blender lane."""\n' } },
+  { match: /application|cv|job/, files: { 'application-draft.md': '# Application Draft\n\n(Tailoring pending the research lane context.)\n' } },
+  { match: null, files: { 'PLAN.md': '# Plan\n\n## acceptance\nUnspecified objective — acceptance must be clarified in a planning pass.\n' } },
+];
+
+function templateFor(deliverable) {
+  for (const t of TEMPLATES) if (t.match && t.match.test(deliverable)) return t;
+  return TEMPLATES[TEMPLATES.length - 1];
+}
+
+/** tiny static server for http acceptance on a random local port */
+function startPreviewServer(root) {
+  return new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      try {
+        const p = path.join(root, decodeURIComponent((req.url || '/').split('?')[0]).replace(/^\//, '') || 'index.html');
+        const f = p.endsWith(path.sep) || !path.extname(p) ? path.join(p, 'index.html') : p;
+        if (!f.replace(/\\/g, '/').startsWith(root.replace(/\\/g, '/'))) { res.writeHead(403).end(); return; }
+        const buf = fs.readFileSync(f);
+        const ext = path.extname(f);
+        res.writeHead(200, { 'content-type': ext === '.css' ? 'text/css' : ext === '.js' ? 'text/javascript' : 'text/html; charset=utf-8' });
+        res.end(buf);
+      } catch { res.writeHead(404).end('not found'); }
+    });
+    server.listen(0, '127.0.0.1', () => resolve(server));
+  });
+}
+
+/**
+ * runObjective(text, {workspaceDir, events}) -> summary
+ * Retargets acceptance spec paths into the workspaceDir, and if any acceptance
+ * needs http, starts a local preview and substitutes '<port>' in its url spec.
+ */
+export async function runObjective(objectiveText, { workspaceDir, events = null, compiled = null } = {}) {
+  if (!workspaceDir) throw new Error('runObjective requires workspaceDir');
+  fs.mkdirSync(workspaceDir, { recursive: true });
+
+  const goal = new Goal({ id: newGoalId(), objective: objectiveText, events });
+  goal.transition('PLANNING', 'compiled');
+  const goalObj = compiled || compileDeterministic(objectiveText);
+  goal.acceptance.push(...goalObj.acceptance.map((a) => ({ id: a.id, description: a.description })));
+  goalObj.acceptance = goalObj.acceptance.map((a) => ({
+    ...a,
+    verify: { ...a.verify, spec: { ...a.verify.spec, path: a.verify.spec.path ? path.resolve(workspaceDir, a.verify.spec.path) : undefined } },
+  }));
+
+  let server = null;
+  const needsHttp = goalObj.acceptance.some((a) => a.verify.kind === 'http');
+  if (needsHttp) {
+    server = await startPreviewServer(workspaceDir);
+    const port = server.address().port;
+    goalObj.acceptance = goalObj.acceptance.map((a) => a.verify.kind === 'http'
+      ? { ...a, verify: { ...a.verify, spec: { ...a.verify.spec, url: a.verify.spec.url.replace('<port>', String(port)) } } }
+      : a);
+  }
+
+  const summary = { goal: null, acceptance: goalObj.acceptance.length, produced: [], verification: [] };
+  try {
+    const { graph } = plan(goalObj, { goalId: goal.id });
+    goal.transition('READY', 'plan compiled'); goal.transition('RUNNING', 'execution');
+
+    const deliverableFiles = new Map();
+    const verdict = await runGraph({
+      goal, graph,
+      execute: async (task) => {
+        if (task.action === 'plan') return { result: 'success', evidence: { strategy: 'template', risk: goalObj.risk } };
+        if (task.action.startsWith('build_')) {
+          const deliverable = task.action.replace(/^build_\d*:/, '').replace(/^build_/, '');
+          const t = templateFor(deliverable);
+          const written = deliverableFiles.get(task.id) || [];
+          for (const [rel, content] of Object.entries(t.files)) {
+            fs.writeFileSync(path.join(workspaceDir, rel), content);
+            written.push(rel);
+            summary.produced.push(rel);
+          }
+          deliverableFiles.set(task.id, written);
+          return { result: 'success', target: written.join(',') };
+        }
+        if (task.action.startsWith('verify_')) {
+          const accId = task.action.replace(/^verify_/, '').replace(/^verify:/, '');
+          const acc = goalObj.acceptance.find((a) => a.id === accId) || goalObj.acceptance[0];
+          const v = await verifyAcceptance(goal, { acceptanceId: acc.id, kind: acc.verify.kind, spec: acc.verify.spec, taskId: task.id });
+          summary.verification.push({ acceptance: acc.id, verified: v.verified });
+          return v.verified ? { result: 'success' } : { result: 'failure', error: { cls: 'VERIFICATION_FAILURE', message: JSON.stringify(v.error || {}) } };
+        }
+        return { result: 'failure', error: { cls: 'UNKNOWN', message: `unroutable task action: ${task.action}` } };
+      },
+    });
+
+    if (verdict.summary.failed > 0) {
+      goal.transition('FAILED', `verification failed for ${verdict.summary.failed} task(s)`);
+      summary.goal = { state: goal.state, uncovered: goal.acceptance.map((a) => a.id) };
+      return summary;
+    }
+    goal.transition('VERIFYING', 'graph done');
+    goal.complete();
+    summary.goal = { state: goal.state, receipts: goal.receipts.length, verifiedReceipts: goal.receipts.filter((r) => r.verified).length };
+    return summary;
+  } finally {
+    if (server) await new Promise((res) => server.close(res));
+  }
+}
