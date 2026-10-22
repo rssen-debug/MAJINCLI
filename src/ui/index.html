@@ -449,6 +449,24 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verified"]::after,#composer #work-progress[data-phase="stalled"] .pulse{animation:none!important}}
 @keyframes majin-trace-sweep{from{transform:translateX(-100%)}to{transform:translateX(295%)}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress::after{animation:none!important;width:100%;opacity:.3}}
+/* Single-surface evidence ember: pink arrow = action sent, green tick = proven.
+   Avoid additional cards or panels in the chat viewport. */
+#composer #work-progress[data-phase="action"] .pulse{
+  width:16px;height:16px;display:grid;place-items:center;flex-shrink:0;
+  background:rgba(242,114,205,.11);border:1px solid rgba(242,114,205,.46);
+  box-shadow:0 0 13px rgba(242,114,205,.19);animation:none;
+}
+#composer #work-progress[data-phase="action"] .pulse::before{
+  content:"↗";font:700 12px/1 system-ui;color:#f8a0dc;
+}
+#composer #work-progress[data-phase="action"] #work-progress-label{color:#e6badb}
+#composer #work-progress[data-phase="action"]::after{
+  background:linear-gradient(90deg,transparent,#f29bdd,transparent);
+  opacity:.56;animation-duration:2.2s
+}
+@media(prefers-reduced-motion:reduce){
+  #composer #work-progress[data-phase="action"]::after{animation:none!important}
+}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
