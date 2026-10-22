@@ -12,6 +12,7 @@ import { bus } from '../log.js';
 import { openFor, closeFor, isOpen, journal } from '../browser.js';
 import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, diffGroundSnapshot, findGroundedControls, VERSION as GROUND_V } from '../browser-ground.js';
 import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
+import { OUTLINE_JS, formatPageOutline } from '../browser-outline.js';
 import { compactBrowserText } from '../browser-compact.js';
 import { SEMANTIC_SNAPSHOT_JS, formatSemanticSnapshot } from '../browser-semantic.js';
 import { VERIFY_JS, verificationCriteria, verifyObserved, browserRecoveryAdvice } from '../browser-evidence.js';
@@ -696,9 +697,9 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     group: 'web',
     risk: 'read',
     desc: 'W6 Set-of-Marks grounding: number every interactive element on the open page, draw the matching pink marks on screen, and return the references so browser.click({ref:"eN"}) hits deterministically instead of guessing. Refs are of-the-moment evidence; a re-rendered DOM makes them stale (browser.click then says ref_stale honestly).',
-    params: { refresh: 'string: "true" = re-walk the DOM now and replace the cached refs (optional, default: false)', query: 'string optional search for a specific control by name, role, or label; returns only matches to reduce model tokens', delta: 'string optional true: first snapshot is full, subsequent snapshots show only changes or unchanged; false is default' },
+    params: { refresh: 'string: "true" = re-walk the DOM now and replace the cached refs (optional, default: false)', query: 'string optional search for a specific control by name, role, or label; returns only matches to reduce model tokens', delta: 'string optional true: first snapshot is full, subsequent snapshots show only changes or unchanged; false is default', outline: 'string optional true: include compact accessible page landmarks and headings (read-only, no form values)' },
     examples: ['browser.elements({})', 'browser.elements({query:"submit button"})'],
-    async run({ refresh, query = '', delta = 'false' }, ctx) {
+    async run({ refresh, query = '', delta = 'false', outline = 'false' }, ctx) {
       const session = ctx.session || 'default';
       journal.guard(session, 'browser.elements');
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
@@ -721,8 +722,11 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         : snap?.mode==='delta'
           ? `Page controls updated: ${snap.changes.length} changed, ${snap.removed.length} removed. Removed references: ${snap.removed.join(', ')||'none'}. Current controls below:\n${baseText}`
           : baseText;
+      const pageOutline = String(outline)==='true'
+        ? await b.eval(OUTLINE_JS).then(formatPageOutline).catch(()=>'Page outline unavailable')
+        : '';
       return {
-        ok: true,result,
+        ok: true,result: pageOutline ? result+'\n\n'+pageOutline : result,
         meta: {version:GROUND_V,count:payload.count,matched:matches?.length??null,
           url:payload.url,title:payload.title,deltaMode:snap?.mode??'off',
           changed:snap?.changes?.length??null,removed:snap?.removed?.length??null},

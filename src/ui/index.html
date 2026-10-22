@@ -619,6 +619,20 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 }
 @keyframes majin-action-trace{from{transform:translateX(-40%);opacity:.2}to{transform:translateX(255%);opacity:.9}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="action"]::before{animation:none;opacity:.3}}
+
+/* One quiet, moving trace UNDER the existing inline task status.
+   No extra UI card or verbose activity text. */
+#composer #work-progress[data-phase="active"]::after,
+#composer #work-progress[data-phase="verify"]::after{
+  content:"";position:absolute;pointer-events:none;left:0;bottom:0;height:1px;width:35%;
+  background:linear-gradient(90deg,transparent,rgba(242,137,223,.85),transparent);
+  animation:majin-trace 2.6s ease-in-out infinite;
+}
+#composer #work-progress[data-phase="verify"]::after{
+  background:linear-gradient(90deg,transparent,rgba(195,155,255,.95),transparent);
+}
+@keyframes majin-trace{from{transform:translateX(-115%);opacity:.2}50%{opacity:1}to{transform:translateX(300%);opacity:.2}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress::after{animation:none;display:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
