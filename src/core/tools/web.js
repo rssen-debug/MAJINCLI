@@ -289,6 +289,8 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     params: {
       selector: 'string: CSS selector of the thing to click (optional — or give ref)',
       ref: 'string: numbered element reference from browser.elements, e.g. "e3" (optional — or give selector)',
+      role: 'string optional: button|link|checkbox|textbox, must also supply accessibleName',
+      accessibleName: 'string optional: exact accessible label to select uniquely with role',
       expectSelector: 'string optional: unique selector that must be visible after the click',
       expectText: 'string optional: text that must appear inside expectSelector',
       expectUrl: 'string optional: URL fragment that must be present after the click',
@@ -296,10 +298,16 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       verifyWaitMs: 'string optional 0–4000: maximum time for post-click verification (default 2500)',
     },
     examples: ['browser.click({selector:"button[type=submit]",expectSelector:"#success",expectText:"Saved"})', 'browser.click({ref:"e3",expectUrl:"/dashboard"})'],
-    async run({ selector, ref, expectSelector, expectText, expectUrl, expectChecked, verifyWaitMs }, ctx) {
+    async run({ selector, ref, role, accessibleName, expectSelector, expectText, expectUrl, expectChecked, verifyWaitMs }, ctx) {
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
-      if (!selector && !ref) return { ok: false, error: { code: 'bad_input', message: 'give selector or ref (from browser.elements)' } };
+      const semantic=Boolean(role || accessibleName);
+      if(semantic && (selector || ref || !['button','link','checkbox','textbox'].includes(String(role||'')) ||
+         !String(accessibleName||'').trim() || String(accessibleName).length>140)){
+        return {ok:false,error:{code:'bad_input',message:'Use role+accessibleName together, uniquely, without selector/ref'}};
+      }
+      if(!selector && !ref && !semantic) return {ok:false,error:{code:'bad_input',message:'Provide selector, live ref, or role+accessibleName'}};
+
       const requiresVerification=Boolean(expectSelector || expectText || expectUrl || expectChecked != null);
       const expected=requiresVerification?verificationCriteria({
         selector:expectSelector,text:expectText,url:expectUrl,checked:expectChecked
@@ -307,7 +315,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       if(requiresVerification && !expected.ok) return {
         ok:false,error:{code:'bad_expectation',message:expected.reason}
       };
-      journal.guard(session, `browser.click:${selector || ref}`);
+      journal.guard(session, `browser.click:${selector || ref || role+":"+accessibleName}`);
       const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
       let sel, identity = null;
       if (ref) {
@@ -320,13 +328,27 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           name: String(cached.name||''), text: String(cached.text||'').slice(0,70) };
         sel = JSON.stringify(`[data-majin-ref=${JSON.stringify(String(ref))}]`);
       } else {
-        sel = JSON.stringify(String(selector));
+        sel = JSON.stringify(String(selector || ''));
       }
+      const semanticTarget=JSON.stringify(semantic ? {role:String(role),name:String(accessibleName).trim()} : null);
       const expectedIdentity=JSON.stringify(identity);
       const hit = await b.eval(`(() => {
         // Playwright-MCP-style unique target selection: acting on the first
         // of multiple matching buttons is unsafe, especially Submit/Buy.
-        const matches = document.querySelectorAll(${sel});
+        const semantic=${semanticTarget};
+        let matches;
+        if(semantic){
+          const selectors={button:'button,[role="button"],input[type="button"],input[type="submit"]',
+            link:'a[href],[role="link"]',checkbox:'input[type="checkbox"],[role="checkbox"]',
+            textbox:'input:not([type="hidden"]):not([type="password"]),textarea,[role="textbox"]'};
+          matches=[...document.querySelectorAll(selectors[semantic.role])].filter(el=>{
+            const box=el.getBoundingClientRect(),sty=getComputedStyle(el);
+            if(!box.width||!box.height||sty.display==='none'||sty.visibility==='hidden'||el.closest('[aria-hidden="true"],[inert]'))return false;
+            const label=el.getAttribute('aria-label')||el.labels?.[0]?.textContent||el.getAttribute('title')||
+              (['INPUT','TEXTAREA'].includes(el.tagName)?el.getAttribute('placeholder'):el.innerText)||'';
+            return String(label).replace(/\\s+/g,' ').trim().toLocaleLowerCase()===semantic.name.toLocaleLowerCase();
+          });
+        }else matches=document.querySelectorAll(${sel});
         if (matches.length > 1) return {found:true,blocked:'ambiguous_target',
           matchCount:matches.length,tag:'',text:'Multiple matching controls'};
         const el = matches[0];
@@ -396,7 +418,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           summary:'click blocked: '+hit.blocked};
       }
       if (!hit.found) {
-        const code = ref ? 'ref_stale' : 'no_such_element';
+        const code = ref ? 'ref_stale' : semantic ? 'semantic_target_missing' : 'no_such_element';
         // Small free LLMs tend to retry guessed selectors such as
         // #apply-button despite a real button named #submit on the page.
         // Include CURRENT DOM-derived selectors in the failed action itself.
