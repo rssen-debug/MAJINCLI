@@ -206,3 +206,13 @@ test('visual result verification feedback stays within existing composer',()=>{
  assert.match(html,/majin-proof-breathe/);
  assert.match(html,/prefers-reduced-motion:reduce/);
 });
+
+test('exact navigation path disallows control characters',()=>{
+ for(const path of ['/dashboard\nnext','/dashboard\tother','/dashboard\rnext']) assert.equal(verificationCriteria({urlPath:path}).ok,false);
+ assert.equal(verificationCriteria({urlPath:'/dashboard'}).ok,true);
+});
+test('navigation verification stays visible without motion dependency',()=>{
+ const html=fs.readFileSync('src/ui/index.html','utf8');
+ assert.match(html,/majin-path-proof/);
+ assert.match(html,/prefers-reduced-motion:reduce/);
+});
