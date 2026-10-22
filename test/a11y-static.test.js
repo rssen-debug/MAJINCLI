@@ -98,3 +98,10 @@ test('interaction honesty: no fake timers simulating progress in studio/app', ()
   }
   assert.ok(studio.includes("No simulated agents, progress, file trees or inference calls"), 'studio honesty header');
 });
+
+test('send/stop focus is visible for keyboard and forced-colors users', () => {
+  assert.match(css, /#send:focus-visible\s*\{[^}]*outline:3px solid var\(--cy\)/);
+  assert.match(css, /#send\.busy:focus-visible\s*\{[^}]*outline-color:var\(--warn/);
+  assert.match(css, /@media\s*\(forced-colors:\s*active\)\s*\{\s*#send:focus-visible\s*\{[^}]*Highlight/);
+  assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+});
