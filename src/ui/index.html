@@ -709,6 +709,10 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 }
 @keyframes majin-verify-sweep{from{background-position:110% 0}to{background-position:-110% 0}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verify"]::before{animation:none}}
+/* A quiet compact-reading signal inside the existing composer. */
+#composer #work-progress[data-phase="compact"] .pulse{animation:majin-compact-breathe 1.9s ease-in-out infinite;box-shadow:0 0 9px rgba(197,135,255,.35)}
+@keyframes majin-compact-breathe{50%{opacity:.55;transform:scale(.84)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="compact"] .pulse{animation:none!important;transform:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
