@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { VERIFY_JS, verificationCriteria, verifyObserved } from '../src/core/browser-evidence.js';
+import { VERIFY_JS, verificationCriteria, verifyObserved, browserRecoveryAdvice } from '../src/core/browser-evidence.js';
 
 test('verify browser evidence requires a concrete observable expectation',()=>{
   assert.equal(verificationCriteria({}).ok,false);
@@ -121,4 +121,35 @@ test('MAJIN distinguishes a browser click from a verified outcome in UI',async()
   assert.match(app,/bar\.dataset\.phase='verified'/);
   assert.match(app,/bar\.dataset\.phase='action'/);
   assert.match(html,/#composer #work-progress\[data-phase="action"\]/);
+});
+
+test('failed verification chooses a bounded grounded recovery rather than replaying a click',()=>{
+  const c=verificationCriteria({selector:'#submit'});
+  const verdict={ok:false,failures:[{name:'element_unique',expected:true,actual:false}]};
+  const plan=browserRecoveryAdvice(verdict,c,[
+    {selector:'#save',label:'Save',type:'button'},
+    {selector:'#pass',label:'password',type:'password'},
+  ]);
+  assert.equal(plan.action,'narrow_selector');
+  assert.equal(plan.candidates.length,2);
+  assert.ok(!JSON.stringify(plan).includes('input.value'));
+});
+test('verification failures choose distinct recovery strategies',()=>{
+  const c=verificationCriteria({url:'/finished'});
+  assert.equal(browserRecoveryAdvice({ok:false,failures:[{name:'url_contains'}]},c).action,'inspect_navigation');
+  assert.equal(browserRecoveryAdvice({ok:false,failures:[{name:'stable_duration'}]},c).action,'wait_or_inspect');
+  assert.equal(browserRecoveryAdvice({ok:false,failures:[{name:'element_enabled'}]},c).action,'resolve_prerequisites');
+  assert.equal(browserRecoveryAdvice({ok:true},c).action,'none');
+});
+test('failed browser verification is visible via ONE inline MAJIN status',async()=>{
+  const fs=await import('node:fs');
+  const src=fs.readFileSync('src/core/tools/web.js','utf8');
+  const app=fs.readFileSync('src/ui/app.js','utf8');
+  const html=fs.readFileSync('src/ui/index.html','utf8');
+  assert.match(src,/browserRecoveryAdvice\(verdict,criteria,controls\)/);
+  assert.match(src,/recovery},meta:\{assertions:verdict.assertions/);
+  assert.match(app,/ev.tool==='browser.verify' && !ev.ok/);
+  assert.match(app,/bar.dataset.phase='recovery'/);
+  assert.match(html,/#composer #work-progress\[data-phase="recovery"\]/);
+  assert.match(html,/prefers-reduced-motion:reduce/);
 });
