@@ -15,3 +15,13 @@ test('preview refuses duplicate or invalid step identifiers',()=>{
  assert.deepEqual(recoveryPreview({state:{steps:[{...base,id:'same'},{...base,id:'same'}]}}),{ready:false,reason:'invalid-or-duplicate-step-id',steps:[]});
  assert.equal(recoveryPreview({state:{steps:[{...base,id:'../bad'}]}}).ready,false);
 });
+
+test('recovery preview summarizes decisions without invoking actions',()=>{
+ const result=recoveryPreview({state:{steps:[
+  {id:'read_1',status:'pending',risk:'read'},
+  {id:'write_1',status:'pending',risk:'write'},
+  {id:'unknown_1',status:'running',risk:'external'}
+ ]}});
+ assert.equal(result.ready,true);
+ assert.deepEqual(result.counts,{resume:1,skip:0,inspect:1,approval:1});
+});
