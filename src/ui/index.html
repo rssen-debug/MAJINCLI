@@ -659,6 +659,13 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="stagnation"] .pulse{background:#f4bb7b;box-shadow:0 0 9px rgba(239,179,91,.35);animation:none}
 #composer #work-progress[data-phase="stagnation"] #work-progress-symbol{color:#ffcd92;filter:drop-shadow(0 0 3px rgba(255,173,94,.35))}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] *{animation:none!important}}
+/* V1 micro-polish: the same chat composer, more legible typing and focus.
+   No new panel; respects keyboard navigation and reduced-motion. */
+#composer:focus-within{border-color:rgba(247,120,209,.58)!important;box-shadow:0 0 0 1px rgba(244,123,212,.12),0 0 23px rgba(223,72,180,.12)!important;transition:border-color .24s ease,box-shadow .24s ease}
+#composer #input{direction:ltr;text-align:left;caret-color:#ff91d2;letter-spacing:.005em}
+#composer .composer-talk:focus-visible,#composer #send:focus-visible{outline:2px solid #f3a0e1;outline-offset:3px}
+#composer .composer-talk[aria-pressed="true"]{box-shadow:inset 0 0 0 1px rgba(253,157,226,.38),0 0 18px rgba(238,91,213,.21)}
+@media(prefers-reduced-motion:reduce){#composer:focus-within{transition:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
