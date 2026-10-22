@@ -468,3 +468,12 @@ body.simple .msg .appr button:disabled {
  }
 }
 body.simple .msg .appr button:focus-visible { outline-offset:4px; }
+
+/* Aurora: approval actions are comfortable on touch and keyboard. */
+@media (pointer:coarse) {
+  body.simple .msg .appr button { min-width:44px; min-height:44px; }
+}
+body.simple .msg .appr button:focus-visible {
+  outline:2px solid var(--warn);
+  outline-offset:4px;
+}
