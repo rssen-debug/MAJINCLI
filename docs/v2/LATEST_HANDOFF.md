@@ -1,6 +1,6 @@
 # MAJIN V2 — LATEST HANDOFF (owner-facing, 2026-10-21)
 
-V2 HEAD (v2/main): 2cc6777f (opencode provider profiles: V1 live-proven session-header + model list reused, env-only key, PROFILE_KEY_MISSING refusal pre-network) ← 180553df (studio consent UI) ← 66e0ea2d (operator writes) ← 126a2b4b (studio scaffold)
+V2 HEAD (v2/main): 2c9007e7 (audit anchors: Ed25519 signed checkpoints, full-rewrite detection, verifier needs only pubkey; Rekor deferred owner-gated) ← 2cc6777f (opencode profiles) ← 180553df (studio consent UI) ← 66e0ea2d (operator writes)
 
 COMPLETED (this working day, verified):
 - v2/main created from V1 tip 282a8ff; V1 untouched (policy: only v2/* branches carry V2 code)
