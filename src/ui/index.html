@@ -633,6 +633,21 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 }
 @keyframes majin-trace{from{transform:translateX(-115%);opacity:.2}50%{opacity:1}to{transform:translateX(300%);opacity:.2}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress::after{animation:none;display:none}}
+/* Recovery micro-indicator: one animated ember inside the existing chat row.
+   No modal, extra card or false success state. */
+#composer #work-progress[data-phase="diagnose"] .pulse{
+  background:rgba(245,168,221,.17);border:1px solid rgba(245,168,221,.65);
+  width:15px;height:15px;box-shadow:0 0 14px rgba(238,97,193,.25);
+  animation:majin-diagnose-breathe 1.8s ease-in-out infinite;
+}
+#composer #work-progress[data-phase="diagnose"] #work-progress-symbol{
+  display:inline-block;color:#efa3d9;animation:majin-diagnose-turn 1.3s linear infinite;
+}
+#composer #work-progress[data-phase="diagnose"] #work-progress-label{color:#e7c6e0}
+#composer #work-progress[data-phase="diagnose"]::after{background:linear-gradient(90deg,transparent,#ec88d7,transparent)}
+@keyframes majin-diagnose-breathe{50%{transform:scale(.7);opacity:.55}}
+@keyframes majin-diagnose-turn{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="diagnose"] .pulse,#composer #work-progress[data-phase="diagnose"] #work-progress-symbol{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
