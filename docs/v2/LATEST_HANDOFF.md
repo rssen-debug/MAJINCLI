@@ -34,3 +34,5 @@ NEXT (roadmap order):
 1. Hardware lane vs 2.0.0-alpha on the owner PC via majin-remote-command (PHASE 4 prep, gauntlet as scenario base)
 2. Context engine + memory store (PHASE 7) with JSON-first persistence, sqlite decision at alpha packaging
 3. Voice pipeline scaffolding check (PHASE 6); promptfoo candidate for model benchmarking milestone
+
+(Noterat 2026-10-22 — levande registry: opencode-go-gateway listar 36 modeller; statiska profiler ligger efter: +29 till (bl.a. glm-5.3, kimi-k3, qwen3.8-max, deepseek-v4-pro) −1 bort (longcat-2.5-preview-free). Avsiktligt INTE tyst uppdaterat — drift är dokumenterad, inte dold.)

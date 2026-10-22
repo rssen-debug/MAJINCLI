@@ -7,7 +7,8 @@
   majin-v2 --audit-anchor <dir> [--anchor-tsa <rfc3161-url>]
   majin-v2 --audit-verify <dir> --with-anchor --with-tsr [--tsa-ca cafile.pem --tsa-untrusted tsa.crt]
   majin-v2 --audit-export <dir> --out <bundleDir>
-  majin-v2 --bundle-verify <bundleDir> [--tsa-ca cafile.pem --tsa-untrusted tsa.crt] [--runner-url http://host:port] [--doctor-whisper-bin <path>] [--port N] | --telemetry-report [dir] [--days N]
+  majin-v2 --bundle-verify <bundleDir> [--tsa-ca cafile.pem --tsa-untrusted tsa.crt]
+  majin-v2 --models-refresh [--profile opencode-go] / --models [--runner-url http://host:port] [--doctor-whisper-bin <path>] [--port N] | --telemetry-report [dir] [--days N]
  *
  * Exit 0 only when the objective COMPLETED with verified evidence (or the
  * subsidiary command succeeded). Failed goals exit 1. Argparse: node:util
@@ -35,7 +36,8 @@ const USAGE = `MAJIN V2
   majin-v2 --audit-anchor <dir> [--anchor-tsa <rfc3161-url>]
   majin-v2 --audit-verify <dir> --with-anchor --with-tsr [--tsa-ca cafile.pem --tsa-untrusted tsa.crt]
   majin-v2 --audit-export <dir> --out <bundleDir>
-  majin-v2 --bundle-verify <bundleDir> [--tsa-ca cafile.pem --tsa-untrusted tsa.crt] [--runner-url http://host:port] [--doctor-whisper-bin <path>] [--port N]
+  majin-v2 --bundle-verify <bundleDir> [--tsa-ca cafile.pem --tsa-untrusted tsa.crt]
+  majin-v2 --models-refresh [--profile opencode-go] / --models [--runner-url http://host:port] [--doctor-whisper-bin <path>] [--port N]
   majin-v2 --telemetry-report [dir] [--days N]
   majin-v2 --audit-verify <dir> [--with-anchor]
   majin-v2 --audit-keygen <dir>
@@ -95,6 +97,8 @@ try {
     'voice-tts': { type: 'string' },
     'voice-stt-command': { type: 'string' },
     'bundle-dir': { type: 'string' },
+    'models-refresh': { type: 'boolean' },
+    models: { type: 'boolean' },
     port: { type: 'string' },
     host: { type: 'string' },
     'audit-dir': { type: 'string' },
@@ -112,7 +116,7 @@ try {
 }
 
 async function main() {
-  if (values.help || (!values.doctor && !values.gauntlet && !values['telemetry-report'] && values['audit-verify'] === undefined && values['audit-keygen'] === undefined && values['audit-anchor'] === undefined && values['audit-export'] === undefined && values['bundle-verify'] === undefined && !values.studio && positionals.length === 0)) {
+  if (values.help || (!values.doctor && !values.gauntlet && !values['telemetry-report'] && values['audit-verify'] === undefined && values['audit-keygen'] === undefined && values['audit-anchor'] === undefined && values['audit-export'] === undefined && values['bundle-verify'] === undefined && !values['models-refresh'] && !values.models && !values.studio && positionals.length === 0)) {
     process.stdout.write(USAGE);
     process.exit(positionals.length || values.help ? 0 : 2);
   }
@@ -180,6 +184,43 @@ async function main() {
       console.log(`TSR ${tv.cls}${tv.genTime ? ` TIME="${tv.genTime}"` : ''}${tv.detail ? ` (${tv.detail})` : ''}`);
       if (!tv.ok) process.exit(1); // MISMATCH / UNPARSEABLE / TRUST_FAILED
     }
+    process.exit(0);
+  }
+
+  if (values['models-refresh']) {
+    const { refreshRegistry } = await import('../src/v2/model/registry-refresh.js');
+    const { PROVIDER_PROFILES } = await import('../src/v2/model/profiles.js');
+    const profile = PROVIDER_PROFILES[values.profile || 'opencode-go'];
+    if (!profile) { console.error(`majin-v2: unknown profile ${values.profile}`); process.exit(2); }
+    const key = process.env[profile.keyEnv] || '';
+    const cache = path.resolve(values['telemetry-dir'] || 'v2-telemetry', 'model-registry.json');
+    try {
+      const r = await refreshRegistry(cache, { profile, key });
+      console.log(`MODELS refreshed count=${r.count} ${r.drift.added.length}added:${r.drift.added.join(',') || '-'} ${r.drift.removed.length}removed:${r.drift.removed.join(',') || '-'} → ${cache}`);
+      process.exit(0);
+    } catch (err) {
+      console.error(`MODELS refresh failed REASON=${err.cls || 'FAILED'} (${err.message})`);
+      process.exit(1);
+    }
+  }
+
+  if (values.models) {
+    const { readRegistry } = await import('../src/v2/model/registry-refresh.js');
+    const { PROVIDER_PROFILES } = await import('../src/v2/model/profiles.js');
+    const profile = PROVIDER_PROFILES[values.profile || 'opencode-go'] || null;
+    const cache = path.resolve(values['telemetry-dir'] || 'v2-telemetry', 'model-registry.json');
+    const r = readRegistry(cache, { profile });
+    if (r.state === 'CACHE_EMPTY' || r.state === 'CACHE_INVALID') {
+      console.log(`MODELS ${r.state} (${r.detail})`);
+      process.exit(0);
+    }
+    const hours = r.ageMs == null ? '?' : (r.ageMs / 3600000).toFixed(1);
+    console.log(`MODELS ${r.state} count=${r.count} age=${hours}h key=sha256:${r.keyFingerprint}… hash=${String(r.contentHash).slice(0, 12)}…`);
+    if (r.drift && (r.drift.added.length || r.drift.removed.length)) {
+      console.log(`  drift vs static profile: +[${r.drift.added.join(', ')}] -[${r.drift.removed.join(', ')}]`);
+    }
+    for (const m of r.models) console.log(`  - ${m}`);
+    if (r.state === 'STALE') console.log('  (STALE = honest age flag, not failure — refresh before trusting)');
     process.exit(0);
   }
 
