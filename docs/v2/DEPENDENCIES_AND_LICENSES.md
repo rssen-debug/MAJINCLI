@@ -29,7 +29,10 @@ Repo philosophy measured: ONE runtime dep today (chokidar). Every new dep must e
 | Objective-level agent GAUNTLET metrics | **reuse of existing v2-gauntlet engine** + objective trials over runObjective | n/a | Survey 2026-10-22: tau-bench-style benchmarks, Harness-Bench, Langfuse/OpenJudge evaluators, Pawinski agent-eval-harness all revolve around live-LLM fixtures/judges -> wrong shape for the revenue-deterministic, receipted, offline CI lane. Decision: extend our own engine (engine already proven). +0 deps |
 | LLM provider abstraction (V2 model runtime) | **thin zero-dep OpenAI-compatible adapter over fetch** | n/a | Evaluated 2026-10-22: @node-llm/core (MIT, 540+ models, production-oriented; BUT ~39 stars / 0 dependents / 44 releases in <1yr = high churn, fails the stability bar), @mariozechner/pi-ai (solid but not broader than our need), llm-ports (young). Decision: thin adapter around the de-facto-compatible /chat/completions surface, zod-gated outputs, all failures mapped to kernel classes. Defer re-eval when node-llm matures. +0 deps |
 | Telemetry/ledger for goals+calls (122-124) | **hand-rolled minimal local JSONL shards + aggregation** | n/a | Evaluated 2026-10-22: OpenTelemetry SDK (correct canonical answer for production infra; too heavy for v2-alpha sandbox, DEFER to Studio/GUI lane), pi-telemetry family (pi-specific, tiny audience). Chosen pattern mirrors the proven local-JSONL shapes: per-day shards, privacy-by-construction field allowlist, locale-independent percentile aggregation. +0 deps |
-\ n## Policy from here
+\ n
+| Multi-provider routing/fallback (59-61) | **V2 ProviderChain hand-rolled** (priority order, per-provider circuit breaker, retry-safe classes only, telemetry) | n/a | Evaluated 2026-10-22: LiteLLM (canonical answer but python gateway service), llm-fallback-router/llm-fallback-gateway/modelchain/prio-llm-router (all young 2026 packages; fit is wrong against the receipts discipline). Defer re-eval on stabilization. +0 deps |
+
+## Policy from here
 
 - Pin every adopted dep in package-lock.json (CI npm ci enforces). One dep reviewed at a time.
 - Licence sheet regenerated at V2-alpha packaging against the real lockfile.
