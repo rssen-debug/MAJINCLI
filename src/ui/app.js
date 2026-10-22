@@ -41,7 +41,8 @@ function md(t) {
   let s = String(t == null ? '' : t);
   const blocks = [];
   s = s.replace(/```(\w*)\n?([\s\S]*?)```/g, (_m, _lang, code) => {
-    const isMindmap = String(_lang).toLowerCase() === 'mindmap' && window.MAJIN_MINDMAP;\n    blocks.push(isMindmap ? window.MAJIN_MINDMAP.render(code) : '<pre>' + esc(String(code).replace(/\n$/, '')) + '</pre>');
+    const isMindmap = String(_lang).toLowerCase() === 'mindmap' && window.MAJIN_MINDMAP;
+    blocks.push(isMindmap ? window.MAJIN_MINDMAP.render(code) : '<pre>' + esc(String(code).replace(/\n$/, '')) + '</pre>');
     return '\u0000' + (blocks.length - 1) + '\u0000';
   });
   s = esc(s);
