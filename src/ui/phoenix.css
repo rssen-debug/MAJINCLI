@@ -687,3 +687,11 @@ body.simple footer #composer:focus-within {
   box-shadow:0 0 0 3px var(--cysoft),0 12px 35px rgba(0,0,0,.13);
 }
 @media (prefers-contrast:more) { body.simple footer #composer { border-width:2px; } }
+
+/* V1 round 12: keep advanced English narration in expert mode while
+   using the existing Voice button as the clear, visual voice affordance. */
+body.simple header #b-narrator { display:none; }
+body.simple header #b-voice.on {
+  border-color:var(--cy);
+  box-shadow:0 0 0 2px var(--cysoft),0 0 15px var(--cysoft);
+}
