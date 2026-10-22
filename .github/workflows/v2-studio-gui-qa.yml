@@ -40,7 +40,6 @@ jobs:
         with:
           node-version: '20'
       - name: Install pinned dependencies (manifest ≡ journal)
-        shell: powershell
         run: |
           $t=[Diagnostics.Stopwatch]::StartNew()
           npm ci --no-audit --no-fund
@@ -50,7 +49,6 @@ jobs:
       # channel 'msedge' (harness falls back to chromium honestly if Edge is absent).
       # No 120MB browser download in this lane, by design.
       - name: Run the GUI-QA evidence harness against a real Studio instance
-        shell: powershell
         env:
           GUI_HEADLESS: ${{ github.event_name == 'push' && '1' || (inputs.headless == 'true' && '1' || '0') }}
           GUI_QA_OUT: gui-qa-out
