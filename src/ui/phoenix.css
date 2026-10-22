@@ -687,3 +687,8 @@ body.simple footer #composer:focus-within {
   box-shadow:0 0 0 3px var(--cysoft),0 12px 35px rgba(0,0,0,.13);
 }
 @media (prefers-contrast:more) { body.simple footer #composer { border-width:2px; } }
+
+/* Voice micro-interaction: one unobtrusive active ring during live listening. */
+body.simple[data-voice-mode="listening"] #composer .composer-talk{outline:2px solid var(--cy);outline-offset:2px;box-shadow:0 0 0 7px var(--cysoft),0 0 22px var(--cysoft)}
+body.simple[data-voice-mode="thinking"] #composer .composer-talk{color:var(--cy);opacity:.76}
+@media(prefers-reduced-motion:reduce){body.simple[data-voice-mode="listening"] #composer .composer-talk{transition:none}}
