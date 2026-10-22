@@ -1,6 +1,6 @@
 # MAJIN V2 — LATEST HANDOFF (owner-facing, 2026-10-21)
 
-V2 HEAD (v2/main): doctor merged (--doctor honest preflight, real probes only, key as fingerprint) ← 91be19d = RELEASE v2.0.0-godmode ← f380c399 (runbook) ← b11c6134 (JCS)
+V2 HEAD (v2/main): anchors-tsr merged (RFC 3161 trusted timestamps, openssl-adapter, LIVE round-trip bevisad) ← 0b363bb8 (doctor) ← 91be19d = RELEASE v2.0.0-godmode
 
 COMPLETED (this working day, verified):
 - v2/main created from V1 tip 282a8ff; V1 untouched (policy: only v2/* branches carry V2 code)
