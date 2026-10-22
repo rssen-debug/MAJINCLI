@@ -724,6 +724,10 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 #composer #work-progress[data-phase="compact"] .pulse{animation:majin-compact-evidence-glow 2.1s ease-in-out infinite;box-shadow:0 0 9px rgba(223,148,248,.23)}
 @keyframes majin-compact-evidence-glow{50%{opacity:.62;transform:scale(.85)}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="compact"] .pulse{animation:none!important;transform:none!important}}
+/* Calm contextual recovery cue; no extra panels. */
+#composer #work-progress[data-phase="recover"] #work-progress-symbol{animation:majin-recovery-spark 2.8s ease-in-out infinite}
+@keyframes majin-recovery-spark{50%{opacity:.7;filter:drop-shadow(0 0 6px rgba(208,128,246,.32))}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recover"] #work-progress-symbol{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
