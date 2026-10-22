@@ -27,3 +27,12 @@ test('app supports listening while busy and awaits confirmed cancellation',()=>{
  assert.match(app,/await send\(intent\.text,\{voiceTurn:true\}\)/);
  assert.ok(html.indexOf('/voice-intent.js')<html.indexOf('/app.js'));
 });
+
+test('natural pauses and punctuation preserve replacement intent',()=>{
+ for(const utterance of ['nej, vänta, sök något annat','nej vänta sök något annat','vänta, öppna de fyra jobben','nej, gör en hemsida istället','wait, open four jobs']){
+  assert.equal(classify(utterance,true).kind,'replace',utterance);
+ }
+ assert.equal(classify('nej, vänta, sök något annat',true).text,'sök något annat');
+ assert.equal(classify('nej, vänta, sök något annat',false).kind,'send');
+ assert.equal(classify('nej jag har en fråga',true).kind,'send');
+});
