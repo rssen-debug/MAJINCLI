@@ -206,3 +206,16 @@ test('visual result verification feedback stays within existing composer',()=>{
  assert.match(html,/majin-proof-breathe/);
  assert.match(html,/prefers-reduced-motion:reduce/);
 });
+
+test('verification boolean expectations reject object coercion and accept actual booleans',()=>{
+ const x=verificationCriteria({selector:'#done',present:{toString:()=> 'false'}});
+ assert.equal(x.present,null);
+ assert.equal(verificationCriteria({selector:'#done',present:false}).present,false);
+ assert.equal(verificationCriteria({selector:'#done',checked:true}).checked,true);
+ assert.equal(verificationCriteria({selector:'#done',enabled:'false'}).enabled,false);
+});
+test('verification feedback is restrained inside the composer',()=>{
+ const html=fs.readFileSync('src/ui/index.html','utf8');
+ assert.match(html,/majin-verify-soft-proof/);
+ assert.match(html,/prefers-reduced-motion:reduce/);
+});
