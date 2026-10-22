@@ -12,6 +12,7 @@ import { bus } from '../log.js';
 import { openFor, closeFor, isOpen, journal } from '../browser.js';
 import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, diffGroundSnapshot, findGroundedControls, VERSION as GROUND_V } from '../browser-ground.js';
 import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
+import { noteBrowserAction, observeBrowserPage, clearBrowserStagnation } from '../browser-stagnation.js';
 import { OUTLINE_JS, formatPageOutline } from '../browser-outline.js';
 import { compactBrowserText } from '../browser-compact.js';
 import { SEMANTIC_SNAPSHOT_JS, formatSemanticSnapshot } from '../browser-semantic.js';
@@ -283,11 +284,12 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       if (!r.ok && selector) return { ok: false, error: { code: 'no_such_element', message: `no element matches ${selector}` } };
       const controls = selector ? [] : await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
       const sourceText=r.text || '(page is empty)';
+      const progress=observeBrowserPage(session,{url:r.url,title:r.title,text:sourceText,controls});
       const compressed=String(mode).toLowerCase()==='compact' ? compactBrowserText(sourceText) : null;
       const visibleText=compressed?.text || sourceText;
-      return { ok: true, result: visibleText + formatControlHints(controls),
+      return { ok: true, result: visibleText + formatControlHints(controls) + (progress.stagnant?'\n\nMAJIN browser observation: page unchanged after '+progress.unchangedActions+' actions. Inspect current controls and change strategy rather than replaying the same click.':''),
         meta: { url: r.url, title: r.title, chars: sourceText.length,
-          groundedControls: Array.isArray(controls) ? controls.length : 0,
+          groundedControls: Array.isArray(controls) ? controls.length : 0, stagnation:progress,
           ...(compressed ? { mode:'compact', visibleChars:compressed.outputChars,
             sourceChars:compressed.originalChars, truncated:compressed.truncated } : {}) },
         summary: compressed ? `compact page read ${compressed.outputChars}/${sourceText.length} chars from ${r.title||r.url}`
@@ -458,6 +460,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           hint: 'Use an EXACT selector from the visible controls below (or browser.elements for live numbered refs). Avoid browser.open again unless navigation is required.' + candidates,
         } };
       }
+      noteBrowserAction(session);
       /* a click may spawn a NEW tab (target=_blank, window.open): follow it
          so the agent lands where the page actually went */
       const fol = await (b.followNewTarget ? b.followNewTarget({ windowMs: 1500 }) : { followed: false });
@@ -762,6 +765,7 @@ def({
     async run(_, ctx) {
       recentShot.delete(ctx.session || 'default');
       const closed = await closeFor(ctx.session || 'default', { wait: true });
+      clearBrowserStagnation(ctx.session || 'default');
       return { ok: true, result: closed ? 'browser closed, slot released' : 'no browser was open for this task', meta: { closed }, summary: closed ? 'closed' : 'nothing open' };
     },
   }),
