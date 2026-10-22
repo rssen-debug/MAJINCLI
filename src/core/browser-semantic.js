@@ -5,7 +5,7 @@
  * consuming huge model context or installing another browser daemon.
  */
 export const SEMANTIC_SNAPSHOT_JS = String.raw`(() => {
-  const safe = (s) => String(s || '').replace(/\\s+/g, ' ').trim().slice(0, 88);
+  const safe = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 88);
   const visible = (el) => {
     if (!el || el.closest('[inert],[aria-hidden="true"]')) return false;
     const r = el.getBoundingClientRect();
@@ -42,8 +42,8 @@ export function formatSemanticSnapshot(payload,{cap=55}={}){
   const max=Math.max(1,Math.min(65,Math.floor(Number(cap)||55)));
   const lines=[`Page: ${String(payload.title||'Untitled').slice(0,88)}`,`URL: ${String(payload.url||'').slice(0,240)}`];
   for(const item of payload.elements.slice(0,max)){
-    const role=String(item.role||'item').replace(/[\\r\\n]/g,' ').slice(0,24);
-    const label=String(item.label||'').replace(/[\\r\\n]/g,' ').slice(0,88);
+    const role=String(item.role||'item').replace(/[\r\n]/g,' ').slice(0,24);
+    const label=String(item.label||'').replace(/[\r\n]/g,' ').slice(0,88);
     const level=Number.isInteger(item.level)&&item.level>0?' level='+item.level:'';
     lines.push('- '+role+level+(label?' "'+label+'"':'')+(item.disabled?' (disabled)':''));
   }
