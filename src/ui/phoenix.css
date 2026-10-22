@@ -354,3 +354,16 @@ body.light.simple .msg .chat-open-file {
 @media (hover:none) {
   body.simple .chat-open-file:hover { box-shadow:none; }
 }
+
+/* Aurora: unobtrusive tactile clarity for preview actions, no extra panels. */
+body.simple .msg .chat-open-file {
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+  letter-spacing:.01em;
+}
+body.simple .msg .chat-open-file:focus-visible {
+  outline:2px solid var(--cy);
+  outline-offset:4px;
+}
+@media(prefers-reduced-motion:reduce) {
+  body.simple .msg .chat-open-file { transition:none!important; }
+}
