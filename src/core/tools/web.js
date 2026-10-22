@@ -12,6 +12,7 @@ import { bus } from '../log.js';
 import { openFor, closeFor, isOpen, journal } from '../browser.js';
 import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, diffGroundSnapshot, findGroundedControls, VERSION as GROUND_V } from '../browser-ground.js';
 import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
+import { compactBrowserText } from '../browser-compact.js';
 import { SEMANTIC_SNAPSHOT_JS, formatSemanticSnapshot } from '../browser-semantic.js';
 import { VERIFY_JS, verificationCriteria, verifyObserved, browserRecoveryAdvice } from '../browser-evidence.js';
 import { browserActionReceipt } from '../browser-action-receipt.js';
@@ -257,7 +258,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     group: 'web',
     risk: 'read',
     desc: 'Read visible text from the page (or one selector) — the actual words on the page, capped.',
-    params: { selector: 'string: optional CSS selector — whole page when omitted', mode: 'string optional "structure" for compact accessibility outline without form values' },
+    params: { selector: 'string: optional CSS selector — whole page when omitted', mode: 'string optional "structure" for compact accessibility outline without form values; "compact" for condensed full-page text' },
     async run({ selector = '', mode = '' }, ctx) {
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
@@ -280,9 +281,16 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       journal.guard(session, `browser.read:${selector}`);
       if (!r.ok && selector) return { ok: false, error: { code: 'no_such_element', message: `no element matches ${selector}` } };
       const controls = selector ? [] : await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
-      return { ok: true, result: (r.text || '(page is empty)') + formatControlHints(controls),
-        meta: { url: r.url, title: r.title, chars: (r.text || '').length, groundedControls: Array.isArray(controls) ? controls.length : 0 },
-        summary: `${(r.text || '').length} chars from ${r.title || r.url}` };
+      const sourceText=r.text || '(page is empty)';
+      const compressed=String(mode).toLowerCase()==='compact' ? compactBrowserText(sourceText) : null;
+      const visibleText=compressed?.text || sourceText;
+      return { ok: true, result: visibleText + formatControlHints(controls),
+        meta: { url: r.url, title: r.title, chars: sourceText.length,
+          groundedControls: Array.isArray(controls) ? controls.length : 0,
+          ...(compressed ? { mode:'compact', visibleChars:compressed.outputChars,
+            sourceChars:compressed.originalChars, truncated:compressed.truncated } : {}) },
+        summary: compressed ? `compact page read ${compressed.outputChars}/${sourceText.length} chars from ${r.title||r.url}`
+          : `${sourceText.length} chars from ${r.title || r.url}` };
     },
   }),
 
