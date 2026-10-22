@@ -13,6 +13,7 @@ import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElements
 import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
 import { SEMANTIC_SNAPSHOT_JS, formatSemanticSnapshot } from '../browser-semantic.js';
 import { VERIFY_JS, verificationCriteria, verifyObserved } from '../browser-evidence.js';
+import { explainVerifyFailure } from '../browser-recovery.js';
 import { browserActionReceipt } from '../browser-action-receipt.js';
 
 const followedSafe = (fol) => (fol && fol.followed === true ? true : false);
@@ -615,7 +616,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       }
       if(!verdict.ok){
         return {ok:false,error:{code:'assertion_failed',
-          message:'Browser outcome NOT verified. Re-observe with browser.elements/read and choose a different recovery step; do not repeat an identical action.',
+          message:'Browser outcome NOT verified. '+explainVerifyFailure(criteria,verdict.failures),
           failures:verdict.failures},meta:{assertions:verdict.assertions,observed:verdict.observed},
           summary:'verification FAILED'};
       }
