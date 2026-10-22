@@ -519,6 +519,12 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="stalled"] #work-progress-symbol,
 #composer #work-progress[data-phase="problem"] #work-progress-symbol{color:#ffabb4}
 @media(prefers-reduced-motion:reduce){#composer #work-progress-symbol{transition:none}}
+/* Quiet recovery signal: the orb and text remain in the same chat surface. */
+#composer #work-progress[data-phase="recovery-match"]{border-top-color:rgba(204,140,250,.19)}
+#composer #work-progress[data-phase="recovery-match"] #work-progress-symbol{color:#dba5ff;animation:majin-quiet-search 1.35s ease-in-out infinite}
+#composer #work-progress[data-phase="recovery-match"] .pulse{background:#dba5ff;box-shadow:0 0 9px rgba(214,139,255,.26)}
+@keyframes majin-quiet-search{50%{opacity:.42;transform:rotate(-20deg) scale(.83)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recovery-match"] #work-progress-symbol{animation:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>

@@ -276,6 +276,13 @@ function onEvent(ev) {
           count+' interactive controls found');
         const bar=$('work-progress');if(bar)bar.dataset.phase='grounded';
         }
+      } else if(ev.tool==='browser.click' && !ev.ok &&
+        ['no_such_element','semantic_target_missing','ref_stale'].includes(ev.error?.code)) {
+        // A single clear, low-noise status in the composer, not a new panel.
+        workPulse('Finding the right control on this page');
+        const bar=$('work-progress');
+        if(bar){bar.dataset.phase='recovery-match';bar.title='The old selector did not match. MAJIN is using observed labels and element references to recover.';}
+        if($('work-progress-symbol'))$('work-progress-symbol').textContent='⌕';
       } else if(ev.tool==='browser.click' && !ev.ok && ev.error?.code==='click_blocked') {
         const reason=String(ev.error?.reason||'').slice(0,50);
         const phrases={occluded:'Another element covers the button · checking the page',

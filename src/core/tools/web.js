@@ -11,6 +11,7 @@ import { bus } from '../log.js';
 import { openFor, closeFor, isOpen, journal } from '../browser.js';
 import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, diffGroundSnapshot, findGroundedControls, VERSION as GROUND_V } from '../browser-ground.js';
 import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
+import { formatRecoverySuggestions } from '../browser-recovery-rank.js';
 import { SEMANTIC_SNAPSHOT_JS, formatSemanticSnapshot } from '../browser-semantic.js';
 import { VERIFY_JS, verificationCriteria, verifyObserved } from '../browser-evidence.js';
 import { browserActionReceipt } from '../browser-action-receipt.js';
@@ -424,9 +425,10 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         // Include CURRENT DOM-derived selectors in the failed action itself.
         const controls = await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
         const candidates = formatControlHints(controls);
+        const ranked = formatRecoverySuggestions(selector || accessibleName || ref, controls);
         return { ok: false, error: { code,
           message: ref ? `element ${ref} vanished from the DOM (page re-rendered?) — do not guess a replacement` : `no clickable element matches ${selector}`,
-          hint: 'Use an EXACT selector from the visible controls below (or browser.elements for live numbered refs). Avoid browser.open again unless navigation is required.' + candidates,
+          hint: 'Use an EXACT observed selector or browser.elements; avoid reopening the browser unless navigation is needed.' + ranked + candidates,
         } };
       }
       /* a click may spawn a NEW tab (target=_blank, window.open): follow it
