@@ -24,6 +24,7 @@ const USAGE = `MAJIN V2
   majin-v2 --gauntlet
   majin-v2 --telemetry-report [dir] [--days N]
   majin-v2 --audit-verify <dir>
+  majin-v2 --studio [--port N] [--host H] [--telemetry-dir D] [--audit-dir D]
 
 Options:
   --workspace <dir>       where the objective may write (required for objectives)
@@ -51,6 +52,10 @@ try {
     gauntlet: { type: 'boolean' },
     'telemetry-report': { type: 'string' },
     'audit-verify': { type: 'string' },
+    studio: { type: 'boolean' },
+    port: { type: 'string' },
+    host: { type: 'string' },
+    'audit-dir': { type: 'string' },
     days: { type: 'string' },
     json: { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
@@ -65,7 +70,7 @@ try {
 }
 
 async function main() {
-  if (values.help || (!values.gauntlet && !values['telemetry-report'] && values['audit-verify'] === undefined && positionals.length === 0)) {
+  if (values.help || (!values.gauntlet && !values['telemetry-report'] && values['audit-verify'] === undefined && !values.studio && positionals.length === 0)) {
     process.stdout.write(USAGE);
     process.exit(positionals.length || values.help ? 0 : 2);
   }
@@ -110,6 +115,21 @@ async function main() {
     }
     console.error(`AUDIT broken LINE=${verdict.brokenAt} REASON=${verdict.reason} (${verdict.detail})`);
     process.exit(1);
+  }
+
+    if (values.studio) {
+    const { createStudioServer } = await import('../src/v2/studio/server.js');
+    const { EventBus } = await import('../src/v2/runtime/events.js');
+    const bus = new EventBus();
+    const telemetryDir = path.resolve(values['telemetry-dir'] || 'telemetry');
+    const auditDir = path.resolve(values['audit-dir'] || 'audit');
+    const studio = createStudioServer({ bus, telemetryDir, auditDir });
+    const bound = await studio.listen({ port: Number(values.port) || 0, host: values.host || '127.0.0.1' });
+    console.log(`MAJIN V2 Studio (read-only scaffold) at ${bound.url}`);
+    console.log(`observing: telemetry=${telemetryDir} audit=${auditDir}`);
+    process.on('SIGINT', async () => { await studio.close(); process.exit(0); });
+    process.on('SIGTERM', async () => { await studio.close(); process.exit(0); });
+    return; // server keeps the loop alive — no exit call
   }
 
   const objective = positionals.join(' ').trim();
