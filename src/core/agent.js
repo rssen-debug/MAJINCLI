@@ -91,7 +91,7 @@ export class Agent {
       } catch { return null; }
       // Reject stale/mismatched journals instead of importing another session's plan.
       if (data?.session !== session) return null;
-      if (Array.isArray(data.plan) && data.plan.length && data.plan.length <= 1000 && data.plan.every(step => step && typeof step === 'object' && !Array.isArray(step) && Object.keys(step).length <= 100)) {
+      if (Array.isArray(data.plan) && data.plan.length && data.plan.length <= 1000 && data.plan.every(step => step && typeof step === 'object' && !Array.isArray(step) && Object.keys(step).length <= 100 && !Object.hasOwn(step, '__proto__'))) {
         this.plans.set(session, data.plan);
         return data.plan;
       }
