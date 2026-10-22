@@ -10,7 +10,7 @@
 
 export const STUDIO_REVISION = 'studio-scaffold.r1'; // not product semver — the single VERSION literal rule lives in src/core/version.js
 
-export function renderStudioPage({ title = 'MAJIN V2 Studio', enableWrites = false } = {}) {
+export function renderStudioPage({ title = 'MAJIN V2 Studio', enableWrites = false, enableGoals = false } = {}) {
   return `<!doctype html>
 <html lang="sv">
 <head>
@@ -54,6 +54,10 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
 #c-result,#c-status-out{font-size:12px;margin-top:6px;white-space:pre-wrap;word-break:break-all}
 #c-result.err{color:var(--bad)} #c-result.ok2{color:var(--ok)}
 #receipts{grid-column:1/-1;max-height:32vh;overflow:auto}
+#goals{grid-column:1/-1}
+#goals input{background:var(--bg);border:1px solid var(--line);border-radius:4px;color:var(--fg);padding:4px 6px;font:inherit;font-size:12px}
+#goals button{background:var(--accent);border:0;border-radius:4px;color:#0b0e12;padding:5px 10px;font:inherit;font-size:12px;cursor:pointer;font-weight:600}
+#g-out.err{color:var(--bad)} #g-out.ok2{color:var(--ok)}
 #receipts input{background:var(--bg);border:1px solid var(--line);border-radius:4px;color:var(--fg);padding:4px 6px;font:inherit;font-size:12px}
 #receipts button{background:var(--accent);border:0;border-radius:4px;color:#0b0e12;padding:5px 10px;font:inherit;font-size:12px;cursor:pointer;font-weight:600}
 .rcpt{display:flex;gap:8px;font-size:12px;border-bottom:1px solid var(--line);padding:3px 0;align-items:baseline}
@@ -97,6 +101,15 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
       <button id="c-revoke" type="button" class="danger">Revoke</button>
     </div>
     <div id="c-status-out"></div>
+  </section>
+  <section id="goals">
+    <h2>Goal runs</h2>
+    <div class="mode ${enableGoals ? 'on">goal runs ENABLED — every run consumes one studio:run-goals consent grant' : 'off">goal runs disabled (start with --enable-goals to unlock; disabled means NO runs)'}</div>
+    <div class="rowform" ${enableGoals ? '' : 'hidden'}>
+      <input id="g-objective" placeholder="objective (runs in the operator-fixed workspace only)" maxlength="2000" style="flex:1;min-width:220px">
+      <button id="g-run" type="button">Run objective</button>
+    </div>
+    <div id="g-out" style="font-size:12px;margin-top:6px;white-space:pre-wrap"></div>
   </section>
   <section id="receipts">
     <h2>Receipts (from the tamper-evident chain)</h2>
@@ -238,6 +251,32 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
   }
   document.getElementById('r-refresh').addEventListener('click',loadReceipts);
   loadReceipts();
+
+  var GOALS=${enableGoals ? 'true' : 'false'};
+  if(GOALS){
+    var gOut=document.getElementById('g-out');
+    document.getElementById('g-run').addEventListener('click',function(){
+      var objective=document.getElementById('g-objective').value.trim();
+      if(!objective){gOut.className='err';gOut.textContent='objective is required';return}
+      gOut.className='';gOut.textContent='running… (telemetry + audit chain record everything)';
+      fetch('/api/goals',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({objective:objective})})
+        .then(function(r){return r.json().then(function(b){return{code:r.status,body:b}})})
+        .then(function(x){
+          var b=x.body;
+          if(x.code===200){
+            gOut.className=(b.state==='COMPLETED'||b.state==='DONE'||b.state===0)?'ok2':'';
+            gOut.textContent='state: '+b.state+(b.produced&&b.produced.length?'\nproduced: '+b.produced.join(', '):'')+(b.error?'\nerror: '+b.error:'')+'\nworkspace: '+b.workspaceFixed+(b.workspaceOverrideIgnored?' (body workspace ignored by construction)':'');
+          } else if(x.code===403&&b.requiredScope){
+            gOut.className='err';
+            gOut.textContent='consent required: grant scope "'+b.requiredScope+'" in the Consent panel above (named human, mode "once" = approve this one run). Note: '+esc(b.note||'');
+          } else if(x.code===409){
+            gOut.className='err';gOut.textContent='busy: '+(b.current?b.current.objective:'another run')+' — one operator-run at a time';
+          } else {
+            gOut.className='err';gOut.textContent='rejected '+x.code+': '+esc(b.error||b.detail||'unknown');
+          }
+        }).catch(function(e){gOut.className='err';gOut.textContent='network error: '+e.message});
+    });
+  }
 
   var es=new EventSource('/api/events');
   es.addEventListener('message',function(m){

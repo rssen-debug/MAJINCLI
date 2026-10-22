@@ -66,14 +66,22 @@ export function createStudioServer({
   telemetryDir,
   auditDir,
   page = null, // default built AFTER enableWrites is known — the UI never lies about the gate
-  approvals = null,      // Approvals instance — required when enableWrites
+  approvals = null,      // Approvals instance — required when enableWrites/enableGoals
   enableWrites = false,  // consent write surface; OFF unless explicitly enabled
+  enableGoals = null,    // { workspaceDir, provider? } — objective runs; OFF unless explicitly enabled
 } = {}) {
   if (!bus) throw new Error('studio requires an EventBus');
   if (!telemetryDir) throw new Error('studio requires telemetryDir');
   if (!auditDir) throw new Error('studio requires auditDir');
   if (enableWrites && !approvals) throw new Error('enableWrites requires an Approvals instance');
-  if (page == null) page = renderStudioPage({ enableWrites });
+  if (enableGoals) {
+    if (!approvals) throw new Error('enableGoals requires an Approvals instance — runs pay consent like every other held op');
+    if (!enableGoals.workspaceDir) throw new Error('enableGoals requires a FIXED workspaceDir (client-supplied paths are never honoured)');
+  }
+  const goals = enableGoals
+    ? { workspaceDir: enableGoals.workspaceDir, provider: enableGoals.provider || null, busy: false, current: null }
+    : null;
+  if (page == null) page = renderStudioPage({ enableWrites, enableGoals: !!enableGoals });
 
   const clients = new Set();
   const unsubs = STUDIO_EVENT_NAMES.map((name) =>
@@ -165,6 +173,64 @@ export function createStudioServer({
       const existed = approvals.status(scope).granted;
       approvals.revoke(scope);
       json(res, 200, { revoked: scope, existed });
+      return;
+    }
+
+    if (url.pathname === '/api/goals' && req.method === 'POST') {
+      if (!goals) {
+        json(res, 403, { error: 'goals surface disabled', detail: 'start studio with enableGoals — disabled means NO runs, never a silent maybe' });
+        return;
+      }
+      // busy precedes the gate: a refused-overlap request must NOT burn a
+      // consent use the operator paid for (found by test — one 409 consumed a grant)
+      if (goals.busy) {
+        json(res, 409, { error: 'a goal is already running', current: goals.current, note: 'concurrency is refused honestly, one operator-run at a time (no consent consumed)' });
+        return;
+      }
+      // consent gate — dogfooding: a studio run pays exactly like any held op;
+      // one grant = one run (mode 'once' is the natural approval)
+      const gate = approvals.check('studio:run-goals', { preflightReason: 'operator UI objective run' });
+      if (gate.decision !== 'allow') {
+        json(res, 403, { decision: gate.decision, note: gate.note, requiredScope: 'studio:run-goals', hint: 'grant via the Consent panel (POST /api/consent) — exactly that scope, nothing wider' });
+        return;
+      }
+      let body;
+      try {
+        const raw = await readBody(req);
+        body = raw ? JSON.parse(raw) : {};
+      } catch (err) {
+        json(res, err.code === 413 ? 413 : 400, { error: err.code === 413 ? 'body too large' : 'invalid JSON body' });
+        return;
+      }
+      const objective = typeof body.objective === 'string' ? body.objective.trim() : '';
+      if (!objective || objective.length > 2000) {
+        json(res, 400, { error: 'objective must be a non-empty string (max 2000 chars)' });
+        return;
+      }
+      // workspace is FIXED at server start — any path in the body is ignored by
+      // construction and told so, never silently honoured (injection surface)
+      const workspaceFixed = goals.workspaceDir;
+      goals.busy = true;
+      goals.current = { objective: objective.slice(0, 120), startedAt: new Date().toISOString() };
+      bus.emit('goal.created', { goalId: 'studio:' + Date.now().toString(36), source: 'studio', objectiveLen: objective.length });
+      try {
+        const { runObjective } = await import('../runtime/orchestrator.js');
+        const { TelemetryLedger } = await import('../telemetry/ledger.js');
+        const telemetry = new TelemetryLedger(telemetryDir);
+        const summary = await runObjective(objective, { workspaceDir: workspaceFixed, events: bus, provider: goals.provider, telemetry });
+        // final state is DATA — a FAILED goal is a 200 with the truth, not a hidden 500
+        json(res, 200, { state: summary.goal?.state || summary.finalState || 'UNKNOWN', produced: summary.produced || [], compiler: summary.compiler?.source || null, workspaceFixed, workspaceOverrideIgnored: 'workspace' in body });
+      } catch (err) {
+        json(res, 200, { state: 'ERROR', error: String(err.message || err).slice(0, 300), workspaceFixed });
+      } finally {
+        goals.busy = false;
+        goals.current = null;
+      }
+      return;
+    }
+
+    if (url.pathname === '/api/goals/active' && req.method === 'GET') {
+      json(res, 200, goals ? { enabled: true, busy: goals.busy, current: goals.current } : { enabled: false, busy: false, current: null });
       return;
     }
 
