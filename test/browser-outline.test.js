@@ -30,3 +30,16 @@ test('outline is opt-in on existing browser.elements tool, with no new permissio
   assert.match(html,/@keyframes majin-trace/);
   assert.match(html,/prefers-reduced-motion:reduce/);
 });
+
+test('invalid outline limits never leak an unbounded page structure',()=>{
+ const entries=Array.from({length:70},(_,i)=>({role:'heading',name:'Heading '+i}));
+ assert.doesNotMatch(formatPageOutline({entries},{cap:-20}),/Heading 0/);
+ const out=formatPageOutline({entries},{cap:99999});
+ assert.match(out,/Heading 54/);
+ assert.doesNotMatch(out,/Heading 55/);
+});
+test('navigation visual glow remains in composer and respects reduced motion',()=>{
+ const html=fs.readFileSync('src/ui/index.html','utf8');
+ assert.match(html,/majin-outline-quiet-glow/);
+ assert.match(html,/prefers-reduced-motion:reduce/);
+});
