@@ -29,6 +29,7 @@ const USAGE = `MAJIN V2
   majin-v2 --audit-keygen <dir>
   majin-v2 --audit-anchor <dir>
   majin-v2 --studio [--port N] [--host H] [--telemetry-dir D] [--audit-dir D] [--enable-writes]
+           [--enable-goals --goal-workspace <dir> --profile opencode-go]
 
 Options:
   --workspace <dir>       where the objective may write (required for objectives)
@@ -64,6 +65,8 @@ try {
     'audit-anchor': { type: 'string' },
     studio: { type: 'boolean' },
     'enable-writes': { type: 'boolean' },
+    'enable-goals': { type: 'boolean' },
+    'goal-workspace': { type: 'string' },
     port: { type: 'string' },
     host: { type: 'string' },
     'audit-dir': { type: 'string' },
@@ -164,7 +167,21 @@ async function main() {
     const auditDir = path.resolve(values['audit-dir'] || 'audit');
     let approvals = null;
     let auditBind = null;
-    if (values['enable-writes']) {
+    let goalOpts = null;
+    if (values['enable-goals']) {
+      if (!values['goal-workspace']) { console.error('majin-v2: --enable-goals requires --goal-workspace <dir> (runs may only write to an operator-fixed workspace)'); process.exit(2); }
+      const { resolveProfile } = await import('../src/v2/model/profiles.js');
+      const { OpenAICompatibleProvider } = await import('../src/v2/model/provider.js');
+      let provider = null;
+      if (values.profile) {
+        try {
+          const r = resolveProfile(values.profile, { baseUrl: values['provider-url'] || null, model: values.model || null });
+          provider = new OpenAICompatibleProvider({ name: r.name, baseUrl: r.baseUrl, apiKey: r.apiKey, model: r.model, extraHeaders: r.extraHeaders });
+        } catch (err) { console.error(`majin-v2: ${err.message}`); process.exit(2); }
+      }
+      goalOpts = { workspaceDir: path.resolve(values['goal-workspace']), provider };
+    }
+    if (values['enable-writes'] || values['enable-goals']) {
       // consent write surface: real Approvals as the only authority, every
       // decision mirrored into the tamper-evident chain via the real bus
       const { Approvals } = await import('../src/v2/safety/approvals.js');
@@ -174,9 +191,9 @@ async function main() {
       auditBind = new AuditBind(new AuditChain(auditDir));
       auditBind.attach(bus);
     }
-    const studio = createStudioServer({ bus, telemetryDir, auditDir, approvals, enableWrites: values['enable-writes'] });
+    const studio = createStudioServer({ bus, telemetryDir, auditDir, approvals, enableWrites: !!values['enable-writes'], enableGoals: goalOpts });
     const bound = await studio.listen({ port: Number(values.port) || 0, host: values.host || '127.0.0.1' });
-    console.log(`MAJIN V2 Studio ${values['enable-writes'] ? '(consent writes ENABLED — every grant/revoke audit-chained)' : '(read-only scaffold)'} at ${bound.url}`);
+    console.log(`MAJIN V2 Studio ${goalOpts ? '(goal runs ENABLED — every run consumes a studio:run-goals grant; workspace ' + goalOpts.workspaceDir + (goalOpts.provider ? ', provider ' + goalOpts.provider.name : '' ) + ')' : values['enable-writes'] ? '(consent writes ENABLED — every grant/revoke audit-chained)' : '(read-only scaffold)'} at ${bound.url}`);
     console.log(`observing: telemetry=${telemetryDir} audit=${auditDir}`);
     const shutdown = async () => { auditBind?.detach(); await studio.close(); process.exit(0); };
     process.on('SIGINT', shutdown);
