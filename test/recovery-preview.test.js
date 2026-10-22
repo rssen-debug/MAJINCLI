@@ -9,3 +9,9 @@ test('preview rejects oversized or missing step collections',()=>{
  assert.equal(recoveryPreview({}).ready,false);
  assert.equal(recoveryPreview({state:{steps:Array.from({length:1001},()=>({}))}}).ready,false);
 });
+
+test('preview refuses duplicate or invalid step identifiers',()=>{
+ const base={status:'pending',risk:'read'};
+ assert.deepEqual(recoveryPreview({state:{steps:[{...base,id:'same'},{...base,id:'same'}]}}),{ready:false,reason:'invalid-or-duplicate-step-id',steps:[]});
+ assert.equal(recoveryPreview({state:{steps:[{...base,id:'../bad'}]}}).ready,false);
+});
