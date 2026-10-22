@@ -8,10 +8,24 @@ export const VERIFY_JS = String.raw`((args) => {
   let el = null, count = 0;
   try {
     if (selector) {
-      const matches = document.querySelectorAll(selector);
-      count = matches.length;
-      // A non-unique selector cannot prove which element the agent observed.
-      if (count === 1) el = matches[0];
+      // Same bounded open-shadow-root traversal as MAJIN's click path.
+      // A verifier must be able to observe the control the agent just clicked.
+      // Closed shadow roots remain inaccessible and are never assumed to pass.
+      const roots=[document],matches=[];
+      let scanned=0;
+      for(let i=0;i<roots.length && i<16 && scanned<350;i++){
+        const root=roots[i];
+        matches.push(...root.querySelectorAll(selector));
+        const candidates=root.querySelectorAll('*');
+        for(const node of Array.from(candidates).slice(0,350-scanned)){
+          scanned++;
+          if(node.shadowRoot && roots.length<16 && !roots.includes(node.shadowRoot))
+            roots.push(node.shadowRoot);
+        }
+      }
+      count=matches.length;
+      // Never silently validate the first of multiple matching controls.
+      if(count===1)el=matches[0];
     }
   } catch { return { valid: false, reason: 'invalid_selector' }; }
   const visible = (node) => {
@@ -25,7 +39,7 @@ export const VERIFY_JS = String.raw`((args) => {
   const text = el ? String(el.innerText || el.textContent || '') : '';
   const state = { valid: true, url: location.href, title: document.title,
     exists: selector ? count > 0 : null, unique: selector ? count === 1 : null,
-    matchCount: selector ? Math.min(count, 1000) : null, visible: selector ? visible(el) : null,
+    matchCount: selector ? Math.min(count, 1000) : null, fromShadowRoot: Boolean(el?.getRootNode?.()?.host), visible: selector ? visible(el) : null,
     checked: el?.matches?.('input[type="checkbox"],input[type="radio"]') ? !!el.checked : null,
     enabled: el ? !el.matches(':disabled,[aria-disabled="true"],[inert]') && !el.closest('[inert]') : null,
     textMatch: args.text ? text.toLowerCase().includes(args.text.toLowerCase()) : null,
@@ -87,7 +101,7 @@ export function verifyObserved(criteria, observed) {
   const failures = assertions.filter(x=>x.expected!==x.actual);
   return {ok:failures.length===0,assertions,failures,
     observed:{url:String(observed.url||'').slice(0,500),title:String(observed.title||'').slice(0,200),
-      matchCount:Number.isInteger(observed.matchCount) ? observed.matchCount : null}};
+      matchCount:Number.isInteger(observed.matchCount) ? observed.matchCount : null, fromShadowRoot:observed.fromShadowRoot===true}};
 }
 
 /**
