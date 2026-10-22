@@ -5,7 +5,9 @@
  *   majin-v2 --gauntlet
   majin-v2 --doctor
   majin-v2 --audit-anchor <dir> [--anchor-tsa <rfc3161-url>]
-  majin-v2 --audit-verify <dir> --with-anchor --with-tsr [--tsa-ca cafile.pem --tsa-untrusted tsa.crt] [--runner-url http://host:port] [--doctor-whisper-bin <path>] [--port N] | --telemetry-report [dir] [--days N]
+  majin-v2 --audit-verify <dir> --with-anchor --with-tsr [--tsa-ca cafile.pem --tsa-untrusted tsa.crt]
+  majin-v2 --audit-export <dir> --out <bundleDir>
+  majin-v2 --bundle-verify <bundleDir> [--tsa-ca cafile.pem --tsa-untrusted tsa.crt] [--runner-url http://host:port] [--doctor-whisper-bin <path>] [--port N] | --telemetry-report [dir] [--days N]
  *
  * Exit 0 only when the objective COMPLETED with verified evidence (or the
  * subsidiary command succeeded). Failed goals exit 1. Argparse: node:util
@@ -24,13 +26,16 @@ import { aggregate, renderReport } from '../src/v2/telemetry/aggregate.js';
 import { AuditChain } from '../src/v2/audit/chain.js';
 import { keygen as auditKeygen, anchor as auditAnchor, verifyAnchor } from '../src/v2/audit/anchor.js';
 import { requestTimestamp, verifyTimestamp } from '../src/v2/audit/timestamp.js';
+import { exportBundle, verifyBundle } from '../src/v2/audit/export.js';
 
 const USAGE = `MAJIN V2
   majin-v2 "<objective>" --workspace <dir> [options]
   majin-v2 --gauntlet
   majin-v2 --doctor
   majin-v2 --audit-anchor <dir> [--anchor-tsa <rfc3161-url>]
-  majin-v2 --audit-verify <dir> --with-anchor --with-tsr [--tsa-ca cafile.pem --tsa-untrusted tsa.crt] [--runner-url http://host:port] [--doctor-whisper-bin <path>] [--port N]
+  majin-v2 --audit-verify <dir> --with-anchor --with-tsr [--tsa-ca cafile.pem --tsa-untrusted tsa.crt]
+  majin-v2 --audit-export <dir> --out <bundleDir>
+  majin-v2 --bundle-verify <bundleDir> [--tsa-ca cafile.pem --tsa-untrusted tsa.crt] [--runner-url http://host:port] [--doctor-whisper-bin <path>] [--port N]
   majin-v2 --telemetry-report [dir] [--days N]
   majin-v2 --audit-verify <dir> [--with-anchor]
   majin-v2 --audit-keygen <dir>
@@ -74,6 +79,9 @@ try {
     'with-anchor': { type: 'boolean' },
     'with-tsr': { type: 'boolean' },
     'anchor-tsa': { type: 'string' },
+    'audit-export': { type: 'string' },
+    out: { type: 'string' },
+    'bundle-verify': { type: 'string' },
     'tsa-ca': { type: 'string' },
     'tsa-untrusted': { type: 'string' },
     'audit-keygen': { type: 'string' },
@@ -103,7 +111,7 @@ try {
 }
 
 async function main() {
-  if (values.help || (!values.doctor && !values.gauntlet && !values['telemetry-report'] && values['audit-verify'] === undefined && values['audit-keygen'] === undefined && values['audit-anchor'] === undefined && !values.studio && positionals.length === 0)) {
+  if (values.help || (!values.doctor && !values.gauntlet && !values['telemetry-report'] && values['audit-verify'] === undefined && values['audit-keygen'] === undefined && values['audit-anchor'] === undefined && values['audit-export'] === undefined && values['bundle-verify'] === undefined && !values.studio && positionals.length === 0)) {
     process.stdout.write(USAGE);
     process.exit(positionals.length || values.help ? 0 : 2);
   }
@@ -172,6 +180,28 @@ async function main() {
       if (!tv.ok) process.exit(1); // MISMATCH / UNPARSEABLE / TRUST_FAILED
     }
     process.exit(0);
+  }
+
+  if (values['audit-export'] !== undefined) {
+    const dir = values['audit-export'];
+    const outDir = values.out;
+    if (!dir || !outDir) { console.error('majin-v2: --audit-export requires a directory and --out <bundleDir>'); process.exit(2); }
+    try {
+      const r = exportBundle(path.resolve(dir), path.resolve(outDir));
+      console.log(`AUDIT bundle OK files=${r.files} entries=${r.stats.entries} anchors=${r.stats.anchors} tsr=${r.stats.tsr} → ${outDir}`);
+      process.exit(0);
+    } catch (err) {
+      console.error(`AUDIT export failed REASON=${err.cls || 'FAILED'} (${err.message})`);
+      process.exit(1);
+    }
+  }
+
+  if (values['bundle-verify'] !== undefined) {
+    const dir = values['bundle-verify'];
+    if (!dir) { console.error('majin-v2: --bundle-verify requires a directory'); process.exit(2); }
+    const v = verifyBundle(path.resolve(dir), { tsrOpts: { caFile: values['tsa-ca'] || null, untrusted: values['tsa-untrusted'] || null } });
+    console.log(`BUNDLE ${v.cls}${v.detail ? ` (${v.detail})` : ''}`);
+    process.exit(v.ok ? 0 : 1);
   }
 
   if (values['audit-keygen'] !== undefined) {
