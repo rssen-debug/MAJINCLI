@@ -30,3 +30,18 @@ test('outline is opt-in on existing browser.elements tool, with no new permissio
   assert.match(html,/@keyframes majin-trace/);
   assert.match(html,/prefers-reduced-motion:reduce/);
 });
+
+test('outline cap cannot go negative or exceed page-structure limit',()=>{
+ const entries=Array.from({length:100},(_,i)=>({role:'heading',name:'Heading '+i}));
+ const negative=formatPageOutline({title:'Safe',entries},{cap:-1});
+ assert.doesNotMatch(negative,/Heading 0/);
+ const huge=formatPageOutline({title:'Safe',entries},{cap:999999});
+ assert.match(huge,/Heading 54/);
+ assert.doesNotMatch(huge,/Heading 55/);
+ assert.match(huge,/more sections omitted/);
+});
+test('outline visual cue remains inside composer with reduced motion',()=>{
+ const html=fs.readFileSync('src/ui/index.html','utf8');
+ assert.match(html,/majin-outline-glow/);
+ assert.match(html,/prefers-reduced-motion:reduce/);
+});
