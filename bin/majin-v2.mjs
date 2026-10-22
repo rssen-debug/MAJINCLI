@@ -19,12 +19,15 @@ import { loadConfig } from '../src/v2/config/config.js';
 import { resolveProfile } from '../src/v2/model/profiles.js';
 import { aggregate, renderReport } from '../src/v2/telemetry/aggregate.js';
 import { AuditChain } from '../src/v2/audit/chain.js';
+import { keygen as auditKeygen, anchor as auditAnchor, verifyAnchor } from '../src/v2/audit/anchor.js';
 
 const USAGE = `MAJIN V2
   majin-v2 "<objective>" --workspace <dir> [options]
   majin-v2 --gauntlet
   majin-v2 --telemetry-report [dir] [--days N]
-  majin-v2 --audit-verify <dir>
+  majin-v2 --audit-verify <dir> [--with-anchor]
+  majin-v2 --audit-keygen <dir>
+  majin-v2 --audit-anchor <dir>
   majin-v2 --studio [--port N] [--host H] [--telemetry-dir D] [--audit-dir D] [--enable-writes]
 
 Options:
@@ -56,6 +59,9 @@ try {
     gauntlet: { type: 'boolean' },
     'telemetry-report': { type: 'string' },
     'audit-verify': { type: 'string' },
+    'with-anchor': { type: 'boolean' },
+    'audit-keygen': { type: 'string' },
+    'audit-anchor': { type: 'string' },
     studio: { type: 'boolean' },
     'enable-writes': { type: 'boolean' },
     port: { type: 'string' },
@@ -75,7 +81,7 @@ try {
 }
 
 async function main() {
-  if (values.help || (!values.gauntlet && !values['telemetry-report'] && values['audit-verify'] === undefined && !values.studio && positionals.length === 0)) {
+  if (values.help || (!values.gauntlet && !values['telemetry-report'] && values['audit-verify'] === undefined && values['audit-keygen'] === undefined && values['audit-anchor'] === undefined && !values.studio && positionals.length === 0)) {
     process.stdout.write(USAGE);
     process.exit(positionals.length || values.help ? 0 : 2);
   }
@@ -116,10 +122,38 @@ async function main() {
     }
     if (verdict.ok) {
       console.log(`AUDIT ok ENTRIES=${verdict.entries} HEAD=${verdict.head.slice(0, 16)}`);
-      process.exit(0);
+    } else {
+      console.error(`AUDIT broken LINE=${verdict.brokenAt} REASON=${verdict.reason} (${verdict.detail})`);
+      process.exit(1);
     }
-    console.error(`AUDIT broken LINE=${verdict.brokenAt} REASON=${verdict.reason} (${verdict.detail})`);
-    process.exit(1);
+    if (values['with-anchor']) {
+      // external-witness check: catches full-chain rewrites the inner walk cannot
+      const av = verifyAnchor(dir);
+      console.log(`ANCHOR ${av.cls}${av.fingerprint ? ` FP=${av.fingerprint}` : ''}${av.detail ? ` (${av.detail})` : ''}`);
+      if (!av.ok) process.exit(1); // SIG_INVALID / ANCHOR_MISMATCH / CHAIN_BROKEN
+    }
+    process.exit(0);
+  }
+
+  if (values['audit-keygen'] !== undefined) {
+    const dir = values['audit-keygen'];
+    if (!dir) { console.error('majin-v2: --audit-keygen requires a directory'); process.exit(2); }
+    const r = auditKeygen(path.resolve(dir));
+    console.log(r.created ? `AUDIT keygen OK fingerprint=${r.fingerprint} (private key 0600, verifier needs only the public key)` : `AUDIT keygen refused: ${r.note}`);
+    process.exit(r.created ? 0 : 1);
+  }
+
+  if (values['audit-anchor'] !== undefined) {
+    const dir = values['audit-anchor'];
+    if (!dir) { console.error('majin-v2: --audit-anchor requires a directory'); process.exit(2); }
+    try {
+      const rec = auditAnchor(path.resolve(dir));
+      console.log(`AUDIT anchored SEQ=${rec.chainSeq} HEAD=${rec.chainHead.slice(0, 16)} ASEq=${rec.aseq} FP=${rec.fingerprint}`);
+      process.exit(0);
+    } catch (err) {
+      console.error(`AUDIT anchor failed REASON=${err.cls || 'FAILED'} (${err.message})`);
+      process.exit(1);
+    }
   }
 
     if (values.studio) {
