@@ -352,6 +352,17 @@ function onEvent(ev) {
       if(bar){bar.dataset.phase='recover';bar.dataset.recovery=String(ev.phase||'').slice(0,35);
         bar.title='MAJIN is inspecting the current page instead of blindly repeating the previous action';}
     }
+    else if (ev.type === 'tool_diagnosis') {
+      const label=String(ev.labelText||'Checking tool failure').slice(0,90);
+      workPulse(label);
+      const bar=$('work-progress');
+      if(bar){
+        bar.dataset.phase='diagnose';
+        bar.dataset.diagnosis=String(ev.kind||'unknown').slice(0,40);
+        bar.title='Current tool: '+String(ev.tool||'unknown').slice(0,64)+' · Next: '+String(ev.action||'inspect_failure').replace(/_/g,' ').slice(0,75);
+      }
+      if($('work-progress-symbol'))$('work-progress-symbol').textContent='↻';
+    }
     else if (ev.type === 'agent_recovery') {
       const stage = ev.phase === 'blocked' ? 'Stopped a repeating action' : 'Switching strategy after a failed action';
       const tool = String(ev.tool || '').replace(/[^a-zA-Z0-9._-]/g,'').slice(0,48);
