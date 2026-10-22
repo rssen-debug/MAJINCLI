@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 126
-# pass 126
+# tests 136
+# pass 136
 # fail 0
 # skipped 0
 ```
@@ -38,15 +38,17 @@ $ npm run v4:test
 | `test/v4/benchmark.test.js` | 3 | benchmark pass rate, duplicate replay, refusal is FAILED |
 | `test/v4/client.test.js` | 9 | conversation continuity across turns, delta assembly, tool card states, replay, cancellation, SSE parser edge cases |
 | `test/v4/voice-server.test.js` | 6 | auth/CSRF, verified WAV from the V2 lane, temp cleanup, input limits, honest capability report |
+| `test/v4/turns.test.js` | 9 | sequence ids, replay from a cursor, bounded buffer, reattach after a dropped socket, work survives a hang-up |
+| `test/v4/e2e.browser.test.js` | 0 run | real-browser acceptance on 5 viewports — **skips** here, no browser binary (see below) |
 
 ## 2. Repository gates
 
 ```
 $ npm run check
-490/490 files parse cleanly.
+492/492 files parse cleanly.
 
 $ npm run i18n
-0 Swedish string literal(s) in 261 files
+0 Swedish string literal(s) in 262 files
 
 $ npm run v4:progress --check
 67.5/100 verified points, matrix valid (exit 0)
@@ -78,13 +80,27 @@ POST /api/chat  "Skriv filen valkomst.txt med innehåll: Hej från MAJIN"
 | A turn could end COMPLETED after an unrecovered tool failure | `agent-failures.test.js` | last tool outcome gates completion |
 | CRLF-separated SSE stalled the client parser | `client.test.js` | line endings normalised before framing |
 
+## 3.2 Browser attempt, documented
+
+Three routes were tried for a real browser and all failed for environmental reasons:
+
+1. `@sparticuz/chromium` (npm) — binary extracts fine but links `libnss3` with `NSS_3.30`.
+2. `kaleido==0.2.1` (pypi) — bundles Chromium **and** NSS, but its NSS is 3.9 and its binary
+   rejects any argv that is not its own scope JSON.
+3. `electron` (npm → GitHub releases) — the downloader fails TLS verification, and the release
+   asset redirects to `objects.githubusercontent.com`, which is blocked.
+
+The portable test therefore skips with a clear reason and the exact command to run it
+elsewhere. That is the honest outcome; a screenshot from a phone is not something this
+sandbox can produce.
+
 ## 4. What is NOT tested here
 
 | Claim | Why not | Where it is tracked |
 |---|---|---|
 | Real model inference | no provider key/endpoint | matrix `A7` (BLOCKED) |
 | iPhone/Android device run | no device | matrix `M10`, `H4` |
-| Playwright viewport screenshots | no browser binary in sandbox | matrix `M11` |
+| Real-browser viewport/visual regression | no browser binary can be obtained here (CDN, Google storage and objects.githubusercontent are blocked; npm Chromium needs NSS ≥ 3.30) | matrix `M11`, `npm run v4:e2e` on the host |
 | Windows logon task + restart persistence | no Windows host | matrix `H1`, `H2`, `H5` |
 | Tunnel HTTPS URL | owner action required | matrix `H3` |
 | Voice latency / barge-in | no device, browser-only voice | matrix `V6` |

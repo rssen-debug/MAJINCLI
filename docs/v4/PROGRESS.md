@@ -54,13 +54,13 @@
 18. Server-side speech is wired through the V2 voice lane with a deterministic offline provider;
     the produced WAV is verified by the V2 file verifier and the response is marked synthetic.
 
-## Remaining by area (10 NOT_STARTED + 1 PARTIAL + 3 BLOCKED)
+## Remaining by area (9 NOT_STARTED + 2 PARTIAL + 3 BLOCKED)
 
 | Area | Points left | What it needs |
 |---|---:|---|
 | HOST | 12 | the Windows machine, the tunnel and a phone |
 | VOICE | 3 | a real device: measured TTS latency and barge-in; a real TTS engine (V7 is half: offline provider only) |
-| MOBILE | 2.5 | physical-device walkthrough, Playwright visual regression, spirit polish |
+| MOBILE | 2.5 | physical-device walkthrough, real-browser visual regression, spirit polish |
 | GOALS | 2 | multi-step browser goal on the host |
 | MODELS | 2 | real inference (blocked: no provider key here) |
 | SECURITY | 1 | external penetration test |
@@ -80,6 +80,29 @@
 The demo brain understands a narrow set of file intents (write / list) and otherwise explains that
 no model is connected. It is a transport-and-execution harness for real model wiring, not an
 assistant. Any progress point that depends on model quality is not claimed.
+
+## Connection survival (new, evidence-backed)
+
+A dropped connection used to abort the turn. On a phone that meant asking again and
+losing the work. The turn now runs independently of the HTTP response and is recorded in a
+bounded journal (`src/v4/turns.js`): every event carries a sequence id, a client can reattach
+with `GET /api/chat/stream?turnId=…&from=<lastSeq>`, and the UI retries with backoff.
+
+Proven by `test/v4/turns.test.js` and `test/v4/client.test.js`: the file is written even when the
+client hangs up mid-stream, and the reattached client receives the verified tool result and
+the terminal status without duplicates.
+
+## What a real browser would add (and why it is still unearned)
+
+`npm run v4:e2e` contains the acceptance run: five viewports (iPhone 13/SE, Pixel 7, iPad,
+desktop), horizontal-overflow checks, 42px touch targets, composer above the fold, pairing,
+a real message, a **verified** tool card, console-error check, and screenshots into
+`docs/v4/evidence/`. It skips loudly when no browser binary exists.
+
+No browser binary can be obtained in this environment: Playwright's CDN, Google's storage and
+`objects.githubusercontent.com` are all unreachable, and the npm-shipped Chromium needs NSS
+≥ 3.30 which the image does not have. So M11 stays unearned rather than being replaced by a
+claim. On the Windows host: `npx playwright install chromium && npm run v4:e2e`.
 
 ## Next engineering objective
 

@@ -479,6 +479,10 @@ async function send(text) {
     if (err.name === 'AbortError') {
       endAssistantBubble();
       addMessage('assistant', t('msg.cancelled'), { error: true, meta: timeLabel() });
+    } else if (await tryReattach()) {
+      // The connection dropped but the host kept working: pick the turn back up
+      // instead of telling the user it failed.
+      return;
     } else {
       endAssistantBubble();
       addMessage('assistant', t('msg.hostUnreachable', { error: err.message }), { error: true, meta: timeLabel() });
@@ -488,6 +492,31 @@ async function send(text) {
   } finally {
     finishStream();
   }
+}
+
+/**
+ * Reattach to a turn the host is still running (or finished while we were
+ * away). Returns true when the turn was picked back up. Bounded retries with
+ * backoff, because a phone changing network often needs a second or two.
+ */
+async function tryReattach({ attempts = 3 } = {}) {
+  const { turnId, lastSeq } = state.session;
+  if (!turnId) return false;
+  for (let i = 0; i < attempts; i += 1) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 400 * 2 ** (i - 1)));
+    try {
+      const res = await api(`/api/chat/stream?turnId=${encodeURIComponent(turnId)}&from=${lastSeq}`);
+      if (res.status === 404) return false; // buffer expired: nothing to resume
+      if (!res.ok || !res.body) continue;
+      state.session.reconnects += 1;
+      els.hint.textContent = t('conn.resumed');
+      await readStream(res.body, new AbortController().signal);
+      return true;
+    } catch {
+      /* try again */
+    }
+  }
+  return false;
 }
 
 function finishStream() {
@@ -509,6 +538,7 @@ async function readStream(stream, signal) {
     const { value, done } = await reader.read();
     if (done) break;
     for (const ev of parser.push(decoder.decode(value, { stream: true }))) {
+      if (Number.isFinite(ev.seq) && ev.seq > 0) state.session.lastSeq = ev.seq;
       const handled = dispatch(ev.event, ev.data);
       if (handled?.final) finalText = handled.final;
     }

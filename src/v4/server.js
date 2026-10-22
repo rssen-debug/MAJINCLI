@@ -39,6 +39,7 @@ import { discoverModels, refreshAllCatalogs } from './models.js';
 import { Kernel } from './kernel.js';
 import { t } from './ui/strings.js';
 import { synthesize, VOICE_MODES } from './voice.js';
+import { TurnJournal } from './turns.js';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui');
 
@@ -136,6 +137,9 @@ export function createV4Server({ config }) {
   const tools = createToolRegistry({ workspaceDir, memoryDir: paths.memory });
   const model = createModelClient(config, { workspaceDir });
   const agent = createAgent({ config, conversations, goals, tools, model });
+  // Mobile connections drop. The journal lets a phone reattach to a turn that
+  // kept running instead of losing the work.
+  const journal = new TurnJournal();
 
   const kernel = new Kernel({
     features: config.platform?.features || {},
@@ -223,6 +227,50 @@ export function createV4Server({ config }) {
     res.end(body);
   }
 
+  /**
+   * Stream a journal turn to an HTTP response. `from` is the last sequence the
+   * client already holds, so a reconnect receives only what it missed.
+   */
+  function pipeTurn(res, turn, { from = 0 } = {}) {
+    res.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-store, no-transform',
+      connection: 'keep-alive',
+      'x-accel-buffering': 'no',
+      'x-majin-turn': turn.id,
+    });
+    res.write(': connected\n\n');
+    let closed = false;
+    const heartbeat = setInterval(() => {
+      if (!closed) res.write(': ping\n\n');
+    }, 15_000);
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      clearInterval(heartbeat);
+      unsubscribe();
+      if (!res.writableEnded) res.end();
+    };
+    const unsubscribe = journal.subscribe(turn, from, (event) => {
+      if (closed || res.writableEnded) return;
+      if (event.type === '__done') {
+        close();
+        return;
+      }
+      try {
+        res.write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`);
+      } catch {
+        close();
+      }
+    });
+    res.on('close', () => {
+      closed = true;
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
+    return { close, turnId: turn.id };
+  }
+
   function startSse(res) {
     res.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
@@ -267,23 +315,41 @@ export function createV4Server({ config }) {
       throw new HttpError(413, 'MESSAGE_TOO_LONG', 'Message is too long.');
     }
 
-    const sse = startSse(res);
+    // The turn becomes a journal entry before the response is written, so the
+    // client learns its id (in the `open` event) and can reattach to the very
+    // same turn if the connection drops.
+    const turn = journal.create({ conversationId: conversationId || 'new' });
     const controller = agent.beginTurn(conversationId || 'new');
-    sse.send('open', { at: new Date().toISOString(), model: agent.modelInfo });
-    try {
-      await agent.runTurn({
-        conversationId,
-        text,
-        requestId,
-        signal: controller.signal,
-        emit: (type, data) => sse.send(type, data),
-      });
-    } catch (err) {
-      sse.send('error', { message: err.message || 'turn failed' });
-    } finally {
+    journal.append(turn, 'open', {
+      at: new Date().toISOString(),
+      model: agent.modelInfo,
+      turnId: turn.id,
+    });
+
+    // Run the agent independently of the response: a dropped socket must not
+    // throw away work the user already paid for.
+    const finished = agent.runTurn({
+      conversationId,
+      text,
+      requestId,
+      signal: controller.signal,
+      emit: (type, data) => journal.append(turn, type, data),
+    }).then((result) => {
+      journal.finish(turn, result?.status || 'completed');
+      return result;
+    }).catch((err) => {
+      journal.append(turn, 'error', { message: err?.message || 'turn failed' });
+      journal.finish(turn, 'failed');
+      return { status: 'failed' };
+    }).finally(() => {
       agent.endTurn(conversationId || 'new', controller);
-      sse.close();
-    }
+    });
+
+    // Replay what already happened (normally just `open`), then follow live.
+    // A dropped socket deliberately does NOT abort the turn: the phone can
+    // reattach with GET /api/chat/stream?turnId=…&from=<lastSeq>.
+    pipeTurn(res, turn, { from: 0 });
+    await finished;
     void session;
   }
 
@@ -449,6 +515,15 @@ export function createV4Server({ config }) {
       const { session } = requireSession(req);
       assertCsrfHeader(req);
       await handleChat(req, res, session);
+    },
+
+    'GET /api/chat/stream': async (req, res, url) => {
+      requireSession(req);
+      const turnId = String(url.searchParams.get('turnId') || '');
+      const from = Number(url.searchParams.get('from') || 0) || 0;
+      const turn = journal.get(turnId);
+      if (!turn) throw new HttpError(404, 'TURN_NOT_FOUND', 'That turn is no longer buffered.');
+      pipeTurn(res, turn, { from });
     },
 
     'POST /api/cancel': async (req, res) => {

@@ -12,6 +12,9 @@
 
 export const INITIAL = Object.freeze({
   conversationId: null,
+  turnId: null,
+  lastSeq: 0,
+  reconnects: 0,
   goalId: null,
   streaming: false,
   status: 'idle',
@@ -49,6 +52,11 @@ export function applyEvent(state, event, data) {
       if (data?.model) {
         s.model = data.model;
         s.demo = Boolean(data.model.demo);
+      }
+      // Remember the turn so a dropped connection can reattach to the same work.
+      if (data?.turnId) {
+        s.turnId = data.turnId;
+        s.lastSeq = 0;
       }
       break;
 
@@ -194,15 +202,17 @@ export function createSseParser() {
 
 export function parseBlock(raw) {
   let event = 'message';
+  let seq = 0;
   const dataLines = [];
   for (const line of String(raw).replace(/\r/g, '').split('\n')) {
     if (line.startsWith(':')) continue;
     if (line.startsWith('event:')) event = line.slice(6).trim();
+    else if (line.startsWith('id:')) seq = Number(line.slice(3).trim()) || 0;
     else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
   }
   if (!dataLines.length) return null;
   try {
-    return { event, data: JSON.parse(dataLines.join('\n')) };
+    return { event, seq, data: JSON.parse(dataLines.join('\n')) };
   } catch {
     return null;
   }

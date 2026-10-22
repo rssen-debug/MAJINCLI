@@ -108,6 +108,20 @@ Known limits: no CSRF tokens per form (header + same-origin instead), the
 session store is a JSON file (single-host), and there is no distributed rate
 limiter. Those are deliberate choices for a single-owner private deployment.
 
+## 5.0 Turn journal (connection survival)
+
+A turn is not owned by an HTTP response. `src/v4/turns.js` records every emitted
+event with a sequence id and keeps the last 50 turns / 10 minutes in memory.
+`POST /api/chat` starts the turn first and then streams it, so the client learns
+`turnId` in the `open` event; `GET /api/chat/stream?turnId=…&from=<seq>` replays
+what was missed and continues live.
+
+Consequences that matter on a phone:
+
+- hanging up (Wi-Fi → cellular, backgrounded tab) no longer aborts the work;
+- `POST /api/cancel` is the only thing that stops a turn;
+- a reconnecting client never re-executes a tool: it only receives events.
+
 ## 5.1 Client state
 
 The browser keeps its conversation state in `src/v4/ui/session.js`: a pure

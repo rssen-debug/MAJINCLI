@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { INITIAL, applyEvent, applyAll, createSseParser, parseBlock } from '../../src/v4/ui/session.js';
-import { startTestServer, postChat } from './helpers.mjs';
+import { startTestServer, postChat, readSse } from './helpers.mjs';
 
 /** Drive a real /api/chat stream through the client model, like app.js does. */
 async function browserTurn(s, cookie, body, session) {
@@ -139,12 +139,50 @@ test('client: an unknown event is ignored, not fatal', () => {
 test('client: the SSE parser handles comments, CRLF, split chunks and bad JSON', () => {
   const parser = createSseParser();
   assert.deepEqual(parser.push(': connected\n\n'), []);
-  assert.deepEqual(parser.push('event: delta\ndata: {"text":"a"}\n\n'), [{ event: 'delta', data: { text: 'a' } }]);
-  assert.deepEqual(parser.push('event: delta\r\ndata: {"text":"b"}\r\n\r\n'), [{ event: 'delta', data: { text: 'b' } }]);
+  assert.deepEqual(parser.push('event: delta\ndata: {"text":"a"}\n\n').map(({ event, data }) => ({ event, data })), [{ event: 'delta', data: { text: 'a' } }]);
+  assert.deepEqual(parser.push('event: delta\r\ndata: {"text":"b"}\r\n\r\n').map(({ event, data }) => ({ event, data })), [{ event: 'delta', data: { text: 'b' } }]);
   // a chunk cut in the middle must not emit a half event
   assert.deepEqual(parser.push('event: delta\ndata: {"te'), []);
-  assert.deepEqual(parser.push('xt":"c"}\n\n'), [{ event: 'delta', data: { text: 'c' } }]);
+  assert.deepEqual(parser.push('xt":"c"}\n\n').map(({ event, data }) => ({ event, data })), [{ event: 'delta', data: { text: 'c' } }]);
   assert.deepEqual(parser.push('event: delta\ndata: {broken\n\n'), []);
   assert.equal(parseBlock(''), null);
   assert.equal(parseBlock('event: x\n'), null);
+});
+
+test('client: a dropped stream is reattached to the same turn instead of losing the work', async () => {
+  const s = await startTestServer();
+  try {
+    const { cookie } = await s.pair();
+    // Start the turn and hang up immediately, like a phone leaving Wi-Fi.
+    const controller = new AbortController();
+    const res = await fetch(`${s.base}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-majin-csrf': '1', origin: s.base, cookie },
+      body: JSON.stringify({ text: 'Skriv filen reattach.txt med innehåll: kvar', requestId: 'ra1' }),
+      signal: controller.signal,
+    });
+    const turnId = res.headers.get('x-majin-turn');
+    const reader = res.body.getReader();
+    const first = await reader.read();
+    controller.abort();
+    try {
+      await reader.cancel();
+    } catch { /* aborted */ }
+
+    // The client saw the open event with a turn id before the line dropped.
+    const parser = createSseParser();
+    const seen = parser.push(new TextDecoder().decode(first.value));
+    const open = seen.find((e) => e.event === 'open');
+    assert.equal(open.data.turnId, turnId);
+
+    await new Promise((r) => setTimeout(r, 400));
+    // Reattach exactly as app.js does: from the last sequence held (0 here).
+    const re = await fetch(`${s.base}/api/chat/stream?turnId=${turnId}&from=0`, { headers: { cookie } });
+    const events = await readSse(re);
+    const done = events.filter((e) => e.type === 'done').pop();
+    assert.equal(done.data.status, 'completed');
+    assert.ok(events.some((e) => e.type === 'tool_result' && e.data.verified));
+  } finally {
+    await s.close();
+  }
 });

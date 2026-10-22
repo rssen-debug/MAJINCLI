@@ -106,6 +106,7 @@ export const SV = {
 
   'conn.offline': 'Offline — MAJIN kan inte nå värden. Meddelanden sparas inte.',
   'conn.back': 'Ansluten igen',
+  'conn.resumed': 'Återuppkopplad till pågående uppgift…',
   'conn.connecting': 'ansluter…',
   'common.done': 'Klart.',
   'common.unknownError': 'okänt fel',
