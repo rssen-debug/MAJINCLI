@@ -546,7 +546,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       title: 'string optional expected title fragment',
       checked: 'string optional true|false expected checkbox checked state',
       enabled: 'string optional true|false expected element enabled state (includes aria-disabled and inert)',
-      waitMs: 'string optional: wait up to 0–5000ms for the expected DOM outcome (default 0)',
+      waitMs: 'string optional: wait up to 0–5000ms for the expected DOM outcome (default 1800ms, immediate return on success)',
       stableMs: 'string optional 0–1500: require expected DOM state to stay true for this duration (default 0)',
     },
     examples: ['browser.verify({selector:"#success",text:"Saved"})', 'browser.verify({url:"/dashboard"})','browser.verify({selector:"input[name=consent]",checked:"true"})', 'browser.verify({selector:"#submit",enabled:"true"})'],
@@ -558,7 +558,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       journal.guard(session, 'browser.verify:' + JSON.stringify(criteria).slice(0,250));
       const b=await openFor({session,cfgGet:k=>ctx.cfg.get(k)});
       const script=VERIFY_JS.replace('__MAJIN_ARGS__',JSON.stringify(criteria));
-      const waitMs=Math.min(5000,Math.max(0,Math.trunc(Number(input?.waitMs)||0)));
+      const waitMs=Math.min(5000,Math.max(0,Math.trunc(Number(input?.waitMs ?? 1800)||0)));
       // React/Vue apps may briefly show a success node and immediately replace
       // it. Require sustained evidence when requested; don't report a flicker
       // as proof and never repeat the user's actual click.
