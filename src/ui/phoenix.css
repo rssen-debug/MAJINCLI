@@ -324,3 +324,15 @@ body[data-run-state="thinking"] #b-stop { opacity:1; box-shadow:0 0 0 1px var(--
  body[data-run-state="working"] #b-stop,
  body[data-run-state="thinking"] #b-stop { animation:none!important; }
 }
+
+/* Aurora micro-polish: status and stop remain legible at mobile widths. */
+@media(max-width:600px){
+ body.simple[data-run-state="working"] #b-stop,
+ body.simple[data-run-state="thinking"] #b-stop {
+   min-width:44px;min-height:44px;flex-shrink:0;
+ }
+}
+body[data-run-state="working"] #b-stop:active,
+body[data-run-state="thinking"] #b-stop:active {
+ box-shadow:inset 0 0 0 2px var(--cysoft);
+}
