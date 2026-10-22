@@ -33,3 +33,10 @@ test('preview rejects envelopes without checkpoint identity',()=>{
 test('preview rejects traversal-style checkpoint identities',()=>{
  assert.equal(recoveryPreview({schema:1,id:'../other',state:{steps:[]}}).reason,'invalid-checkpoint');
 });
+
+test('preview produces only known recovery actions',()=>{
+ const result=recoveryPreview({schema:1,id:'safe',state:{steps:[{id:'step_1',status:'pending',risk:'read'}]}});
+ assert.equal(result.ready,true);
+ assert.deepEqual(result.counts,{resume:1,skip:0,inspect:0,approval:0});
+ assert.ok(result.steps.every(step=>['resume','skip','inspect','approval'].includes(step.action)));
+});
