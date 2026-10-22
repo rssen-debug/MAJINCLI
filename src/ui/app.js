@@ -1083,6 +1083,12 @@ function listen() {
 
 /* ------------------------- hands-free voice -------------------------- */
 let recog=null, speechActive=false, voiceArmed=false;
+let lastSpokenReply='';
+function isVoicePlaybackEcho(heard){
+ const words=text=>String(text||'').toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[];
+ const utterance=words(heard),reply=new Set(words(lastSpokenReply));
+ return utterance.length>0 && utterance.filter(word=>reply.has(word)).length/utterance.length>=0.8;
+}
 let voiceSilenceTimer=null, voiceSessionTimer=null, voiceTranscript='', voiceFinal='', voiceFinished=false;
 let voiceMeterStream=null, voiceMeterContext=null, voiceMeterFrame=null;
 let voiceGate=null, voiceGateReady=false;
@@ -1220,6 +1226,7 @@ function startMic(){
       if(e.results[i].isFinal)complete+=chunk;
     }
     if(!words.trim())return;
+    if(speechActive && isVoicePlaybackEcho(words))return;
     voiceTranscript=words.trim();voiceFinal=complete.trim();
     if(speechActive){
       speechActive=false;
@@ -1326,6 +1333,7 @@ async function speak(t){
   const clean=String(t).replace(/\`[^\`]+\`/g,' ').replace(/https?:\/\/\S+/g,' link ').replace(/[*_#]/g,'').slice(0,1200).trim();
   if(!clean)return;
   // Keep the conversation armed; recognizer remains available for user barge-in.
+  lastSpokenReply=clean;
   speechActive=true;voiceState('speaking','MAJIN speaking…');
   try {
     // A locally configured Kokoro narrator is optional; never silently
