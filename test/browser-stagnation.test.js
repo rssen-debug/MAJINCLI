@@ -94,3 +94,16 @@ test('a checked checkbox in the middle of a long form resets false stagnation',(
  assert.equal(observeBrowserPage(s,{...state,controls:changed}).stagnant,false);
  clearBrowserStagnation(s);
 });
+
+test('enabled status on a sampled middle control counts as progress',()=>{
+ const s='middle-enabled-progress';
+ const controls=Array.from({length:55},(_,i)=>({selector:'#field-'+i,label:'Field '+i,enabled:false}));
+ const state={...page(),controls};
+ observeBrowserPage(s,state);
+ for(let i=0;i<2;i++){noteBrowserAction(s);observeBrowserPage(s,state);}
+ assert.equal(observeBrowserPage(s,state).stagnant,true);
+ const changed=controls.map(x=>({...x}));changed[29].enabled=true;
+ noteBrowserAction(s);
+ assert.equal(observeBrowserPage(s,{...state,controls:changed}).stagnant,false);
+ clearBrowserStagnation(s);
+});
