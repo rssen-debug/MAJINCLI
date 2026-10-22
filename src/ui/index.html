@@ -432,6 +432,14 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="blocked"] .pulse{animation-duration:2.1s}
 #composer #work-progress[data-phase="blocked"]::after{background:linear-gradient(90deg,transparent,rgba(255,198,138,.8),transparent);animation-duration:3.3s}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="blocked"] .pulse{animation:none!important}}
+
+/* MAJIN inline micro-progress: single subtle light trace, never another card. */
+#composer #work-progress{--trace:linear-gradient(90deg,transparent,#ff8edd 30%,#cdb1ff 70%,transparent)}
+#composer #work-progress:not([hidden])::after{content:"";position:absolute;inset:auto 0 0;width:34%;height:1px;background:var(--trace);opacity:.75;animation:majin-trace-sweep 2.3s ease-in-out infinite;pointer-events:none}
+#composer #work-progress[data-phase="verify"]::after{height:2px;opacity:.95}
+#composer #work-progress[data-phase="stalled"]::after{animation-duration:5s;opacity:.33}
+@keyframes majin-trace-sweep{from{transform:translateX(-100%)}to{transform:translateX(295%)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress::after{animation:none!important;width:100%;opacity:.3}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
