@@ -420,6 +420,12 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="recover"]::after{background:linear-gradient(90deg,transparent,#b87cff,transparent);animation-duration:1.4s}
 @keyframes majin-rethink{50%{opacity:.5;transform:scale(.72);box-shadow:0 0 0 7px rgba(177,114,246,0)}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recover"] .pulse{animation:none}}
+/* Browsing insight — one quiet lilac pulse in the EXISTING composer,
+   never a new card or overlay. */
+#composer #work-progress[data-phase="grounded"]{color:#d8c5fa;border-top-color:rgba(173,144,232,.22)}
+#composer #work-progress[data-phase="grounded"] .pulse{background:#bd9afa;box-shadow:0 0 0 3px rgba(187,151,244,.13);animation:majin-grounded 1.8s ease-in-out infinite}
+@keyframes majin-grounded{50%{opacity:.56;transform:scale(.77)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="grounded"] .pulse{animation:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>

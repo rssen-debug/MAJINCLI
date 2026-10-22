@@ -235,6 +235,14 @@ function onEvent(ev) {
       if(ev.tool==='browser.verify' && ev.ok){
         workPulse('Browser result verified');
         const bar=$('work-progress');if(bar)bar.dataset.phase='verified';
+      } else if(ev.tool==='browser.elements' && ev.ok){
+        const matched=Number(ev.meta?.matched);
+        const total=Number(ev.meta?.count);
+        const count=Number.isFinite(matched)&&matched>=0 ? matched :
+          Number.isFinite(total)&&total>=0 ? total : null;
+        workPulse(count===null?'Reading controls on the page':
+          count+' interactive controls found');
+        const bar=$('work-progress');if(bar)bar.dataset.phase='grounded';
       } else if(ev.tool==='browser.click' && !ev.ok && ev.error?.code==='click_blocked') {
         workPulse('Click blocked · checking page overlay');
       } else workPulse(ev.ok?'Tool finished · checking result':'Tool failed · adjusting approach');
