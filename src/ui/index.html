@@ -519,6 +519,12 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="stalled"] #work-progress-symbol,
 #composer #work-progress[data-phase="problem"] #work-progress-symbol{color:#ffabb4}
 @media(prefers-reduced-motion:reduce){#composer #work-progress-symbol{transition:none}}
+/* Evidence shimmer: tiny, integrated in composer (no extra panel). */
+#composer #work-progress[data-phase="visual"] #work-progress-symbol{color:#f8b5ee;text-shadow:0 0 9px rgba(255,133,224,.66);animation:majin-evidence-bloom .7s ease-out 1}
+#composer #work-progress[data-phase="visual"]::after{background:linear-gradient(90deg,transparent,#ee81de,#b69cff,transparent);height:2px}
+#composer #work-progress[data-phase="delta"] #work-progress-symbol{color:var(--dim);opacity:.7}
+@keyframes majin-evidence-bloom{from{transform:scale(.7);opacity:.35}60%{transform:scale(1.18);opacity:1}to{transform:scale(1);opacity:1}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="visual"] #work-progress-symbol{animation:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
