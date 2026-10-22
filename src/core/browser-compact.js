@@ -24,14 +24,14 @@ export function compactBrowserText(input,{maxChars=2600}={}){
   // Reserve a meaningful tail allowance before reading the beginning: a long
   // page must not erase late save/error confirmations from the model context.
   const hasTail=unique.length>30;
-  const tail=hasTail?unique.slice(-8):[];
+  const tail=hasTail?unique.slice(-3):[];
   const reserve=hasTail?Math.min(650,Math.floor(budget*.35)):0;
   const headBudget=budget-reserve;
   for(const row of unique.slice(0,Math.min(28,unique.length)))append(row,headBudget);
   if(hasTail){
     selected.push('… [middle page content omitted]');
     used+='… [middle page content omitted]'.length+1;
-    for(const row of tail)append(row,budget);
+    for(const row of tail)append(row.slice(0,110),budget);
   }
   const result=selected.join('\\n').slice(0,cap);
   return {text:result,originalChars:String(input||'').length,outputChars:result.length,
