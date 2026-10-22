@@ -72,3 +72,34 @@ export function verifyObserved(criteria, observed) {
     observed:{url:String(observed.url||'').slice(0,500),title:String(observed.title||'').slice(0,200),
       matchCount:Number.isInteger(observed.matchCount) ? observed.matchCount : null}};
 }
+
+/**
+ * Select a bounded, evidence-grounded recovery plan after failed browser.verify.
+ * Inspired by browser-use's explicit failure feedback. NEVER auto-repeats an
+ * irreversible click, and never leaks field values or full page text.
+ */
+export function browserRecoveryAdvice(verdict, criteria, controls = []) {
+  if (verdict?.ok) return { action:'none', hint:'Outcome verified', candidates:[] };
+  const names = new Set((verdict?.failures || []).map(f=>f.name));
+  let action='inspect_page', hint='Inspect live page state with browser.read or browser.elements before choosing a new action.';
+  if (names.has('element_unique')) {
+    action='narrow_selector'; hint='Selector matches multiple elements. Use browser.elements and an exact unique ref; do not guess a different nth-child.';
+  } else if (names.has('element_present')) {
+    action='refresh_grounding'; hint='Expected control or confirmation is absent. Re-read the current page and refresh element refs; do not repeat the previous click blindly.';
+  } else if (names.has('element_visible')) {
+    action='inspect_overlay'; hint='Element exists but is not visible. Inspect tab/modal, scrolling or loading state before interacting.';
+  } else if (names.has('element_enabled')) {
+    action='resolve_prerequisites'; hint='Control disabled. Inspect required fields, checkboxes, or validation messages first.';
+  } else if (names.has('checkbox_checked')) {
+    action='inspect_checkbox'; hint='Observed checkbox state differs from the goal. Inspect its label and active state; do not infer success from the click.';
+  } else if (names.has('url_contains') || names.has('title_contains')) {
+    action='inspect_navigation'; hint='Expected destination not observed. Check the current URL/title and whether navigation opened another tab.';
+  } else if (names.has('stable_duration')) {
+    action='wait_or_inspect'; hint='Outcome appeared temporarily but did not remain stable. Inspect SPA rerender or server response; do not declare success.';
+  } else if (names.has('element_text_contains')) {
+    action='inspect_content'; hint='Expected confirmation text not visible in target. Inspect the actual result and errors without inventing success.';
+  }
+  const safe = Array.isArray(controls) ? controls.filter(c=>typeof c?.selector==='string' && c.selector.length<=100).slice(0,5)
+    .map(c=>({selector:c.selector, label:String(c.label||'').slice(0,60),type:String(c.type||'').slice(0,20)})) : [];
+  return {action,hint,candidates:safe,expectedSelector:String(criteria?.selector||'').slice(0,350)};
+}

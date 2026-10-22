@@ -13,7 +13,7 @@ import { openFor, closeFor, isOpen, journal } from '../browser.js';
 import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, diffGroundSnapshot, findGroundedControls, VERSION as GROUND_V } from '../browser-ground.js';
 import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
 import { SEMANTIC_SNAPSHOT_JS, formatSemanticSnapshot } from '../browser-semantic.js';
-import { VERIFY_JS, verificationCriteria, verifyObserved } from '../browser-evidence.js';
+import { VERIFY_JS, verificationCriteria, verifyObserved, browserRecoveryAdvice } from '../browser-evidence.js';
 import { browserActionReceipt } from '../browser-action-receipt.js';
 
 const followedSafe = (fol) => (fol && fol.followed === true ? true : false);
@@ -631,10 +631,15 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         await new Promise(resolve=>setTimeout(resolve,Math.min(120,Math.max(1,deadline-now))));
       }
       if(!verdict.ok){
+        // A failed assertion must show the next grounded step, not an opaque
+        // failure that makes a small model repeat the same unsafe click.
+        const controls=await b.eval(VISIBLE_CONTROLS_JS).catch(()=>[]);
+        const recovery=browserRecoveryAdvice(verdict,criteria,controls);
         return {ok:false,error:{code:'assertion_failed',
-          message:'Browser outcome NOT verified. Re-observe with browser.elements/read and choose a different recovery step; do not repeat an identical action.',
-          failures:verdict.failures},meta:{assertions:verdict.assertions,observed:verdict.observed},
-          summary:'verification FAILED'};
+          message:'Browser outcome NOT verified. '+recovery.hint,
+          failures:verdict.failures,
+          recovery},meta:{assertions:verdict.assertions,observed:verdict.observed,recovery},
+          summary:'verification FAILED · '+recovery.action};
       }
       return {ok:true,result:'Verified live browser outcome: '+verdict.assertions.map(a=>a.name+'='+a.actual).join(', '),
         meta:{assertions:verdict.assertions,observed:verdict.observed},summary:'browser outcome VERIFIED'};

@@ -258,6 +258,15 @@ function onEvent(ev) {
         if(bar){bar.dataset.phase=unchanged?'delta':'visual';bar.title=unchanged?
           'The new screenshot matches the previous image exactly':'A new screenshot was saved for visual inspection';}
         const glyph=$('work-progress-symbol');if(glyph)glyph.textContent=unchanged?'=':'◉';
+      } else if(ev.tool==='browser.verify' && !ev.ok){
+        const plan=ev.error?.recovery || ev.meta?.recovery || {};
+        const action=String(plan.action||'inspect_page').replace(/[^a-z_]/gi,'').slice(0,32);
+        workPulse('Verification failed · choosing a safer next step');
+        const bar=$('work-progress');if(bar){
+          bar.dataset.phase='recovery';
+          bar.title='Live verification failed. Recovery: '+action+'. No action has been repeated automatically.';
+        }
+        const glyph=$('work-progress-symbol');if(glyph)glyph.textContent='↻';
       } else if(ev.tool==='browser.verify' && ev.ok){
         workPulse('Browser result verified');
         const bar=$('work-progress');if(bar)bar.dataset.phase='verified';
@@ -311,7 +320,7 @@ function onEvent(ev) {
       const stage = ev.phase === 'blocked' ? 'Stopped a repeating action' : 'Switching strategy after a failed action';
       const tool = String(ev.tool || '').replace(/[^a-zA-Z0-9._-]/g,'').slice(0,48);
       workPulse(tool ? stage + ' · ' + tool : stage);
-      const bar=$('work-progress');if(bar)bar.dataset.phase=ev.phase==='blocked'?'problem':'recover';
+      const bar=$('work-progress');if(bar)bar.dataset.phase=ev.phase==='blocked'?'problem':'recovery';
     }
     else if (ev.type === 'verify' || ev.type === 'verification') workPulse('Verifying the real result');
     else if (ev.type === 'thinking') workPulse('Thinking through the next step');

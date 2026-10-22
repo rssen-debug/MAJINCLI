@@ -525,6 +525,28 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="delta"] #work-progress-symbol{color:var(--dim);opacity:.7}
 @keyframes majin-evidence-bloom{from{transform:scale(.7);opacity:.35}60%{transform:scale(1.18);opacity:1}to{transform:scale(1);opacity:1}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="visual"] #work-progress-symbol{animation:none}}
+
+/* Round 2 visual: the existing inline spirit-thread shows graceful recovery,
+   without adding another box or interrupting text entry. */
+#composer #work-progress[data-phase="recovery"]{
+  color:#e9c4f4;
+  border-top-color:rgba(210,136,255,.22);
+}
+#composer #work-progress[data-phase="recovery"] .pulse{
+  background:#dc9fff;
+  box-shadow:0 0 0 3px rgba(220,159,255,.09),0 0 13px rgba(210,110,255,.35);
+  animation:majin-recovery-breathe 1.25s ease-in-out infinite;
+}
+#composer #work-progress[data-phase="recovery"] #work-progress-symbol{
+  color:#e2b3ff;
+  animation:majin-recovery-tilt 1.7s ease-in-out infinite;
+}
+@keyframes majin-recovery-breathe{50%{transform:scale(.72);opacity:.48}}
+@keyframes majin-recovery-tilt{50%{transform:rotate(-24deg) scale(.88);opacity:.65}}
+@media(prefers-reduced-motion:reduce){
+  #composer #work-progress[data-phase="recovery"] .pulse,
+  #composer #work-progress[data-phase="recovery"] #work-progress-symbol{animation:none!important}
+}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
