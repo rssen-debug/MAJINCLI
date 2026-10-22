@@ -75,7 +75,7 @@ function scroll(force = false) {
   if (!force && S.readingHistory) return;
   // V1: avoid redundant scroll writes during streamed responses.
   const target = s.scrollHeight;
-  if (s.scrollTop + s.clientHeight < target - 1) s.scrollTop = target;
+  if (force || s.scrollTop + s.clientHeight < target - 1) s.scrollTop = target;
 }
 $('scroller').addEventListener('scroll', () => {
   const n = $('scroller'); S.readingHistory = n.scrollHeight - n.clientHeight - n.scrollTop > 100;
