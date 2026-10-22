@@ -38,6 +38,7 @@ import { createAgent } from './agent.js';
 import { discoverModels, refreshAllCatalogs } from './models.js';
 import { Kernel } from './kernel.js';
 import { t } from './ui/strings.js';
+import { synthesize, VOICE_MODES } from './voice.js';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui');
 
@@ -49,6 +50,7 @@ const STATIC = {
   '/spirit.js': { file: 'spirit.js', type: 'text/javascript; charset=utf-8' },
   '/voice.js': { file: 'voice.js', type: 'text/javascript; charset=utf-8' },
   '/strings.js': { file: 'strings.js', type: 'text/javascript; charset=utf-8' },
+  '/session.js': { file: 'session.js', type: 'text/javascript; charset=utf-8' },
   '/manifest.webmanifest': { file: 'manifest.webmanifest', type: 'application/manifest+json; charset=utf-8' },
   '/sw.js': { file: 'sw.js', type: 'text/javascript; charset=utf-8' },
   '/icons/icon-192.png': { file: 'icons/icon-192.png', type: 'image/png' },
@@ -317,6 +319,70 @@ export function createV4Server({ config }) {
       if (token) sessions.revokeByToken(token);
       res.setHeader('set-cookie', clearCookie(config.auth.cookieName, { secure: isSecureRequest(req, config) }));
       sendJson(res, 200, { ok: true });
+    },
+
+    'POST /api/voice/speak': async (req, res) => {
+      const { session } = requireSession(req);
+      assertCsrfHeader(req);
+      void session;
+      limiter.take('turns', clientKey(req, config));
+      const body = await readJsonBody(req, 16 * 1024);
+      const text = String(body.text || '').trim();
+      if (!text) throw new HttpError(400, 'EMPTY_TEXT', 'text is required.');
+      if (text.length > 1500) throw new HttpError(413, 'TEXT_TOO_LONG', 'text is limited to 1500 characters.');
+      const mode = VOICE_MODES.includes(body.mode) ? body.mode : 'auto';
+      const result = await synthesize({
+        text,
+        mode,
+        voice: body.voice ? String(body.voice).slice(0, 64) : null,
+        approvals: agent.approvals,
+        dir: path.join(paths.root, 'voice'),
+      });
+
+      if (!result.ok) {
+        const status = result.pendingConsent ? 409 : 502;
+        sendJson(res, status, {
+          ok: false,
+          provider: result.provider,
+          error: {
+            code: result.pendingConsent ? 'CONSENT_REQUIRED' : (result.errorClass || 'tts_failed'),
+            message: result.pendingConsent
+              ? 'External voice synthesis needs a consent record for scope voice:external.'
+              : (result.message || 'speech synthesis failed'),
+          },
+        });
+        return;
+      }
+
+      const audio = fs.readFileSync(result.audioPath);
+      try {
+        fs.unlinkSync(result.audioPath);
+      } catch { /* temp file cleanup is best effort */ }
+      res.writeHead(200, {
+        'content-type': result.format === 'mp3' ? 'audio/mpeg' : 'audio/wav',
+        'cache-control': 'no-store',
+        'x-majin-tts-provider': result.provider,
+        'x-majin-tts-verified': String(result.verified),
+        'x-majin-tts-synthetic': String(result.synthetic),
+        'content-length': String(audio.length),
+      });
+      res.end(audio);
+    },
+
+    'GET /api/voice': async (req, res) => {
+      requireSession(req);
+      sendJson(res, 200, {
+        ok: true,
+        modes: VOICE_MODES,
+        default: 'auto',
+        // The browser engine is what the phone actually uses today.
+        clientEngine: 'SpeechSynthesis + SpeechRecognition',
+        serverSide: {
+          tts: ['buffer', 'edge-tts'],
+          stt: ['buffer'],
+          note: 'Buffer is a deterministic offline provider that proves the pipeline, not a voice.',
+        },
+      });
     },
 
     'GET /api/kernel': async (req, res) => {

@@ -82,7 +82,7 @@ test('security: the UI ships no inline script and no secrets', () => {
   const html = fs.readFileSync(path.join(UI, 'index.html'), 'utf8');
   assert.ok(!/<script(?![^>]*src=)/i.test(html), 'no inline <script>');
   assert.ok(!/on(click|load|error)=/i.test(html), 'no inline handlers');
-  for (const f of ['app.js', 'spirit.js', 'voice.js', 'sw.js', 'strings.js']) {
+  for (const f of ['app.js', 'spirit.js', 'voice.js', 'sw.js', 'strings.js', 'session.js']) {
     const src = fs.readFileSync(path.join(UI, f), 'utf8');
     assert.ok(!/sk-[a-zA-Z0-9]{16,}/.test(src), `${f} has no key`);
     assert.ok(!/ghp_[a-zA-Z0-9]{20,}/.test(src), `${f} has no token`);
@@ -99,6 +99,7 @@ test('ui: every asset is served with the right content type', async () => {
       '/spirit.js': 'text/javascript',
       '/voice.js': 'text/javascript',
       '/strings.js': 'text/javascript',
+      '/session.js': 'text/javascript',
       '/manifest.webmanifest': 'application/manifest+json',
       '/sw.js': 'text/javascript',
       '/icons/icon-192.png': 'image/png',

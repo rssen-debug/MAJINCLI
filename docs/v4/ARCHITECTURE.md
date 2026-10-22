@@ -20,7 +20,8 @@ Private tunnel  →  MAJIN V4 host  (127.0.0.1 on the Windows PC)
         ├── models.js      model discovery from the EXISTING V1 config
         ├── store.js       conversations + goals on disk (atomic writes)
         ├── kernel.js      versioned capability API, plugins, feature flags
-        └── ui/            PWA: index.html, app.css, app.js, spirit.js, voice.js, strings.js
+        ├── voice.js       server-side TTS through the V2 voice lane (optional)
+        └── ui/            PWA: index.html, app.css, app.js, session.js, spirit.js, voice.js, strings.js
 ```
 
 Modular monolith. One process, one port, no microservices. The browser is an
@@ -38,6 +39,7 @@ untrusted client; every tool runs on the host behind an approval decision.
 | Memory | `src/v2/memory/store.js` | preferences |
 | Provider transport | `src/core/provider/chat.js` + `openai.js`/`anthropic.js` | real model calls |
 | Live model catalog | `src/core/provider/catalog.js` (pagination, per-provider auth, origin pinning) | `/api/models?refresh=1` |
+| Speech synthesis + verification | `src/v2/voice/speak.js`, `tts.js` | `POST /api/voice/speak` (opt-in) |
 | Rate limiting + classification | `src/core/ratelimit.js` | model admission |
 | Config layout | `src/core/paths.js` rules (re-implemented narrowly in `config.js`) | data dir |
 
@@ -105,6 +107,19 @@ endpoint and cannot silently change desktop route defaults.
 Known limits: no CSRF tokens per form (header + same-origin instead), the
 session store is a JSON file (single-host), and there is no distributed rate
 limiter. Those are deliberate choices for a single-owner private deployment.
+
+## 5.1 Client state
+
+The browser keeps its conversation state in `src/v4/ui/session.js`: a pure
+reducer over the same SSE events the server emits, plus an SSE parser. It is
+imported by `app.js` and tested directly, including a real HTTP round trip that
+asserts a second message stays in the first conversation. The server is the
+authority for `conversationId`; the client never invents one.
+
+Why it exists: the first version hashed this logic into the DOM and silently
+lost the conversation id, so the app started a new thread on every message while
+all server tests stayed green. Behaviour that only lives in the view is behaviour
+nobody tests.
 
 ## 6. Platform kernel
 

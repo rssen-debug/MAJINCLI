@@ -469,8 +469,10 @@
         {
           "id": "V7",
           "weight": 2,
-          "status": "NOT_STARTED",
-          "title": "Server-side STT/TTS via existing V2 voice adapters"
+          "status": "PARTIAL",
+          "title": "Server-side TTS wired through the V2 voice lane (offline provider verified)",
+          "evidence": "test/v4/voice-server.test.js",
+          "note": "The V2 adapters, consent path, file verifier and HTTP surface are proven with the deterministic offline provider. A real engine (edge-tts) needs network to Microsoft and is not verified here."
         }
       ]
     },

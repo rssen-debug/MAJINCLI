@@ -652,3 +652,22 @@ input[type="checkbox"] { accent-color: var(--pink); width: 18px; height: 18px; }
 .model-status[data-status="missing-key"] { color: var(--err); }
 .model-status[data-status="configured"] { color: var(--warn); }
 .model-empty { font-size: 12.5px; color: var(--text-mute); padding: 8px 2px; line-height: 1.5; }
+
+/* ------------------------------------------------------------- goal list -- */
+
+.goal-list { list-style: none; margin: var(--s2) 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.goal-item {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px var(--s3);
+  padding: 10px 12px; border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.03); font-size: 13px; color: var(--text-dim);
+}
+.goal-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.goal-state {
+  font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-mute);
+  align-self: center; white-space: nowrap;
+}
+.goal-state[data-state="BLOCKED"] { color: var(--warn); }
+.goal-state[data-state="FAILED"] { color: var(--err); }
+.goal-state[data-state="RUNNING"], .goal-state[data-state="VERIFYING"] { color: var(--violet); }
+.goal-item .btn.small { grid-column: 1 / -1; justify-self: start; margin-top: 2px; padding: 6px 12px; font-size: 12px; }
+.goal-empty { font-size: 12.5px; color: var(--text-mute); padding: 6px 2px; }

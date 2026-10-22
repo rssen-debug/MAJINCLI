@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 111
-# pass 111
+# tests 126
+# pass 126
 # fail 0
 # skipped 0
 ```
@@ -36,15 +36,17 @@ $ npm run v4:test
 | `test/v4/resume.test.js` | 9 | resume against recorded hashes, deleted/tampered artifacts stay BLOCKED, correction lineage, cross-device read |
 | `test/v4/agent-failures.test.js` | 9 | throwing/schema-breaking/hanging tools, budget stop, strict-policy pause, prompt-injection corpus |
 | `test/v4/benchmark.test.js` | 3 | benchmark pass rate, duplicate replay, refusal is FAILED |
+| `test/v4/client.test.js` | 9 | conversation continuity across turns, delta assembly, tool card states, replay, cancellation, SSE parser edge cases |
+| `test/v4/voice-server.test.js` | 6 | auth/CSRF, verified WAV from the V2 lane, temp cleanup, input limits, honest capability report |
 
 ## 2. Repository gates
 
 ```
 $ npm run check
-486/486 files parse cleanly.
+490/490 files parse cleanly.
 
 $ npm run i18n
-0 Swedish string literal(s) in 259 files
+0 Swedish string literal(s) in 261 files
 
 $ npm run v4:progress --check
 67.5/100 verified points, matrix valid (exit 0)
@@ -65,6 +67,16 @@ POST /api/chat  "Skriv filen valkomst.txt med innehåll: Hej från MAJIN"
   → tool_start workspace_write → tool_result {ok:true, verified:true}
   → goal COMPLETED, receipt sha256 44e095c7…, 26 bytes on disk
 ```
+
+## 3.1 Bugs the tests found (fixed, not hidden)
+
+| Bug | How it was caught | Fix |
+|---|---|---|
+| UI dropped the server's conversation id → every message started a new conversation | `client.test.js` driving real SSE bytes through the client model | client state extracted to `src/v4/ui/session.js`, server is authoritative for the id |
+| Resume compared a file against its own hash → tampering was undetectable | `resume.test.js` | compare against the SHA-256 recorded when the work was done |
+| Approval wait skipped a legal state hop → goal stuck in WAITING_FOR_TOOL | `agent-failures.test.js` | explicit RUNNING → WAITING_FOR_APPROVAL |
+| A turn could end COMPLETED after an unrecovered tool failure | `agent-failures.test.js` | last tool outcome gates completion |
+| CRLF-separated SSE stalled the client parser | `client.test.js` | line endings normalised before framing |
 
 ## 4. What is NOT tested here
 

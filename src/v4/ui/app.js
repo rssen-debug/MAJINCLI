@@ -9,6 +9,7 @@
 import { createSpirit } from '/spirit.js';
 import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage } from '/voice.js';
 import { t } from '/strings.js';
+import { INITIAL, applyEvent, createSseParser } from '/session.js';
 
 const $ = (sel) => document.querySelector(sel);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -42,6 +43,7 @@ const els = {
   refreshModels: $('#refresh-models'),
   sheetFiles: $('#file-list'),
   sheetConvs: $('#conv-list'),
+  sheetGoals: $('#goal-list'),
   ttsToggle: $('#tts-toggle'),
   autosendToggle: $('#autosend-toggle'),
   voiceNote: $('#voice-note'),
@@ -76,6 +78,7 @@ const state = {
   bubbleText: '',
   version: null,
   requestSeq: 0,
+  session: { ...INITIAL },
 };
 
 const spirit = createSpirit($('#spirit'), { reducedMotion, lowPower });
@@ -310,6 +313,7 @@ async function loadState() {
     : t('model.providerNote', { provider: data.model.provider });
   els.versionNote.textContent = `MAJIN ${data.version} · policy: ${data.policy}`;
   renderFiles(data.workspace?.files || []);
+  renderGoals(data.goals || []);
   renderConversations(data.conversations || []);
   loadModels();
   if (demo) els.hint.textContent = t('hero.demoHint');
@@ -330,6 +334,60 @@ function renderFiles(files) {
     name.textContent = f;
     li.append(name);
     els.sheetFiles.append(li);
+  }
+}
+
+/**
+ * Goals the host has on disk. A BLOCKED goal gets an explicit resume control:
+ * resuming re-verifies against recorded hashes on the server and can still come
+ * back BLOCKED, so the button never promises success.
+ */
+function renderGoals(list) {
+  els.sheetGoals.textContent = '';
+  const open = list.filter((g) => ['BLOCKED', 'FAILED', 'RUNNING', 'VERIFYING', 'WAITING_FOR_APPROVAL'].includes(g.state));
+  if (!open.length) {
+    const li = document.createElement('li');
+    li.className = 'goal-empty';
+    li.textContent = t('sheet.noGoals');
+    els.sheetGoals.append(li);
+    return;
+  }
+  for (const goal of open.slice(0, 10)) {
+    const li = document.createElement('li');
+    li.className = 'goal-item';
+    const title = document.createElement('span');
+    title.className = 'goal-title';
+    title.textContent = goal.objective || goal.id;
+    const state = document.createElement('span');
+    state.className = 'goal-state';
+    state.dataset.state = goal.state;
+    state.textContent = t(`goal.state.${goal.state}`);
+    li.append(title, state);
+    if (goal.state === 'BLOCKED') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn ghost small';
+      btn.textContent = t('goal.resume');
+      btn.addEventListener('click', () => resumeGoal(goal.id, btn));
+      li.append(btn);
+    }
+    els.sheetGoals.append(li);
+  }
+}
+
+async function resumeGoal(goalId, button) {
+  button.disabled = true;
+  button.textContent = t('goal.resuming');
+  try {
+    const res = await api('/api/goal/resume', { method: 'POST', body: { goalId } });
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+    await readStream(res.body, new AbortController().signal);
+    await refreshSidebar();
+  } catch (err) {
+    toast(err.message || t('msg.genericError'));
+  } finally {
+    button.disabled = false;
+    button.textContent = t('goal.resume');
   }
 }
 
@@ -445,17 +503,13 @@ function finishStream() {
 async function readStream(stream, signal) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  const parser = createSseParser();
   let finalText = '';
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let idx;
-    while ((idx = buffer.indexOf('\n\n')) >= 0) {
-      const chunk = buffer.slice(0, idx);
-      buffer = buffer.slice(idx + 2);
-      const handled = handleEvent(chunk);
+    for (const ev of parser.push(decoder.decode(value, { stream: true }))) {
+      const handled = dispatch(ev.event, ev.data);
       if (handled?.final) finalText = handled.final;
     }
     if (signal.aborted) {
@@ -465,27 +519,40 @@ async function readStream(stream, signal) {
       break;
     }
   }
+  const tail = parser.pending;
+  if (tail.trim()) {
+    const last = handleEventText(tail);
+    if (last) dispatch(last.event, last.data);
+  }
   return finalText;
 }
 
-function handleEvent(chunk) {
+function handleEventText(chunk) {
+  const lines = chunk.split('\n').filter(Boolean);
   let event = 'message';
-  const dataLines = [];
-  for (const line of chunk.split('\n')) {
+  const data = [];
+  for (const line of lines) {
     if (line.startsWith('event:')) event = line.slice(6).trim();
-    else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+    else if (line.startsWith('data:')) data.push(line.slice(5).trim());
   }
-  if (!dataLines.length) return null;
-  let data;
+  if (!data.length) return null;
   try {
-    data = JSON.parse(dataLines.join('\n'));
+    return { event, data: JSON.parse(data.join('\n')) };
   } catch {
     return null;
   }
-  return applyEvent(event, data);
 }
 
-function applyEvent(event, data) {
+/** Fold the event into client state, then let the view react. */
+function dispatch(event, data) {
+  const before = state.session;
+  const { state: next, intents } = applyEvent(before, event, data);
+  state.session = next;
+  if (next.conversationId) state.conversationId = next.conversationId;
+  return viewIntents(event, data, intents);
+}
+
+function viewIntents(event, data, intents) {
   switch (event) {
     case 'open':
       if (data.model) {
@@ -542,6 +609,20 @@ function applyEvent(event, data) {
     case 'cancelled':
       addMessage('assistant', t('msg.cancelledShort'), { error: true, meta: timeLabel() });
       break;
+
+    case 'resume_result': {
+      if (data.status === 'completed') {
+        addMessage('assistant', t('goal.resumed'), { meta: timeLabel() });
+        spirit.set('done');
+      } else {
+        addMessage('assistant', t('goal.stillBlocked', { items: (data.missing || []).join(', ') || '?' }), {
+          error: true,
+          meta: timeLabel(),
+        });
+        spirit.set('error');
+      }
+      break;
+    }
 
     case 'replay':
       if (data.content) addMessage('assistant', data.content, { meta: t('state.replayed') });
@@ -821,6 +902,7 @@ async function refreshSidebar() {
     if (!res.ok) return;
     const data = await res.json();
     renderFiles(data.workspace?.files || []);
+    renderGoals(data.goals || []);
     renderConversations(data.conversations || []);
   } catch { /* sidebar is non-critical */ }
 }

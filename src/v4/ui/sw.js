@@ -14,6 +14,7 @@ const SHELL = [
   '/spirit.js',
   '/voice.js',
   '/strings.js',
+  '/session.js',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
