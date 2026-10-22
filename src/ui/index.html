@@ -426,6 +426,12 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="grounded"] .pulse{background:#bd9afa;box-shadow:0 0 0 3px rgba(187,151,244,.13);animation:majin-grounded 1.8s ease-in-out infinite}
 @keyframes majin-grounded{50%{opacity:.56;transform:scale(.77)}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="grounded"] .pulse{animation:none}}
+/* Subtle amber recovery ember: state remains inside the composer, never a new panel. */
+#composer #work-progress[data-phase="blocked"]{--ember:#ffc68a;--halo:rgba(255,198,138,.22);border-top-color:rgba(255,198,138,.23)}
+#composer #work-progress[data-phase="blocked"] #work-progress-label{color:#f7d6ad;transition:color .22s ease}
+#composer #work-progress[data-phase="blocked"] .pulse{animation-duration:2.1s}
+#composer #work-progress[data-phase="blocked"]::after{background:linear-gradient(90deg,transparent,rgba(255,198,138,.8),transparent);animation-duration:3.3s}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="blocked"] .pulse{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
