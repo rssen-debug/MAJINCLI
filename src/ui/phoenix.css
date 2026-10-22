@@ -436,15 +436,15 @@ body.simple .msg .appr button:focus-visible {
 }
 
 /* Aurora polish: actionable plan updates remain quiet but visibly accessible. */
-body.simple .msg [data-plan-action] {
+body.simple .msg .appr button {
   min-height:40px;
   border-radius:10px;
   outline-offset:3px;
 }
-body.simple .msg [data-plan-action]:focus-visible {
+body.simple .msg .appr button:focus-visible {
   outline:2px solid var(--cy);
   box-shadow:0 0 0 4px var(--cysoft);
 }
 @media(max-width:600px){
- body.simple .msg [data-plan-action] { min-height:44px; }
+ body.simple .msg .appr button { min-height:44px; }
 }
