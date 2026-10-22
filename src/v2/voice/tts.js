@@ -60,15 +60,22 @@ export class CommandTtsProvider {
   async speech(text, { outPath = null } = {}) {
     if (!this.commandTemplate) throw new ModelError('DEPENDENCY_MISSING', 'command tts has no template');
     const out = outPath || `speech-${Date.now()}.wav`;
-    const cmd = this.commandTemplate.replace('{OUT}', JSON.stringify(out)).replace('{TEXT}', JSON.stringify(text));
-    const tier = preflight(cmd);
+    // two gates, different jobs:
+    //  1) preflight scans the TEMPLATE (consent tier) — 'rm -rf /' dies here
+    //  2) runSafe executes argv-style with NO SHELL — text is literal data;
+    //     a `$` in the text can never be evaluated (see src/v2/spawn/safe-exec.js)
+    const tier = preflight(this.commandTemplate);
     if (tier.tier === 'no') throw new ModelError('PERMISSION_DENIED', `tts command blocked by preflight: ${tier.reason}`, { provider: this.name });
-    const { exec } = await import('node:child_process');
-    await new Promise((resolve, reject) => {
-      const p = exec(cmd, { timeout: this.timeoutMs, windowsHide: true, shell: '/bin/sh' }, (err) => err ? reject(err) : resolve());
-      if (this.executableName === null) return;
-      return p;
-    });
+    const { runSafe, SafeExecError } = await import('../spawn/safe-exec.js');
+    try {
+      await runSafe(this.commandTemplate, { OUT: out, TEXT: text }, { timeoutMs: this.timeoutMs });
+    } catch (e) {
+      if (e instanceof SafeExecError) {
+        const cls = e.cls === 'SPAWN' ? 'DEPENDENCY_MISSING' : e.cls === 'SAFE_REFUSED' ? 'PERMISSION_DENIED' : 'MODEL_FAILURE';
+        throw new ModelError(cls, `command tts failed honestly: ${e.cls} — ${e.message}`, { provider: this.name });
+      }
+      throw e;
+    }
     const st = fs.statSync(out);
     return { audioPath: out, bytes: st.size, format: 'wav', provider: this.name };
   }
