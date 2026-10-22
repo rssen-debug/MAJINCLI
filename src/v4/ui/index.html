@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#07060c" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="MAJIN — privat assistent som utför saker, inte bara pratar." />
+  <title>MAJIN</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icons/icon-192.png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="MAJIN" />
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <div class="aurora" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <header class="topbar" id="topbar">
+    <div class="brand" aria-label="MAJIN">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">MAJIN</span>
+      <span class="brand-ver">v4</span>
+    </div>
+    <div class="topbar-actions">
+      <button type="button" class="pill" id="model-pill" aria-haspopup="dialog">
+        <span class="dot" id="conn-dot" aria-hidden="true"></span>
+        <span id="model-label">ansluter…</span>
+      </button>
+      <button type="button" class="icon-btn" id="menu-btn" aria-label="Meny" aria-haspopup="dialog" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="stage" id="stage">
+    <section class="hero" id="hero">
+      <div class="spirit-wrap">
+        <canvas id="spirit" width="320" height="320" role="img" aria-label="MAJINs närvaro"></canvas>
+      </div>
+      <h1 class="hero-title" id="hero-title">Vad vill du få gjort?</h1>
+      <p class="hero-sub" id="hero-sub">Säg det. MAJIN planerar, utför och visar beviset.</p>
+      <div class="suggestions" id="suggestions">
+        <button type="button" class="chip" data-fill="Lista filerna i arbetsytan">Lista filerna i arbetsytan</button>
+        <button type="button" class="chip" data-fill="Skriv filen välkomst.txt med innehåll: Hej från MAJIN på min telefon.">Skriv en fil åt mig</button>
+        <button type="button" class="chip" data-fill="Vad kan du göra just nu?">Vad kan du göra?</button>
+      </div>
+    </section>
+
+    <section class="thread" id="thread" aria-live="polite" aria-relevant="additions text"></section>
+  </main>
+
+  <section class="approval" id="approval" hidden aria-live="assertive">
+    <div class="approval-head">
+      <span class="approval-kicker">Kräver ditt godkännande</span>
+      <button type="button" class="approval-x" id="approval-dismiss" aria-label="Stäng">×</button>
+    </div>
+    <p class="approval-text" id="approval-text"></p>
+    <div class="approval-actions">
+      <button type="button" class="btn ghost" id="approval-deny">Nej</button>
+      <button type="button" class="btn primary" id="approval-allow">Ja, kör</button>
+    </div>
+  </section>
+
+  <div class="offline-bar" id="offline-bar" hidden>Offline — MAJIN kan inte nå värden. Meddelanden sparas inte.</div>
+
+  <form class="composer" id="composer" autocomplete="off">
+    <div class="composer-inner">
+      <button type="button" class="mic" id="mic-btn" aria-label="Tala" aria-pressed="false">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/>
+          <path d="M18 11a6 6 0 0 1-12 0M12 17v4M9 21h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <span class="mic-ring" aria-hidden="true"></span>
+      </button>
+      <label class="sr-only" for="input">Meddelande till MAJIN</label>
+      <textarea id="input" rows="1" placeholder="Skriv eller tryck på mikrofonen…" enterkeyhint="send" maxlength="8000"></textarea>
+      <button type="submit" class="send" id="send-btn" aria-label="Skicka" disabled>
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button type="button" class="stop" id="stop-btn" aria-label="Stoppa" hidden>
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+      </button>
+    </div>
+    <p class="composer-hint" id="composer-hint"></p>
+  </form>
+
+  <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+  <aside class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <h2 id="sheet-title" class="sheet-title">MAJIN</h2>
+
+    <div class="sheet-section">
+      <h3>Modell</h3>
+      <p class="sheet-value" id="sheet-model">…</p>
+      <p class="sheet-note" id="sheet-model-note"></p>
+      <ul class="model-list" id="model-list" role="radiogroup" aria-label="Välj modell"></ul>
+      <p class="sheet-note" id="model-source"></p>
+    </div>
+
+    <div class="sheet-section">
+      <h3>Röst</h3>
+      <label class="row">
+        <span>Läs upp svar</span>
+        <input type="checkbox" id="tts-toggle" />
+      </label>
+      <label class="row">
+        <span>Skicka direkt efter tal</span>
+        <input type="checkbox" id="autosend-toggle" checked />
+      </label>
+      <p class="sheet-note" id="voice-note"></p>
+    </div>
+
+    <div class="sheet-section">
+      <h3>Arbetsyta</h3>
+      <ul class="file-list" id="file-list"></ul>
+    </div>
+
+    <div class="sheet-section">
+      <h3>Samtal</h3>
+      <ul class="conv-list" id="conv-list"></ul>
+      <button type="button" class="btn ghost wide" id="new-chat">Nytt samtal</button>
+    </div>
+
+    <div class="sheet-section">
+      <h3>Säkerhet</h3>
+      <p class="sheet-note">Inloggad enhet. <button type="button" class="link" id="logout">Logga ut</button></p>
+      <p class="sheet-note" id="version-note"></p>
+    </div>
+  </aside>
+
+  <div class="gate" id="gate" hidden>
+    <div class="gate-card">
+      <div class="gate-orb" aria-hidden="true"></div>
+      <h1>Anslut enheten</h1>
+      <p class="gate-copy">Ange parkodningen som visades på MAJIN-värden första gången den startade.</p>
+      <form id="gate-form" autocomplete="off">
+        <label class="sr-only" for="gate-code">Parkod</label>
+        <input id="gate-code" name="code" inputmode="text" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" maxlength="12" required />
+        <button type="submit" class="btn primary wide" id="gate-submit">Anslut</button>
+      </form>
+      <p class="gate-error" id="gate-error" role="alert" hidden></p>
+      <p class="gate-note">Koden finns på värden: <code>npm run v4:pair</code> skriver ut en ny.</p>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <template id="tpl-message">
+    <article class="msg">
+      <div class="msg-body"></div>
+      <div class="msg-meta"></div>
+    </article>
+  </template>
+
+  <template id="tpl-tool">
+    <details class="tool">
+      <summary>
+        <span class="tool-state" aria-hidden="true"></span>
+        <span class="tool-name"></span>
+        <span class="tool-summary"></span>
+      </summary>
+      <div class="tool-detail"></div>
+    </details>
+  </template>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

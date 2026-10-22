@@ -1,0 +1,136 @@
+/**
+ * MAJIN V4 — Swedish UI copy.
+ *
+ * Product language lives in one file, separate from behaviour, so it can be
+ * translated or reviewed without touching logic. The repository's i18n gate
+ * scans shipped code for stray non-English literals; this module is the
+ * declared localization resource and is exempt for that reason only.
+ */
+export const SV = {
+  'gate.title': 'Anslut enheten',
+  'gate.copy': 'Ange parkodningen som visades på MAJIN-värden första gången den startade.',
+  'gate.code': 'Parkod',
+  'gate.connect': 'Anslut',
+  'gate.hint': 'Koden finns på värden: npm run v4:pair skriver ut en ny.',
+  'gate.badCode': 'Koden stämmer inte. Försök igen.',
+  'gate.failed': 'Kunde inte ansluta. Försök igen.',
+  'gate.offline': 'Nätverket svarar inte.',
+  'gate.expired': 'Sessionen har gått ut. Anslut igen.',
+  'gate.loggedOut': 'Utloggad.',
+
+  'hero.title': 'Vad vill du få gjort?',
+  'hero.sub': 'Säg det. MAJIN planerar, utför och visar beviset.',
+  'hero.demoHint': 'Demo-läge — koppla en modell för fri konversation.',
+
+  'composer.placeholder': 'Skriv eller tryck på mikrofonen…',
+  'composer.listening': 'Lyssnar…',
+
+  'state.speaking': 'MAJIN talar',
+  'state.verified': 'verifierad på disk',
+  'state.done': 'utförd',
+  'state.running': 'kör…',
+  'state.failed': 'misslyckades',
+  'state.replayed': 'återuppspelat svar',
+  'state.receipt': 'kvitto',
+
+  'msg.cancelled': 'Avbrutet. Ingenting mer kördes.',
+  'msg.cancelledShort': 'Avbrutet.',
+  'msg.genericError': 'Något gick fel.',
+  'msg.hostUnreachable': 'Jag nådde inte värden: {error}. Ingenting utfördes.',
+  'msg.approvalFailed': 'Godkännandet kunde inte genomföras: {error}',
+
+  'approval.kicker': 'Kräver ditt godkännande',
+  'approval.text': '{tool} kräver ditt godkännande.',
+  'approval.deny': 'Nej',
+  'approval.allow': 'Ja, kör',
+
+  'sheet.title': 'MAJIN',
+  'sheet.model': 'Modell',
+  'sheet.voice': 'Röst',
+  'sheet.workspace': 'Arbetsyta',
+  'sheet.chats': 'Samtal',
+  'sheet.security': 'Säkerhet',
+  'sheet.newChat': 'Nytt samtal',
+  'sheet.logout': 'Logga ut',
+  'sheet.speakReplies': 'Läs upp svar',
+  'sheet.autoSend': 'Skicka direkt efter tal',
+  'sheet.emptyWorkspace': 'Tom arbetsyta',
+  'sheet.messages': 'medd.',
+
+  'model.none': 'Inga modeller hittades i Windows-konfigurationen. MAJIN kör demo.',
+  'model.readConfig': 'Läste {path} — inga providers med nyckel.',
+  'model.noConfig': 'Ingen MAJIN-konfiguration hittades på värden.',
+  'model.summary': '{count} konfigurerade modeller från värden. Endast live-verifierade har kvitto.',
+  'model.demoNote': 'Ingen språkmodell är kopplad. MAJIN kör en deterministisk demo som bara klarar filuppgifter i arbetsytan.',
+  'model.providerNote': 'Provider: {provider}. Modellen svarar via värden.',
+  'model.missingKey': 'nyckel saknas',
+  'model.unverified': 'okonfirmerad',
+  'model.live': 'live',
+  'model.selected': 'Modell vald',
+  'model.selectFailed': 'Kunde inte byta modell',
+  'model.waitForTurn': 'Vänta tills svaret är klart.',
+
+  'tool.workspace_write': 'Skriver fil',
+  'tool.workspace_read': 'Läser fil',
+  'tool.workspace_list': 'Listar arbetsyta',
+  'tool.memory_save': 'Sparar minne',
+  'tool.memory_search': 'Söker minne',
+
+  'voice.unsupported': 'Din webbläsare saknar röstinmatning. Text fungerar fullt ut.',
+  'voice.readyTts': 'Tryck för att tala (en tur i taget). Svaren kan läsas upp. Bakgrundsmikrofon stöds inte av iOS/Android i webbläsare.',
+  'voice.readyNoTts': 'Tryck för att tala (en tur i taget). Uppläsning stöds inte i den här webbläsaren.',
+  'voice.noTts': 'Uppläsning stöds inte i den här webbläsaren.',
+  'voice.blocked': 'Mikrofonen är blockerad. Tillåt mikrofon i webbläsarens inställningar.',
+  'voice.noSpeech': 'Jag hörde inget. Försök igen.',
+  'voice.noMic': 'Ingen mikrofon hittades på enheten.',
+  'voice.needsNetwork': 'Röstigenkänningen behöver nätverk.',
+  'voice.error': 'Röstfel: {code}',
+
+  'conn.offline': 'Offline — MAJIN kan inte nå värden. Meddelanden sparas inte.',
+  'conn.back': 'Ansluten igen',
+  'conn.connecting': 'ansluter…',
+  'common.done': 'Klart.',
+  'common.unknownError': 'okänt fel',
+  'agent.files': '{count} fil(er)',
+  'agent.matches': '{count} träff(ar)',
+  'agent.summaryDone': 'klart',
+  'agent.failed': 'Jag kunde inte slutföra det här: {reason}',
+  'agent.denied': 'Avbrutet — du nekade åtgärden. Ingenting utfördes.',
+  'agent.approved': 'Klart — {tool} utfördes och verifierades.',
+  'agent.notExecuted': 'Åtgärden utfördes inte: {error}.',
+
+  'demo.doneSv': 'Klart. Jag skapade **{name}** i arbetsytan och verifierade den mot disken: {bytes} byte, sha256 `{hash}…`.',
+  'demo.doneEn': 'Done. I created **{name}** in the workspace and verified it on disk: {bytes} bytes, sha256 `{hash}…`.',
+  'demo.failSv': 'Det gick inte: {error}. Ingenting skrevs till disk.',
+  'demo.failEn': 'That did not work: {error}. Nothing was written to disk.',
+  'demo.badNameSv': 'Filnamnet fungerar inte: {error}. Ge mig ett enkelt namn utan mappar, till exempel `anteckning.txt`.',
+  'demo.badNameEn': 'That filename does not work: {error}. Give me a simple name without folders, for example `note.txt`.',
+  'demo.introSv': 'Jag kör i **demo-läge** — det finns ingen språkmodell kopplad ännu.\n\nI demo kan jag ändå utföra riktiga filuppgifter i arbetsytan, till exempel:\n\n> skriv filen välkomst.txt med innehåll: Hej från MAJIN\n\nKoppla en modell med `MAJIN_V4_BASE_URL`, `MAJIN_V4_API_KEY` och `MAJIN_V4_MODEL` så blir samtalet fritt i stället för mallbaserat.',
+  'demo.introEn': 'I am running in **demo mode** — no language model is connected yet.\n\nEven in demo I can perform real file tasks in the workspace, for example:\n\n> write file welcome.txt with content: Hello from MAJIN\n\nConnect a model with `MAJIN_V4_BASE_URL`, `MAJIN_V4_API_KEY` and `MAJIN_V4_MODEL` to replace the template replies with real conversation.',
+
+  'model.status.missingKey': 'Saknar nyckel',
+  'model.status.configured': 'Konfigurerad (ej live-verifierad)',
+  'model.status.verified': 'Live-verifierad i denna session',
+  'model.status.unavailable': 'Tillfälligt otillgänglig',
+  'model.envLabel': 'Miljövariabel',
+  'model.caveat': 'Konfigurerad betyder att en nyckel finns, inte att modellen svarat ännu.',
+
+  'cli.pairExists': 'En parkod finns redan. Kör med --rotate för att ersätta den.',
+  'cli.pairEnter': '  Ange den i webbläsaren på telefonen.',
+  'cli.pairRotate': '  Parkod finns redan. Ny kod: npm run v4:pair -- --rotate',
+  'cli.reconciled': '  {count} pågående uppgift(er) markerades BLOCKED efter omstart:',
+  'cli.shutdown': '{signal} — stänger av.',
+  'cli.help.serve': '  node src/v4/main.js          starta servern',
+  'cli.help.pair': '  node src/v4/main.js pair     visa/rotera parkod',
+  'cli.help.env': '  miljö: MAJIN_V4_PORT, MAJIN_V4_HOST, MAJIN_V4_BASE_URL,',
+};
+
+
+/** Look up copy and fill {placeholders}. Unknown keys pass through. */
+export function t(key, vars = null) {
+  const template = SV[key] ?? key;
+  if (!vars) return template;
+  return template.replace(/\{(\w+)\}/g, (_, name) => (vars[name] == null ? `{${name}}` : String(vars[name])));
+}
+
+export default { SV, t };

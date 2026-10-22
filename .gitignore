@@ -1,32 +1,15 @@
 node_modules/
-.lent/
-data/
-lent.config.json
-*.log
-*.pyc
-__pycache__/
-.DS_Store
-coverage/
 dist/
-.env
+out/
+*.log
+.DS_Store
 
-.pkg-cache/
-memory/
-!src/v2/memory/
-# src/v2/memory/ is V2 kernel source, not app-runtime data (guard: CI failed once when this dir was silently ignored)
-skills/
+# MAJIN runtime state never belongs in git
+.majin/
+.majin-*/
 majin.config.json
+*.bundle
+!assets/*.bundle
 
-# staged by scripts/build-installer.mjs before iscc runs
-installer/majin-win-x64.exe
-installer/majin.ico
-installer/majin.cmd
-
-# written by scripts/build-on-windows.ps1
-build-notes.txt
-
-# the downloadable bundle this session produced (built artifacts, not source)
-MAJIN-PATCHES.zip
-
-# Disposable browser acceptance evidence
-work/
+# local V4 data if someone points MAJIN_HOME into the repo
+v4-data/

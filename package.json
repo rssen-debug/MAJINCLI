@@ -1,7 +1,7 @@
 {
   "name": "majin",
   "version": "2.0.0-alpha",
-  "description": "MAJIN \u00e2\u20ac\u201d a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
+  "description": "MAJIN â€” a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -44,7 +44,13 @@
     "installer": "node ./scripts/build-installer.mjs",
     "win:build": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-on-windows.ps1",
     "win:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-on-windows.ps1 -SkipBuild",
-    "test:ui": "node scripts/phoenix-browser.mjs"
+    "test:ui": "node scripts/phoenix-browser.mjs",
+    "v4": "node ./src/v4/main.js",
+    "v4:pair": "node ./src/v4/main.js pair",
+    "v4:test": "node --test test/v4/*.test.js",
+    "v4:icons": "node ./scripts/v4/make-icons.mjs",
+    "v4:doctor": "node ./scripts/v4/host-doctor.mjs",
+    "v4:progress": "node ./scripts/v4/progress.mjs"
   },
   "optionalDependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",

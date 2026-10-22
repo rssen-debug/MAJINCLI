@@ -1,0 +1,925 @@
+/**
+ * MAJIN V4 — client.
+ *
+ * The browser is a thin, honest client: it renders what the server proves and
+ * never claims a task succeeded on its own. Voice uses the browser engines
+ * (SpeechRecognition + SpeechSynthesis) so it works without extra services,
+ * and every unsupported capability is reported instead of faked.
+ */
+import { createSpirit } from '/spirit.js';
+import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage } from '/voice.js';
+import { t } from '/strings.js';
+
+const $ = (sel) => document.querySelector(sel);
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const lowPower = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 4) <= 2;
+
+const els = {
+  stage: $('#stage'),
+  hero: $('#hero'),
+  thread: $('#thread'),
+  input: $('#input'),
+  composer: $('#composer'),
+  send: $('#send-btn'),
+  stop: $('#stop-btn'),
+  mic: $('#mic-btn'),
+  hint: $('#composer-hint'),
+  gate: $('#gate'),
+  gateForm: $('#gate-form'),
+  gateCode: $('#gate-code'),
+  gateError: $('#gate-error'),
+  gateSubmit: $('#gate-submit'),
+  modelPill: $('#model-pill'),
+  modelLabel: $('#model-label'),
+  connDot: $('#conn-dot'),
+  menu: $('#menu-btn'),
+  sheet: $('#sheet'),
+  sheetBackdrop: $('#sheet-backdrop'),
+  sheetModel: $('#sheet-model'),
+  sheetModelNote: $('#sheet-model-note'),
+  modelList: $('#model-list'),
+  modelSource: $('#model-source'),
+  sheetFiles: $('#file-list'),
+  sheetConvs: $('#conv-list'),
+  ttsToggle: $('#tts-toggle'),
+  autosendToggle: $('#autosend-toggle'),
+  voiceNote: $('#voice-note'),
+  versionNote: $('#version-note'),
+  offline: $('#offline-bar'),
+  toast: $('#toast'),
+  approval: $('#approval'),
+  approvalText: $('#approval-text'),
+  approvalAllow: $('#approval-allow'),
+  approvalDeny: $('#approval-deny'),
+  approvalDismiss: $('#approval-dismiss'),
+  heroTitle: $('#hero-title'),
+  heroSub: $('#hero-sub'),
+  suggestions: $('#suggestions'),
+  newChat: $('#new-chat'),
+  logout: $('#logout'),
+};
+
+const state = {
+  conversationId: null,
+  modelId: null,
+  streaming: false,
+  controller: null,
+  model: null,
+  tts: false,
+  autosend: true,
+  listening: false,
+  recognition: null,
+  pendingApproval: null,
+  started: false,
+  bubble: null,
+  bubbleText: '',
+  version: null,
+  requestSeq: 0,
+};
+
+const spirit = createSpirit($('#spirit'), { reducedMotion, lowPower });
+spirit.set('idle');
+
+/* --------------------------------------------------------------- helpers -- */
+
+function toast(message, ms = 2600) {
+  els.toast.textContent = message;
+  els.toast.hidden = false;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => {
+    els.toast.hidden = true;
+  }, ms);
+}
+
+function setDot(mode) {
+  els.connDot.dataset.state = mode;
+}
+
+function api(path, { method = 'GET', body = null, signal = null } = {}) {
+  const headers = { accept: 'application/json' };
+  if (body !== null) headers['content-type'] = 'application/json';
+  if (method !== 'GET') headers['x-majin-csrf'] = '1';
+  return fetch(path, {
+    method,
+    headers,
+    credentials: 'same-origin',
+    body: body === null ? undefined : JSON.stringify(body),
+    signal,
+  });
+}
+
+/** Minimal, safe markdown: **bold**, `code`, paragraphs. No HTML injection. */
+function renderRich(container, text) {
+  container.textContent = '';
+  const parts = String(text).split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  for (const part of parts) {
+    if (!part) continue;
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      const b = document.createElement('strong');
+      b.textContent = part.slice(2, -2);
+      container.append(b);
+    } else if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+      const c = document.createElement('code');
+      c.textContent = part.slice(1, -1);
+      container.append(c);
+    } else {
+      container.append(document.createTextNode(part));
+    }
+  }
+}
+
+function timeLabel() {
+  return new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+}
+
+function scrollDown(force = false) {
+  const nearBottom = els.stage.scrollHeight - els.stage.scrollTop - els.stage.clientHeight < 160;
+  if (force || nearBottom) els.stage.scrollTop = els.stage.scrollHeight;
+}
+
+function setHero(visible) {
+  els.hero.hidden = !visible;
+  if (!visible) els.hero.classList.add('is-compact');
+}
+
+function resizeInput() {
+  els.input.style.height = 'auto';
+  els.input.style.height = `${Math.min(els.input.scrollHeight, 132)}px`;
+  els.send.disabled = !els.input.value.trim() || state.streaming;
+}
+
+/* ------------------------------------------------------------- rendering -- */
+
+function addMessage(role, text, { error = false, meta = '' } = {}) {
+  const article = document.createElement('article');
+  article.className = 'msg';
+  article.dataset.role = role;
+  if (error) article.dataset.error = 'true';
+  const body = document.createElement('div');
+  body.className = 'msg-body';
+  if (role === 'assistant') renderRich(body, text);
+  else body.textContent = text;
+  const metaEl = document.createElement('div');
+  metaEl.className = 'msg-meta';
+  metaEl.textContent = meta;
+  article.append(body, metaEl);
+  els.thread.append(article);
+  setHero(false);
+  scrollDown(true);
+  return { article, body, metaEl };
+}
+
+function beginAssistantBubble() {
+  if (state.bubble) return state.bubble;
+  const { article, body } = addMessage('assistant', '', { meta: '' });
+  body.classList.add('cursor');
+  state.bubble = { article, body };
+  state.bubbleText = '';
+  return state.bubble;
+}
+
+function streamDelta(text) {
+  const bubble = beginAssistantBubble();
+  state.bubbleText += text;
+  renderRich(bubble.body, state.bubbleText);
+  scrollDown();
+}
+
+function endAssistantBubble(meta = '') {
+  if (!state.bubble) return state.bubbleText;
+  state.bubble.body.classList.remove('cursor');
+  const metaEl = state.bubble.article.querySelector('.msg-meta');
+  if (metaEl) metaEl.textContent = meta || timeLabel();
+  const text = state.bubbleText;
+  state.bubble = null;
+  state.bubbleText = '';
+  return text;
+}
+
+function toolLabel(name) {
+  return {
+    workspace_write: t('tool.workspace_write'),
+    workspace_read: t('tool.workspace_read'),
+    workspace_list: t('tool.workspace_list'),
+    memory_save: t('tool.memory_save'),
+    memory_search: t('tool.memory_search'),
+  }[name] || name;
+}
+
+function addToolCard(name, input) {
+  const node = document.createElement('details');
+  node.className = 'tool';
+  node.dataset.state = 'running';
+  node.dataset.tool = name;
+
+  const summary = document.createElement('summary');
+  const dot = document.createElement('span');
+  dot.className = 'tool-state';
+  const label = document.createElement('span');
+  label.className = 'tool-name';
+  label.textContent = toolLabel(name);
+  const sum = document.createElement('span');
+  sum.className = 'tool-summary';
+  sum.textContent = input?.fileName || '';
+  summary.append(dot, label, sum);
+
+  const detail = document.createElement('div');
+  detail.className = 'tool-detail';
+  detail.textContent = t('state.running');
+
+  node.append(summary, detail);
+  els.thread.append(node);
+  setHero(false);
+  scrollDown(true);
+  return { node, sum, detail };
+}
+
+const activeTools = new Map();
+
+/* ------------------------------------------------------------------ auth -- */
+
+function showGate(message = '') {
+  els.gate.hidden = false;
+  els.gateError.hidden = !message;
+  els.gateError.textContent = message;
+  setTimeout(() => els.gateCode.focus(), 80);
+}
+
+function hideGate() {
+  els.gate.hidden = true;
+}
+
+async function pair(code) {
+  els.gateSubmit.disabled = true;
+  try {
+    const res = await api('/api/auth/pair', { method: 'POST', body: { code } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      showGate(data?.error?.message === 'That pairing code is not valid.' ? t('gate.badCode') : t('gate.failed'));
+      return;
+    }
+    hideGate();
+    await loadState();
+    toast(t('conn.back'));
+  } catch {
+    showGate(t('gate.offline'));
+  } finally {
+    els.gateSubmit.disabled = false;
+  }
+}
+
+/* ------------------------------------------------------------------ boot -- */
+
+async function boot() {
+  try {
+    const health = await api('/api/health');
+    const h = await health.json().catch(() => ({}));
+    state.version = h.version || null;
+    if (els.versionNote) els.versionNote.textContent = `MAJIN ${h.version || ''} · Node ${h.node || ''}`.trim();
+  } catch {
+    setDot('offline');
+    els.modelLabel.textContent = 'offline';
+  }
+
+  const me = await api('/api/me').then((r) => r.json()).catch(() => ({ authenticated: false }));
+  if (!me.authenticated) {
+    showGate();
+    return;
+  }
+  hideGate();
+  await loadState();
+}
+
+async function loadState() {
+  const res = await api('/api/state');
+  if (res.status === 401) {
+    showGate();
+    return;
+  }
+  const data = await res.json();
+  if (!data.ok) return;
+  state.model = data.model;
+  state.version = data.version || state.version;
+  const demo = data.model.demo;
+  els.modelLabel.textContent = demo ? 'demo' : data.model.model;
+  setDot(demo ? 'demo' : 'ok');
+  els.sheetModel.textContent = data.model.label;
+  els.sheetModelNote.textContent = demo
+    ? t('model.demoNote')
+    : t('model.providerNote', { provider: data.model.provider });
+  els.versionNote.textContent = `MAJIN ${data.version} · policy: ${data.policy}`;
+  renderFiles(data.workspace?.files || []);
+  renderConversations(data.conversations || []);
+  loadModels();
+  if (demo) els.hint.textContent = t('hero.demoHint');
+  state.started = true;
+}
+
+function renderFiles(files) {
+  els.sheetFiles.textContent = '';
+  if (!files.length) {
+    const li = document.createElement('li');
+    li.textContent = 'Tom arbetsyta';
+    els.sheetFiles.append(li);
+    return;
+  }
+  for (const f of files) {
+    const li = document.createElement('li');
+    const name = document.createElement('span');
+    name.textContent = f;
+    li.append(name);
+    els.sheetFiles.append(li);
+  }
+}
+
+function renderConversations(list) {
+  els.sheetConvs.textContent = '';
+  for (const conv of list.slice(0, 12)) {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    const title = document.createElement('span');
+    title.textContent = conv.title;
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = `${conv.messages} medd.`;
+    btn.append(title, meta);
+    btn.addEventListener('click', () => openConversation(conv.id));
+    li.append(btn);
+    els.sheetConvs.append(li);
+  }
+}
+
+async function openConversation(id) {
+  closeSheet();
+  const res = await api(`/api/conversation?id=${encodeURIComponent(id)}`);
+  if (!res.ok) return;
+  const data = await res.json();
+  state.conversationId = data.conversation.id;
+  els.thread.textContent = '';
+  state.bubble = null;
+  state.bubbleText = '';
+  for (const m of data.conversation.messages) {
+    if (m.role === 'user') addMessage('user', m.content, { meta: timeLabel() });
+    else addMessage('assistant', m.content, { error: m.meta?.error === true, meta: timeLabel() });
+  }
+  if (data.conversation.pendingApproval) {
+    showApproval({ tool: data.conversation.pendingApproval.tool, reason: '' });
+  } else {
+    hideApproval();
+  }
+  setHero(!data.conversation.messages.length);
+  scrollDown(true);
+}
+
+/* ------------------------------------------------------------------ chat -- */
+
+function newRequestId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  state.requestSeq += 1;
+  return `req_${Date.now()}_${state.requestSeq}`;
+}
+
+async function send(text) {
+  const message = String(text || '').trim();
+  if (!message || state.streaming) return;
+
+  cancelSpeech();
+  els.input.value = '';
+  resizeInput();
+  addMessage('user', message, { meta: timeLabel() });
+  hideApproval();
+
+  state.streaming = true;
+  els.send.hidden = true;
+  els.stop.hidden = false;
+  els.send.disabled = true;
+  els.composer.dataset.streaming = 'true';
+  spirit.set('thinking');
+  els.hint.textContent = '';
+
+  const controller = new AbortController();
+  state.controller = controller;
+
+  const body = { text: message, requestId: newRequestId() };
+  if (state.conversationId) body.conversationId = state.conversationId;
+
+  try {
+    const res = await api('/api/chat', { method: 'POST', body, signal: controller.signal });
+    if (res.status === 401) {
+      finishStream();
+      showGate(t('gate.expired'));
+      return;
+    }
+    if (!res.ok || !res.body) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `HTTP ${res.status}`);
+    }
+    await readStream(res.body, controller.signal);
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      endAssistantBubble();
+      addMessage('assistant', t('msg.cancelled'), { error: true, meta: timeLabel() });
+    } else {
+      endAssistantBubble();
+      addMessage('assistant', t('msg.hostUnreachable', { error: err.message }), { error: true, meta: timeLabel() });
+      setDot('offline');
+    }
+    spirit.set('error');
+  } finally {
+    finishStream();
+  }
+}
+
+function finishStream() {
+  state.streaming = false;
+  state.controller = null;
+  els.stop.hidden = true;
+  els.send.hidden = false;
+  els.composer.dataset.streaming = 'false';
+  resizeInput();
+  if (spirit.state !== 'error') setTimeout(() => spirit.set('idle'), 900);
+}
+
+async function readStream(stream, signal) {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalText = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buffer.indexOf('\n\n')) >= 0) {
+      const chunk = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      const handled = handleEvent(chunk);
+      if (handled?.final) finalText = handled.final;
+    }
+    if (signal.aborted) {
+      try {
+        await reader.cancel();
+      } catch { /* already closed */ }
+      break;
+    }
+  }
+  return finalText;
+}
+
+function handleEvent(chunk) {
+  let event = 'message';
+  const dataLines = [];
+  for (const line of chunk.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice(6).trim();
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+  }
+  if (!dataLines.length) return null;
+  let data;
+  try {
+    data = JSON.parse(dataLines.join('\n'));
+  } catch {
+    return null;
+  }
+  return applyEvent(event, data);
+}
+
+function applyEvent(event, data) {
+  switch (event) {
+    case 'open':
+      if (data.model) {
+        els.modelLabel.textContent = data.model.demo ? 'demo' : data.model.model;
+        setDot(data.model.demo ? 'demo' : 'ok');
+      }
+      break;
+
+    case 'user':
+      break;
+
+    case 'state':
+      if (data.state === 'thinking') spirit.set('thinking');
+      else if (data.state === 'working') spirit.set('working');
+      else if (data.state === 'verifying') spirit.set('working');
+      break;
+
+    case 'delta':
+      spirit.set('speaking');
+      streamDelta(data.text);
+      break;
+
+    case 'tool_start': {
+      const card = addToolCard(data.name, data.input);
+      activeTools.set(data.id || data.name, card);
+      spirit.set('working');
+      break;
+    }
+
+    case 'tool_result': {
+      const card = activeTools.get(data.id || data.name) || [...activeTools.values()].pop();
+      if (card) {
+        card.node.dataset.state = data.ok ? (data.verified ? 'verified' : 'ok') : 'failed';
+        card.sum.textContent = data.summary || '';
+        card.detail.textContent = data.ok
+          ? `${data.verified ? t('state.verified') : t('state.done')}${data.receiptId ? ` · ${t('state.receipt')} ${data.receiptId}` : ''}`
+          : t('state.failed');
+      }
+      spirit.set('working');
+      break;
+    }
+
+    case 'approval_required':
+      state.pendingApproval = data;
+      showApproval(data);
+      spirit.set('thinking');
+      break;
+
+    case 'error':
+      addMessage('assistant', data.message || t('msg.genericError'), { error: true, meta: timeLabel() });
+      spirit.set('error');
+      break;
+
+    case 'cancelled':
+      addMessage('assistant', t('msg.cancelledShort'), { error: true, meta: timeLabel() });
+      break;
+
+    case 'replay':
+      if (data.content) addMessage('assistant', data.content, { meta: t('state.replayed') });
+      break;
+
+    case 'done': {
+      const text = endAssistantBubble(timeLabel());
+      const finalText = text || '';
+      if (data.status === 'completed') {
+        spirit.set('done');
+        if (state.tts && finalText) speak(finalText);
+        refreshSidebar();
+      } else if (data.status === 'awaiting_approval') {
+        spirit.set('thinking');
+      } else if (data.status === 'cancelled' || data.status === 'denied') {
+        spirit.set('idle');
+      } else if (data.status === 'failed') {
+        spirit.set('error');
+      }
+      return { final: finalText };
+    }
+
+    default:
+      break;
+  }
+  return null;
+}
+
+/* -------------------------------------------------------------- approval -- */
+
+function showApproval({ tool, reason }) {
+  els.approval.hidden = false;
+  els.approvalText.textContent = `${t('approval.text', { tool: toolLabel(tool) })}${reason ? ` ${reason}` : ''}`;
+}
+
+function hideApproval() {
+  els.approval.hidden = true;
+  state.pendingApproval = null;
+}
+
+async function resolveApproval(approve) {
+  if (!state.conversationId) {
+    hideApproval();
+    return;
+  }
+  hideApproval();
+  spirit.set(approve ? 'working' : 'idle');
+  try {
+    const res = await api('/api/approve', { method: 'POST', body: { conversationId: state.conversationId, approve } });
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+    await readStream(res.body, new AbortController().signal);
+  } catch (err) {
+    addMessage('assistant', t('msg.approvalFailed', { error: err.message }), { error: true, meta: timeLabel() });
+    spirit.set('error');
+  } finally {
+    refreshSidebar();
+  }
+}
+
+/* ----------------------------------------------------------------- voice -- */
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const voiceSupport = detectVoiceSupport(window);
+
+function setupVoice() {
+  if (!voiceSupport.recognition) {
+    els.mic.disabled = true;
+    els.mic.setAttribute('aria-disabled', 'true');
+    els.voiceNote.textContent = t('voice.unsupported');
+    return;
+  }
+  const rec = new SpeechRecognition();
+  rec.lang = recognitionLang(navigator.language);
+  rec.continuous = false;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+
+  rec.onstart = () => {
+    state.listening = true;
+    els.mic.setAttribute('aria-pressed', 'true');
+    spirit.set('listening');
+    els.hint.textContent = 'Lyssnar…';
+  };
+  rec.onresult = (ev) => {
+    let interim = '';
+    let final = '';
+    for (let i = ev.resultIndex; i < ev.results.length; i += 1) {
+      const r = ev.results[i];
+      if (r.isFinal) final += r[0].transcript;
+      else interim += r[0].transcript;
+    }
+    const text = final || interim;
+    if (text) {
+      els.input.value = text.trim();
+      resizeInput();
+    }
+    spirit.level(Math.min(1, (ev.results[ev.results.length - 1]?.[0]?.confidence || 0.6)));
+    if (final) {
+      state.lastVoiceFinal = final.trim();
+    }
+  };
+  rec.onerror = (ev) => {
+    const msg = voiceErrorMessage(ev.error);
+    if (msg) els.hint.textContent = msg;
+  };
+  rec.onend = () => {
+    state.listening = false;
+    els.mic.setAttribute('aria-pressed', 'false');
+    spirit.level(0);
+    spirit.set('idle');
+    els.hint.textContent = '';
+    const spoken = state.lastVoiceFinal;
+    state.lastVoiceFinal = null;
+    if (shouldAutoSend({ finalTranscript: spoken, autosend: state.autosend, streaming: state.streaming })) {
+      els.input.value = '';
+      resizeInput();
+      send(spoken);
+    }
+  };
+  state.recognition = rec;
+  els.voiceNote.textContent = voiceSupport.synthesis
+    ? t('voice.readyTts')
+    : t('voice.readyNoTts');
+}
+
+function toggleListening() {
+  const rec = state.recognition;
+  if (!rec) return;
+  if (state.listening) {
+    rec.stop();
+    return;
+  }
+  cancelSpeech();
+  try {
+    rec.start();
+  } catch {
+    /* start() throws if already started; ignore */
+  }
+}
+
+function pickVoice() {
+  const voices = window.speechSynthesis?.getVoices?.() || [];
+  const lang = document.documentElement.lang || 'sv-SE';
+  return voices.find((v) => v.lang?.toLowerCase().startsWith(lang.slice(0, 2))) || voices[0] || null;
+}
+
+function speak(text) {
+  if (!('speechSynthesis' in window)) {
+    els.hint.textContent = t('voice.noTts');
+    return;
+  }
+  const clean = speechText(text);
+  if (!clean) return;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(clean);
+  utter.lang = recognitionLang(navigator.language);
+  utter.rate = 1.02;
+  utter.pitch = 1.0;
+  const voice = pickVoice();
+  if (voice) utter.voice = voice;
+  utter.onstart = () => spirit.set('speaking');
+  utter.onboundary = () => spirit.level(0.45 + Math.random() * 0.3);
+  utter.onend = () => {
+    spirit.level(0);
+    spirit.set('idle');
+  };
+  window.speechSynthesis.speak(utter);
+}
+
+function cancelSpeech() {
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+}
+
+/* ------------------------------------------------------------------ ui -- */
+
+function openSheet() {
+  els.sheet.hidden = false;
+  els.sheetBackdrop.hidden = false;
+  els.menu.setAttribute('aria-expanded', 'true');
+  els.sheet.querySelector('button, input')?.focus();
+  refreshSidebar();
+}
+
+function closeSheet() {
+  els.sheet.hidden = true;
+  els.sheetBackdrop.hidden = true;
+  els.menu.setAttribute('aria-expanded', 'false');
+}
+
+async function loadModels() {
+  try {
+    const res = await api('/api/models');
+    if (!res.ok) return;
+    const data = await res.json();
+    renderModels(data);
+  } catch { /* model list is informational; chat still works */ }
+}
+
+function renderModels(data) {
+  els.modelList.textContent = '';
+  const models = (data.models || []).filter((m) => m.configured);
+  if (!models.length) {
+    const li = document.createElement('li');
+    li.className = 'model-empty';
+    li.textContent = t('model.none');
+    els.modelList.append(li);
+    els.modelSource.textContent = data.configReadable
+      ? t('model.readConfig', { path: data.configPath })
+      : t('model.noConfig');
+    return;
+  }
+  const active = state.modelId || data.current;
+  for (const m of models) {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'model-item';
+    btn.setAttribute('role', 'radio');
+    btn.setAttribute('aria-checked', String(m.id === active));
+    btn.dataset.modelId = m.id;
+    if (m.id === active) btn.dataset.active = 'true';
+    const name = document.createElement('span');
+    name.textContent = m.label;
+    const status = document.createElement('span');
+    status.className = 'model-status';
+    status.dataset.status = m.status;
+    status.textContent = m.liveVerified ? 'live' : (m.status === 'missing-key' ? t('model.missingKey') : t('model.unverified'));
+    btn.append(name, status);
+    btn.addEventListener('click', () => selectModel(m.id));
+    li.append(btn);
+    els.modelList.append(li);
+  }
+  els.modelSource.textContent = t('model.summary', { count: models.length });
+}
+
+async function selectModel(modelId) {
+  if (state.streaming) {
+    toast(t('model.waitForTurn'));
+    return;
+  }
+  try {
+    if (!state.conversationId) {
+      const created = await api('/api/conversations', { method: 'POST' });
+      const data = await created.json();
+      if (!data.ok) throw new Error(data?.error?.message || t('msg.genericError'));
+      state.conversationId = data.conversation.id;
+    }
+    const res = await api('/api/model', { method: 'POST', body: { conversationId: state.conversationId, modelId } });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data?.error?.message || t('model.selectFailed'));
+    state.modelId = modelId;
+    els.sheetModel.textContent = data.info.label;
+    els.modelLabel.textContent = data.info.demo ? 'demo' : data.info.model;
+    setDot(data.info.demo ? 'demo' : 'ok');
+    await loadModels();
+    toast(t('model.selected'));
+  } catch (err) {
+    toast(err.message || t('model.selectFailed'));
+  }
+}
+
+async function refreshSidebar() {
+  try {
+    const res = await api('/api/state');
+    if (!res.ok) return;
+    const data = await res.json();
+    renderFiles(data.workspace?.files || []);
+    renderConversations(data.conversations || []);
+  } catch { /* sidebar is non-critical */ }
+}
+
+function bindEvents() {
+  els.composer.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    send(els.input.value);
+  });
+  els.input.addEventListener('input', resizeInput);
+  els.input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
+      ev.preventDefault();
+      send(els.input.value);
+    }
+  });
+  els.stop.addEventListener('click', async () => {
+    cancelSpeech();
+    if (state.conversationId) {
+      api('/api/cancel', { method: 'POST', body: { conversationId: state.conversationId } }).catch(() => {});
+    }
+    state.controller?.abort();
+    spirit.set('idle');
+  });
+  els.mic.addEventListener('click', toggleListening);
+  els.menu.addEventListener('click', openSheet);
+  els.sheetBackdrop.addEventListener('click', closeSheet);
+  els.newChat.addEventListener('click', () => {
+    state.conversationId = null;
+    els.thread.textContent = '';
+    state.bubble = null;
+    setHero(true);
+    hideApproval();
+    closeSheet();
+  });
+  els.logout.addEventListener('click', async () => {
+    await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    closeSheet();
+    showGate(t('gate.loggedOut'));
+  });
+  els.ttsToggle.checked = state.tts;
+  els.ttsToggle.addEventListener('change', () => {
+    state.tts = els.ttsToggle.checked;
+    if (!state.tts) cancelSpeech();
+    localStorage.setItem('majin.tts', state.tts ? '1' : '0');
+  });
+  els.autosendToggle.checked = state.autosend;
+  els.autosendToggle.addEventListener('change', () => {
+    state.autosend = els.autosendToggle.checked;
+    localStorage.setItem('majin.autosend', state.autosend ? '1' : '0');
+  });
+  els.gateForm.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const code = els.gateCode.value.trim();
+    if (code.length >= 8) pair(code);
+  });
+  els.approvalAllow.addEventListener('click', () => resolveApproval(true));
+  els.approvalDeny.addEventListener('click', () => resolveApproval(false));
+  els.approvalDismiss.addEventListener('click', hideApproval);
+  els.modelPill.addEventListener('click', openSheet);
+  els.suggestions.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('[data-fill]');
+    if (!btn) return;
+    els.input.value = btn.dataset.fill;
+    resizeInput();
+    els.input.focus();
+  });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && !els.sheet.hidden) closeSheet();
+  });
+  window.addEventListener('online', () => {
+    els.offline.hidden = true;
+    setDot(state.model?.demo ? 'demo' : 'ok');
+    toast(t('conn.back'));
+  });
+  window.addEventListener('offline', () => {
+    els.offline.hidden = false;
+    setDot('offline');
+  });
+  if (!navigator.onLine) els.offline.hidden = false;
+  // Keep the composer visible when the mobile keyboard opens.
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      if (document.activeElement === els.input) setTimeout(() => scrollDown(true), 50);
+    });
+  }
+}
+
+function restorePrefs() {
+  try {
+    if (localStorage.getItem('majin.tts') === '1') state.tts = true;
+    if (localStorage.getItem('majin.autosend') === '0') state.autosend = false;
+  } catch { /* storage may be blocked; defaults stand */ }
+}
+
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      /* offline shell is optional; the app works without it */
+    });
+  });
+}
+
+async function main() {
+  restorePrefs();
+  setupVoice();
+  bindEvents();
+  registerServiceWorker();
+  resizeInput();
+  if (reducedMotion) spirit.set('idle');
+  await boot();
+}
+
+main();

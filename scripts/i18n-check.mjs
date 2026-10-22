@@ -47,6 +47,10 @@ const ALLOW = [
   'path.join(homedir, ',  // desktop folder names we look for, not messages (Skrivbord)
 ];
 
+// Localization resources hold the product copy by design; they are data, not
+// logic, and are reviewed as translations rather than scanned as literals.
+const LOCALIZATION = [/src[\\/]v4[\\/]ui[\\/]strings\.js$/];
+
 const TARGETS = [];
 for (const root of ['src', 'scripts']) if (fs.existsSync(root)) for (const f of walk(root)) if (/\.(js|mjs|cjs)$/.test(f)) TARGETS.push(f);
 for (const f of ['install.ps1', 'start-majin.cmd']) if (fs.existsSync(f)) TARGETS.push(f);
@@ -97,6 +101,7 @@ export function scan({ quiet = false } = {}) {
   const hits = [];
   for (const f of TARGETS) {
     if (f.includes('i18n-check')) continue;
+    if (LOCALIZATION.some((re) => re.test(f))) continue;
     const lines = fs.readFileSync(f, 'utf8').split('\n');
     let inBlock = false;
     for (let n = 0; n < lines.length; n++) {
