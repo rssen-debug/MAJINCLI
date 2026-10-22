@@ -14,11 +14,9 @@ export function recoveryPreview(checkpoint) {
   for (const [index, step] of steps.entries()) {
     // Reject malformed entries before asking the recovery policy to classify them.
     if (!step || typeof step !== 'object' || Array.isArray(step)) return { ready:false, reason:'invalid-step', steps:[] };
-    const id = typeof step?.id === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(step.id) ? step.id : null;
+    const id = Object.hasOwn(step, 'id') && typeof step.id === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(step.id) ? step.id : null;
     if (!id || seen.has(id)) return { ready:false, reason:'invalid-or-duplicate-step-id', steps:[] };
     seen.add(id);
-    // Never allow an inherited field to spoof a checkpoint step's identity.
-    if (!Object.hasOwn(step, 'id')) return { ready:false, reason:'invalid-step', steps:[] };
     if (!Object.hasOwn(step, 'risk') || !Object.hasOwn(step, 'status')) return { ready:false, reason:'invalid-step', steps:[] };
     if (!['read','write','destructive','external'].includes(step.risk) || !['pending','running','uncertain','verified','failed','completed'].includes(step.status)) return { ready:false, reason:'invalid-step-metadata', steps:[] };
     const decision = recoveryDecision(step);
