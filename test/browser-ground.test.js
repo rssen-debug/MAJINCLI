@@ -91,3 +91,21 @@ test('each round keeps working feedback in a single accessible composer row',()=
   assert.match(fs,/prefers-reduced-motion:reduce/);
 });
 function requireFixture(){ return fs.readFileSync('src/ui/index.html','utf8'); }
+
+test('grounding never leaves stale refs or advertises controls outside viewport',()=>{
+  assert.match(GROUND_JS,/removeAttribute\('data-majin-ref'\)/);
+  assert.match(GROUND_JS,/out\.length >= 200/);
+  assert.match(GROUND_JS,/rect\.top >= innerHeight/);
+  assert.match(GROUND_JS,/rect\.left >= innerWidth/);
+  assert.match(GROUND_JS,/\[inert\]/);
+  assert.match(GROUND_JS,/aria-disabled/);
+  assert.doesNotMatch(GROUND_JS,/rect\.left \+ window\.scrollX/, 'fixed markers use viewport coordinates');
+});
+test('existing MAJIN composer visualizes browser grounding without another panel',()=>{
+  const app=fs.readFileSync('src/ui/app.js','utf8');
+  const html=fs.readFileSync('src/ui/index.html','utf8');
+  assert.match(app,/ev\.tool==='browser\.elements'/);
+  assert.match(app,/interactive controls found/);
+  assert.match(html,/#composer #work-progress\[data-phase="grounded"\]/);
+  assert.match(html,/prefers-reduced-motion/);
+});
