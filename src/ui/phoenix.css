@@ -284,4 +284,30 @@ body.light .model-detail-use,body.light .ob-go{color:#fff}
 .theme-changing *{transition:none!important}
 
 body.simple .msg .tools,body.simple .msg .trace,body.simple .msg .gauge{display:none}
-body:is([data-run-state=connecting],[data-run-state=thinking],[data-run-state=working]) #status{visibility:hidden}
+/* Agent activity must remain visible while a task is running.
+   Keep one calm inline signal instead of hiding status or adding panels. */
+body:is([data-run-state=connecting],[data-run-state=thinking],[data-run-state=working]) #status{
+  visibility:visible;
+  color:var(--cy);
+  opacity:.9;
+  font-variant-numeric:tabular-nums;
+  text-overflow:ellipsis;
+  overflow:hidden;
+  white-space:nowrap;
+}
+body:is([data-run-state=connecting],[data-run-state=thinking],[data-run-state=working]) #status::before{
+  content:"";
+  display:inline-block;
+  width:6px;height:6px;
+  margin-right:8px;
+  border-radius:50%;
+  background:currentColor;
+  box-shadow:0 0 10px var(--cysoft);
+  vertical-align:middle;
+}
+@media(prefers-reduced-motion:no-preference){
+  body:is([data-run-state=connecting],[data-run-state=thinking],[data-run-state=working]) #status::before{
+    animation:majin-status-breathe 2.4s ease-in-out infinite;
+  }
+  @keyframes majin-status-breathe{50%{opacity:.45;transform:scale(.8)}}
+}
