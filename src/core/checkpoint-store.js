@@ -34,6 +34,9 @@ export function saveCheckpoint(root, id, state) {
   return destination;
 }
 export function loadCheckpoint(root, id) {
+  const directory = (() => { try { return fs.lstatSync(root); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } })();
+  if (!directory) return null;
+  if (!directory.isDirectory() || directory.isSymbolicLink()) throw new Error('Invalid checkpoint directory');
   const file = checkpointPath(root, id);
   let data;
   const stat = (() => { try { return fs.lstatSync(file); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } })();
