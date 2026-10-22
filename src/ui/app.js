@@ -261,6 +261,15 @@ function onEvent(ev) {
           workPulse('Click sent · checking its effect');
           const bar=$('work-progress');if(bar)bar.dataset.phase='action';
         }
+      } else if(ev.tool==='browser.fill'){
+        const confirmed=ev.ok===true && ev.meta?.retained===true;
+        workPulse(confirmed?'Field retained · verified':'Form field not confirmed · reviewing target');
+        const bar=$('work-progress');
+        if(bar){
+          bar.dataset.phase=confirmed?'verified':'problem';
+          bar.title=confirmed?'Browser confirmed the field still contained the requested input after an app update. Input content is never shown.':'Browser did not verify the input; no form success is claimed.';
+        }
+        const glyph=$('work-progress-symbol');if(glyph)glyph.textContent=confirmed?'✓':'!';
       } else if(ev.tool==='browser.shot' && ev.ok){
         const unchanged=ev.meta?.unchanged===true;
         workPulse(unchanged?'Screenshot unchanged · keeping previous view':'Screenshot captured · visual evidence ready');
