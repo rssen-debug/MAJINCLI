@@ -9,6 +9,7 @@ export function recoveryDecision(step) {
   if (step.status === 'running' || step.status === 'uncertain') {
     return { action: 'inspect', reason: 'outcome-unknown' };
   }
+  // A previous approval is not transferable across restart or task identity.
   if (step.risk === 'write' || step.risk === 'destructive' || step.risk === 'external') {
     return { action: 'approval', reason: 'side-effect-risk' };
   }
