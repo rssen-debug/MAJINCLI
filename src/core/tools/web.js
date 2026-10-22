@@ -427,11 +427,11 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       }
       return {
         ok: true,
-        result: `clicked ${hit.tag} "${hit.text}"${typeof hit.checked === 'boolean' ? (hit.checked ? ' — checkbox CHECKED' : ' — checkbox UNCHECKED') : ''}${fol.followed ? ' (new tab followed)' : ''} — page now: "${after.title}" at ${after.url}`,
+        result: `Click dispatched on ${hit.tag} "${hit.text}"${typeof hit.checked === 'boolean' ? (hit.checked ? ' — checkbox CHECKED' : ' — checkbox UNCHECKED') : ''}${fol.followed ? ' (new tab followed)' : ''} — page now: "${after.title}" at ${after.url}${proof?.ok ? ' — EXPECTED OUTCOME VERIFIED' : ' — OUTCOME NOT VERIFIED: call browser.verify before declaring task done'}`,
         meta: { tag: hit.tag, text: hit.text, checked: hit.checked, checkboxChanged: hit.changed,
           urlAfter: after.url, title: after.title, openedNewTab: fol.followed,
-          verified: proof?.ok ?? null, verificationAttempts: attempts },
-        summary: `clicked "${hit.text}"${typeof hit.checked === 'boolean' ? (hit.checked ? ' (checked)' : ' (unchecked)') : ''}`,
+          verified: proof?.ok === true, outcomeEvidence: proof?.ok ? 'postcondition' : 'action_only', verificationAttempts: attempts },
+        summary: `${proof?.ok ? 'verified' : 'action only'} · clicked "${hit.text}"${typeof hit.checked === 'boolean' ? (hit.checked ? ' (checked)' : ' (unchecked)') : ''}`,
       };
     },
   }),
