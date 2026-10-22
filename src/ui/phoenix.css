@@ -583,3 +583,8 @@ body.simple .msg [data-recovery-status="approval"] { border-inline-start:3px sol
 body.simple .msg [data-recovery-status="approval"] { font-weight:700; }
 body.simple .msg [data-recovery-status="inspect"] { border-width:2px; }
 @media(prefers-reduced-motion:reduce) { body.simple .msg [data-recovery-status] { transition:none!important; } }
+
+/* Aurora: compact recovery labels stay legible in light and dark themes. */
+body.simple .msg [data-recovery-status] { line-height:1.4; vertical-align:middle; }
+body.light.simple .msg [data-recovery-status="inspect"] { color:var(--ink); }
+@media(max-width:480px) { body.simple .msg [data-recovery-status] { white-space:normal; } }
