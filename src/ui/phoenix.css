@@ -510,3 +510,12 @@ body.simple .msg .appr button:not(:disabled):focus-visible {
   box-shadow:0 0 0 4px var(--cysoft);
 }
 @media(max-width:600px) { body.simple .msg .appr { padding:12px; } }
+
+/* Aurora: clean action focus on high-density displays, no new visual clutter. */
+@media (min-resolution:2dppx) {
+  body.simple .msg .appr button:focus-visible {
+    outline-offset:3px;
+    box-shadow:0 0 0 3px var(--cysoft);
+  }
+}
+body.simple .msg .appr button:disabled { pointer-events:none; }
