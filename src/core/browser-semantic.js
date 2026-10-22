@@ -14,7 +14,7 @@ export const SEMANTIC_SNAPSHOT_JS = String.raw`(() => {
       st.display !== 'none' && Number(st.opacity) > 0;
   };
   const pick = 'main,nav,aside,header,footer,h1,h2,h3,button,a,input,textarea,select,summary,[role="button"],[role="link"],[role="checkbox"],[role="textbox"]';
-  const nodes = [];
+  const nodes = [...document.querySelectorAll(pick)].slice(0,65);
   // Like accessibility-first automation, inspect open shadow roots. Closed
   // roots remain opaque. Limit both scanned nodes and roots to avoid stalls.
   const roots = [document], seen = new Set();
@@ -26,7 +26,7 @@ export const SEMANTIC_SNAPSHOT_JS = String.raw`(() => {
     const descendants = [...root.querySelectorAll('*')].slice(0, 350 - scanned);
     scanned += descendants.length;
     for (const node of descendants) {
-      if (node.matches?.(pick)) nodes.push(node);
+      if (index > 0 && node.matches?.(pick) && nodes.length < 65) nodes.push(node);
       if (node.shadowRoot && roots.length < 16 && !seen.has(node.shadowRoot)) {
         roots.push(node.shadowRoot);
         shadowRoots++;
