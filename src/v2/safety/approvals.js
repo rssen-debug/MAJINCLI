@@ -24,6 +24,26 @@ export class Approvals {
     this.events.emit('consent.revoked', { scope });
   }
 
+  /** status(scope): read-only snapshot for operator surfaces. Never mutates;
+   *  never consumes a use. Frozen so callers cannot reach into the store. */
+  status(scope) {
+    const rec = this.consents.get(scope);
+    if (!rec) return Object.freeze({ scope, granted: false });
+    const expired = rec.expiresAt && Date.now() > rec.expiresAt;
+    return Object.freeze({
+      scope,
+      granted: !expired,
+      mode: rec.mode,
+      user: rec.user,
+      uses: rec.uses,
+      maxUses: rec.maxUses,
+      usesLeft: Math.max(0, rec.maxUses - rec.uses),
+      grantedAt: rec.grantedAt,
+      expiresAt: rec.expiresAt || null,
+      expired: !!expired,
+    });
+  }
+
   /** check(scope): exactly what the executor asks before touching a held op */
   check(scope, detail = {}) {
     const rec = this.consents.get(scope);

@@ -24,7 +24,7 @@ const USAGE = `MAJIN V2
   majin-v2 --gauntlet
   majin-v2 --telemetry-report [dir] [--days N]
   majin-v2 --audit-verify <dir>
-  majin-v2 --studio [--port N] [--host H] [--telemetry-dir D] [--audit-dir D]
+  majin-v2 --studio [--port N] [--host H] [--telemetry-dir D] [--audit-dir D] [--enable-writes]
 
 Options:
   --workspace <dir>       where the objective may write (required for objectives)
@@ -53,6 +53,7 @@ try {
     'telemetry-report': { type: 'string' },
     'audit-verify': { type: 'string' },
     studio: { type: 'boolean' },
+    'enable-writes': { type: 'boolean' },
     port: { type: 'string' },
     host: { type: 'string' },
     'audit-dir': { type: 'string' },
@@ -123,12 +124,25 @@ async function main() {
     const bus = new EventBus();
     const telemetryDir = path.resolve(values['telemetry-dir'] || 'telemetry');
     const auditDir = path.resolve(values['audit-dir'] || 'audit');
-    const studio = createStudioServer({ bus, telemetryDir, auditDir });
+    let approvals = null;
+    let auditBind = null;
+    if (values['enable-writes']) {
+      // consent write surface: real Approvals as the only authority, every
+      // decision mirrored into the tamper-evident chain via the real bus
+      const { Approvals } = await import('../src/v2/safety/approvals.js');
+      const { AuditChain } = await import('../src/v2/audit/chain.js');
+      const { AuditBind } = await import('../src/v2/audit/bind.js');
+      approvals = new Approvals(bus);
+      auditBind = new AuditBind(new AuditChain(auditDir));
+      auditBind.attach(bus);
+    }
+    const studio = createStudioServer({ bus, telemetryDir, auditDir, approvals, enableWrites: values['enable-writes'] });
     const bound = await studio.listen({ port: Number(values.port) || 0, host: values.host || '127.0.0.1' });
-    console.log(`MAJIN V2 Studio (read-only scaffold) at ${bound.url}`);
+    console.log(`MAJIN V2 Studio ${values['enable-writes'] ? '(consent writes ENABLED — every grant/revoke audit-chained)' : '(read-only scaffold)'} at ${bound.url}`);
     console.log(`observing: telemetry=${telemetryDir} audit=${auditDir}`);
-    process.on('SIGINT', async () => { await studio.close(); process.exit(0); });
-    process.on('SIGTERM', async () => { await studio.close(); process.exit(0); });
+    const shutdown = async () => { auditBind?.detach(); await studio.close(); process.exit(0); };
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
     return; // server keeps the loop alive — no exit call
   }
 

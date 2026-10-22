@@ -139,14 +139,21 @@ test('4. GET /api/audit/verify reports the honest verdict of the REAL chain on d
   await again.close();
 });
 
-test('5. read-only BY CONSTRUCTION: write methods get 405, unknown paths 404', async () => {
+test('5. read-only by default: unsupported methods 405, consent writes 403 without enableWrites', async () => {
   const { studio, bound } = await boot();
   for (const method of ['POST', 'PUT', 'DELETE']) {
     const res = await fetch(bound.url + '/api/audit/verify', { method });
     assert.equal(res.status, 405, method);
     const body = await res.json();
-    assert.equal(body.error, 'read-only surface');
+    assert.equal(body.error, 'unsupported method on this surface');
   }
+  const grant = await fetch(bound.url + '/api/consent', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ scope: 'voice:external', user: 'tester', mode: 'once' }),
+  });
+  assert.equal(grant.status, 403);
+  assert.match((await grant.json()).detail, /silence\/disabled means NO/);
   const res = await fetch(bound.url + '/api/nope');
   assert.equal(res.status, 404);
   await studio.close();
