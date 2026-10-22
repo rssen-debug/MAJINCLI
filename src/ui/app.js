@@ -245,7 +245,18 @@ function onEvent(ev) {
       if($('work-progress-symbol'))$('work-progress-symbol').textContent='◌';
     }
     else if (ev.type === 'tool_result') {
-      if(ev.tool==='browser.read' && ev.ok && ev.meta?.stagnation?.stagnant===true){
+      if(ev.tool==='browser.click' && !ev.ok && ev.error?.reason==='occluded'){
+        const controls=Array.isArray(ev.error.recoveryControls)?ev.error.recoveryControls:[];
+        const hint=controls[0]?.label?' · '+String(controls[0].label).slice(0,35):'';
+        workPulse('Button covered by another element'+hint);
+        const bar=$('work-progress');
+        if(bar){
+          bar.dataset.phase='obstructed';
+          bar.title='MAJIN did not click the covered button. It is inspecting the visible blocker and choosing a different action.';
+        }
+        if($('work-progress-symbol'))$('work-progress-symbol').textContent='↳';
+      }
+      else if(ev.tool==='browser.read' && ev.ok && ev.meta?.stagnation?.stagnant===true){
         const n=Math.min(20,Number(ev.meta.stagnation.unchangedActions)||0);
         workPulse('Page unchanged after '+n+' actions · changing approach');
         const bar=$('work-progress');

@@ -424,11 +424,24 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           return {found:true,blocked:'outside_viewport',tag:el.tagName.toLowerCase(),text:t};
         const over=document.elementFromPoint(x,y);
         const associatedLabel=over?.closest?.('label');
-        if(over && over!==el && !el.contains(over) && associatedLabel?.control!==el)
+        if(over && over!==el && !el.contains(over) && associatedLabel?.control!==el) {
+          // Agent-browser-inspired obstruction diagnosis: inspect actual visible
+          // dialog controls rather than blindly retrying the covered target.
+          const overlay=over.closest('[role="dialog"],[aria-modal="true"],dialog') ||
+            over.closest('[role="alertdialog"]') || over;
+          const controls=[...overlay.querySelectorAll('button,[role="button"],a[href]')]
+            .filter(n=>{
+              const r=n.getBoundingClientRect(),css=getComputedStyle(n);
+              return r.width>0&&r.height>0&&css.display!=='none'&&css.visibility!=='hidden';
+            }).slice(0,6).map(n=>({
+              role:n.tagName.toLowerCase()==='a'?'link':'button',
+              label:String(n.getAttribute('aria-label')||n.innerText||n.getAttribute('title')||'').replace(/\\s+/g,' ').trim().slice(0,65)
+            })).filter(n=>n.label);
           return {found:true,blocked:'occluded',tag:el.tagName.toLowerCase(),text:t,
             coveringTag:String(over.tagName||'').toLowerCase(),
-            coveringRole:String(over.closest('[role="dialog"],[aria-modal="true"],dialog')?.getAttribute('role')||'').slice(0,30),
-            coveringId:String(over.id||'').slice(0,60)};
+            coveringRole:String(overlay.getAttribute('role')||'').slice(0,30),
+            coveringId:String(over.id||'').slice(0,60),recoveryControls:controls};
+        }
         el.click();
         return { found: true, fromShadowRoot: Boolean(el.getRootNode?.()?.host), tag: String(el.tagName).toLowerCase(), text: t,
           checked: isCheckbox ? Boolean(el.checked) : null,
@@ -444,7 +457,10 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           ),
           reason:hit.blocked,coveringTag:hit.coveringTag||null,
           coveringRole:hit.coveringRole||null,coveringId:hit.coveringId||null,
-          recovery:'browser.elements({refresh:"true"}) then choose a NEW grounded action'},
+          recoveryControls:hit.recoveryControls||[],
+          recovery:(hit.recoveryControls?.length
+            ? 'Visible overlapping controls: '+hit.recoveryControls.map(c=>c.role+' "'+c.label+'"').join('; ')+'. Refresh browser.elements and interact with the correct blocking control ONLY if appropriate.'
+            : 'browser.elements({refresh:"true"}) then choose a NEW grounded action')},
           meta:{blocked:hit.blocked,tag:hit.tag,text:hit.text,receipt:browserActionReceipt({reason:hit.blocked})},
           summary:'click blocked: '+hit.blocked};
       }
