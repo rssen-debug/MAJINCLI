@@ -117,6 +117,8 @@ test('MAJIN distinguishes a browser click from a verified outcome in UI',async()
   assert.match(tools,/outcomeEvidence: proof\?\.ok \? 'postcondition' : 'action_only'/);
   assert.match(tools,/OUTCOME NOT VERIFIED: call browser\.verify/);
   assert.match(app,/Click sent · checking its effect/);
-  assert.match(app,/bar\.dataset\.phase=verified\?'verified':'action'/);
+  assert.match(app,/if\(verified\)/);
+  assert.match(app,/bar\.dataset\.phase='verified'/);
+  assert.match(app,/bar\.dataset\.phase='action'/);
   assert.match(html,/#composer #work-progress\[data-phase="action"\]/);
 });
