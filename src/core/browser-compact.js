@@ -14,21 +14,26 @@ export function compactBrowserText(input,{maxChars=2600}={}){
   const budget=Math.max(0,cap-180);
   const selected=[];
   let used=0;
-  const take=(row)=>{
-    if(used>=budget)return;
-    const remaining=budget-used;
+  const append=(row,limit)=>{
+    if(used>=limit)return;
+    const remaining=limit-used;
     if(remaining<30)return;
     const piece=row.slice(0,Math.min(remaining-1,450));
     if(piece){selected.push(piece);used+=piece.length+1;}
   };
-  // Main content first, then late-page status/footer evidence, both bounded.
-  for(const row of unique.slice(0,Math.min(28,unique.length)))take(row);
-  if(unique.length>30){
+  // Reserve a meaningful tail allowance before reading the beginning: a long
+  // page must not erase late save/error confirmations from the model context.
+  const hasTail=unique.length>30;
+  const tail=hasTail?unique.slice(-8):[];
+  const reserve=hasTail?Math.min(650,Math.floor(budget*.35)):0;
+  const headBudget=budget-reserve;
+  for(const row of unique.slice(0,Math.min(28,unique.length)))append(row,headBudget);
+  if(hasTail){
     selected.push('… [middle page content omitted]');
-    used+=34;
-    for(const row of unique.slice(-8))take(row);
+    used+='… [middle page content omitted]'.length+1;
+    for(const row of tail)append(row,budget);
   }
-  const result=selected.join('\n').slice(0,cap);
+  const result=selected.join('\\n').slice(0,cap);
   return {text:result,originalChars:String(input||'').length,outputChars:result.length,
     linesRead:rows.length,uniqueLines:unique.length,truncated:result.length<String(input||'').length};
 }
