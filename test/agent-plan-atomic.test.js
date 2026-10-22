@@ -41,3 +41,17 @@ test('agent refuses oversized plan journal before parsing', t => {
  assert.equal(agent.loadPlan('demo'),null);
  assert.equal(agent.plans.size,0);
 });
+
+test('agent refuses symlinked plan journals',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'majin-plan-link-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const agent=Object.create(Agent.prototype);
+ agent.plans=new Map();
+ agent.planPath=()=>path.join(dir,'demo.plan.json');
+ const target=path.join(dir,'target.json');
+ fs.writeFileSync(target,JSON.stringify({session:'demo',plan:[{id:'unsafe'}]}));
+ try {fs.symlinkSync(target,agent.planPath());}
+ catch(e){if(['EPERM','EACCES'].includes(e.code)){t.skip('symlinks unavailable');return;}throw e;}
+ assert.equal(agent.loadPlan('demo'),null);
+ assert.equal(agent.plans.size,0);
+});
