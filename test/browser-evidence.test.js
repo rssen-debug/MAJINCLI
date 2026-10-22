@@ -189,3 +189,19 @@ test('count validation rejects invalid and conflicting expectations',()=>{
  assert.equal(verificationCriteria({selector:'.row',count:'3',text:'hello'}).ok,false);
  assert.equal(verificationCriteria({selector:'.row',count:'0'}).ok,true);
 });
+
+test('count above 1000 cannot masquerade as exactly 1000',()=>{
+ const c=verificationCriteria({selector:'.result',count:'1000'});
+ const observed={valid:true,matchCount:1001,url:'https://example.test',title:'Results'};
+ const verdict=verifyObserved(c,observed);
+ assert.equal(verdict.ok,false);
+ assert.equal(browserRecoveryAdvice(verdict,c).action,'inspect_result_count');
+ const source=fs.readFileSync('src/core/browser-evidence.js','utf8');
+ assert.match(source,/count > 1000 \? 1001 : count/);
+});
+test('visual result verification feedback stays within existing composer',()=>{
+ const html=fs.readFileSync('src/ui/index.html','utf8');
+ assert.match(html,/#composer #work-progress\[data-phase="verify"\] #work-progress-symbol/);
+ assert.match(html,/majin-proof-breathe/);
+ assert.match(html,/prefers-reduced-motion:reduce/);
+});
