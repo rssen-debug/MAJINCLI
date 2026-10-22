@@ -314,3 +314,13 @@ body[data-run-state="thinking"] #b-stop:focus-visible {
 /* The simplified layout normally hides Stop: surface it only while busy. */
 body.simple[data-run-state="working"] #b-stop,
 body.simple[data-run-state="thinking"] #b-stop { display:inline-flex; align-items:center; justify-content:center; }
+
+/* Aurora: a calm visual confirmation when execution is no longer active. */
+body[data-run-state="idle"] #b-stop,
+body[data-run-state="done"] #b-stop { opacity:.35; }
+body[data-run-state="working"] #b-stop,
+body[data-run-state="thinking"] #b-stop { opacity:1; box-shadow:0 0 0 1px var(--cysoft); }
+@media(prefers-reduced-motion:reduce){
+ body[data-run-state="working"] #b-stop,
+ body[data-run-state="thinking"] #b-stop { animation:none!important; }
+}
