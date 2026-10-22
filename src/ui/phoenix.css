@@ -285,3 +285,28 @@ body.light .model-detail-use,body.light .ob-go{color:#fff}
 
 body.simple .msg .tools,body.simple .msg .trace,body.simple .msg .gauge{display:none}
 body:is([data-run-state=connecting],[data-run-state=thinking],[data-run-state=working]) #status{visibility:hidden}
+
+
+/* Quiet execution: make the existing stop action obvious when a run is active. */
+body[data-run-state="working"] #b-stop,
+body[data-run-state="thinking"] #b-stop {
+  outline:1px solid var(--line);
+  outline-offset:1px;
+  border-radius:10px;
+  color:var(--ink);
+  transition:background .15s ease, border-color .15s ease;
+}
+body[data-run-state="working"] #b-stop:hover,
+body[data-run-state="thinking"] #b-stop:hover {
+  background:var(--cysoft);
+  border-color:var(--cy);
+}
+body[data-run-state="working"] #b-stop:focus-visible,
+body[data-run-state="thinking"] #b-stop:focus-visible {
+  outline:2px solid var(--cy);
+  outline-offset:3px;
+}
+@media(prefers-reduced-motion:reduce){
+  body[data-run-state="working"] #b-stop,
+  body[data-run-state="thinking"] #b-stop { transition:none; }
+}
