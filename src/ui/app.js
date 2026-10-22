@@ -1163,7 +1163,7 @@ function dispatchVoiceTurn(r){
 }
 function startMic(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){voiceState('error','Speech recognition unavailable');return;}
+  if(!SR){S.handsFree=false;S.listening=false;voiceState('error','Speech recognition unavailable — use Chrome or Edge and allow microphone access');return;}
   if(speechActive||S.busy||!S.handsFree||recog)return;
   const r=new SR();recog=r;voiceArmed=true;voiceFinished=false;
   voiceTranscript='';voiceFinal='';S.listening=true;
