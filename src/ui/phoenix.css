@@ -597,3 +597,7 @@ body.simple .msg .appr :is(button,a):focus-visible { outline:3px solid var(--war
 /* Aurora: make the real permission prompt easier to scan on mobile. */
 @media(max-width:560px){body.simple .msg .appr{padding:14px;border-radius:14px}body.simple .msg .appr :is(button,a){min-height:44px}}
 body.simple .msg .appr :is(button,a):focus-visible{outline:3px solid var(--warn);outline-offset:4px}
+
+/* Aurora: warn before irreversible tool approvals, without extra UI panels. */
+body.simple .msg .appr { box-shadow: inset 3px 0 0 var(--warn); }
+@media (prefers-contrast: more) { body.simple .msg .appr { border-width:2px; } }
