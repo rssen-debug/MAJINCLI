@@ -6,9 +6,10 @@
  */
 import { runGauntlet } from '../../src/v2/gauntlet/gauntlet.js';
 import { defaultScenarios } from '../../src/v2/gauntlet/scenarios.js';
+import { objectiveScenarios } from '../../src/v2/gauntlet/scenarios-objectives.js';
 
 const OUT = new URL('../../docs/v2/gauntlet/', import.meta.url).pathname;
-const report = await runGauntlet({ scenarios: defaultScenarios(), outDir: OUT });
+const report = await runGauntlet({ scenarios: [...defaultScenarios(), ...objectiveScenarios()], outDir: OUT });
 
 console.log('MAJIN GAUNTLET');
 console.log(`  scenarios:        ${report.scenarios}`);
