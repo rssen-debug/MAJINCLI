@@ -438,6 +438,15 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress:not([hidden])::after{content:"";position:absolute;inset:auto 0 0;width:34%;height:1px;background:var(--trace);opacity:.75;animation:majin-trace-sweep 2.3s ease-in-out infinite;pointer-events:none}
 #composer #work-progress[data-phase="verify"]::after{height:2px;opacity:.95}
 #composer #work-progress[data-phase="stalled"]::after{animation-duration:5s;opacity:.33}
+/* V2 micro-feedback: a single tiny spirit glyph conveys verified vs stalled.
+   No extra panel, toast, or status card. */
+#composer #work-progress[data-phase="verified"] .pulse{width:16px;height:16px;display:grid;place-items:center;flex-shrink:0;border:1px solid rgba(140,207,176,.62);background:rgba(140,207,176,.12);box-shadow:0 0 14px rgba(140,207,176,.25);animation:none}
+#composer #work-progress[data-phase="verified"] .pulse::before{content:"✓";color:var(--ok);font:700 11px/1 system-ui}
+#composer #work-progress[data-phase="verified"] #work-progress-label{color:var(--ok)}
+#composer #work-progress[data-phase="verified"]::after{background:linear-gradient(90deg,transparent,var(--ok),transparent);animation-duration:1.3s}
+#composer #work-progress[data-phase="stalled"] .pulse{width:10px;height:10px;background:#f0b67d;box-shadow:0 0 0 3px rgba(240,182,125,.08);animation-duration:2.6s}
+#composer #work-progress[data-phase="stalled"] #work-progress-label{color:#e1ba95}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verified"]::after,#composer #work-progress[data-phase="stalled"] .pulse{animation:none!important}}
 @keyframes majin-trace-sweep{from{transform:translateX(-100%)}to{transform:translateX(295%)}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress::after{animation:none!important;width:100%;opacity:.3}}
 </style>
