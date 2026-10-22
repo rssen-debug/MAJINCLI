@@ -2,7 +2,8 @@
 /**
  * MAJIN V2 console entry — ties the whole stack into one honest command:
  *   majin-v2 "<objective>" --workspace <dir> [--provider-url <url> --model <m>]
- *   majin-v2 --gauntlet | --telemetry-report [dir] [--days N]
+ *   majin-v2 --gauntlet
+  majin-v2 --doctor [--runner-url http://host:port] [--doctor-whisper-bin <path>] [--port N] | --telemetry-report [dir] [--days N]
  *
  * Exit 0 only when the objective COMPLETED with verified evidence (or the
  * subsidiary command succeeded). Failed goals exit 1. Argparse: node:util
@@ -24,6 +25,7 @@ import { keygen as auditKeygen, anchor as auditAnchor, verifyAnchor } from '../s
 const USAGE = `MAJIN V2
   majin-v2 "<objective>" --workspace <dir> [options]
   majin-v2 --gauntlet
+  majin-v2 --doctor [--runner-url http://host:port] [--doctor-whisper-bin <path>] [--port N]
   majin-v2 --telemetry-report [dir] [--days N]
   majin-v2 --audit-verify <dir> [--with-anchor]
   majin-v2 --audit-keygen <dir>
@@ -59,6 +61,9 @@ try {
     recovery: { type: 'string' },
     'telemetry-dir': { type: 'string' },
     gauntlet: { type: 'boolean' },
+    doctor: { type: 'boolean' },
+    'runner-url': { type: 'string' },
+    'doctor-whisper-bin': { type: 'string' },
     'telemetry-report': { type: 'string' },
     'audit-verify': { type: 'string' },
     'with-anchor': { type: 'boolean' },
@@ -89,9 +94,20 @@ try {
 }
 
 async function main() {
-  if (values.help || (!values.gauntlet && !values['telemetry-report'] && values['audit-verify'] === undefined && values['audit-keygen'] === undefined && values['audit-anchor'] === undefined && !values.studio && positionals.length === 0)) {
+  if (values.help || (!values.doctor && !values.gauntlet && !values['telemetry-report'] && values['audit-verify'] === undefined && values['audit-keygen'] === undefined && values['audit-anchor'] === undefined && !values.studio && positionals.length === 0)) {
     process.stdout.write(USAGE);
     process.exit(positionals.length || values.help ? 0 : 2);
+  }
+
+  if (values.doctor) {
+    const { runDoctor, formatDoctor } = await import('../src/v2/ops/doctor.js');
+    const result = await runDoctor({
+      runnerUrl: values['runner-url'] || null,
+      whisperBin: values['doctor-whisper-bin'] || null,
+      studioPort: values.port || 4783,
+    });
+    console.log(formatDoctor(result));
+    process.exit(result.verdict === 'NOT_READY' ? 1 : 0);
   }
 
   if (values.gauntlet) {
