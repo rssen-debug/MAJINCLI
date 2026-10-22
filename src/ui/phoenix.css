@@ -673,3 +673,17 @@ body.simple #composer #voice-stage{max-width:100%;min-width:0;box-sizing:border-
 body.simple #composer #voice-caption{color:var(--ink);overflow-wrap:anywhere;white-space:normal;max-width:min(65ch,100%)}
 body.simple[data-voice-mode="listening"] #composer .composer-talk{box-shadow:0 0 0 3px var(--cysoft),0 0 16px var(--cysoft)}
 @media(max-width:520px){body.simple #composer #voice-stage{flex-wrap:wrap}body.simple #composer .voice-stage-copy{min-width:0;flex:1}}
+
+/* V1 wish-first UI: make the composer the primary luminous action surface.
+   Self-test remains available through /selftest (quick) and /selftest full;
+   keep its DOM node and handler intact for expert mode and compatibility. */
+body.simple header #b-test { display:none; }
+body.simple footer #composer {
+  border-color:color-mix(in srgb,var(--cy) 34%,var(--line));
+  box-shadow:0 0 0 1px var(--cysoft),0 12px 35px rgba(0,0,0,.11);
+}
+body.simple footer #composer:focus-within {
+  border-color:var(--cy);
+  box-shadow:0 0 0 3px var(--cysoft),0 12px 35px rgba(0,0,0,.13);
+}
+@media (prefers-contrast:more) { body.simple footer #composer { border-width:2px; } }
