@@ -47,3 +47,12 @@ test('browser evidence UI uses only existing composer and reduced motion',()=>{
  assert.ok(html.includes('majin-compact-evidence-glow'));
  assert.match(html,/prefers-reduced-motion:reduce/);
 });
+
+test('same initial 180 characters do not collapse different result rows',()=>{
+ const prefix='Result '+('x'.repeat(190));
+ const source=prefix+' FAILED\n'+prefix+' SAVED';
+ const out=compactBrowserText(source,{maxChars:1200});
+ assert.equal(out.uniqueLines,2);
+ assert.match(out.text,/FAILED/);
+ assert.match(out.text,/SAVED/);
+});
