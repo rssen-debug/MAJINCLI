@@ -35,14 +35,14 @@ test('browser.read compact is explicitly opt-in and visible as one inline activi
 test('compact browser reserves tail evidence even after long head rows',()=>{
  const rows=Array.from({length:100},(_,i)=>'Content '+i+' '+('details '.repeat(45)));
  rows.push('FINAL RESULT: saved successfully');
- const out=compactBrowserText(rows.join('\\n'),{maxChars:1200});
+ const out=compactBrowserText(rows.join('\n'),{maxChars:1200});
  assert.ok(out.outputChars<=1200);
  assert.match(out.text,/Content 0/);
  assert.match(out.text,/FINAL RESULT: saved successfully/);
 });
 test('compact tail cue stays inside existing composer with reduced motion',()=>{
  const html=fs.readFileSync('src/ui/index.html','utf8');
- assert.match(html,/work-progress\\[data-phase="compact"\\] \\.pulse/);
+ assert.ok(html.includes('#composer #work-progress[data-phase="compact"] .pulse'));
  assert.match(html,/majin-compact-breathe/);
  assert.match(html,/prefers-reduced-motion:reduce/);
 });
