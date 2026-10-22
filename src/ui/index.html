@@ -707,6 +707,10 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 #composer #work-progress[data-phase="verify"] #work-progress-symbol{
   color:#ff93dc;text-shadow:0 0 10px rgba(255,127,216,.55);
 }
+/* Subtle grounded-proof pulse, respecting reduced motion. */
+#composer #work-progress[data-phase="verify"] #work-progress-symbol{animation:majin-proof-breathe 1.8s ease-in-out infinite}
+@keyframes majin-proof-breathe{50%{opacity:.66;text-shadow:0 0 16px rgba(255,127,216,.78)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verify"] #work-progress-symbol{animation:none}}
 @keyframes majin-verify-sweep{from{background-position:110% 0}to{background-position:-110% 0}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verify"]::before{animation:none}}
 </style>
