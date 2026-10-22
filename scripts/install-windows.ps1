@@ -3,7 +3,7 @@
 
   You do not need git, GitHub, a token, or Visual Studio. What this script does:
 
-    1. checks the machine (PowerShell 5+, Node >= 20.11, room on disk, a folder it may write to)
+    1. checks the machine (PowerShell 5+, Node >= 22.0, room on disk, a folder it may write to)
     2. copies the source next to it into %LOCALAPPDATA%\MAJIN\src  (a boring, writeable, non-synced path -
        OneDrive folders and "Downloads" are where npm builds usually die)
     3. installs the build tools from npm (esbuild, pkg, resedit)
@@ -99,8 +99,8 @@ $nv = ''
 try { $nv = ((& node --version 2>&1) | Select-Object -First 1) } catch { $nv = '' }
 $nv = ($nv -replace '^v', '')
 $parts = $nv.Split('-')[0].Split('.')
-if ($parts.Count -lt 2 -or [int]$parts[0] -lt 20 -or (([int]$parts[0] -eq 20) -and ([int]$parts[1] -lt 11))) {
-  Stop-Here ('node ' + $nv + ' is too old; MAJIN needs 20.11 or newer:  winget install -e --id OpenJS.NodeJS.LTS')
+if ($parts.Count -lt 2 -or [int]$parts[0] -lt 22) {
+  Stop-Here ('node ' + $nv + ' is too old; MAJIN requires Node.js 22 or newer:  winget install -e --id OpenJS.NodeJS.LTS')
 }
 Good ('node ' + $nv + '  ' + $node.Source)
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { Stop-Here 'npm is missing (it ships with node - reinstall node and open a new terminal)' }

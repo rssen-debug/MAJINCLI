@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { runV3FileDeliverable, V3InputError, V3_FILE_LIMIT } from './runtime/file-deliverable.js';
 import { renderV3Page } from './ui/page.js';
+import { assertV3NodeSupported } from './platform/runtime.js';
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -66,6 +67,7 @@ function readJson(req, maxBytes) {
  * provider routes, or CORS. The workspace path is a local operator choice.
  */
 export function createV3Server({ workspaceDir, host = '127.0.0.1', maxBodyBytes = V3_FILE_LIMIT + 16_384 } = {}) {
+  assertV3NodeSupported();
   if (typeof workspaceDir !== 'string' || !workspaceDir.trim()) {
     throw new TypeError('workspaceDir is required; no implicit write destination is allowed');
   }

@@ -142,7 +142,7 @@ test('the zip wrapper builds via the shared script and asks for nothing but node
   assert.match(ps, /'-Port', \$Port/, 'and passes -Port through');
   assert.match(ps, /\$psArgs \+= '-SkipVerify'/, 'SkipVerify maps to the real skip flag, not to -SkipInstaller');
   assert.match(ps, /'ci'/, 'npm ci when package-lock.json is there, so the build is reproducible');
-  assert.match(ps, /20\.11/, 'it checks the node floor and says so');
+  assert.match(ps, /Node >= ?22\.0/, 'it checks the current node floor and says so');
   assert.match(ps, /OpenJS\.NodeJS\.LTS/, 'and hands out the winget line instead of a shrug');
   assert.match(ps, /LOCALAPPDATA/, 'it builds in LOCALAPPDATA, out of OneDrive and Downloads');
   assert.match(ps, /Stop-Here/, 'every dead end has its own sentence');

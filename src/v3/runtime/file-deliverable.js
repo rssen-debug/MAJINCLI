@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Goal } from '../../v2/runtime/goal.js';
 import { runVerifier } from '../../v2/runtime/verifiers.js';
+import { assertV3NodeSupported } from '../platform/runtime.js';
 
 export const V3_FILE_LIMIT = 1_000_000;
 export const V3_FILE_ACCEPTANCE_ID = 'artifact-written-and-verified';
@@ -51,6 +52,7 @@ function failureCode(error) {
  * claim. It never overwrites an existing file and never invokes a shell.
  */
 export async function runV3FileDeliverable({ objective, fileName, content, workspaceDir } = {}) {
+  assertV3NodeSupported();
   validateInput({ objective, fileName, content, workspaceDir });
 
   const requestedRoot = path.resolve(workspaceDir);

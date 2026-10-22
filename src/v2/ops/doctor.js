@@ -46,10 +46,10 @@ export async function runDoctor({
   const rows = [];
   const add = (name, req, state, detail) => { checks.push({ name, req, state, detail }); };
 
-  /* CORE: node >= 20 (suite + fetch + crypto.subtle floor) */
+  /* CORE: Node >=22, matching canonicalize and p-queue runtime engines. */
   {
     const major = Number((process.versions.node || '0').split('.')[0]);
-    add('node-runtime', 'CORE', major >= 20 ? 'OK' : 'FAIL', `node v${process.versions.node} (requires >= 20)`);
+    add('node-runtime', 'CORE', major >= 22 ? 'OK' : 'FAIL', `node v${process.versions.node} (requires >= 22)`);
   }
 
   /* CORE: repo shape — bin entrypoint present */

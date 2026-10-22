@@ -92,7 +92,7 @@ test('setup: setup.ps1 is readable, needs no admin and avoids the dangerous move
   assert.match(ps, /IconLocation = "\$icon,0"/, 'the icon comes from the payload, not a download');
   assert.match(ps, /%~dp0\.\.\\dist\\majin\.cjs/, 'the wrapper runs the bundled app from its own folder');
   assert.match(ps, /MAJIN_HOME/, 'it must not start guessing new data locations');
-  assert.match(ps, /20\.11/, 'the documented node floor is enforced, not assumed');
+  assert.match(ps, /22\.0/, 'the documented node floor is enforced, not assumed');
 });
 
 test('setup: the stub does four things and nothing fifth', () => {

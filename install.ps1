@@ -50,15 +50,15 @@ Write-Host "data + config: $Home`n" -ForegroundColor DarkCyan
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) {
   Write-Bad 'Node was not found in PATH.'
-  Write-Host '  Install the LTS (>= 20.11): winget install OpenJS.NodeJS.LTS' -ForegroundColor Yellow
+  Write-Host '  Install the LTS (>= 22): winget install OpenJS.NodeJS.LTS' -ForegroundColor Yellow
   Write-Host '  Restart PowerShell and run install.ps1 again.' -ForegroundColor Yellow
   exit 1
 }
 $ver = (& node -v) -replace '^v', ''
 $parts = $ver.Split('.')
-$okNode = ([int]$parts[0] -gt 20) -or ([int]$parts[0] -eq 20 -and ([int]$parts[1] -gt 11 -or ([int]$parts[1] -eq 11 -and [int]$parts[2] -ge 0)))
+$okNode = [int]$parts[0] -ge 22
 if (-not $okNode) {
-  Write-Bad "Node $ver is too old — MAJIN needs 20.11 or later (fetch, structuredClone, --test)."
+  Write-Bad "Node $ver is too old — MAJIN requires Node.js 22 or later."
   exit 1
 }
 Write-Ok "Node $ver ($($node.Source))"
@@ -83,7 +83,7 @@ $cmd = @"
 rem MAJIN — start the agent (server + window)
 setlocal
 if "%MAJIN_HOME%"=="" set "MAJIN_HOME=$Home"
-where node >nul 2>nul || (echo Node is missing - install Node LTS 20.11+ from nodejs.org & exit /b 1)
+where node >nul 2>nul || (echo Node is missing - install Node LTS 22+ from nodejs.org & exit /b 1)
 pushd "$Repo"
 node "src\cli\majin.js" start %*
 popd

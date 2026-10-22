@@ -12,7 +12,7 @@ cd /d "%~dp0"
 where node >nul 2>nul
 if errorlevel 1 (
   echo.
-  echo   MAJIN behover Node 20.11 eller senare.
+  echo   MAJIN behover Node 22 eller senare.
   echo   Installera med:  winget install OpenJS.NodeJS.LTS
   echo   Close this window, open a new one and run it again.
   echo.
@@ -26,13 +26,12 @@ for /f "tokens=1,2 delims=." %%a in ("%NODEV%") do (
   set "MAJOR=%%a"
   set "MINOR=%%b"
 )
-if %MAJOR% LSS 20 goto :toogame
-if %MAJOR% EQU 20 if %MINOR% LSS 11 goto :toogame
+if %MAJOR% LSS 22 goto :toogame
 goto :run
 
 :toogame
 echo.
-echo   Node %NODEV% ar for gammal for MAJIN (kraver 20.11+).
+echo   Node %NODEV% ar for gammal for MAJIN (kraver 22+).
 echo   hamta ny: https://nodejs.org/   eller   winget install OpenJS.NodeJS.LTS
 echo.
 pause
