@@ -38,3 +38,9 @@ test('agent connects recovery guidance and subtle UI, no new overlays',()=>{
 test('inherited prototype error codes never produce fabricated recovery advice',()=>{
  for(const code of ['__proto__','constructor','toString','valueOf']) assert.equal(suggestBrowserRecovery('browser.click',{code}),null);
 });
+
+test('recovery rejects object and array codes instead of invoking their coercion hooks',()=>{
+ const hostile={toString(){throw Error('should never stringify untrusted code')}};
+ for(const code of [hostile,['ref_stale'],null,12]) assert.equal(suggestBrowserRecovery('browser.click',{code}),null);
+ assert.equal(suggestBrowserRecovery('browser.click',{code:'ref_stale'}).phase,'refresh_page');
+});
