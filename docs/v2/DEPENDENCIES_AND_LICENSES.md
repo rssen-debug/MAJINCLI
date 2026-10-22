@@ -58,6 +58,8 @@ Repo philosophy measured: ONE runtime dep today (chokidar). Every new dep must e
 | Live GUI QA harness + runner workflow (PHASE 24, evidence lane) | playwright (devDep, pre-existing) | scripts/v2-gui-qa.mjs | Real Chromium drives the full Studio surface family and collects EVIDENCE: zero external asset requests, gate sentences in DOM, consent grant→goal RUN via UI (kernel COMPLETED), doctor/dossier verdicts, audit chain entries ≥2, zero unexpected console errors (expected gate statuses filtered by pattern), screenshot + results JSON artifacts. Headless by default, GUI_HEADLESS=0 for headed desktop proof. Found and fixed a REAL bug on first run: the inline page script carried single-backslash `
 ` (template-literal emission) making the ENTIRE browser script a SyntaxError — emitted since the goals panel, invisible to HTTP tests; regression guard test/v2-studio-script-syntax.test.js (7 render combos must parse + wiring markers). Workflow .github/workflows/v2-studio-gui-qa.yml: workflow_dispatch only, runs-on [self-hosted, windows, majin-interactive], artifacts always uploaded. +0 production deps |
 
+- **actions/cache + actions/setup-node + PowerShell bypass shell format** — runner-lane hardening (2026-10-22): documented REUSE of existing actions rather than bespoke automation; bypass applies to the JOB only, the machine's ExecutionPolicy is never modified.
+
 ## Policy from here
 
 - Pin every adopted dep in package-lock.json (CI npm ci enforces). One dep reviewed at a time.
