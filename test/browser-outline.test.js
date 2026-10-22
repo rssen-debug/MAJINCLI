@@ -30,3 +30,11 @@ test('outline is opt-in on existing browser.elements tool, with no new permissio
   assert.match(html,/@keyframes majin-trace/);
   assert.match(html,/prefers-reduced-motion:reduce/);
 });
+
+test('outline bounds invalid and oversized limits without unbounded output',()=>{
+ const entries=Array.from({length:70},(_,i)=>({role:'heading',name:'Heading '+i}));
+ assert.doesNotMatch(formatPageOutline({entries},{cap:-1}),/Heading 0/);
+ const out=formatPageOutline({entries},{cap:99999});
+ assert.match(out,/Heading 54/);
+ assert.doesNotMatch(out,/Heading 55/);
+});
