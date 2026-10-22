@@ -3,7 +3,7 @@
  * Read-only. Avoid private text, input values and hidden nodes. The outline
  * guides model navigation; clickable refs remain provided by browser.elements.
  */
-export const OUTLINE_JS = String.raw\`(() => {
+export const OUTLINE_JS = String.raw`(() => {
   const nodes = document.querySelectorAll('main,nav,header,footer,aside,form,section,h1,h2,h3,h4,[role="main"],[role="navigation"],[role="dialog"],[role="heading"]');
   const entries = [];
   const limit = 55;
@@ -26,7 +26,7 @@ export const OUTLINE_JS = String.raw\`(() => {
       name,tag});
   }
   return {url:location.href,title:document.title,entries};
-})()\`;
+})()`;
 
 export function formatPageOutline(payload,{cap=45}={}) {
   const entries=Array.isArray(payload?.entries)?payload.entries.slice(0,cap):[];
