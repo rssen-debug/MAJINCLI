@@ -736,6 +736,9 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 /* Small visibility improvement to the existing browser recovery state. */
 #composer #work-progress[data-phase="stagnation"] #work-progress-symbol{letter-spacing:.012em;transition:opacity .2s ease}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] #work-progress-symbol{transition:none!important}}
+/* Better evidence visibility within the existing status row (no new overlay). */
+#composer #work-progress[data-phase="stagnation"]{text-underline-offset:3px}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"]{scroll-behavior:auto}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
