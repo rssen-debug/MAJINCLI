@@ -514,8 +514,15 @@ async function send(text, options = {}) {
   if (!input) return false;
   if (S.stopRequested) { toast('Waiting for stop confirmation.'); return false; }
   if (input[0] === '/') {
-    const ok = await command(input);
-    if (ok) return true;
+    // V1: command API failures must not become unhandled UI promise rejections.
+    // Leave the typed command untouched so the user can retry it.
+    try {
+      const ok = await command(input);
+      if (ok) return true;
+    } catch (e) {
+      err('Command failed: ' + (e?.message || String(e)));
+      return false;
+    }
   }
   /* AUTOPILOT: a task is already running on this chat — this new message is
      an independent task, it gets its own agent, card and stop button and
