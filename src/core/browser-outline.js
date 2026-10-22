@@ -29,11 +29,12 @@ export const OUTLINE_JS = String.raw`(() => {
 })()`;
 
 export function formatPageOutline(payload,{cap=45}={}) {
-  const entries=Array.isArray(payload?.entries)?payload.entries.slice(0,cap):[];
+  const bounded=Number.isFinite(Number(cap))?Math.max(0,Math.min(55,Math.floor(Number(cap)))):45;
+  const entries=Array.isArray(payload?.entries)?payload.entries.slice(0,bounded):[];
   const lines=entries.map(({role,level,name})=>
     '- '+String(role||'region').slice(0,24)+(level?' '+level:'')+
     (name?' "'+String(name).replace(/[\r\n"]/g,' ').slice(0,95)+'"':''));
   return 'Page structure — '+String(payload?.title||'').slice(0,100)+
     '\n'+(lines.join('\n')||'(no visible landmarks or headings)')+
-    (Array.isArray(payload?.entries)&&payload.entries.length>cap?'\n… more sections omitted':'');
+    (Array.isArray(payload?.entries)&&payload.entries.length>bounded?'\n… more sections omitted':'');
 }
