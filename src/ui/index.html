@@ -728,6 +728,9 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 #composer #work-progress[data-phase="stagnation"] #work-progress-symbol{animation:majin-stagnation-orbit 2.6s ease-in-out infinite}
 @keyframes majin-stagnation-orbit{50%{opacity:.7;filter:drop-shadow(0 0 5px rgba(255,172,90,.3))}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] #work-progress-symbol{animation:none!important}}
+#composer #work-progress[data-phase="verify"] .pulse{animation:majin-verify-soft-proof 2.9s ease-in-out infinite}
+@keyframes majin-verify-soft-proof{50%{opacity:.75;box-shadow:0 0 8px rgba(216,148,248,.32)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verify"] .pulse{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
