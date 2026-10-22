@@ -14,8 +14,12 @@ export function saveCheckpoint(root, id, state) {
   if (!state || typeof state !== 'object' || Array.isArray(state)) throw new TypeError('Checkpoint state must be an object');
   const destination = checkpointPath(root, id);
   fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  if (!fs.lstatSync(root).isDirectory()) throw new Error('Invalid checkpoint directory');
   const tmp = path.join(root, '.checkpoint-' + crypto.randomUUID() + '.tmp');
-  const payload = JSON.stringify({ schema: 1, id, savedAt: new Date().toISOString(), state });
+  const payload = JSON.stringify({ schema: 1, id, savedAt: new Date().toISOString(), state }, (_key, value) => {
+    if (typeof value === 'bigint') throw new TypeError('Checkpoint BigInt unsupported');
+    return value;
+  });
   if (typeof payload !== 'string') throw new Error('Checkpoint serialization failed');
   if (Buffer.byteLength(payload) > 1024 * 1024) throw new Error('Checkpoint too large');
   try {
