@@ -695,3 +695,8 @@ body.simple header #b-voice.on {
   border-color:var(--cy);
   box-shadow:0 0 0 2px var(--cysoft),0 0 15px var(--cysoft);
 }
+
+/* Voice: quiet but clear listening state. */
+body.simple[data-voice-mode="listening"] #composer .composer-talk{outline:2px solid var(--cy);outline-offset:2px;box-shadow:0 0 0 7px var(--cysoft),0 0 22px var(--cysoft)}
+body.simple[data-voice-mode="thinking"] #composer .composer-talk{color:var(--cy);opacity:.76}
+@media(prefers-reduced-motion:reduce){body.simple[data-voice-mode="listening"] #composer .composer-talk{transition:none}}
