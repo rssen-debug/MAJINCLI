@@ -1,6 +1,6 @@
 # MAJIN V2 — LATEST HANDOFF (owner-facing, 2026-10-21)
 
-V2 HEAD (v2/main): 081384a5 (audit lane: tamper-evident hash-chain, consent/receipt/telemetry bound, --audit-verify CLI, +0 deps) ← 26aa3e16 (STT lane: whisper.cpp CLI adapters, honest inconclusive verdict) ← 5fb8aaa5 (voice/TTS edge-tts, consent-gated, live proof) (executor layer merged (ph2/8): whitelist→preflight→mode→consent→confinement-proof; zod adopted; earlier incident fully repaired (see postmortem))
+V2 HEAD (v2/main): 126a2b4b (studio lane: read-only operator scaffold REST+SSE over real kernel objects, +0 deps; Windows GUI-QA honestly NOT_TESTED — runner offline) ← 081384a5 (audit lane: tamper-evident hash-chain bound, --audit-verify CLI) ← 26aa3e16 (STT lane) ← 5fb8aaa5 (voice/TTS)
 
 COMPLETED (this working day, verified):
 - v2/main created from V1 tip 282a8ff; V1 untouched (policy: only v2/* branches carry V2 code)
