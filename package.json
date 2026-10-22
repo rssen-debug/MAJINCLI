@@ -1,7 +1,7 @@
 {
   "name": "majin",
   "version": "2.0.0-alpha",
-  "description": "MAJIN \u00e2\u20ac\u201d a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
+  "description": "MAJIN â€” a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -80,6 +80,7 @@
   },
   "dependencies": {
     "chokidar": "^4.0.3",
+    "node-edge-tts": "^1.2.11",
     "p-queue": "^10.0.0",
     "pngjs": "^7.0.0",
     "zod": "^4.6.7"
