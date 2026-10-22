@@ -51,3 +51,8 @@ test('preview safely handles missing and null state',()=>{
  assert.equal(recoveryPreview({schema:1,id:'demo'}).reason,'invalid-state');
  assert.equal(recoveryPreview({schema:1,id:'demo',state:null}).reason,'invalid-state');
 });
+
+test('empty checkpoint cannot be presented as resumable',()=>{
+ const result=recoveryPreview({schema:1,id:'empty',state:{steps:[]}});
+ assert.deepEqual(result,{ready:false,reason:'empty-steps',steps:[]});
+});
