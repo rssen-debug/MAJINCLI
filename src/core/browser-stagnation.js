@@ -17,7 +17,7 @@ function hashPage({url='',title='',text='',controls=[]}={}){
     String(text).slice(0,9000),String(text).slice(-3000),
     Array.isArray(controls)?[controls.length,...(controls.length>30?[...controls.slice(0,12),...Array.from({length:10},(_,i)=>controls[Math.floor((i+1)*(controls.length-1)/11)]),...controls.slice(-10)]:controls).map(c=>[
       String(c.selector||'').slice(0,100),
-      String(c.label||'').slice(0,100),Boolean(c.checked)
+      String(c.label||'').slice(0,100),Boolean(c.checked),c.enabled===true?true:c.enabled===false?false:null
     ])]:[]
   ]));
   return h.digest('hex');
