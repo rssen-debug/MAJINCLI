@@ -31,3 +31,4 @@
 | Tool registry + policy-diff being runner (110-116) | VERIFIED | test/v2-tools.test.js 7/7 incl. schema-break output classified, consent exhaustion, escape-path refusal, timeout honors, verifier bridge through policy |
 | Supervisor: model-planner with framework-owned verifiers | VERIFIED | test/v2-planner-model.test.js 4/4: model verify-attempts filtered, verifiers ALWAYS built from compiled goal by framework (section 22 independence), loud template fallback on garbage, roleCall schema gates |
 | Outer recovery loop 106-117 | VERIFIED | test/v2-outer-loop.test.js 5/5: bounded replan injection, retry/replan executed, co-worker-needed steps BLOCKED honestly (never simulated), recovered-flag exact, budget exhaustion definite |
+| Provider chain: failover + breakers + telemetry | VERIFIED | test/v2-provider-chain.test.js 5/5: retry-safe only, AUTH fails fast, breaker accumulates across requests, half-open probes, cap honored |
