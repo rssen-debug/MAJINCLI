@@ -52,7 +52,7 @@ const results=[];
 for(const check of checks){
  process.stdout.write('Running '+check.name+'...\n');
  const result=await execute(check);results.push(result);
- process.stdout.write('  '+result.status+' ('+result.durationMs+' ms)\n');
+ process.stdout.write('  '+result.status+' ('+result.durationMs+' ms)\n'); if(result.status==='FAIL')process.stdout.write('STDOUT: '+result.stdout.slice(-6000)+'\nSTDERR: '+result.stderr.slice(-4000)+'\n');
 }
 const passed=results.filter(x=>x.status==='PASS').length;
 const report={schemaVersion:1,generatedAt:new Date().toISOString(),scope:'MAJIN V1',mode:quick?'quick':'full',verdict:passed===results.length?'PASS':'FAIL',automated:{passed,total:results.length,checks:results},manual:manuallyRequired};
