@@ -654,3 +654,16 @@ body.simple .msg .appr:focus-within h4 { text-decoration:underline;text-underlin
 body.simple #c-update:not([hidden]) { min-height:36px;padding-inline:12px;font-weight:650; }
 body.simple #c-update:focus-visible { outline:3px solid var(--cy);outline-offset:3px; }
 @media(pointer:coarse){body.simple .msg .appr :is(button,a){min-height:44px;touch-action:manipulation}}
+
+/* V1 chat alignment contract: transcript and composer share ONE centered width. */
+body.simple #main{min-width:0;overflow:hidden}
+body.simple #scroller{width:100%;min-width:0;box-sizing:border-box;overflow-x:hidden}
+body.simple #scroller>.msg{width:min(100%,var(--chat-width));max-width:var(--chat-width);margin-inline:auto;box-sizing:border-box}
+body.simple #scroller>.home{width:min(100%,var(--chat-width));max-width:var(--chat-width);margin-inline:auto;box-sizing:border-box}
+body.simple footer{width:100%;min-width:0;box-sizing:border-box;padding-inline:clamp(16px,3vw,40px)}
+body.simple footer #composer,body.simple footer .crow,body.simple footer #run-state{width:min(100%,var(--chat-width));max-width:var(--chat-width);margin-inline:auto;box-sizing:border-box}
+body.simple footer #composer{grid-template-columns:38px minmax(0,1fr) 44px;align-items:center;gap:8px}
+body.simple #composer #mic{grid-column:1;grid-row:1;align-self:center;justify-self:center;width:38px;height:38px;min-height:38px;margin:0}
+body.simple #composer #input{grid-column:2;grid-row:1;min-width:0;width:100%;align-self:center;margin:0;resize:none}
+body.simple #composer #send{grid-column:3;grid-row:1;align-self:center;justify-self:center;margin:0}
+@media(max-width:600px){body.simple footer{padding-inline:12px}body.simple #scroller{padding-inline:12px}body.simple #scroller>.msg{max-width:100%}}
