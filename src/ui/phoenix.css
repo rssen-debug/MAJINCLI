@@ -499,3 +499,14 @@ body.simple .msg .appr button:not(:disabled):active { transform:translateY(1px);
 @media(prefers-contrast:more) {
  body.simple .msg .appr button:not(:disabled):focus-visible { outline-width:4px; }
 }
+
+/* Aurora: crisp permission prompt separation in compact layouts. */
+body.simple .msg .appr {
+  border-radius:12px;
+  background:var(--bg2);
+}
+body.simple .msg .appr button:not(:disabled):focus-visible {
+  outline-offset:4px;
+  box-shadow:0 0 0 4px var(--cysoft);
+}
+@media(max-width:600px) { body.simple .msg .appr { padding:12px; } }
