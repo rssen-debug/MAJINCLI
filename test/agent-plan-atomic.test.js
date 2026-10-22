@@ -55,3 +55,14 @@ test('agent refuses symlinked plan journals',t=>{
  assert.equal(agent.loadPlan('demo'),null);
  assert.equal(agent.plans.size,0);
 });
+
+test('agent refuses journals with excessive plan steps', t => {
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'majin-plan-steps-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const agent=Object.create(Agent.prototype);
+ agent.plans=new Map();
+ agent.planPath=()=>path.join(dir,'demo.plan.json');
+ fs.writeFileSync(agent.planPath(),JSON.stringify({session:'demo',plan:Array.from({length:1001},(_,i)=>({id:i}))}));
+ assert.equal(agent.loadPlan('demo'),null);
+ assert.equal(agent.plans.size,0);
+});
