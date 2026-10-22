@@ -741,6 +741,9 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 /* Rebased progress visibility: gentle amber edge, no extra panel. */
 #composer #work-progress[data-phase="stagnation"]{border-top-color:rgba(255,187,113,.36)}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] *{animation:none!important}}
+/* Session recovery cue remains inside the existing composer. */
+#composer #work-progress[data-phase="stagnation"] #work-progress-symbol{filter:drop-shadow(0 0 4px rgba(242,172,104,.28))}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] #work-progress-symbol{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
