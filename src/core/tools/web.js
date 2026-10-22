@@ -505,13 +505,19 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     group: 'web',
     risk: 'exec',
     desc: 'Type text into an input/textarea/select (real events — frameworks see it) and confirm the value stuck. Use browser.click for buttons and checkboxes.',
-    params: { selector: 'string: CSS selector of the field', value: 'string: what to type' },
-    async run({ selector, value }, ctx) {
+    params: { selector: 'string optional CSS selector of the field', ref: 'string optional numbered ref from browser.elements, e.g. e4 (exclusive with selector)', value: 'string: what to type' },
+    async run({ selector, ref, value }, ctx) {
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
-      journal.guard(session, `browser.fill:${selector}`);
+      if (Boolean(selector) === Boolean(ref)) return {ok:false,error:{code:'bad_input',message:'Give exactly one live ref from browser.elements OR a CSS selector'}};
+      const grounded=ref?recallRef(session,ref):null;
+      if(ref&&!grounded)return {ok:false,error:{code:'ref_unknown',message:'Ref is not grounded in this session; rerun browser.elements'}};
+      const identity=grounded?{tag:String(grounded.tag||'').toLowerCase(),id:String(grounded.id||''),
+        name:String(grounded.name||''),type:String(grounded.type||'').toLowerCase()}:null;
+      journal.guard(session, `browser.fill:${ref || selector}`);
       const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
-      const sel = JSON.stringify(String(selector));
+      const sel = JSON.stringify(ref?`[data-majin-ref="${String(ref).replace(/[^a-zA-Z0-9_-]/g,'')}"]`:String(selector));
+      const expectedIdentity=JSON.stringify(identity);
       const val = JSON.stringify(String(value ?? ''));
       const r = await b.eval(`(() => {
         let nodes;
@@ -520,6 +526,12 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         if (nodes.length > 1) return { found: true, blocked: 'ambiguous_target', count: nodes.length };
         const el = nodes[0];
         if (!el) return { found: false };
+        const expected=${expectedIdentity};
+        if(expected && (el.tagName.toLowerCase()!==expected.tag ||
+          String(el.id||'')!==expected.id || String(el.name||'')!==expected.name ||
+          String(el.type||'').toLowerCase()!==expected.type)){
+          return {found:true,blocked:'ref_stale'};
+        }
         // A checkbox/radio/button is an ACTION, not a value to overwrite.
         // Assigning input.value can corrupt a form submission without checking.
         const inputType = String(el.getAttribute('type') || '').toLowerCase();
@@ -557,7 +569,13 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       await new Promise(resolve => setTimeout(resolve, 120));
       const retained = await b.eval(`(() => {
         let nodes; try { nodes=document.querySelectorAll(${sel}); } catch { return false; }
-        return nodes.length === 1 && nodes[0].value === ${val};
+        const expected=${expectedIdentity};
+        return nodes.length === 1 && (!expected || (
+          nodes[0].tagName.toLowerCase()===expected.tag &&
+          String(nodes[0].id||'')===expected.id &&
+          String(nodes[0].name||'')===expected.name &&
+          String(nodes[0].type||'').toLowerCase()===expected.type)) &&
+          nodes[0].value === ${val};
       })()`).catch(() => false);
       if (!retained) return {ok:false,error:{code:'value_reverted',
         message:'Field initially accepted input but the app reverted it after its framework update. Re-observe before retrying.'},
