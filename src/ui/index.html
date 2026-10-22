@@ -571,6 +571,13 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
   #composer #work-progress[data-phase="verified"] .pulse,
   #composer #work-progress[data-phase="verified"] #work-progress-symbol{animation:none!important}
 }
+
+/* Round 4: navigation proof stays inside the existing single composer thread. */
+#composer #work-progress[data-phase="navigation"]{color:#e9c6f1;border-top-color:rgba(240,145,218,.16)}
+#composer #work-progress[data-phase="navigation"] #work-progress-symbol{color:#f6aedc;animation:majin-navigation-seek 1.5s ease-in-out infinite}
+#composer #work-progress[data-phase="navigation"] .pulse{background:#f4a6de;box-shadow:0 0 9px rgba(244,166,222,.33)}
+@keyframes majin-navigation-seek{50%{transform:translate(2px,-2px);opacity:.6}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="navigation"] #work-progress-symbol{animation:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
