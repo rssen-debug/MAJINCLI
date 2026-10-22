@@ -59,3 +59,14 @@ test('checkpoint reader rejects a symlink swapped into place',t=>{
  catch(e){ if(['EPERM','EACCES'].includes(e.code)){t.skip('symlink unavailable');return;}throw e; }
  assert.throws(()=>loadCheckpoint(dir,'race'),/Invalid checkpoint file size|ELOOP/);
 });
+
+test('checkpoint saving rejects a symlinked destination',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'majin-checkpoint-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const target=path.join(dir,'target');
+ fs.writeFileSync(target,'untouched');
+ try { fs.symlinkSync(target,checkpointPath(dir,'link')); }
+ catch(e){ if(['EPERM','EACCES'].includes(e.code)){t.skip('symlinks unavailable');return;}throw e; }
+ assert.throws(()=>saveCheckpoint(dir,'link',{step:1}),/Unsafe checkpoint destination/);
+ assert.equal(fs.readFileSync(target,'utf8'),'untouched');
+});
