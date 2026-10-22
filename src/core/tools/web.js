@@ -349,19 +349,34 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         // Playwright-MCP-style unique target selection: acting on the first
         // of multiple matching buttons is unsafe, especially Submit/Buy.
         const semantic=${semanticTarget};
+        // Stagehand-style grounded interaction across OPEN shadow boundaries:
+        // never blindly pick the first match, preserve uniqueness checks.
+        const queryDeep=(css)=>{
+          const roots=[document],found=[];
+          let scanned=0;
+          for(let i=0;i<roots.length && i<16 && scanned<350;i++){
+            const root=roots[i];
+            found.push(...root.querySelectorAll(css));
+            for(const node of [...root.querySelectorAll('*')].slice(0,350-scanned)){
+              scanned++;
+              if(node.shadowRoot && roots.length<16 && !roots.includes(node.shadowRoot))roots.push(node.shadowRoot);
+            }
+          }
+          return found.slice(0,250);
+        };
         let matches;
         if(semantic){
           const selectors={button:'button,[role="button"],input[type="button"],input[type="submit"]',
             link:'a[href],[role="link"]',checkbox:'input[type="checkbox"],[role="checkbox"]',
             textbox:'input:not([type="hidden"]):not([type="password"]),textarea,[role="textbox"]'};
-          matches=[...document.querySelectorAll(selectors[semantic.role])].filter(el=>{
+          matches=queryDeep(selectors[semantic.role]).filter(el=>{
             const box=el.getBoundingClientRect(),sty=getComputedStyle(el);
             if(!box.width||!box.height||sty.display==='none'||sty.visibility==='hidden'||el.closest('[aria-hidden="true"],[inert]'))return false;
             const label=el.getAttribute('aria-label')||el.labels?.[0]?.textContent||el.getAttribute('title')||
               (['INPUT','TEXTAREA'].includes(el.tagName)?el.getAttribute('placeholder'):el.innerText)||'';
             return String(label).replace(/\\s+/g,' ').trim().toLocaleLowerCase()===semantic.name.toLocaleLowerCase();
           });
-        }else matches=document.querySelectorAll(${sel});
+        }else matches=queryDeep(${sel});
         if (matches.length > 1) return {found:true,blocked:'ambiguous_target',
           matchCount:matches.length,tag:'',text:'Multiple matching controls'};
         const el = matches[0];
@@ -412,7 +427,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
             coveringRole:String(over.closest('[role="dialog"],[aria-modal="true"],dialog')?.getAttribute('role')||'').slice(0,30),
             coveringId:String(over.id||'').slice(0,60)};
         el.click();
-        return { found: true, tag: String(el.tagName).toLowerCase(), text: t,
+        return { found: true, fromShadowRoot: Boolean(el.getRootNode?.()?.host), tag: String(el.tagName).toLowerCase(), text: t,
           checked: isCheckbox ? Boolean(el.checked) : null,
           changed: isCheckbox ? Boolean(el.checked) !== before : null };
       })()`);
