@@ -23,7 +23,7 @@ function hashPage({url='',title='',text='',controls=[]}={}){
   return h.digest('hex');
 }
 function entry(id){
-  const key=String(id||'default');
+  const key=typeof id==='string'&&id?id:'default';
   if(!sessions.has(key)){
     if(sessions.size>=MAX_SESSIONS)sessions.delete(sessions.keys().next().value);
     sessions.set(key,{last:null,pending:false,unchangedActions:0});
@@ -39,4 +39,4 @@ export function observeBrowserPage(session,state){
   e.last=fp;e.pending=false;
   return {stagnant:e.unchangedActions>=2,unchangedActions:e.unchangedActions};
 }
-export function clearBrowserStagnation(session){sessions.delete(String(session||'default'));}
+export function clearBrowserStagnation(session){sessions.delete(typeof session==='string'&&session?session:'default');}
