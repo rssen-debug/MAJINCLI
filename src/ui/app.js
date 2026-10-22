@@ -244,7 +244,16 @@ function onEvent(ev) {
           count+' interactive controls found');
         const bar=$('work-progress');if(bar)bar.dataset.phase='grounded';
       } else if(ev.tool==='browser.click' && !ev.ok && ev.error?.code==='click_blocked') {
-        workPulse('Click blocked · checking page overlay');
+        const reason=String(ev.error?.reason||'').slice(0,50);
+        const phrases={occluded:'Another element covers the button · checking the page',
+          disabled:'Button unavailable · checking required steps',
+          hidden:'Button hidden · finding visible controls',
+          outside_viewport:'Control off-screen · inspecting the page',
+          ref_identity_changed:'Page changed · finding the current button'};
+        workPulse(phrases[reason]||'Click blocked · finding a safe alternative');
+        const bar=$('work-progress');
+        if(bar){bar.dataset.phase='blocked';bar.dataset.blocker=reason;
+          bar.title='MAJIN will re-observe the page rather than repeatedly clicking a blocked control';}
       } else workPulse(ev.ok?'Tool finished · checking result':'Tool failed · adjusting approach');
     }
     else if (ev.type === 'agent_recovery') {

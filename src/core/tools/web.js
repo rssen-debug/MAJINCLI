@@ -359,7 +359,9 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         const associatedLabel=over?.closest?.('label');
         if(over && over!==el && !el.contains(over) && associatedLabel?.control!==el)
           return {found:true,blocked:'occluded',tag:el.tagName.toLowerCase(),text:t,
-            coveringTag:String(over.tagName||'').toLowerCase()};
+            coveringTag:String(over.tagName||'').toLowerCase(),
+            coveringRole:String(over.closest('[role="dialog"],[aria-modal="true"],dialog')?.getAttribute('role')||'').slice(0,30),
+            coveringId:String(over.id||'').slice(0,60)};
         el.click();
         return { found: true, tag: String(el.tagName).toLowerCase(), text: t,
           checked: isCheckbox ? Boolean(el.checked) : null,
@@ -367,8 +369,15 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       })()`);
       if (hit.found && hit.blocked) {
         return {ok:false,error:{code:'click_blocked',
-          message:'Browser click was NOT attempted: '+hit.blocked+' ('+hit.text+'). Re-observe the current page and resolve the overlay or disabled state before retrying.',
-          reason:hit.blocked,coveringTag:hit.coveringTag||null},
+          message:'Browser click was NOT attempted: '+hit.blocked+' ('+hit.text+'). '+(
+            hit.blocked==='occluded'?'Another page element overlaps the target. Inspect current controls or dismiss an actual visible dialog; do not blindly repeat the click.':
+            hit.blocked==='disabled'?'Control is disabled or inert. Check required fields/permissions before retrying.':
+            hit.blocked==='hidden'?'Target is not visible. Re-ground the page and find the visible control.':
+            'Re-observe the current page before retrying.'
+          ),
+          reason:hit.blocked,coveringTag:hit.coveringTag||null,
+          coveringRole:hit.coveringRole||null,coveringId:hit.coveringId||null,
+          recovery:'browser.elements({refresh:"true"}) then choose a NEW grounded action'},
           meta:{blocked:hit.blocked,tag:hit.tag,text:hit.text},
           summary:'click blocked: '+hit.blocked};
       }
