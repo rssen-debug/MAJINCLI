@@ -261,12 +261,13 @@ function onEvent(ev) {
       } else if(ev.tool==='browser.verify' && !ev.ok){
         const plan=ev.error?.recovery || ev.meta?.recovery || {};
         const action=String(plan.action||'inspect_page').replace(/[^a-z_]/gi,'').slice(0,32);
-        workPulse('Verification failed · choosing a safer next step');
+        const navigation=action==='inspect_navigation';
+        workPulse(navigation?'Destination not confirmed · checking page':'Verification failed · choosing a safer next step');
         const bar=$('work-progress');if(bar){
-          bar.dataset.phase='recovery';
+          bar.dataset.phase=navigation?'navigation':'recovery';
           bar.title='Live verification failed. Recovery: '+action+'. No action has been repeated automatically.';
         }
-        const glyph=$('work-progress-symbol');if(glyph)glyph.textContent='↻';
+        const glyph=$('work-progress-symbol');if(glyph)glyph.textContent=navigation?'↗':'↻';
       } else if(ev.tool==='browser.verify' && ev.ok){
         workPulse('Browser result verified');
         const bar=$('work-progress');
