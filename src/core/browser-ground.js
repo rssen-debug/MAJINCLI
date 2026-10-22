@@ -56,6 +56,35 @@ export const GROUND_JS = `(() => {
 
 export const CLEAR_JS = `(() => { document.querySelectorAll('.majin-mark').forEach((n) => n.remove()); document.querySelectorAll('[data-majin-ref]').forEach((n) => n.removeAttribute('data-majin-ref')); return true; })()`;
 
+/* Browser snapshot deltas: per-session, read-only, bounded, no secret values.
+ * Every changed ref remains the CURRENT page's ref; unchanged is reported
+ * only when ref identities and visible descriptions all match.
+ */
+const snapshotBases = new Map();
+export function diffGroundSnapshot(session,payload,{query='',reset=false,cap=60}={}){
+  const key=String(session)+'::'+String(query||'').slice(0,100);
+  const url=String(payload?.url||'');
+  const elements=Array.isArray(payload?.elements)?payload.elements.slice(0,200):[];
+  const signatures=new Map(elements.map(e=>[String(e.ref),
+    JSON.stringify([e.tag,e.role,e.text,e.id,e.name,e.href,e.disabled,e.type])]));
+  const previous=reset?null:snapshotBases.get(key);
+  snapshotBases.set(key,{url,signatures});
+  if(!previous||previous.url!==url){
+    return {mode:'full',changes:elements.slice(0,cap),removed:[],count:elements.length};
+  }
+  const changed=elements.filter(e=>previous.signatures.get(String(e.ref))!==signatures.get(String(e.ref)));
+  const removed=[...previous.signatures.keys()].filter(ref=>!signatures.has(ref)).slice(0,cap);
+  const fullSize=JSON.stringify(elements).length;
+  const deltaSize=JSON.stringify(changed).length+JSON.stringify(removed).length;
+  if(!changed.length&&!removed.length)return {mode:'unchanged',changes:[],removed:[],count:elements.length};
+  if(elements.length>5 && deltaSize>=fullSize*.85)return {mode:'full',changes:elements.slice(0,cap),removed:[],count:elements.length};
+  return {mode:'delta',changes:changed.slice(0,cap),removed,count:elements.length};
+}
+export function clearGroundSnapshot(session){
+  const prefix=String(session)+'::';
+  for(const key of snapshotBases.keys())if(key.startsWith(prefix))snapshotBases.delete(key);
+}
+
 /* per-session reference cache: session -> Map(ref -> descriptor) */
 const cache = new Map();
 
@@ -70,6 +99,7 @@ export function recallRef(session, ref) {
 }
 export function clearRefs(session) {
   cache.delete(String(session));
+  clearGroundSnapshot(session);
 }
 
 export function groundSummary(el) {

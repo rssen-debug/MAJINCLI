@@ -9,7 +9,7 @@ import { def } from './registry.js';
 import { resolveIn } from './files.js';
 import { bus } from '../log.js';
 import { openFor, closeFor, isOpen, journal } from '../browser.js';
-import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, findGroundedControls, VERSION as GROUND_V } from '../browser-ground.js';
+import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, diffGroundSnapshot, findGroundedControls, VERSION as GROUND_V } from '../browser-ground.js';
 import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
 import { SEMANTIC_SNAPSHOT_JS, formatSemanticSnapshot } from '../browser-semantic.js';
 import { VERIFY_JS, verificationCriteria, verifyObserved } from '../browser-evidence.js';
@@ -605,9 +605,9 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     group: 'web',
     risk: 'read',
     desc: 'W6 Set-of-Marks grounding: number every interactive element on the open page, draw the matching pink marks on screen, and return the references so browser.click({ref:"eN"}) hits deterministically instead of guessing. Refs are of-the-moment evidence; a re-rendered DOM makes them stale (browser.click then says ref_stale honestly).',
-    params: { refresh: 'string: "true" = re-walk the DOM now and replace the cached refs (optional, default: false)', query: 'string optional search for a specific control by name, role, or label; returns only matches to reduce model tokens' },
+    params: { refresh: 'string: "true" = re-walk the DOM now and replace the cached refs (optional, default: false)', query: 'string optional search for a specific control by name, role, or label; returns only matches to reduce model tokens', delta: 'string optional true: first snapshot is full, subsequent snapshots show only changes or unchanged; false is default' },
     examples: ['browser.elements({})', 'browser.elements({query:"submit button"})'],
-    async run({ refresh, query = '' }, ctx) {
+    async run({ refresh, query = '', delta = 'false' }, ctx) {
       const session = ctx.session || 'default';
       journal.guard(session, 'browser.elements');
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
@@ -619,13 +619,25 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const needle=String(query||'').trim();
       const matches=needle ? findGroundedControls(payload.elements||[],needle) : null;
       const visible=matches ? {...payload,elements:matches} : payload;
+      const isDelta=String(delta)==='true';
+      const snap=isDelta?diffGroundSnapshot(session,visible,{query:needle,reset:String(refresh)==='true',cap:needle?12:60}):null;
+      const selected=snap?.mode==='delta' ? {...visible,elements:snap.changes} : visible;
+      const baseText=needle && !matches.length
+        ? `No grounded controls match "${needle.slice(0,100)}" on ${payload.url}. Refresh or try broader terms.`
+        : renderElementsText(selected, {cap:needle?12:60});
+      const result=snap?.mode==='unchanged'
+        ? `No changes in ${payload.count} page controls at ${payload.url}. Previous references remain valid only if the page has not rerendered.`
+        : snap?.mode==='delta'
+          ? `Page controls updated: ${snap.changes.length} changed, ${snap.removed.length} removed. Removed references: ${snap.removed.join(', ')||'none'}. Current controls below:\n${baseText}`
+          : baseText;
       return {
-        ok: true,
-        result: needle && !matches.length
-          ? `No grounded controls match "${needle.slice(0,100)}" on ${payload.url}. Refresh or try broader terms.`
-          : renderElementsText(visible, {cap:needle?12:60}),
-        meta: { version: GROUND_V, count: payload.count, matched:matches?.length ?? null, url: payload.url, title: payload.title },
-        summary: needle ? `${matches.length} matching controls among ${payload.count}` : `${payload.count} elements grounded on this page`,
+        ok: true,result,
+        meta: {version:GROUND_V,count:payload.count,matched:matches?.length??null,
+          url:payload.url,title:payload.title,deltaMode:snap?.mode??'off',
+          changed:snap?.changes?.length??null,removed:snap?.removed?.length??null},
+        summary: snap?.mode==='unchanged'?'Page controls unchanged':
+          snap?.mode==='delta'?`${snap.changes.length} updated and ${snap.removed.length} removed controls`:
+          needle?`${matches.length} matching controls among ${payload.count}`:`${payload.count} elements grounded on this page`,
       };
     },
   }),
