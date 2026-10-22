@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { VERIFY_JS, verificationCriteria, verifyObserved, browserRecoveryAdvice } from '../src/core/browser-evidence.js';
 
 test('verify browser evidence requires a concrete observable expectation',()=>{
