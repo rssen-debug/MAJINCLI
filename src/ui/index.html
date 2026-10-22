@@ -611,6 +611,14 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
   box-shadow:0 0 0 1px rgba(255,158,227,.10),0 0 23px rgba(226,98,200,.08);
 }
 @media(prefers-reduced-motion:reduce){#composer{transition:none}}
+/* Round 2: a single micro-shimmer while clicking, never another activity panel. */
+#composer #work-progress[data-phase="action"]::before{
+  content:"";position:absolute;left:0;bottom:0;height:1px;width:32%;
+  border-radius:2px;background:linear-gradient(90deg,transparent,#ffa8e8,#ab91ff,transparent);
+  opacity:.85;pointer-events:none;animation:majin-action-trace 2.1s ease-in-out infinite alternate;
+}
+@keyframes majin-action-trace{from{transform:translateX(-40%);opacity:.2}to{transform:translateX(255%);opacity:.9}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="action"]::before{animation:none;opacity:.3}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
