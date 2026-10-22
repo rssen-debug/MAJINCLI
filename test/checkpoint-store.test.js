@@ -33,3 +33,12 @@ test('checkpoint rejects oversize input before reading or parsing',t=>{
  fs.writeFileSync(checkpointPath(dir,'too_big'),'x'.repeat(1100000));
  assert.throws(()=>loadCheckpoint(dir,'too_big'),/Invalid checkpoint file size/);
 });
+
+test('checkpoint loader rejects symlink files',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'majin-checkpoint-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ fs.writeFileSync(path.join(dir,'target.json'),JSON.stringify({schema:1,id:'alias',state:{}}));
+ try { fs.symlinkSync(path.join(dir,'target.json'),checkpointPath(dir,'alias')); }
+ catch (e) { if (e.code==='EPERM'||e.code==='EACCES') { t.skip('symlinks unavailable'); return; } throw e; }
+ assert.throws(()=>loadCheckpoint(dir,'alias'),/Invalid checkpoint file size/);
+});
