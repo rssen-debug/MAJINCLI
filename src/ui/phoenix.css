@@ -617,3 +617,7 @@ body.simple .msg .appr:focus-within { border-color:var(--warn); }
 /* Aurora: clear active approval choice in the real chat permission card. */
 body.simple .msg .appr:focus-within { box-shadow:inset 3px 0 0 var(--warn),0 0 0 2px var(--cysoft); }
 @media(prefers-contrast:more){body.simple .msg .appr:focus-within{outline:2px solid currentColor;outline-offset:2px}}
+
+/* Aurora: support keyboard navigation without making permission cards visually noisy. */
+body.simple .msg .appr :is(button,a):focus-visible { text-decoration:underline; text-underline-offset:3px; }
+@media (prefers-contrast:more) { body.simple .msg .appr :is(button,a):focus-visible { outline-width:4px; } }
