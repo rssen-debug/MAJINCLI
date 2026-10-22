@@ -547,6 +547,30 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
   #composer #work-progress[data-phase="recovery"] .pulse,
   #composer #work-progress[data-phase="recovery"] #work-progress-symbol{animation:none!important}
 }
+
+/* Round 3 visual: one quiet proof state inside the existing composer, no new panels. */
+#composer #work-progress[data-phase="verified"]{
+  color:#dcefe3;
+  border-top-color:rgba(142,233,182,.2);
+}
+#composer #work-progress[data-phase="verified"] .pulse{
+  background:#8de5b1;
+  box-shadow:0 0 0 3px rgba(141,229,177,.09),0 0 13px rgba(141,229,177,.32);
+  animation:majin-proof-breathe 1.6s ease-in-out infinite;
+}
+#composer #work-progress[data-phase="verified"] #work-progress-symbol{
+  color:#a6f2c4;
+  animation:majin-proof-arrive .46s cubic-bezier(.22,.8,.22,1) both;
+}
+@keyframes majin-proof-arrive{
+  from{opacity:0;transform:translateY(3px) scale(.75)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@keyframes majin-proof-breathe{50%{opacity:.6;transform:scale(.82)}}
+@media(prefers-reduced-motion:reduce){
+  #composer #work-progress[data-phase="verified"] .pulse,
+  #composer #work-progress[data-phase="verified"] #work-progress-symbol{animation:none!important}
+}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>

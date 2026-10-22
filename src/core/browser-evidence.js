@@ -30,6 +30,8 @@ export const VERIFY_JS = String.raw`((args) => {
     enabled: el ? !el.matches(':disabled,[aria-disabled="true"],[inert]') && !el.closest('[inert]') : null,
     textMatch: args.text ? text.toLowerCase().includes(args.text.toLowerCase()) : null,
     urlMatch: args.url ? location.href.includes(args.url) : null,
+    pathMatch: args.urlPath ? location.pathname === args.urlPath : null,
+    originMatch: args.urlOrigin ? location.origin === args.urlOrigin : null,
     titleMatch: args.title ? document.title.toLowerCase().includes(args.title.toLowerCase()) : null,
   };
   return state;
@@ -39,16 +41,29 @@ export function verificationCriteria(input = {}) {
   const selector = String(input.selector || '').trim().slice(0, 350);
   const text = String(input.text || '').trim().slice(0, 200);
   const url = String(input.url || '').trim().slice(0, 350);
+  // Exact URL assertions prevent a redirect target or a query parameter such
+  // as ?next=/dashboard from masquerading as a successful navigation.
+  const urlPath = String(input.urlPath || '').trim().slice(0, 350);
+  const urlOrigin = String(input.urlOrigin || '').trim().slice(0, 350);
+  if(urlPath && (!urlPath.startsWith('/') || urlPath.startsWith('//') || urlPath.includes('?') || urlPath.includes('#')))
+    return {ok:false,reason:'urlPath must be an absolute pathname (for example /dashboard), with no query or fragment'};
+  if(urlOrigin){
+    try {
+      const parsed=new URL(urlOrigin);
+      if(!['http:','https:'].includes(parsed.protocol) || parsed.origin !== urlOrigin || parsed.username || parsed.password)
+        return {ok:false,reason:'urlOrigin must be an exact HTTP(S) origin'};
+    } catch { return {ok:false,reason:'urlOrigin must be an exact HTTP(S) origin'}; }
+  }
   const title = String(input.title || '').trim().slice(0, 200);
   const present = ['true','false'].includes(String(input.present)) ? String(input.present) === 'true' : null;
   const checked = ['true','false'].includes(String(input.checked)) ? String(input.checked) === 'true' : null;
   const enabled = ['true','false'].includes(String(input.enabled)) ? String(input.enabled) === 'true' : null;
-  if (!selector && !url && !title) return { ok:false, reason:'Specify a selector, URL fragment or title fragment to verify' };
+  if (!selector && !url && !title && !urlPath && !urlOrigin) return { ok:false, reason:'Specify a selector, URL fragment, exact URL path/origin, or title fragment to verify' };
   if ((text || present !== null || checked !== null || enabled !== null) && !selector) return {ok:false, reason:'Element text, presence and checkbox checks require selector'};
   if (checked !== null && !selector) return {ok:false, reason:'Checkbox assertion requires selector'};
   if (present === false && (text || checked !== null || enabled !== null))
     return {ok:false, reason:'An absent element cannot also have matching text or checkbox state'};
-  return { ok:true, selector, text, url, title, present, checked, enabled };
+  return { ok:true, selector, text, url, urlPath, urlOrigin, title, present, checked, enabled };
 }
 
 export function verifyObserved(criteria, observed) {
@@ -66,6 +81,8 @@ export function verifyObserved(criteria, observed) {
     }
   }
   if (criteria.url) assertions.push({name:'url_contains',expected:true,actual:observed.urlMatch === true});
+  if (criteria.urlPath) assertions.push({name:'url_path_exact',expected:true,actual:observed.pathMatch === true});
+  if (criteria.urlOrigin) assertions.push({name:'url_origin_exact',expected:true,actual:observed.originMatch === true});
   if (criteria.title) assertions.push({name:'title_contains',expected:true,actual:observed.titleMatch === true});
   const failures = assertions.filter(x=>x.expected!==x.actual);
   return {ok:failures.length===0,assertions,failures,

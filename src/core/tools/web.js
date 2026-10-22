@@ -591,14 +591,16 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       selector: 'string optional CSS selector to assert exists and is visible',
       present: 'string optional true|false, default true if selector set',
       text: 'string optional expected text fragment within selector',
-      url: 'string optional expected URL fragment',
+      url: 'string optional URL fragment (loose; use urlPath+urlOrigin for security-sensitive outcomes)',
+      urlPath: 'string optional EXACT pathname such as /dashboard, unaffected by redirect query parameters',
+      urlOrigin: 'string optional EXACT origin such as https://app.example.com',
       title: 'string optional expected title fragment',
       checked: 'string optional true|false expected checkbox checked state',
       enabled: 'string optional true|false expected element enabled state (includes aria-disabled and inert)',
       waitMs: 'string optional: wait up to 0–5000ms for the expected DOM outcome (default 1800ms, immediate return on success)',
       stableMs: 'string optional 0–1500: require expected DOM state to stay true for this duration (default 0)',
     },
-    examples: ['browser.verify({selector:"#success",text:"Saved"})', 'browser.verify({url:"/dashboard"})','browser.verify({selector:"input[name=consent]",checked:"true"})', 'browser.verify({selector:"#submit",enabled:"true"})'],
+    examples: ['browser.verify({selector:"#success",text:"Saved"})', 'browser.verify({url:"/dashboard"})','browser.verify({selector:"input[name=consent]",checked:"true"})', 'browser.verify({selector:"#submit",enabled:"true"})', 'browser.verify({urlOrigin:"https://app.example.com",urlPath:"/dashboard"})'],
     async run(input, ctx) {
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok:false,error:{code:'browser_closed',message:'Open the target page before verifying'} };
