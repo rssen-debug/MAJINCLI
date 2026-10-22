@@ -93,7 +93,8 @@ test('each round keeps working feedback in a single accessible composer row',()=
 function requireFixture(){ return fs.readFileSync('src/ui/index.html','utf8'); }
 
 test('grounding never leaves stale refs or advertises controls outside viewport',()=>{
-  assert.match(GROUND_JS,/removeAttribute\('data-majin-ref'\)/);
+  assert.match(CLEAR_JS,/removeAttribute\('data-majin-ref'\)/);
+  assert.match(GROUND_JS,/window\.__majinRefSequence/, 'same-DOM refs stay stable');
   assert.match(GROUND_JS,/out\.length >= 200/);
   assert.match(GROUND_JS,/rect\.top >= innerHeight/);
   assert.match(GROUND_JS,/rect\.left >= innerWidth/);
@@ -145,13 +146,13 @@ test('agent-browser style refs survive re-snapshot and never recycle removed DOM
   const context = vm.createContext({document,window,location:{href:'https://example.test'},
     innerHeight:600,innerWidth:800,getComputedStyle:()=>({visibility:'visible',display:'block',opacity:'1'})});
   const first=vm.runInContext(GROUND_JS,context);
-  assert.deepEqual(first.elements.map(x=>x.ref),['e1','e2']);
+  assert.deepEqual(Array.from(first.elements,x=>String(x.ref)),['e1','e2']);
   const repeated=vm.runInContext(GROUND_JS,context);
-  assert.deepEqual(repeated.elements.map(x=>x.ref),['e1','e2']);
+  assert.deepEqual(Array.from(repeated.elements,x=>String(x.ref)),['e1','e2']);
   const replacement=makeNode('Publish');
   nodes=[replacement,two];
   const after=vm.runInContext(GROUND_JS,context);
-  assert.deepEqual(after.elements.map(x=>x.ref),['e3','e2'],
+  assert.deepEqual(Array.from(after.elements,x=>String(x.ref)),['e3','e2'],
     'new DOM nodes must never silently inherit a stale removed button ref');
 });
 test('visual polish stays inside the single composer and honours reduced motion',()=>{
