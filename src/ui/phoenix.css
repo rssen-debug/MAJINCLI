@@ -593,3 +593,7 @@ body.light.simple .msg [data-recovery-status="inspect"] { color:var(--ink); }
 body.simple .msg .appr { border-inline-start:3px solid var(--warn); }
 body.simple .msg .appr :is(button,a):focus-visible { outline:3px solid var(--warn);outline-offset:3px; }
 @media(max-width:600px) { body.simple .msg .appr button { min-height:44px; } }
+
+/* Aurora: make the real permission prompt easier to scan on mobile. */
+@media(max-width:560px){body.simple .msg .appr{padding:14px;border-radius:14px}body.simple .msg .appr :is(button,a){min-height:44px}}
+body.simple .msg .appr :is(button,a):focus-visible{outline:3px solid var(--warn);outline-offset:4px}
