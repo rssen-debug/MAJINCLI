@@ -44,6 +44,11 @@ test('1. gate honest: without the flag, 403 SURFACE_DISABLED ("disabled means NO
 });
 
 test('2. ENABLED: real probes on the servers own dirs — CORE OK, verdict composed honestly', async (t) => {
+  // isolation: this test asserts the KEY-FREE honest verdict — ambient
+  // OPENCODE_API_KEY (e.g. exported for the MAJIN_LIVE tier) must not leak in
+  const savedKey = process.env.OPENCODE_API_KEY;
+  delete process.env.OPENCODE_API_KEY;
+  t.after(() => { if (savedKey !== undefined) process.env.OPENCODE_API_KEY = savedKey; });
   const { bound } = await boot(t, { doctor: { studioPort: 0 } });
   const r = await fetch(bound.url + '/api/doctor/run', { method: 'POST', body: '{}' }).then(async (x) => ({ code: x.status, body: await x.json() }));
   assert.equal(r.code, 200, JSON.stringify(r.body));
