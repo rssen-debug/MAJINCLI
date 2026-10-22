@@ -29,10 +29,13 @@ export function createStudioServer({
   telemetryDir,
   auditDir,
   page = renderStudioPage(),
+  approvals = null,      // Approvals instance — required when enableWrites
+  enableWrites = false,  // consent write surface; OFF unless explicitly enabled
 } = {}) {
   if (!bus) throw new Error('studio requires an EventBus');
   if (!telemetryDir) throw new Error('studio requires telemetryDir');
   if (!auditDir) throw new Error('studio requires auditDir');
+  if (enableWrites && !approvals) throw new Error('enableWrites requires an Approvals instance');
 
   const clients = new Set();
   const unsubs = EVENT_NAMES.map((name) =>
@@ -51,12 +54,98 @@ export function createStudioServer({
   }, HEARTBEAT_MS);
   heartbeat.unref();
 
-  const server = http.createServer((req, res) => {
+  const MAX_BODY = 8192;
+  const json = (res, code, body) => {
+    res.writeHead(code, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(body));
+  };
+
+  function readBody(req) {
+    return new Promise((resolve, reject) => {
+      // drain-and-discard past the cap: destroying the socket mid-upload would
+      // give the client ECONNRESET and no answer; a 413 must always LAND.
+      let size = 0;
+      let tooLarge = false;
+      const chunks = [];
+      req.on('data', (c) => {
+        size += c.length;
+        if (size > MAX_BODY) { tooLarge = true; return; }
+        if (!tooLarge) chunks.push(c);
+      });
+      req.on('end', () => {
+        if (tooLarge) reject(Object.assign(new Error('body too large'), { code: 413 }));
+        else resolve(Buffer.concat(chunks).toString('utf8'));
+      });
+      req.on('error', reject);
+    });
+  }
+
+  const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://studio.local');
 
+    // ---- consent write surface ( Approvals is the only authority; studio is a gate ) ----
+    if (req.method === 'POST' && url.pathname === '/api/consent') {
+      if (!enableWrites) {
+        json(res, 403, { error: 'writes disabled', detail: 'consent writes require starting studio with enableWrites — silence/disabled means NO, never a silent grant' });
+        return;
+      }
+      let body;
+      try {
+        const raw = await readBody(req);
+        body = raw ? JSON.parse(raw) : {};
+      } catch (err) {
+        json(res, err.code === 413 ? 413 : 400, { error: err.code === 413 ? 'body too large' : 'invalid JSON body' });
+        return;
+      }
+      const { scope, user, mode, maxUses, ttlMs } = body;
+      if (typeof scope !== 'string' || !scope || scope.length > 256) {
+        json(res, 400, { error: 'scope must be a non-empty string (max 256 chars)' });
+        return;
+      }
+      try {
+        // Approvals enforces: named human required, known mode required.
+        // rejections are DATA the operator needs — surface them, never mask.
+        approvals.grant(scope, { user, mode, maxUses, ttlMs });
+      } catch (err) {
+        json(res, 400, { error: String(err.message || err), scope });
+        return;
+      }
+      json(res, 201, { granted: scope, status: approvals.status(scope) });
+      return;
+    }
+
+    if (req.method === 'DELETE' && url.pathname === '/api/consent') {
+      if (!enableWrites) {
+        json(res, 403, { error: 'writes disabled' });
+        return;
+      }
+      const scope = url.searchParams.get('scope');
+      if (!scope) {
+        json(res, 400, { error: 'DELETE /api/consent requires ?scope=' });
+        return;
+      }
+      const existed = approvals.status(scope).granted;
+      approvals.revoke(scope);
+      json(res, 200, { revoked: scope, existed });
+      return;
+    }
+
     if (req.method !== 'GET') {
-      res.writeHead(405, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: 'read-only surface', method: req.method }));
+      json(res, 405, { error: 'unsupported method on this surface', method: req.method });
+      return;
+    }
+
+    if (url.pathname === '/api/consent/status') {
+      if (!approvals) {
+        json(res, 503, { error: 'no approvals instance wired', granted: false });
+        return;
+      }
+      const scope = url.searchParams.get('scope');
+      if (!scope) {
+        json(res, 400, { error: 'requires ?scope=' });
+        return;
+      }
+      json(res, 200, approvals.status(scope));
       return;
     }
 
