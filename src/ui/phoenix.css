@@ -338,3 +338,19 @@ body.simple .chat-open-file:focus-visible {
 }
 @media(max-width:600px){ body.simple .chat-open-file { min-height:44px; } }
 @media(prefers-reduced-motion:reduce){ body.simple .chat-open-file{transition:none!important} }
+
+/* MAJIN Aurora: refined inline preview controls and dark/light legibility. */
+body.simple .msg .chat-open-file {
+  vertical-align:middle;
+  line-height:1.3;
+  text-decoration:none;
+  white-space:normal;
+}
+body.light.simple .msg .chat-open-file {
+  background:var(--cysoft);
+  color:var(--cy);
+  border-color:var(--line);
+}
+@media (hover:none) {
+  body.simple .chat-open-file:hover { box-shadow:none; }
+}
