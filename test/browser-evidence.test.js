@@ -149,7 +149,24 @@ test('failed browser verification is visible via ONE inline MAJIN status',async(
   assert.match(src,/browserRecoveryAdvice\(verdict,criteria,controls\)/);
   assert.match(src,/recovery},meta:\{assertions:verdict.assertions/);
   assert.match(app,/ev.tool==='browser.verify' && !ev.ok/);
-  assert.match(app,/bar.dataset.phase='recovery'/);
+  assert.match(app,/bar\.dataset\.phase=navigation\?'navigation':'recovery'/);
   assert.match(html,/#composer #work-progress\[data-phase="recovery"\]/);
   assert.match(html,/prefers-reduced-motion:reduce/);
+});
+
+test('navigation recovery includes exact pathname and origin mismatches',()=>{
+ const c=verificationCriteria({urlPath:'/dashboard',urlOrigin:'https://example.test'});
+ const fail=verifyObserved(c,{valid:true,url:'https://evil.test/?next=/dashboard',title:'Redirect',
+    pathMatch:false,originMatch:false});
+ assert.equal(fail.ok,false);
+ const recovery=browserRecoveryAdvice(fail,c);
+ assert.equal(recovery.action,'inspect_navigation');
+ assert.match(recovery.hint,/pathname/);
+});
+test('UI shows a lightweight navigation investigation state without another panel',async()=>{
+ const fs=await import('node:fs');
+ const app=fs.readFileSync('src/ui/app.js','utf8');
+ const html=fs.readFileSync('src/ui/index.html','utf8');
+ assert.match(app,/bar\.dataset\.phase=navigation\?'navigation':'recovery'/);
+ assert.match(html,/work-progress\[data-phase="navigation"\]/);
 });

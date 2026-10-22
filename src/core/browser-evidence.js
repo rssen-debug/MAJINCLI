@@ -109,8 +109,8 @@ export function browserRecoveryAdvice(verdict, criteria, controls = []) {
     action='resolve_prerequisites'; hint='Control disabled. Inspect required fields, checkboxes, or validation messages first.';
   } else if (names.has('checkbox_checked')) {
     action='inspect_checkbox'; hint='Observed checkbox state differs from the goal. Inspect its label and active state; do not infer success from the click.';
-  } else if (names.has('url_contains') || names.has('title_contains')) {
-    action='inspect_navigation'; hint='Expected destination not observed. Check the current URL/title and whether navigation opened another tab.';
+  } else if (names.has('url_contains') || names.has('url_path_exact') || names.has('url_origin_exact') || names.has('title_contains')) {
+    action='inspect_navigation'; hint='Expected destination not observed. Inspect the actual URL origin, pathname, title, and whether navigation opened another tab; never trust a matching query parameter or redirect hint.';
   } else if (names.has('stable_duration')) {
     action='wait_or_inspect'; hint='Outcome appeared temporarily but did not remain stable. Inspect SPA rerender or server response; do not declare success.';
   } else if (names.has('element_text_contains')) {
