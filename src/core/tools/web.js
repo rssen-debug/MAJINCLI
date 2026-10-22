@@ -12,7 +12,7 @@ import { openFor, closeFor, isOpen, journal } from '../browser.js';
 import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, diffGroundSnapshot, findGroundedControls, VERSION as GROUND_V } from '../browser-ground.js';
 import { VISIBLE_CONTROLS_JS, formatControlHints } from '../browser-control-hints.js';
 import { SEMANTIC_SNAPSHOT_JS, formatSemanticSnapshot } from '../browser-semantic.js';
-import { VERIFY_JS, verificationCriteria, verifyObserved } from '../browser-evidence.js';
+import { VERIFY_JS, verificationCriteria, verifyObserved, suggestVerificationRecovery } from '../browser-evidence.js';
 import { browserActionReceipt } from '../browser-action-receipt.js';
 
 const followedSafe = (fol) => (fol && fol.followed === true ? true : false);
@@ -615,7 +615,8 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       }
       if(!verdict.ok){
         return {ok:false,error:{code:'assertion_failed',
-          message:'Browser outcome NOT verified. Re-observe with browser.elements/read and choose a different recovery step; do not repeat an identical action.',
+          message:'Browser outcome NOT verified. '+suggestVerificationRecovery(verdict),
+          recoveryHint:suggestVerificationRecovery(verdict),
           failures:verdict.failures},meta:{assertions:verdict.assertions,observed:verdict.observed},
           summary:'verification FAILED'};
       }
