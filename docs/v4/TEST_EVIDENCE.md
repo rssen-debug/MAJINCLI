@@ -18,8 +18,9 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 136
-# pass 136
+# tests 144
+# pass 143
+# skipped 1
 # fail 0
 # skipped 0
 ```
@@ -37,7 +38,7 @@ $ npm run v4:test
 | `test/v4/agent-failures.test.js` | 9 | throwing/schema-breaking/hanging tools, budget stop, strict-policy pause, prompt-injection corpus |
 | `test/v4/benchmark.test.js` | 3 | benchmark pass rate, duplicate replay, refusal is FAILED |
 | `test/v4/client.test.js` | 9 | conversation continuity across turns, delta assembly, tool card states, replay, cancellation, SSE parser edge cases |
-| `test/v4/voice-server.test.js` | 6 | auth/CSRF, verified WAV from the V2 lane, temp cleanup, input limits, honest capability report |
+| `test/v4/voice-server.test.js` | 13 | auth/CSRF, verified WAV from the V2 lane, temp cleanup, input limits, honest capabilities, a **real local subprocess** for TTS and STT, pipeline refusal, missing-binary failure |
 | `test/v4/turns.test.js` | 9 | sequence ids, replay from a cursor, bounded buffer, reattach after a dropped socket, work survives a hang-up |
 | `test/v4/e2e.browser.test.js` | 0 run | real-browser acceptance on 5 viewports — **skips** here, no browser binary (see below) |
 
@@ -45,10 +46,10 @@ $ npm run v4:test
 
 ```
 $ npm run check
-492/492 files parse cleanly.
+494/494 files parse cleanly.
 
 $ npm run i18n
-0 Swedish string literal(s) in 262 files
+0 Swedish string literal(s) in 263 files
 
 $ npm run v4:progress --check
 67.5/100 verified points, matrix valid (exit 0)

@@ -7,8 +7,8 @@
 
 ## Score
 
-- **Verified:** **77.5/100** points (**77.5%**)
-- **Criteria:** 75 → 61 VERIFIED · 2 PARTIAL · 9 NOT_STARTED · 3 BLOCKED
+- **Verified:** **78.5/100** points (**78.5%**)
+- **Criteria:** 75 → 62 VERIFIED · 1 PARTIAL · 9 NOT_STARTED · 3 BLOCKED
 
 | Area | Earned | Weight | What is actually proven |
 |---|---:|---:|---|
@@ -18,7 +18,7 @@
 | CONVERSATION | 9 | 9 | streaming, persistence, idempotent retry, cancellation, scoping, deletion, honest errors, corrections linked as revisions, cross-device read |
 | GOALS | 12 | 14 | V2 state machine, SHA-256 verification, receipts, crash→BLOCKED, resume re-verifies against recorded hashes, tool failures classified |
 | MODELS | 12 | 14 | V1 config reuse, V1 live catalog discovery (TTL cache + refresh), no secrets, id scoping, demo degradation |
-| VOICE | 6 | 9 | honest capability model, language, error copy, auto-send rules, speech text |
+| VOICE | 7 | 9 | honest capability model, language, error copy, auto-send rules, speech text |
 | PLATFORM | 12 | 12 | versioned kernel, manifest validation, rollback, opt-in + allowlist + flags |
 | HOST | 0 | 12 | nothing verified — no Windows host and no tunnel in this environment |
 
@@ -51,15 +51,18 @@
     server emits, including CRLF, split chunks and malformed JSON.
 17. A BLOCKED goal can be resumed from the phone. The button never promises success: the server
     re-verifies against recorded hashes and can answer "still blocked" with the exact items.
-18. Server-side speech is wired through the V2 voice lane with a deterministic offline provider;
-    the produced WAV is verified by the V2 file verifier and the response is marked synthetic.
+18. Server-side speech is wired through the V2 voice lane. Three lanes are proven: the deterministic
+    `buffer` provider (silent WAV, labelled synthetic), a **real local binary** spawned argv-only
+    with a scrubbed environment (`command`), and refusal of a shell pipeline in the template.
+    STT goes through the same lane and reports an empty transcript as `inconclusive`, never as a
+    sentence nobody said. A cloud engine (`edge-tts`) needs network and is not claimed.
 
 ## Remaining by area (9 NOT_STARTED + 2 PARTIAL + 3 BLOCKED)
 
 | Area | Points left | What it needs |
 |---|---:|---|
 | HOST | 12 | the Windows machine, the tunnel and a phone |
-| VOICE | 3 | a real device: measured TTS latency and barge-in; a real TTS engine (V7 is half: offline provider only) |
+| VOICE | 2 | a real device: measured TTS latency and barge-in (V6) |
 | MOBILE | 2.5 | physical-device walkthrough, real-browser visual regression, spirit polish |
 | GOALS | 2 | multi-step browser goal on the host |
 | MODELS | 2 | real inference (blocked: no provider key here) |

@@ -93,6 +93,20 @@ part with no security coupling: the model catalog implementation.
 | `kernel.js` | No versioned capability contract exists in any prior version |
 | `ui/*` | No mobile/PWA surface exists |
 
+## 4. Limitations found in reused code (not modified)
+
+Reusing a module means inheriting its edges. These were found while wiring V4 to
+the V2 voice lane; V2 is left untouched so `v2/main` keeps behaving exactly as
+its users expect.
+
+| Module | Limitation | V4 handling |
+|---|---|---|
+| `src/v2/voice/stt.js` `CommandSttProvider` | strips quotes from **arguments** but uses the executable token verbatim, so a quoted binary path becomes `spawn "C:\Program Files\…" ENOENT` | documented here; V4 tests use an unquoted path and the docs tell operators to use a path without spaces |
+| `src/v2/safety/command-preflight.js` | classifies a `|` pipeline as `hold`, not `no` | safe-exec then refuses the pipeline at tokenise time; V4 surfaces `PERMISSION_DENIED`, and a test proves the pipeline never runs |
+| `src/v2/tools/runner.js` | throws classified `ToolError`s instead of returning `{ok:false}` | the agent catches them, moves the goal out of `WAITING_FOR_TOOL` and records a failure receipt |
+| `src/core/provider/catalog.js` | paginates up to 100 pages with no total cap | V4 bounds the whole call with an 8 s timeout and caches for 6 h |
+| `src/v2/runtime/goal.js` | `uncoveredAcceptance()` treats any historical verified receipt as coverage | V4 resume ignores history and re-verifies every item against recorded hashes |
+
 ## 4. Risks carried forward
 
 1. V1 config schema is not versioned; a future V1 change could alter

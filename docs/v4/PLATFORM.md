@@ -38,6 +38,23 @@ Statuses in `GET /api/kernel`: `active`, `failed`, `rejected`, `incompatible`,
 `flagged-off`. Management: `npm run v4:plugins` (list), `... quarantine`,
 `... restore <name>`.
 
+## Voice lanes
+
+| Lane | Where | Honest status |
+|---|---|---|
+| Browser `SpeechSynthesis` / `SpeechRecognition` | phone | default; tap-to-talk, no always-listening |
+| `buffer` | server | offline, deterministic; proves the pipeline, silent WAV |
+| `command` | server | operator-configured local binary (`MAJIN_V4_TTS_COMMAND`, `MAJIN_V4_STT_COMMAND`); preflight-gated, argv-only, scrubbed env |
+| `edge-tts` | server | real voice, needs network; not verified in CI |
+
+Configure a local engine (example, path without spaces):
+
+```powershell
+setx MAJIN_V4_TTS_COMMAND "C:\tools\piper\piper.exe -m C:\tools\piper\sv.onnx -f {OUT}"
+setx MAJIN_V4_STT_COMMAND "C:\tools\whisper\whisper-cli.exe -m C:\tools\whisper\base.bin -f {WAV}"
+```
+Template comes from configuration only — never from a chat message or an HTTP body.
+
 ## Measured quality
 
 `npm run v4:bench` runs seven fixed scenarios and records pass rate, p50/p95

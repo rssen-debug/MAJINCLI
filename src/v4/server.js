@@ -38,7 +38,7 @@ import { createAgent } from './agent.js';
 import { discoverModels, refreshAllCatalogs } from './models.js';
 import { Kernel } from './kernel.js';
 import { t } from './ui/strings.js';
-import { synthesize, VOICE_MODES } from './voice.js';
+import { synthesize, VOICE_MODES, voiceCapabilities } from './voice.js';
 import { TurnJournal } from './turns.js';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui');
@@ -444,8 +444,7 @@ export function createV4Server({ config }) {
         // The browser engine is what the phone actually uses today.
         clientEngine: 'SpeechSynthesis + SpeechRecognition',
         serverSide: {
-          tts: ['buffer', 'edge-tts'],
-          stt: ['buffer'],
+          ...voiceCapabilities(),
           note: 'Buffer is a deterministic offline provider that proves the pipeline, not a voice.',
         },
       });

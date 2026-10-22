@@ -116,10 +116,99 @@ test('voice: capabilities are reported honestly', async () => {
     const { cookie } = await s.pair();
     const res = await fetch(`${s.base}/api/voice`, { headers: { cookie } });
     const body = await res.json();
-    assert.deepEqual(body.modes, ['auto', 'buffer', 'edge-tts']);
+    assert.deepEqual(body.modes, ['auto', 'buffer', 'edge-tts', 'command']);
     assert.match(body.serverSide.note, /not a voice/i);
     assert.ok(body.clientEngine.includes('SpeechSynthesis'));
   } finally {
     await s.close();
   }
+});
+
+/* ------------------------------------------------------- local command lane -- */
+
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { synthesize, transcribe, voiceCapabilities, makeTtsProvider } from '../../src/v4/voice.js';
+
+const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../scripts/v4/voice-fixture.mjs');
+const ttsTemplate = () => `"${process.execPath}" "${FIXTURE}" tts {OUT} {TEXT}`;
+// NOTE: the V2 CommandSttProvider strips quotes from ARGUMENTS but uses the
+// executable token verbatim, so the binary path must be unquoted there. That is
+// a documented V2 limitation (SOURCE_AUDIT §5), not worked around silently.
+const sttTemplate = () => `${process.execPath} ${FIXTURE} stt {WAV}`;
+
+test('voice/command: a real local binary is spawned without a shell and its audio is verified', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-tts-cmd-'));
+  const result = await synthesize({ text: 'tre ord här', mode: 'command', command: ttsTemplate(), dir });
+  assert.equal(result.ok, true);
+  assert.equal(result.provider, 'command');
+  assert.equal(result.verified, true, 'the V2 file verifier accepted the produced WAV');
+  assert.equal(result.synthetic, false, 'a real subprocess produced it');
+  assert.ok(result.bytes > 44);
+  assert.ok(fs.existsSync(result.audioPath));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('voice/command: longer text produces a longer file (the text really reaches the binary)', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-tts-len-'));
+  const short = await synthesize({ text: 'ett', mode: 'command', command: ttsTemplate(), dir });
+  const long = await synthesize({ text: 'ett två tre fyra fem sex sju åtta nio tio elva tolv', mode: 'command', command: ttsTemplate(), dir });
+  assert.ok(long.bytes > short.bytes, `${long.bytes} should exceed ${short.bytes}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('voice/command: a shell pipeline in the template never runs', async () => {
+  // safe-exec has no shell, so the pipeline is refused at tokenise time and
+  // surfaces as a classified failure — not as a silent partial run.
+  const result = await synthesize({ text: 'hej', mode: 'command', command: 'sh -c "echo pwned" | tee /tmp/majin-pwned.txt', dir: '/tmp' });
+  assert.equal(result.ok, false);
+  assert.equal(result.errorClass, 'PERMISSION_DENIED');
+  const fs = await import('node:fs');
+  assert.equal(fs.existsSync('/tmp/majin-pwned.txt'), false, 'the pipeline did not execute');
+});
+
+test('voice/command: a missing binary fails honestly instead of pretending', async () => {
+  const result = await synthesize({ text: 'hej', mode: 'command', command: '/nonexistent/tts-bin {OUT}', dir: '/tmp' });
+  assert.equal(result.ok, false);
+  assert.ok(result.errorClass, 'the failure is classified');
+  assert.notEqual(result.verified, true);
+});
+
+test('voice/command: command mode without a configured template is refused, not silently swapped', () => {
+  assert.throws(() => makeTtsProvider({ mode: 'command' }), /MAJIN_V4_TTS_COMMAND/);
+});
+
+test('voice/stt: the local command lane returns a transcript, and an empty one stays inconclusive', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-stt-'));
+  const wav = path.join(dir, 'in.wav');
+  fs.writeFileSync(wav, Buffer.concat([Buffer.alloc(44), Buffer.from('MAJINSTT:öppna rapporten')]));
+
+  const heard = await transcribe({ audioPath: wav, command: sttTemplate() });
+  assert.equal(heard.ok, true, JSON.stringify(heard));
+  assert.equal(heard.verdict, 'capture');
+  assert.equal(heard.transcript, 'öppna rapporten');
+  assert.equal(heard.synthetic, false);
+
+  const quiet = path.join(dir, 'quiet.wav');
+  fs.writeFileSync(quiet, Buffer.alloc(64));
+  const empty = await transcribe({ audioPath: quiet, command: sttTemplate() });
+  assert.equal(empty.ok, false, 'an empty transcript is not a success');
+  assert.equal(empty.verdict, 'inconclusive');
+  assert.equal(empty.transcript, '');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('voice: capabilities name every lane and mark what is configured', () => {
+  const caps = voiceCapabilities({});
+  assert.deepEqual(caps.tts.map((c) => c.mode), ['buffer', 'command', 'edge-tts']);
+  assert.equal(caps.tts.find((c) => c.mode === 'command').available, false);
+  const configured = voiceCapabilities({ MAJIN_V4_TTS_COMMAND: 'piper {OUT}', MAJIN_V4_STT_COMMAND: 'whisper {WAV}' });
+  assert.equal(configured.tts.find((c) => c.mode === 'command').available, true);
+  assert.equal(configured.stt.find((c) => c.mode === 'command').available, true);
 });

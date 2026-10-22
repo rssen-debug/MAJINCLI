@@ -22,15 +22,35 @@ import { listen } from '../v2/voice/listen.js';
 import { EdgeTtsProvider, BufferTtsProvider, CommandTtsProvider } from '../v2/voice/tts.js';
 import { BufferSttProvider, CommandSttProvider } from '../v2/voice/stt.js';
 
-export const VOICE_MODES = Object.freeze(['auto', 'buffer', 'edge-tts']);
+export const VOICE_MODES = Object.freeze(['auto', 'buffer', 'edge-tts', 'command']);
+
+/**
+ * The local-command lane is operator-supplied and therefore gated exactly like
+ * every other shell path in V2: preflight first, argv-only spawn (no shell),
+ * scrubbed environment, mandatory timeout. The template comes from config, never
+ * from a chat message or an HTTP body.
+ */
+export function commandTemplateFromEnv(env = process.env) {
+  return env.MAJIN_V4_TTS_COMMAND || null;
+}
+
+export function sttTemplateFromEnv(env = process.env) {
+  return env.MAJIN_V4_STT_COMMAND || null;
+}
 
 /**
  * Pick a provider. `auto` prefers the real engine and falls back to the offline
  * one; it never pretends the offline one is speech synthesis of a real voice.
  */
-export function makeTtsProvider({ mode = 'auto', voice = null } = {}) {
-  if (mode === 'edge-tts') return new EdgeTtsProvider(voice ? { defaultVoice: voice } : {});
+export function makeTtsProvider({ mode = 'auto', voice = null, command = null } = {}) {
   if (mode === 'buffer') return new BufferTtsProvider();
+  if (mode === 'command') {
+    if (!command) throw new Error('command mode needs MAJIN_V4_TTS_COMMAND (a {OUT}/{TEXT} template)');
+    return new CommandTtsProvider({ commandTemplate: command });
+  }
+  if (mode === 'edge-tts') return new EdgeTtsProvider(voice ? { defaultVoice: voice } : {});
+  // auto: a configured local command wins over a network engine
+  if (command) return new CommandTtsProvider({ commandTemplate: command });
   return new EdgeTtsProvider(voice ? { defaultVoice: voice } : {});
 }
 
@@ -38,13 +58,28 @@ export function makeSttProvider({ command = null } = {}) {
   return command ? new CommandSttProvider({ commandTemplate: command }) : new BufferSttProvider({});
 }
 
+/** Which lanes are actually available on this host, without pretending. */
+export function voiceCapabilities(env = process.env) {
+  return {
+    tts: [
+      { mode: 'buffer', kind: 'offline', description: 'Deterministic silent WAV. Proves the pipeline, not a voice.' },
+      { mode: 'command', kind: 'local', available: Boolean(commandTemplateFromEnv(env)), description: 'Operator-configured local binary (piper, kokoro, …). Preflight-gated.' },
+      { mode: 'edge-tts', kind: 'network', available: true, description: 'Microsoft Edge TTS. Needs network; real voice.' },
+    ],
+    stt: [
+      { mode: 'buffer', kind: 'offline', description: 'Fixture mapping. Deterministic, not recognition.' },
+      { mode: 'command', kind: 'local', available: Boolean(sttTemplateFromEnv(env)), description: 'Local whisper-style CLI. Preflight-gated.' },
+    ],
+  };
+}
+
 /**
  * Synthesize into a private temp dir and return the bytes plus the V2 verdict.
  * The caller decides what to do with a failed verification; nothing here turns
  * a failure into a success.
  */
-export async function synthesize({ text, mode = 'auto', voice = null, approvals, dir }) {
-  const provider = makeTtsProvider({ mode, voice });
+export async function synthesize({ text, mode = 'auto', voice = null, approvals, dir, command = null }) {
+  const provider = makeTtsProvider({ mode, voice, command: command || commandTemplateFromEnv() });
   const target = path.join(dir || fs.mkdtempSync(path.join(os.tmpdir(), 'majin-tts-')), `speech-${Date.now()}.${provider.name === 'edge-tts' ? 'mp3' : 'wav'}`);
   const started = Date.now();
   let result;
@@ -80,11 +115,12 @@ export async function synthesize({ text, mode = 'auto', voice = null, approvals,
     // A buffer provider produces a valid but silent WAV: it proves the pipeline,
     // not the voice. Say which one happened.
     synthetic: provider.name === 'buffer',
+    engine: provider.name,
   };
 }
 
 export async function transcribe({ audioPath, command = null }) {
-  const provider = makeSttProvider({ command });
+  const provider = makeSttProvider({ command: command || sttTemplateFromEnv() });
   const started = Date.now();
   try {
     const result = await listen(audioPath, { provider });
