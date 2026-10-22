@@ -733,6 +733,11 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 #composer #work-progress[data-phase="compact"] #work-progress-symbol{animation:majin-evidence-breathe 2.7s ease-in-out infinite}
 @keyframes majin-evidence-breathe{50%{opacity:.68;filter:drop-shadow(0 0 6px rgba(213,143,247,.3))}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recover"] #work-progress-symbol,#composer #work-progress[data-phase="compact"] #work-progress-symbol{animation:none!important}}
+/* One visual enhancement: verification and progress within the existing chat composer. */
+#composer #work-progress[data-phase="verify"],#composer #work-progress[data-phase="stagnation"]{transition:border-top-color .18s ease}
+#composer #work-progress[data-phase="verify"]{border-top-color:rgba(226,151,250,.3)}
+#composer #work-progress[data-phase="stagnation"]{border-top-color:rgba(250,180,99,.3)}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verify"],#composer #work-progress[data-phase="stagnation"]{transition:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
