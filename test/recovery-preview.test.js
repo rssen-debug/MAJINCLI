@@ -29,3 +29,7 @@ test('recovery preview summarizes decisions without invoking actions',()=>{
 test('preview rejects envelopes without checkpoint identity',()=>{
  assert.equal(recoveryPreview({state:{steps:[]}}).reason,'invalid-checkpoint');
 });
+
+test('preview rejects traversal-style checkpoint identities',()=>{
+ assert.equal(recoveryPreview({schema:1,id:'../other',state:{steps:[]}}).reason,'invalid-checkpoint');
+});
