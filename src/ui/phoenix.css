@@ -540,3 +540,14 @@ body.simple .msg .appr button:focus-visible {
     touch-action:manipulation;
   }
 }
+
+/* Aurora: intentional keyboard focus for high-contrast permission decisions. */
+body.simple .msg .appr button:focus-visible {
+  outline:3px solid var(--warn);
+  outline-offset:4px;
+  text-decoration:underline;
+  text-underline-offset:3px;
+}
+@media (prefers-reduced-motion:reduce) {
+  body.simple .msg .appr button { transition:none!important; }
+}
