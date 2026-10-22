@@ -40,3 +40,20 @@ test('tool and one-line UI are actually wired to browser stagnation evidence',()
   assert.match(app,/meta\?\.stagnation\?\.stagnant===true/);
   assert.match(html,/data-phase="stagnation"/);
 });
+
+test('long-page tail updates reset stagnant state without saving raw text',()=>{
+ const s='tail-only-change';
+ const long='A'.repeat(15000);
+ observeBrowserPage(s,page(long+' Pending'));
+ noteBrowserAction(s);observeBrowserPage(s,page(long+' Pending'));
+ noteBrowserAction(s);assert.equal(observeBrowserPage(s,page(long+' Pending')).stagnant,true);
+ noteBrowserAction(s);const changed=observeBrowserPage(s,page(long+' Saved'));
+ assert.equal(changed.stagnant,false);
+ assert.equal(changed.unchangedActions,0);
+ clearBrowserStagnation(s);
+});
+test('stagnation visual warning remains a subdued inline composer signal',()=>{
+ const html=fs.readFileSync('src/ui/index.html','utf8');
+ assert.match(html,/majin-stagnation-calm/);
+ assert.match(html,/prefers-reduced-motion:reduce/);
+});
