@@ -8,7 +8,7 @@ npm ci
 npm run v4:doctor      # read-only host check
 npm run v4             # start the host on 127.0.0.1:7373
 npm run v4:pair -- --rotate   # new pairing code
-npm run v4:test        # 74 tests
+npm run v4:test        # 81 tests
 npm run v4:progress    # verified points, recomputed from the matrix
 ```
 
@@ -21,4 +21,4 @@ Open `http://127.0.0.1:7373` and enter the pairing code printed at boot.
 - Evidence behind every claim: `TEST_EVIDENCE.md` and `ACCEPTANCE_MATRIX.json`
 - What is next: `NEXT_ACTIONS.md` · Platform rules: `PLATFORM.md`
 
-**Status:** private vertical slice, **67.5/100 verified**, release NOT READY.
+**Status:** private vertical slice, **68.5/100 verified**, release NOT READY.

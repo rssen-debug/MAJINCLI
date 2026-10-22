@@ -7,8 +7,8 @@
 
 ## Score
 
-- **Verified:** **67.5/100** points (**67.5%**)
-- **Criteria:** 75 → 52 VERIFIED · 5 PARTIAL · 15 NOT_STARTED · 3 BLOCKED
+- **Verified:** **68.5/100** points (**68.5%**)
+- **Criteria:** 75 → 53 VERIFIED · 5 PARTIAL · 14 NOT_STARTED · 3 BLOCKED
 
 | Area | Earned | Weight | What is actually proven |
 |---|---:|---:|---|
@@ -17,7 +17,7 @@
 | SECURITY | 12.5 | 14 | pairing, sessions, revocation, CSRF, origin/host, rate limits, CSP, traversal, no keys to client |
 | CONVERSATION | 7.5 | 9 | streaming, persistence, idempotent retry, cancellation, scoping, deletion, honest errors |
 | GOALS | 10 | 14 | V2 state machine, SHA-256 verification, receipts, crash→BLOCKED, no completion without evidence |
-| MODELS | 11 | 14 | V1 config reuse, discovery without secrets, id scoping, demo degradation |
+| MODELS | 12 | 14 | V1 config reuse, V1 live catalog discovery (TTL cache + refresh), no secrets, id scoping, demo degradation |
 | VOICE | 5 | 9 | honest capability model, language, error copy, auto-send rules, speech text |
 | PLATFORM | 8 | 12 | versioned kernel, manifest validation, rollback, opt-in + allowlist + flags |
 | HOST | 0 | 12 | nothing verified — no Windows host and no tunnel in this environment |
@@ -29,7 +29,8 @@
 3. Conversation history, goals and receipts persist to disk and survive a restart.
 4. A repeated `requestId` is replayed instead of executing twice (safe reconnects).
 5. Cancellation aborts the active turn and records `CANCELLED`.
-6. `GET /api/models` lists the models from the existing Windows MAJIN config, with no key material.
+6. `GET /api/models` lists the models from the existing Windows MAJIN config, with no key material, and
+   `?refresh=1` runs V1's live provider catalog (pagination, auth, origin pinning) behind a 6 h cache.
 7. Model choice is scoped to one conversation and validated server-side.
 8. Without a configured provider the app runs a labelled demo brain — it cannot pretend to be an LLM.
 9. PWA shell is installable (manifest + 192/512/maskable icons) and never caches API data.

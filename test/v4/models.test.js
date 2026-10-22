@@ -199,3 +199,140 @@ test('models: the demo lane answers without any provider and is labelled as demo
     await s.close();
   }
 });
+
+/* ---------------------------------------------------------------------------
+ * Live catalog discovery. The fetching is V1's code (src/core/provider/
+ * catalog.js); these tests prove V4 uses it, caches it, and never leaks a key.
+ * ------------------------------------------------------------------------- */
+
+import { refreshProviderCatalog, refreshAllCatalogs, readCatalogCache, cacheEntryFresh, CATALOG_TTL_MS } from '../../src/v4/models.js';
+
+function mockFetch(payload, { status = 200 } = {}) {
+  const calls = [];
+  const fn = async (url, opts = {}) => {
+    calls.push({ url: String(url), headers: opts.headers || {} });
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => payload,
+    };
+  };
+  fn.calls = calls;
+  return fn;
+}
+
+test('catalog: refresh uses the provider /models endpoint and never sends the key to the client', async () => {
+  const home = tempHome();
+  writeV1Config(home);
+  const fetchImpl = mockFetch({ data: [{ id: 'deepseek-chat' }, { id: 'deepseek-v3' }] });
+  const entry = await refreshProviderCatalog({ home, env: {}, providerName: 'deepseek', fetchImpl });
+  assert.equal(entry.ok, true);
+  assert.deepEqual(entry.models.sort(), ['deepseek-chat', 'deepseek-v3']);
+  assert.equal(fetchImpl.calls.length, 1);
+  assert.match(fetchImpl.calls[0].url, /\/models$/);
+  assert.equal(fetchImpl.calls[0].headers.authorization, `Bearer ${V1_SECRET}`);
+  // the persisted cache must not contain the credential
+  const persisted = fs.readFileSync(path.join(home, 'v4', 'model-cache.json'), 'utf8');
+  assert.equal(persisted.includes(V1_SECRET), false);
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+test('catalog: discovered models are listed and routable, marked as discovered', async () => {
+  const home = tempHome();
+  writeV1Config(home);
+  await refreshAllCatalogs({
+    home,
+    env: {},
+    fetchImpl: mockFetch({ data: [{ id: 'deepseek-chat' }, { id: 'deepseek-brand-new' }] }),
+  });
+  const cat = discoverModels({ home, env: {} });
+  const fresh = cat.models.find((m) => m.model === 'deepseek-brand-new');
+  assert.ok(fresh, 'newly discovered model appears in the catalogue');
+  assert.equal(fresh.status, 'discovered');
+  assert.equal(fresh.discoveredVia, 'catalog');
+  assert.equal(fresh.liveVerified, false, 'listing is not inference');
+
+  const route = resolveRouteForModel({ home, env: {}, modelId: 'deepseek/deepseek-brand-new' });
+  assert.ok(route, 'a discovered model can be routed');
+  assert.equal(route.model, 'deepseek-brand-new');
+  assert.equal(route.baseUrl, 'https://api.deepseek.example', 'endpoint still comes from config');
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+test('catalog: an expired cache stops authorising models it discovered', async () => {
+  const home = tempHome();
+  writeV1Config(home);
+  const entry = await refreshProviderCatalog({ home, env: {}, providerName: 'deepseek', fetchImpl: mockFetch({ data: [{ id: 'deepseek-chat' }, { id: 'deepseek-old' }] }) });
+  assert.ok(entry.ok);
+  const stale = { v: 1, providers: { deepseek: { ...entry, at: new Date(Date.now() - CATALOG_TTL_MS - 1000).toISOString() } } };
+  fs.writeFileSync(path.join(home, 'v4', 'model-cache.json'), JSON.stringify(stale));
+  assert.equal(readCatalogCache({ home }).providers.deepseek.ok, true);
+  assert.equal(cacheEntryFresh(readCatalogCache({ home }).providers.deepseek), false);
+  assert.equal(resolveRouteForModel({ home, env: {}, modelId: 'deepseek/deepseek-old' }), null);
+  assert.ok(resolveRouteForModel({ home, env: {}, modelId: 'deepseek/deepseek-chat' }), 'config-declared models still work');
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+test('catalog: provider errors are reported, cached honestly and never crash the listing', async () => {
+  const home = tempHome();
+  writeV1Config(home);
+  const entry = await refreshProviderCatalog({
+    home,
+    env: {},
+    providerName: 'deepseek',
+    fetchImpl: mockFetch({ error: { message: 'invalid api key' } }, { status: 401 }),
+  });
+  assert.equal(entry.ok, false);
+  assert.match(entry.error, /401|failed/i);
+  const cat = discoverModels({ home, env: {} });
+  assert.equal(cat.catalog.providers.deepseek.ok, false);
+  assert.ok(cat.models.length >= 2, 'config models still listed');
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+test('catalog: a hung provider is cut off before it can stall the API', async () => {
+  const home = tempHome();
+  writeV1Config(home);
+  const hang = () => new Promise(() => {});
+  const started = Date.now();
+  const entry = await refreshProviderCatalog({ home, env: {}, providerName: 'deepseek', fetchImpl: hang, timeoutMs: 150 });
+  assert.equal(entry.ok, false);
+  assert.match(entry.error, /timed out/i);
+  assert.ok(Date.now() - started < 3000, 'timeout is enforced');
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+test('catalog: a provider without a key is never called', async () => {
+  const home = tempHome();
+  writeV1Config(home);
+  const fetchImpl = mockFetch({ data: [] });
+  const entry = await refreshProviderCatalog({ home, env: {}, providerName: 'openrouter', fetchImpl });
+  assert.equal(entry.ok, false);
+  assert.match(entry.error, /no api key/i);
+  assert.equal(fetchImpl.calls.length, 0);
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+test('catalog: /api/models?refresh=1 triggers one discovery pass and stays authenticated', async () => {
+  const home = tempHome();
+  writeV1Config(home);
+  const s = await startTestServer({ home });
+  try {
+    const unauthenticated = await fetch(`${s.base}/api/models?refresh=1`);
+    assert.equal(unauthenticated.status, 401);
+
+    const { cookie } = await s.pair();
+    const res = await fetch(`${s.base}/api/models?refresh=1`, { headers: { cookie } });
+    assert.equal(res.status, 200);
+    const raw = await res.text();
+    assert.equal(raw.includes(V1_SECRET), false);
+    const data = JSON.parse(raw);
+    assert.ok(data.catalog, 'catalog metadata is reported');
+    // The sandbox cannot reach api.deepseek.example: the failure must be visible,
+    // not silently converted into a fake success.
+    assert.equal(data.catalog.providers.deepseek.ok, false);
+    assert.ok(data.models.some((m) => m.id === 'deepseek/deepseek-chat'));
+  } finally {
+    await s.close();
+  }
+});

@@ -37,6 +37,7 @@ untrusted client; every tool runs on the host behind an approval decision.
 | Consent model | `src/v2/safety/approvals.js` | `strict` policy |
 | Memory | `src/v2/memory/store.js` | preferences |
 | Provider transport | `src/core/provider/chat.js` + `openai.js`/`anthropic.js` | real model calls |
+| Live model catalog | `src/core/provider/catalog.js` (pagination, per-provider auth, origin pinning) | `/api/models?refresh=1` |
 | Rate limiting + classification | `src/core/ratelimit.js` | model admission |
 | Config layout | `src/core/paths.js` rules (re-implemented narrowly in `config.js`) | data dir |
 
@@ -73,6 +74,14 @@ answer; tools do not run twice. This is what makes a phone reconnect safe.
 `GET /api/models` returns provider labels, model ids, `configured` and a
 `liveVerified` flag that only turns true after a real call in this process. Raw
 keys, base URLs and Authorization headers never cross the API.
+
+`?refresh=1` calls **V1's own catalog code** (`src/core/provider/catalog.js`) to
+list each keyed provider's real models — no second discovery implementation.
+Results are cached in `v4/model-cache.json` for 6 h (`MAJIN_V4_MODEL_CACHE_TTL_MS`),
+a hung provider is cut off at 8 s, and a provider error is stored as an error,
+not converted into an empty-but-happy list. A model found only via the catalog
+is marked `discovered` and stays routable **only while its cache entry is
+fresh**; the provider endpoint still comes from the config.
 
 Selection scope is **per conversation** (`POST /api/model`), validated against
 the discovered catalogue, so the phone cannot point MAJIN at an arbitrary

@@ -375,7 +375,7 @@
           "id": "A2",
           "weight": 2,
           "status": "VERIFIED",
-          "title": "Configured providers and models are discovered and listed without secrets",
+          "title": "Configured and discovered models are listed without secrets",
           "evidence": "test/v4/models.test.js"
         },
         {
@@ -416,8 +416,9 @@
         {
           "id": "A8",
           "weight": 1,
-          "status": "NOT_STARTED",
-          "title": "Cache/refresh policy for dynamic gateway model lists"
+          "status": "VERIFIED",
+          "title": "Live catalog discovery via V1 code, TTL cache and refresh",
+          "evidence": "test/v4/models.test.js"
         }
       ]
     },

@@ -35,7 +35,7 @@ import { ConversationStore, GoalStore, publicGoal } from './store.js';
 import { createToolRegistry } from './tools.js';
 import { createModelClient } from './model.js';
 import { createAgent } from './agent.js';
-import { discoverModels } from './models.js';
+import { discoverModels, refreshAllCatalogs } from './models.js';
 import { Kernel } from './kernel.js';
 import { t } from './ui/strings.js';
 
@@ -323,8 +323,14 @@ export function createV4Server({ config }) {
       sendJson(res, 200, { ok: true, ...kernel.summary() });
     },
 
-    'GET /api/models': async (req, res) => {
+    'GET /api/models': async (req, res, url) => {
       requireSession(req);
+      if (url.searchParams.get('refresh') === '1') {
+        limiter.take('general', clientKey(req, config), 2);
+        // Live discovery uses V1's catalog implementation; failures are
+        // reported per provider and never break the listing.
+        await refreshAllCatalogs({ home: paths.home, env: process.env });
+      }
       const catalogue = discoverModels({ home: paths.home, env: process.env });
       sendJson(res, 200, {
         ok: true,

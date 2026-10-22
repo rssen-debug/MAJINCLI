@@ -15,7 +15,111 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expandEnvValue } from './config.js';
+import { discoverModels as discoverProviderModels } from '../core/provider/catalog.js';
 import { t } from './ui/strings.js';
+
+export const CATALOG_TTL_MS = Number(process.env.MAJIN_V4_MODEL_CACHE_TTL_MS || 6 * 60 * 60 * 1000);
+
+/**
+ * Live catalog cache. The fetching itself is V1's proven implementation
+ * (`src/core/provider/catalog.js`): per-provider auth headers, pagination,
+ * origin pinning and honest errors. V4 only adds caching and status labels —
+ * no second discovery implementation.
+ */
+function cacheFile({ home }) {
+  return path.join(home, 'v4', 'model-cache.json');
+}
+
+export function readCatalogCache({ home } = {}) {
+  try {
+    const raw = JSON.parse(fs.readFileSync(cacheFile({ home }), 'utf8'));
+    if (raw?.v !== 1 || typeof raw.providers !== 'object') return { providers: {} };
+    return raw;
+  } catch {
+    return { providers: {} };
+  }
+}
+
+function writeCatalogCache({ home }, cache) {
+  const file = cacheFile({ home });
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ v: 1, updatedAt: new Date().toISOString(), ...cache }, null, 2), { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}
+
+/** True when a cached listing is still inside its TTL. */
+export function cacheEntryFresh(entry, now = Date.now()) {
+  if (!entry?.at || !entry.ok) return false;
+  return now - Date.parse(entry.at) < CATALOG_TTL_MS;
+}
+
+/** Provider objects from the V1 config, with keys resolved. Never serialised. */
+function providersFromConfig({ home, env }) {
+  const cfg = readConfig(configFilePath({ home, env }));
+  const out = [];
+  for (const [name, p] of Object.entries(cfg?.providers || {})) {
+    if (!p || typeof p !== 'object' || !p.baseUrl) continue;
+    const apiKey = expandEnvValue(p.apiKey, env);
+    out.push({
+      name,
+      label: typeof p.label === 'string' ? p.label : name,
+      kind: ['openai', 'anthropic', 'responses', 'mock', 'gemini'].includes(p.kind) ? p.kind : 'openai',
+      baseUrl: String(p.baseUrl).replace(/\/+$/, ''),
+      apiKey,
+      headers: p.headers || null,
+      hasKey: Boolean(apiKey),
+    });
+  }
+  return out;
+}
+
+/**
+ * Refresh one provider's model list using V1's catalog code.
+ * Returns a cache entry. Errors are data, never thrown to the UI as a crash.
+ */
+export async function refreshProviderCatalog({ home, env = process.env, providerName, fetchImpl = globalThis.fetch, timeoutMs = 8000 } = {}) {
+  const provider = providersFromConfig({ home, env }).find((p) => p.name === providerName);
+  if (!provider) return { ok: false, error: 'unknown provider', models: [] };
+  if (!provider.hasKey) return { ok: false, error: 'no api key configured', models: [] };
+  const at = new Date().toISOString();
+  let result;
+  try {
+    result = await discoverProviderModels(
+      { kind: provider.kind, baseUrl: provider.baseUrl, apiKey: provider.apiKey, headers: provider.headers, models: [] },
+      { fetchImpl: withTimeout(fetchImpl, timeoutMs) },
+    );
+  } catch (err) {
+    result = { ok: false, error: String(err?.message || err), models: [] };
+  }
+  const entry = {
+    at,
+    ok: Boolean(result.ok),
+    models: result.ok ? [...new Set(result.models || [])] : [],
+    ...(result.ok ? {} : { error: result.error || 'catalog request failed' }),
+  };
+  const cache = readCatalogCache({ home });
+  writeCatalogCache({ home }, { providers: { ...cache.providers, [providerName]: entry } });
+  return entry;
+}
+
+/** Wrap fetch so a hung provider cannot hold /api/models forever. */
+function withTimeout(fetchImpl, timeoutMs) {
+  return (url, opts = {}) => Promise.race([
+    fetchImpl(url, opts),
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`catalog timed out after ${timeoutMs}ms`)), timeoutMs)),
+  ]);
+}
+
+/** Refresh every wired provider in parallel and persist the cache. */
+export async function refreshAllCatalogs({ home, env = process.env, fetchImpl = globalThis.fetch } = {}) {
+  const providers = providersFromConfig({ home, env }).filter((p) => p.hasKey);
+  const entries = await Promise.all(providers.map(async (p) => [
+    p.name,
+    await refreshProviderCatalog({ home, env, providerName: p.name, fetchImpl }),
+  ]));
+  return Object.fromEntries(entries);
+}
 
 const liveResults = new Map(); // "provider/model" -> { ok, at, errorClass }
 
@@ -56,6 +160,7 @@ function hostOf(baseUrl) {
 export function discoverModels({ home, env = process.env } = {}) {
   const file = configFilePath({ home, env });
   const cfg = readConfig(file);
+  const cache = readCatalogCache({ home });
   const result = {
     source: cfg ? 'v1-config' : 'none',
     configPath: file,
@@ -86,7 +191,10 @@ export function discoverModels({ home, env = process.env } = {}) {
   const providers = cfg?.providers && typeof cfg.providers === 'object' ? cfg.providers : {};
   for (const [name, p] of Object.entries(providers)) {
     if (!p || typeof p !== 'object') continue;
-    const models = Array.isArray(p.models) ? p.models.filter((m) => typeof m === 'string' && m.trim()) : [];
+    const declaredModels = Array.isArray(p.models) ? p.models.filter((m) => typeof m === 'string' && m.trim()) : [];
+    const cached = cache.providers?.[name];
+    const discoveredModels = cacheEntryFresh(cached) ? cached.models : [];
+    const models = [...new Set([...declaredModels, ...discoveredModels])];
     const apiKey = expandEnvValue(p.apiKey, env);
     const hasKey = Boolean(apiKey);
     if (!hasKey && !models.length) continue; // nothing to offer
@@ -97,12 +205,20 @@ export function discoverModels({ home, env = process.env } = {}) {
       host: hostOf(p.baseUrl) || null,
       hasKey,
       models: [...models],
+      catalogAt: cacheEntryFresh(cached) ? cached.at : null,
     };
     result.providers.push(entry);
     for (const model of models) {
       const id = `${name}/${model}`;
       const live = liveResults.get(id);
-      const status = !hasKey ? 'missing-key' : live ? (live.ok ? 'verified' : 'unavailable') : 'configured';
+      const fromCatalog = discoveredModels.includes(model) && !declaredModels.includes(model);
+      const status = !hasKey
+        ? 'missing-key'
+        : live
+          ? (live.ok ? 'verified' : 'unavailable')
+          : fromCatalog
+            ? 'discovered'
+            : 'configured';
       result.models.push({
         id,
         provider: name,
@@ -114,9 +230,11 @@ export function discoverModels({ home, env = process.env } = {}) {
         statusLabel: {
           'missing-key': t('model.status.missingKey'),
           configured: t('model.status.configured'),
+          discovered: t('model.status.discovered'),
           verified: t('model.status.verified'),
           unavailable: t('model.status.unavailable'),
         }[status],
+        discoveredVia: fromCatalog ? 'catalog' : (declaredModels.includes(model) ? 'config' : null),
         liveVerified: status === 'verified',
         ...(live?.errorClass ? { errorClass: live.errorClass } : {}),
       });
@@ -132,6 +250,11 @@ export function discoverModels({ home, env = process.env } = {}) {
     result.current = firstUsable ? firstUsable.id : result.models[0].id;
   }
   result.liveVerifiedCount = result.models.filter((m) => m.liveVerified).length;
+  result.catalog = {
+    at: Object.values(cache.providers || {}).map((e) => e?.at).filter(Boolean).sort().pop() || null,
+    ttlMs: CATALOG_TTL_MS,
+    providers: Object.fromEntries(Object.entries(cache.providers || {}).map(([k, v]) => [k, { ok: Boolean(v?.ok), at: v?.at || null, count: v?.models?.length || 0, ...(v?.error ? { error: v.error } : {}) }])),
+  };
   return result;
 }
 
@@ -156,7 +279,12 @@ export function resolveRouteForModel({ home, env = process.env, modelId, base })
   const provider = cfg.providers?.[providerName];
   if (!provider || !provider.baseUrl) return null;
   const declared = Array.isArray(provider.models) ? provider.models : [];
-  if (!declared.includes(model)) return null; // not an authorised model id
+  // A model id is authorised when it is either declared in the V1 config or
+  // came back from that provider's own live catalog (cached, TTL-bounded).
+  // The provider and its endpoint are still fixed by the config.
+  const cached = readCatalogCache({ home }).providers?.[providerName];
+  const discovered = cacheEntryFresh(cached) ? cached.models : [];
+  if (!declared.includes(model) && !discovered.includes(model)) return null;
   const apiKey = expandEnvValue(provider.apiKey, env);
   if (!apiKey) return null;
   const kind = ['anthropic', 'responses', 'mock'].includes(provider.kind) ? provider.kind : 'openai';

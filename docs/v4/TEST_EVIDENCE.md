@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 74
-# pass 74
+# tests 81
+# pass 81
 # fail 0
 # skipped 0
 ```
@@ -28,7 +28,7 @@ $ npm run v4:test
 |---|---:|---|
 | `test/v4/security.test.js` | 22 | pairing, sessions, expiry, revocation, CSRF, origin, host allowlist, rate limit, body caps, CSP, traversal, overwrite, static escape |
 | `test/v4/conversation.test.js` | 12 | streaming, persistence, idempotent replay, cancellation, scoping, deletion, goal states, receipts with SHA-256, crash reconciliation |
-| `test/v4/models.test.js` | 9 | V1 config discovery, secret-free projection, unknown model refusal, per-conversation scope, broken config, demo labelling |
+| `test/v4/models.test.js` | 16 | V1 config discovery, V1 live catalog reuse, cache TTL, timeout, secret-free projection, unknown model refusal, per-conversation scope, broken config, demo labelling |
 | `test/v4/ui.test.js` | 12 | manifest/icons, safe areas, responsive, a11y, SW policy, asset content types, voice policy units |
 | `test/v4/kernel.test.js` | 10 | manifest validation, declared permissions, rollback, opt-in, allowlist, flags |
 | `test/v4/progress.test.js` | 9 | matrix structure, weights = 100, evidence required, derived score, PROGRESS.md agreement |
@@ -37,10 +37,10 @@ $ npm run v4:test
 
 ```
 $ npm run check
-476/476 files parse cleanly.
+478/478 files parse cleanly.
 
 $ npm run i18n
-0 Swedish string literal(s) in 254 files
+0 Swedish string literal(s) in 255 files
 
 $ npm run v4:progress --check
 67.5/100 verified points, matrix valid (exit 0)

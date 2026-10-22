@@ -39,6 +39,7 @@ const els = {
   sheetModelNote: $('#sheet-model-note'),
   modelList: $('#model-list'),
   modelSource: $('#model-source'),
+  refreshModels: $('#refresh-models'),
   sheetFiles: $('#file-list'),
   sheetConvs: $('#conv-list'),
   ttsToggle: $('#tts-toggle'),
@@ -730,14 +731,16 @@ function closeSheet() {
   els.menu.setAttribute('aria-expanded', 'false');
 }
 
-async function loadModels() {
+async function loadModels({ refresh = false } = {}) {
   try {
-    const res = await api('/api/models');
+    const res = await api(`/api/models${refresh ? '?refresh=1' : ''}`);
     if (!res.ok) return;
     const data = await res.json();
     renderModels(data);
   } catch { /* model list is informational; chat still works */ }
 }
+
+const refreshModelsBtn = els.refreshModels;
 
 function renderModels(data) {
   els.modelList.textContent = '';
@@ -767,13 +770,23 @@ function renderModels(data) {
     const status = document.createElement('span');
     status.className = 'model-status';
     status.dataset.status = m.status;
-    status.textContent = m.liveVerified ? 'live' : (m.status === 'missing-key' ? t('model.missingKey') : t('model.unverified'));
+    status.textContent = m.liveVerified
+      ? t('model.live')
+      : m.status === 'missing-key'
+        ? t('model.missingKey')
+        : m.status === 'discovered'
+          ? t('model.discovered')
+          : t('model.unverified');
     btn.append(name, status);
     btn.addEventListener('click', () => selectModel(m.id));
     li.append(btn);
     els.modelList.append(li);
   }
-  els.modelSource.textContent = t('model.summary', { count: models.length });
+  const catalogAt = data.catalog?.at ? new Date(data.catalog.at).toLocaleString('sv-SE') : null;
+  els.modelSource.textContent = catalogAt
+    ? `${t('model.summary', { count: models.length })} ${t('model.catalogAt', { at: catalogAt })}`
+    : t('model.summary', { count: models.length });
+  refreshModelsBtn.hidden = !(data.models || []).some((m) => m.configured);
 }
 
 async function selectModel(modelId) {
@@ -868,6 +881,12 @@ function bindEvents() {
   els.approvalDeny.addEventListener('click', () => resolveApproval(false));
   els.approvalDismiss.addEventListener('click', hideApproval);
   els.modelPill.addEventListener('click', openSheet);
+  els.refreshModels.addEventListener('click', async () => {
+    els.refreshModels.disabled = true;
+    toast(t('model.refreshing'), 8000);
+    await loadModels({ refresh: true });
+    els.refreshModels.disabled = false;
+  });
   els.suggestions.addEventListener('click', (ev) => {
     const btn = ev.target.closest('[data-fill]');
     if (!btn) return;

@@ -22,6 +22,8 @@ needs a host/credential; **scaffold** = structure without runtime evidence.
 |---|---|---|---|
 | Provider transport (SSE, tool calls, retries) | `src/core/provider/chat.js`, `openai.js`, `anthropic.js` | proven (source) | **used directly** |
 | Rate limiting / classification | `src/core/ratelimit.js` | proven | used via `complete()` |
+| Live model catalog | `src/core/provider/catalog.js` | proven | **used directly** by `/api/models?refresh=1` |
+| Local HTTP server + SSE chat | `src/core/server/index.js` (914 lines) | usable | **not reused** — see §2.1 |
 | Config + data dirs | `src/core/config.js`, `paths.js` | proven | path rules re-implemented narrowly; config file read as-is |
 | Persona / style | `src/core/config.js` `persona` | text only | replaced by a V4 system prompt (mobile product voice) |
 | Agent loop | `src/core/agent.js` (674 lines) | usable | **not reused**: it is CLI/desktop oriented and would drag the whole surface in |
@@ -63,13 +65,31 @@ SSE streaming, cancellation and idempotency. Bolting those onto Studio would
 have changed its contract for existing V2 users. The security primitives were
 re-used as patterns; the module stays intact for V2.
 
+## 2.1 The V1 server: why it is not the V4 server
+
+V1 already serves a full UI, `/api/chat` with SSE, `/api/models`, `/api/state`,
+tasks, approvals and a WhatsApp webhook. Tempting to reuse wholesale. It is not
+reused as the V4 front door because its trust model is *desktop-local*:
+
+- the session secret is a static token that is also accepted in the **URL**
+  (`?t=…`), in a cookie **without** `HttpOnly`/`Secure`, and as a bearer header;
+- loopback peers are trusted **without any token** (`server.trustLocal`);
+- `OPTIONS` answers with `access-control-allow-origin: *`;
+- there is no CSRF requirement and no per-device revocation.
+
+Every one of those is a reasonable localhost convenience and a vulnerability the
+moment a tunnel publishes the port. Rewriting V1's auth for the internet would
+change its contract for existing desktop users, so V4 keeps V1 untouched and
+adds a thin, separately tested session layer. What *is* reused from V1 is the
+part with no security coupling: the model catalog implementation.
+
 ## 3. Duplication ledger
 
 | Built in V4 | Why not reuse |
 |---|---|
 | `security.js` (limits, host/origin) | V3's checks are one-shot and loopback-only; needed reusable, tested middleware |
 | `store.js` (conversations) | No conversation persistence exists in V1–V3 |
-| `models.js` (discovery) | V1 has a registry but no safe, secret-free projection for a remote client |
+| `models.js` (discovery) | V1 has a catalog but no safe, secret-free projection for a remote client — the *fetching* is V1's code, only the projection is new |
 | `kernel.js` | No versioned capability contract exists in any prior version |
 | `ui/*` | No mobile/PWA surface exists |
 

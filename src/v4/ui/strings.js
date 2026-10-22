@@ -112,7 +112,12 @@ export const SV = {
   'model.status.configured': 'Konfigurerad (ej live-verifierad)',
   'model.status.verified': 'Live-verifierad i denna session',
   'model.status.unavailable': 'Tillfälligt otillgänglig',
+  'model.status.discovered': 'Hittad via providers /models',
   'model.envLabel': 'Miljövariabel',
+  'model.discovered': 'hittad',
+  'model.catalogAt': 'Katalog hämtad {at}.',
+  'model.refresh': 'Uppdatera modellistan',
+  'model.refreshing': 'Hämtar modellistan…',
   'model.caveat': 'Konfigurerad betyder att en nyckel finns, inte att modellen svarat ännu.',
 
   'cli.pairExists': 'En parkod finns redan. Kör med --rotate för att ersätta den.',
