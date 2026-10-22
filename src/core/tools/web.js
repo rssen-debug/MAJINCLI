@@ -5,6 +5,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { def } from './registry.js';
 import { resolveIn } from './files.js';
 import { bus } from '../log.js';
@@ -16,6 +17,10 @@ import { VERIFY_JS, verificationCriteria, verifyObserved } from '../browser-evid
 import { browserActionReceipt } from '../browser-action-receipt.js';
 
 const followedSafe = (fol) => (fol && fol.followed === true ? true : false);
+// Only the latest per-session screenshot digest; prevents duplicate evidence files.
+const recentShot = new Map();
+function screenshotDigest(bytes){ return createHash('sha256').update(bytes).digest('hex'); }
+
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36 MAJIN/1.0';
 
@@ -518,19 +523,31 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     name: 'browser.shot',
     group: 'web',
     risk: 'read',
-    desc: 'Screenshot the current page to the workspace (visual evidence — attach it or verify with your own eyes).',
-    params: {},
-    async run(_, ctx) {
-      const session = ctx.session || 'default';
-      if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
-      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
-      const shot = await b.send('Page.captureScreenshot', { format: 'png' });
-      const dir = path.join(ctx.cfg.get('workspace'), 'shots');
-      await fs.mkdir(dir, { recursive: true });
-      const file = path.join(dir, `shot-${session.replace(/[^\w.-]/g, '_')}-${Date.now()}.png`);
-      await fs.writeFile(file, Buffer.from(shot.data, 'base64'));
-      ctx.bus?.emit?.('file.write', { path: file, bytes: shot.data.length * 0.75 | 0 });
-      return { ok: true, result: `screenshot saved: ${file}`, meta: { path: file }, summary: `shot ${path.basename(file)}` };
+    desc: 'Capture visible browser screenshot. ifChanged=true saves only when pixel-identical PNG evidence differs from the preceding screenshot for this session (agent-browser-inspired token and disk optimization).',
+    params: { ifChanged:'string optional true|false (default false) to skip saving duplicate PNGs' },
+    async run({ifChanged='false'}={},ctx){
+      const session=ctx.session||'default';
+      if(!isOpen(session))return {ok:false,error:{code:'browser_closed',message:'no browser open for this task'}};
+      const b=await openFor({session,cfgGet:k=>ctx.cfg.get(k)});
+      const shot=await b.send('Page.captureScreenshot',{format:'png'});
+      if(!shot?.data)return {ok:false,error:{code:'screenshot_empty',message:'Browser returned no image'}};
+      const bytes=Buffer.from(shot.data,'base64');
+      const digest=screenshotDigest(bytes);
+      const previous=recentShot.get(session);
+      if(String(ifChanged)==='true' && previous?.sha256===digest){
+        return {ok:true,result:'Screenshot unchanged — previous file is still valid: '+previous.path,
+          meta:{path:previous.path,unchanged:true,sha256:digest},
+          summary:'screen unchanged; no duplicate file'};
+      }
+      const dir=path.join(ctx.cfg.get('workspace'),'shots');
+      await fs.mkdir(dir,{recursive:true});
+      const file=path.join(dir,'shot-'+session.replace(/[^\w.-]/g,'_')+'-'+Date.now()+'.png');
+      await fs.writeFile(file,bytes);
+      recentShot.set(session,{path:file,sha256:digest});
+      if(recentShot.size>64)recentShot.delete(recentShot.keys().next().value);
+      ctx.bus?.emit?.('file.write',{path:file,bytes:bytes.length});
+      return {ok:true,result:'screenshot saved: '+file,meta:{path:file,unchanged:false,sha256:digest},
+        summary:'shot '+path.basename(file)};
     },
   }),
 
@@ -689,6 +706,7 @@ def({
     desc: 'Close this task’s browser window and give the slot back to the fleet.',
     params: {},
     async run(_, ctx) {
+      recentShot.delete(ctx.session || 'default');
       const closed = await closeFor(ctx.session || 'default', { wait: true });
       return { ok: true, result: closed ? 'browser closed, slot released' : 'no browser was open for this task', meta: { closed }, summary: closed ? 'closed' : 'nothing open' };
     },

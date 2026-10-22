@@ -251,6 +251,13 @@ function onEvent(ev) {
           workPulse('Click sent · checking its effect');
           const bar=$('work-progress');if(bar)bar.dataset.phase='action';
         }
+      } else if(ev.tool==='browser.shot' && ev.ok){
+        const unchanged=ev.meta?.unchanged===true;
+        workPulse(unchanged?'Screenshot unchanged · keeping previous view':'Screenshot captured · visual evidence ready');
+        const bar=$('work-progress');
+        if(bar){bar.dataset.phase=unchanged?'delta':'visual';bar.title=unchanged?
+          'The new screenshot matches the previous image exactly':'A new screenshot was saved for visual inspection';}
+        const glyph=$('work-progress-symbol');if(glyph)glyph.textContent=unchanged?'=':'◉';
       } else if(ev.tool==='browser.verify' && ev.ok){
         workPulse('Browser result verified');
         const bar=$('work-progress');if(bar)bar.dataset.phase='verified';
