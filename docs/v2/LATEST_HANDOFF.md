@@ -1,6 +1,6 @@
 # MAJIN V2 — LATEST HANDOFF (owner-facing, 2026-10-21)
 
-V2 HEAD (v2/main): jcs-interop merged (RFC 8785 via author ref impl canonicalize@5.1.0 Apache-2.0, back-compat fixture-proven, ecosystem-interoperable hashes) ← 641e69e5 (voice panel) ← 0e3a44b5 (goal runs) ← 33ec0a50 (receipts)
+V2 HEAD (v2/main): runbook-windows merged (operator runbook + doc-consistency guard: docs kan ej driftra från CLI) ← b11c6134 (JCS interop) ← 641e69e5 (voice panel) ← 0e3a44b5 (goal runs)
 
 COMPLETED (this working day, verified):
 - v2/main created from V1 tip 282a8ff; V1 untouched (policy: only v2/* branches carry V2 code)
