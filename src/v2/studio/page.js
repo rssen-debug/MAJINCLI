@@ -53,6 +53,15 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
 #consent .rowform{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
 #c-result,#c-status-out{font-size:12px;margin-top:6px;white-space:pre-wrap;word-break:break-all}
 #c-result.err{color:var(--bad)} #c-result.ok2{color:var(--ok)}
+#receipts{grid-column:1/-1;max-height:32vh;overflow:auto}
+#receipts input{background:var(--bg);border:1px solid var(--line);border-radius:4px;color:var(--fg);padding:4px 6px;font:inherit;font-size:12px}
+#receipts button{background:var(--accent);border:0;border-radius:4px;color:#0b0e12;padding:5px 10px;font:inherit;font-size:12px;cursor:pointer;font-weight:600}
+.rcpt{display:flex;gap:8px;font-size:12px;border-bottom:1px solid var(--line);padding:3px 0;align-items:baseline}
+.rcpt .v{color:var(--ok);font-weight:700}
+.rcpt .u{color:var(--warn)}
+.rcpt .act{color:var(--fg);min-width:150px}
+.rcpt .gid{color:var(--dim)}
+.rcpt .h{color:var(--dim);font-size:11px}
 </style>
 </head>
 <body>
@@ -88,6 +97,14 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
       <button id="c-revoke" type="button" class="danger">Revoke</button>
     </div>
     <div id="c-status-out"></div>
+  </section>
+  <section id="receipts">
+    <h2>Receipts (from the tamper-evident chain)</h2>
+    <div class="rowform" style="margin-bottom:6px">
+      <input id="r-goal" placeholder="filter goalId (optional)" maxlength="64" style="flex:1;min-width:140px">
+      <button id="r-refresh" type="button">Refresh</button>
+    </div>
+    <div id="receipts-body" class="empty">loading…</div>
   </section>
   <section id="events">
     <h2>Live events</h2>
@@ -194,7 +211,41 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
     });
   }
 
+  // ---- receipts panel: reads the chain of record via /api/receipts; a broken
+  // chain is displayed as a warning, never as an empty "nothing happened" ----
+  var rBody=document.getElementById('receipts-body');
+  function loadReceipts(){
+    var gid=document.getElementById('r-goal').value.trim();
+    fetch('/api/receipts?limit=50'+(gid?'&goalId='+encodeURIComponent(gid):''))
+      .then(function(r){return r.json()})
+      .then(function(b){
+        if(!b.ok){
+          rBody.className='';
+          rBody.innerHTML='<div style="color:var(--bad)">chain broken ('+esc(b.reason)+') — receipts withheld, not presented as fact</div>';
+          return;
+        }
+        if(b.count===0){rBody.className='empty';rBody.textContent=gid?('no receipts for '+gid):'no receipts yet';return}
+        rBody.className='';
+        rBody.innerHTML=b.receipts.slice().reverse().map(function(r){
+          return '<div class="rcpt"><span class="'+(r.verified?'v':'u')+'">'+(r.verified?'✓':'?')+'</span>'+
+            '<span class="act">'+esc(r.action)+'</span>'+
+            '<span class="gid">'+esc(r.goalId)+(r.taskId?'/'+esc(r.taskId):'')+'</span>'+
+            '<span>'+esc(r.result)+'</span>'+
+            '<span class="h">'+esc((r.hash||'').slice(0,12))+'…</span>'+
+            '<span class="h">'+esc((r.at||'').slice(5,19))+'</span></div>';
+        }).join('');
+      }).catch(function(e){rBody.className='';rBody.textContent='receipts endpoint error: '+e.message});
+  }
+  document.getElementById('r-refresh').addEventListener('click',loadReceipts);
+  loadReceipts();
+
   var es=new EventSource('/api/events');
+  es.addEventListener('message',function(m){
+    try{
+      var e=JSON.parse(m.data);
+      if(e.type==='goal.receipt'||e.type==='goal.receipt_verified') loadReceipts(); // live refresh on the receipt events
+    }catch(_){ }
+  });
   es.onopen=function(){conn.textContent='live';conn.className='live'};
   es.onerror=function(){conn.textContent='disconnected (retrying)';conn.className=''};
   es.onmessage=function(m){

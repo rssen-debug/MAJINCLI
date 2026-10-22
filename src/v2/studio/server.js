@@ -16,7 +16,9 @@
  */
 
 import http from 'node:http';
-import { AuditChain } from '../audit/chain.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { AuditChain, AUDIT_FILE } from '../audit/chain.js';
 import { aggregate } from '../telemetry/aggregate.js';
 import { EVENT_NAMES } from '../runtime/events.js';
 
@@ -27,6 +29,37 @@ import { renderStudioPage } from './page.js';
 
 const HEARTBEAT_MS = 15000;
 const REPLAY_LIMIT = 100;
+
+/** fresh-instance verification — endpoint answers never trust server memory */
+function safeChainVerify(auditDir) {
+  try {
+    return new AuditChain(auditDir).verify();
+  } catch (err) {
+    return { ok: false, reason: err.cls || 'FAILED', detail: String(err.message || err) };
+  }
+}
+
+function readChainEntries(auditDir) {
+  const file = path.join(auditDir, AUDIT_FILE);
+  if (!fs.existsSync(file)) return [];
+  const text = fs.readFileSync(file, 'utf8').trim();
+  if (!text) return [];
+  const out = [];
+  for (const line of text.split('\n')) {
+    try { out.push(JSON.parse(line)); } catch { /* the verify() verdict above carries the truth; a partial line just does not render */ }
+  }
+  return out;
+}
+
+/** operator-friendly payload projection: keep it shallow and small */
+function summarize(payload) {
+  const out = {};
+  for (const k of Object.keys(payload || {}).slice(0, 10)) {
+    const v = payload[k];
+    out[k] = typeof v === 'object' && v !== null ? '[obj]' : v;
+  }
+  return out;
+}
 
 export function createStudioServer({
   bus,
@@ -189,8 +222,7 @@ export function createStudioServer({
       return;
     }
 
-    if (url.pathname === '/api/audit/verify') {
-      // fresh instance — verification never trusts the server's in-memory view
+    if (url.pathname === '/api/audit/verify') {      // fresh instance — verification never trusts the server's in-memory view
       let verdict;
       try {
         verdict = new AuditChain(auditDir).verify();
@@ -199,6 +231,36 @@ export function createStudioServer({
       }
       res.writeHead(200, { 'content-type': 'application/json' }); // verdict is DATA — a broken chain is not a transport failure
       res.end(JSON.stringify(verdict));
+      return;
+    }
+
+    if (url.pathname === '/api/receipts') {
+      // receipts are chain entries of kind 'receipt' — the chain is the ONLY
+      // source of truth; a broken chain yields an honest empty answer with
+      // the reason attached, never silently stale "facts"
+      const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit')) || 50));
+      const goalId = url.searchParams.get('goalId');
+      const verdict = safeChainVerify(auditDir);
+      if (!verdict.ok) {
+        json(res, 200, { ok: false, reason: verdict.reason, receipts: [], note: 'chain broken — receipts withheld, not presented as fact' });
+        return;
+      }
+      let entries = readChainEntries(auditDir).filter((e) => e.kind === 'receipt');
+      if (goalId) entries = entries.filter((e) => e.payload.goalId === goalId);
+      const receipts = entries.slice(-limit).map((e) => ({ seq: e.seq, at: e.ts, ...e.payload }));
+      json(res, 200, { ok: true, count: receipts.length, goalId: goalId || null, receipts });
+      return;
+    }
+
+    if (url.pathname === '/api/chain/tail') {
+      const n = Math.max(1, Math.min(100, Number(url.searchParams.get('n')) || 20));
+      const verdict = safeChainVerify(auditDir);
+      if (!verdict.ok) {
+        json(res, 200, { ok: false, reason: verdict.reason, entries: [] });
+        return;
+      }
+      const entries = readChainEntries(auditDir).slice(-n).map((e) => ({ seq: e.seq, at: e.ts, kind: e.kind, actor: e.actor, ...summarize(e.payload) }));
+      json(res, 200, { ok: true, count: entries.length, entries });
       return;
     }
 
