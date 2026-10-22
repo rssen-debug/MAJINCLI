@@ -23,7 +23,7 @@ jobs:
   gui-qa:
     name: Drive real Chromium through the full Studio surface family (evidence artifacts)
     runs-on: [self-hosted, windows, majin-interactive]
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,21 +32,38 @@ jobs:
       - name: Install pinned dependencies (manifest ≡ journal)
         shell: powershell
         run: |
+          $t=[Diagnostics.Stopwatch]::StartNew()
           npm ci --no-audit --no-fund
           if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
-      - name: Install Chromium for Playwright
+          Write-Host ("npm ci: {0:N1}s" -f $t.Elapsed.TotalSeconds)
+      - name: Cache Playwright browsers (the 120MB Chromium must not download every run)
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/ms-playwright
+          key: pw-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Chromium for Playwright (cache-hit = seconds, miss = full download once)
         shell: powershell
         run: |
+          $t=[Diagnostics.Stopwatch]::StartNew()
+          if (Test-Path "$env:LOCALAPPDATA\ms-playwright") {
+            $existing=(Get-ChildItem "$env:LOCALAPPDATA\ms-playwright" -Directory).Name -join ','
+            Write-Host "existing browser dirs: $existing"
+          }
           npx playwright install chromium
           if ($LASTEXITCODE -ne 0) { throw 'playwright install failed' }
+          Write-Host ("playwright install: {0:N1}s" -f $t.Elapsed.TotalSeconds)
       - name: Run the GUI-QA evidence harness against a real Studio instance
         shell: powershell
         env:
           GUI_HEADLESS: ${{ github.event_name == 'push' && '1' || (inputs.headless == 'true' && '1' || '0') }}
           GUI_QA_OUT: gui-qa-out
+        timeout-minutes: 15
         run: |
+          $t=[Diagnostics.Stopwatch]::StartNew()
           node scripts/v2-gui-qa.mjs
           if ($LASTEXITCODE -ne 0) { throw 'GUI-QA RED — see gui-qa-out/gui-qa-results.json artifact' }
+          Write-Host ("gui-qa script: {0:N1}s" -f $t.Elapsed.TotalSeconds)
       - name: Upload evidence (results JSON + full-page screenshot)
         if: always()
         uses: actions/upload-artifact@v4
