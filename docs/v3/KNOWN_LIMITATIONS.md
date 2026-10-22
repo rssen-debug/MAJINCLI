@@ -23,4 +23,4 @@
 - Browser-rendered accessibility and visual behavior were not run in a browser during this round. Static/source tests are not equivalent to visual/assistive-technology acceptance.
 - Real Windows desktop/voice/browser validation was unavailable in this Linux sandbox.
 - `package.json` says Node >=20.11, but several installed dependency declarations require Node >=22. This must be resolved before release support is promised.
-- No push has been verified. The remote V3 branch did not exist at inspection; this environment has no GitHub connector. Do not use the chat-exposed credentials. Rotate them before any push attempt.
+- Push was attempted without credentials and failed because Git could not read a GitHub username with terminal prompts disabled. Remote `v3/main` is still not published. This environment has no GitHub connector. Do not use the chat-exposed credentials; revoke/rotate them and use a secure auth path.

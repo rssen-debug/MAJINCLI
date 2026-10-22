@@ -28,7 +28,7 @@ Create an evidence-backed V3 foundation and vertical slice while protecting V1 `
 
 ## Immediate next steps
 
-1. Push the verified V3 commits only through a safe, authorized credential path; never use a credential pasted into chat.
+1. After rotating/revoking the credentials exposed in chat and configuring a secure GitHub auth path, push local `v3/main` without using the pasted token. The first push attempt was blocked because no username/credential was available.
 2. Reconcile the Node support floor (`>=20.11` in the manifest vs `>=22` dependency warnings) with the Windows installer and CI.
 3. Next engineering objective: adapt the existing V2 DAG/scheduler plus safe tool registry into a narrowly scoped V3 goal executor, starting with a second genuinely useful deliverable and an explicit cancellation/approval contract.
 4. Keep the default UI minimal and add real Playwright DOM/browser acceptance before claiming rendered accessibility.
@@ -36,7 +36,7 @@ Create an evidence-backed V3 foundation and vertical slice while protecting V1 `
 
 ## Outstanding blockers
 
-- No GitHub connector is offered in this environment, and no safe authorized push mechanism is configured.
+- GitHub connector lookup returned unsupported. `GIT_TERMINAL_PROMPT=0 git push origin HEAD:refs/heads/v3/main` failed with `could not read Username`; remote `v3/main` is not published. No chat-pasted credential was used.
 - User pasted provider/GitHub credentials into chat. Treat them as compromised and revoke/rotate immediately; they are not stored in V3 or used for any operation.
 - Windows host is not available here, so Windows desktop, voice, installer and headed-browser acceptance remain blocked/not run.
 - Node engine range mismatch: package says >=20.11 while installed dependencies request >=22.

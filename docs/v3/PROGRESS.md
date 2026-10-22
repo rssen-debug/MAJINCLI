@@ -43,6 +43,6 @@ Scoring uses only `VERIFIED` criteria in `ACCEPTANCE_MATRIX.json`; `IN_PROGRESS`
 - No V3 realtime voice, browser/desktop control, provider UI, adaptive goal engine, multi-agent runtime or full memory experience.
 - Windows install/voice/desktop tests and real browser acceptance are not available in this sandbox.
 - Package metadata says Node `>=20.11.0`, while some installed dependencies request Node `>=22`; reconcile before supported-release claims.
-- Remote `v3/main` and push are unverified. Do not treat the local branch/commit as published.
+- Remote `v3/main` is not published; push attempt was blocked by missing GitHub authentication. Do not treat the local branch/commits as published.
 
 See `ACCEPTANCE_MATRIX.json` for criterion-level status/evidence and `TEST_EVIDENCE.md` for exact commands/results.
