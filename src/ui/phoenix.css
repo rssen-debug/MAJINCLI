@@ -609,3 +609,7 @@ body.simple .msg .appr { box-shadow: inset 3px 0 0 var(--warn); }
 @media (prefers-reduced-motion:reduce) {
   body.simple .msg .appr button { animation:none!important; }
 }
+
+/* Aurora: keep approval actions usable when keyboard focus moves across choices. */
+body.simple .msg .appr:focus-within { border-color:var(--warn); }
+@media (max-width:560px) { body.simple .msg .appr button { line-height:1.4; } }
