@@ -7,7 +7,7 @@ export function compactBrowserText(input,{maxChars=2600}={}){
   const rows=String(input||'').split(/\r?\n/).map(s=>s.replace(/\s+/g,' ').trim()).filter(Boolean);
   const unique=[];const seen=new Set();
   for(const row of rows){
-    const key=row.toLocaleLowerCase().slice(0,180);
+    const key=row.toLocaleLowerCase();
     if(!key||seen.has(key))continue;
     seen.add(key);unique.push(row);
   }
