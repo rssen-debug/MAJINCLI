@@ -641,3 +641,6 @@ body.simple .msg .appr :is(button,a):focus-visible { outline-offset:3px; }
  body.simple .msg .appr { display:flow-root; }
  body.simple .msg .appr :is(button,a) { max-width:100%; overflow-wrap:anywhere; }
 }
+
+/* Aurora: prevent accidental double-taps during approvals on touch screens. */
+@media (pointer:coarse) { body.simple .msg .appr :is(button,a) { min-height:44px; touch-action:manipulation; } }
