@@ -91,7 +91,7 @@ export class Agent {
       } catch { return null; }
       // Reject stale/mismatched journals instead of importing another session's plan.
       if (data?.session !== session) return null;
-      if (Array.isArray(data.plan) && data.plan.length) {
+      if (Array.isArray(data.plan) && data.plan.length && data.plan.length <= 1000) {
         this.plans.set(session, data.plan);
         return data.plan;
       }
