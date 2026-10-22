@@ -90,3 +90,9 @@ test('recovery preview requires explicit risk and status metadata',()=>{
   assert.equal(recoveryPreview({schema:1,id:'valid',state:{steps:[step]}}).reason,'invalid-step');
  }
 });
+
+test('recovery rejects unknown risk and status values',()=>{
+ for(const step of [{id:'a',risk:'surprise',status:'pending'},{id:'b',risk:'read',status:'magic'}]) {
+  assert.equal(recoveryPreview({schema:1,id:'valid',state:{steps:[step]}}).reason,'invalid-step-metadata');
+ }
+});
