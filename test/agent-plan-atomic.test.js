@@ -119,3 +119,19 @@ test('agent derives a distinct plan journal path from session history',()=>{
  assert.ok(file === null || file.endsWith('.plan.json'));
  assert.ok(file === null || !file.endsWith('.jsonl'));
 });
+
+test('oversized plan is rejected before overwriting an existing valid journal', t => {
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'majin-plan-size-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const agent=Object.create(Agent.prototype);
+ agent.plans=new Map([['demo',[{id:'ok'}]]]);
+ agent.bus={emit(){}};
+ agent.planPath=()=>path.join(dir,'demo.plan.json');
+ assert.equal(agent.persistPlan('demo'),true);
+ const previous=fs.readFileSync(agent.planPath(),'utf8');
+ agent.plans.set('demo',[{id:'oversized',note:'x'.repeat(1024*1024)}]);
+ assert.equal(agent.persistPlan('demo'),false);
+ assert.equal(agent.lastPlanPersistError.code,'EPLAN_TOO_LARGE');
+ assert.equal(fs.readFileSync(agent.planPath(),'utf8'),previous);
+ assert.equal(fs.readdirSync(dir).length,1);
+});
