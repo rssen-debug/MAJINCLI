@@ -519,6 +519,16 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="stalled"] #work-progress-symbol,
 #composer #work-progress[data-phase="problem"] #work-progress-symbol{color:#ffabb4}
 @media(prefers-reduced-motion:reduce){#composer #work-progress-symbol{transition:none}}
+/* Round improvement: a single quiet light-trail INSIDE the composer during work.
+   No modal, no extra panels. Respects reduced-motion preferences. */
+#composer{position:relative;overflow:hidden}
+#composer::after{content:"";pointer-events:none;position:absolute;left:8%;right:8%;bottom:0;height:2px;border-radius:99px;opacity:0;transform:scaleX(.14);transform-origin:left center;background:linear-gradient(90deg,transparent,rgba(252,143,231,.84),rgba(154,113,255,.88),transparent);transition:opacity .24s ease}
+body:has(#work-progress:not([hidden])) #composer::after{opacity:.7;animation:majin-work-trail 2.7s ease-in-out infinite alternate}
+body:has(#work-progress[data-phase="stalled"]:not([hidden])) #composer::after,
+body:has(#work-progress[data-phase="problem"]:not([hidden])) #composer::after{background:linear-gradient(90deg,transparent,rgba(255,160,160,.9),transparent);animation-duration:4s}
+body:has(#work-progress[data-phase="verified"]:not([hidden])) #composer::after{background:linear-gradient(90deg,transparent,rgba(153,242,202,.9),transparent);animation-duration:1.6s}
+@keyframes majin-work-trail{0%{transform:translateX(-23%) scaleX(.14)}100%{transform:translateX(23%) scaleX(.95)}}
+@media(prefers-reduced-motion:reduce){body:has(#work-progress:not([hidden])) #composer::after{animation:none;transform:none;opacity:.4}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
