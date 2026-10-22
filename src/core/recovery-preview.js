@@ -17,6 +17,8 @@ export function recoveryPreview(checkpoint) {
     if (!id || seen.has(id)) return { ready:false, reason:'invalid-or-duplicate-step-id', steps:[] };
     seen.add(id);
     const decision = recoveryDecision(step);
+    // Never trust an unrecognized policy verdict as authorization to resume.
+    if (!['resume', 'skip', 'inspect', 'approval'].includes(decision?.action)) return { ready:false, reason:'unknown-recovery-action', steps:[] };
     results.push({ index, id, action: decision.action, reason: decision.reason });
   }
   const counts = { resume:0, skip:0, inspect:0, approval:0 };
