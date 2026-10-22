@@ -1,6 +1,6 @@
 # MAJIN V2 — LATEST HANDOFF (owner-facing, 2026-10-21)
 
-V2 HEAD (v2/main): 180553df (studio consent UI: gate-truthful panel, Scoped Grant + Irreversibility Gate, live SSE consent-loop) ← 66e0ea2d (operator writes API) ← 126a2b4b (studio scaffold) ← 081384a5 (audit chain)
+V2 HEAD (v2/main): 2cc6777f (opencode provider profiles: V1 live-proven session-header + model list reused, env-only key, PROFILE_KEY_MISSING refusal pre-network) ← 180553df (studio consent UI) ← 66e0ea2d (operator writes) ← 126a2b4b (studio scaffold)
 
 COMPLETED (this working day, verified):
 - v2/main created from V1 tip 282a8ff; V1 untouched (policy: only v2/* branches carry V2 code)
