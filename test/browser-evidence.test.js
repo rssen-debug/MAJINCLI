@@ -206,3 +206,14 @@ test('visual result verification feedback stays within existing composer',()=>{
  assert.match(html,/majin-proof-breathe/);
  assert.match(html,/prefers-reduced-motion:reduce/);
 });
+
+test('strict criteria reject coerced counts and URL control characters',()=>{
+ for(const count of [true,{},[],[1]]) assert.equal(verificationCriteria({selector:'.result',count}).ok,false);
+ assert.equal(verificationCriteria({selector:'.result',count:1}).ok,true);
+ for(const urlPath of ['/next\nstep','/next\tstep']) assert.equal(verificationCriteria({urlPath}).ok,false);
+});
+test('strict criteria do not accept toString object as boolean',()=>{
+ const criteria=verificationCriteria({selector:'#send',present:{toString:()=> 'false'}});
+ assert.equal(criteria.present,null);
+ assert.equal(verificationCriteria({selector:'#send',present:false}).present,false);
+});
