@@ -487,14 +487,24 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const sel = JSON.stringify(String(selector));
       const val = JSON.stringify(String(value ?? ''));
       const r = await b.eval(`(() => {
-        const el = document.querySelector(${sel});
+        let nodes;
+        try { nodes = document.querySelectorAll(${sel}); }
+        catch { return { found: false, invalidSelector: true }; }
+        if (nodes.length > 1) return { found: true, blocked: 'ambiguous_target', count: nodes.length };
+        const el = nodes[0];
         if (!el) return { found: false };
         // A checkbox/radio/button is an ACTION, not a value to overwrite.
         // Assigning input.value can corrupt a form submission without checking.
         const inputType = String(el.getAttribute('type') || '').toLowerCase();
-        if (['checkbox', 'radio', 'submit', 'button', 'reset'].includes(inputType)) {
+        if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) ||
+            ['checkbox', 'radio', 'submit', 'button', 'reset', 'file', 'hidden', 'password'].includes(inputType)) {
           return { found: true, wrongType: inputType };
         }
+        const style = getComputedStyle(el), rect = el.getBoundingClientRect();
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0 || !rect.width || !rect.height)
+          return {found:true,blocked:'hidden'};
+        if (el.disabled || el.readOnly || el.matches('[aria-disabled="true"]') || el.closest('[inert]'))
+          return {found:true,blocked:'disabled_or_readonly'};
         el.focus();
         const proto = el.tagName === 'SELECT' ? window.HTMLSelectElement.prototype : (el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype);
         const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
@@ -510,12 +520,22 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           hint: 'Use EXACT selectors from these live controls. Checkboxes and buttons need browser.click, not browser.fill. Do not reopen the page to guess fields.' + formatControlHints(controls),
         } };
       }
+      if (r.blocked) return {ok:false,error:{code:r.blocked,
+        message:r.blocked==='ambiguous_target' ? 'Selector matched '+r.count+' fields; nothing changed. Narrow the selector.' : 'Target is '+r.blocked+'; nothing changed.'}};
       if (r.wrongType) {
         return { ok: false, error: { code: 'wrong_control_type', message: `browser.fill cannot set a ${r.wrongType}`,
           hint: 'Use browser.click with this exact selector and confirm the checked result. The control was not modified.' } };
       }
       if (!r.stuck) return { ok: false, error: { code: 'value_rejected', message: 'the page reverted the value immediately — the field may have javascript validation', hint: 'type slower substrings or confirm the field with browser.shot' } };
-      return { ok: true, result: 'filled — browser confirmed input retained (value hidden)', meta: { retained: true, valueHidden: true }, summary: 'field filled and verified' };
+      await new Promise(resolve => setTimeout(resolve, 120));
+      const retained = await b.eval(`(() => {
+        let nodes; try { nodes=document.querySelectorAll(${sel}); } catch { return false; }
+        return nodes.length === 1 && nodes[0].value === ${val};
+      })()`).catch(() => false);
+      if (!retained) return {ok:false,error:{code:'value_reverted',
+        message:'Field initially accepted input but the app reverted it after its framework update. Re-observe before retrying.'},
+        meta:{retained:false,valueHidden:true}};
+      return { ok: true, result: 'filled — value retained after page update (value hidden)', meta: { retained: true, valueHidden: true, verified: true }, summary: 'field value verified' };
     },
   }),
 
