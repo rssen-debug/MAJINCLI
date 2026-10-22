@@ -1,6 +1,6 @@
 # MAJIN V2 — LATEST HANDOFF (owner-facing, 2026-10-21)
 
-V2 HEAD (v2/main): runbook-windows merged (operator runbook + doc-consistency guard: docs kan ej driftra från CLI) ← b11c6134 (JCS interop) ← 641e69e5 (voice panel) ← 0e3a44b5 (goal runs)
+V2 HEAD (v2/main): 91be19d ← RELEASE v2.0.0-godmode tagged+published (cold-clone gate: 1137/1120/0/17 green + smoke pass) ← f380c399 (runbook + doc-guard) ← b11c6134 (JCS) ← 641e69e5 (voice)
 
 COMPLETED (this working day, verified):
 - v2/main created from V1 tip 282a8ff; V1 untouched (policy: only v2/* branches carry V2 code)
