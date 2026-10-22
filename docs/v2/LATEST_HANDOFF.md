@@ -1,6 +1,6 @@
 # MAJIN V2 — LATEST HANDOFF (owner-facing, 2026-10-21)
 
-V2 HEAD (v2/main): models-refresh merged (live registry, honest STALE, drift vs static live-proven) ← 935822a6 (studio bundle panel) ← 73d8e80a (audit bundle) ← 97c839ec (safe-exec)
+V2 HEAD (v2/main): deps-guard merged (journal≡manifest, exact pins — self-bite fixed, ceiling ≤8) ← defd17a6 (models refresh, live 36) ← 935822a6 (studio bundle) ← 73d8e80a (audit bundle)
 
 COMPLETED (this working day, verified):
 - v2/main created from V1 tip 282a8ff; V1 untouched (policy: only v2/* branches carry V2 code)
