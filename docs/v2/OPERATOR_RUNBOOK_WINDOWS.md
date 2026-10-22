@@ -199,3 +199,5 @@ vägran är testbevisad (stub-servern såg exakt 0 anrop).
 | Live-GUI-QA | NOT_TESTED — runner offline än så länge | starta runnern (steg 1) |
 
 Rapportera avvikelser rakt: `node bin/majin-v2.mjs --telemetry-report .\v2-telemetry --days 1` och kedjan säger sanningen om vad som hände.
+
+Modellistan: `node bin/majin-v2.mjs --models-refresh` (kräver nyckeln i env) lagrar dagens sanningslista lokalt; `node bin/majin-v2.mjs --models` visar den med ärlig FRESH/STALE-märkning och drift mot den statiska profilen.
