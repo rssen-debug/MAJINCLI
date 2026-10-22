@@ -71,6 +71,7 @@ export function createStudioServer({
   enableGoals = null,    // { workspaceDir, provider? } — objective runs; OFF unless explicitly enabled
   voice = null,          // { outDir, tts?, stt? } — speak/listen surfaces; OFF unless explicitly enabled
   enableBundle = null,   // { dir } — evidence dossier export/verify; OFF unless explicitly enabled
+  enableDoctor = null,   // { runnerUrl?, whisperBin?, studioPort? } — preflight dogfood in the UI; OFF unless explicitly enabled
 } = {}) {
   if (!bus) throw new Error('studio requires an EventBus');
   if (!telemetryDir) throw new Error('studio requires telemetryDir');
@@ -86,7 +87,7 @@ export function createStudioServer({
   if (voice && !voice.outDir) throw new Error('voice requires outDir');
   if (enableBundle && !enableBundle.dir) throw new Error('bundle surface requires a FIXED dir (client-supplied destinations are never honoured)');
   const bundle = enableBundle ? { dir: enableBundle.dir } : null;
-  if (page == null) page = renderStudioPage({ enableWrites, enableGoals: !!enableGoals, enableVoice: !!voice, enableBundle: !!bundle });
+  if (page == null) page = renderStudioPage({ enableWrites, enableGoals: !!enableGoals, enableVoice: !!voice, enableBundle: !!bundle, enableDoctor: !!enableDoctor });
 
   const clients = new Set();
   const unsubs = STUDIO_EVENT_NAMES.map((name) =>
@@ -332,6 +333,22 @@ export function createStudioServer({
         goals.busy = false;
         goals.current = null;
       }
+      return;
+    }
+
+    if (url.pathname === '/api/doctor/run' && req.method === 'POST') {
+      if (!enableDoctor) {
+        json(res, 403, { error: 'doctor panel disabled — start with --enable-doctor-panel. disabled means NO probe (honest gate)', cls: 'SURFACE_DISABLED' });
+        return;
+      }
+      const { runDoctor } = await import('../ops/doctor.js');
+      const report = await runDoctor({
+        paths: { telemetry: telemetryDir, audit: auditDir, bin: 'bin/majin-v2.mjs' },
+        runnerUrl: enableDoctor.runnerUrl || null,
+        whisperBin: enableDoctor.whisperBin || null,
+        studioPort: enableDoctor.studioPort || 0,
+      });
+      json(res, 200, { ok: true, verdict: report.verdict, summary: report.summary, checks: report.checks });
       return;
     }
 

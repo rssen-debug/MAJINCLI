@@ -136,6 +136,11 @@ Studio-varianten: lägg till `--bundle-dir .\v2-dossier` i studio-kommandot →
 "Evidence dossier"-panelen får Export/Verify-knappar (samma API:er, samma
 vägransklasser, destinationen kan aldrig styras av klienten).
 
+Doctor-panelen i Studio: lägg till `--enable-doctor-panel` (ev. med
+`--runner-url http://127.0.0.1:PORT/health` och `--doctor-whisper-bin <sökväg>`)
+→ samma preflight som CLI:n, körbar med knapp; nyckeln renderas bara som
+fingeravtryck.
+
 ## 4. Audit-spår: verifiera, signera, bevittna
 
 Kedjan bevisar intern konsistens; **anchors** stänger hålet "hel kedjan
