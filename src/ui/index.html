@@ -648,6 +648,12 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 @keyframes majin-diagnose-breathe{50%{transform:scale(.7);opacity:.55}}
 @keyframes majin-diagnose-turn{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="diagnose"] .pulse,#composer #work-progress[data-phase="diagnose"] #work-progress-symbol{animation:none!important}}
+/* A single quiet mauve proof shimmer in the EXISTING composer line.
+   Open shadow-root verification is distinct from ordinary page clicks. */
+#composer #work-progress[data-phase="shadow-verified"]{color:#d8c4ff;border-top-color:rgba(172,135,242,.3)}
+#composer #work-progress[data-phase="shadow-verified"] .pulse{background:#b9a1ff;box-shadow:0 0 10px rgba(176,126,253,.55);animation:none}
+#composer #work-progress[data-phase="shadow-verified"] #work-progress-symbol{color:#e3cfff;filter:drop-shadow(0 0 5px rgba(185,133,255,.7))}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="shadow-verified"] *{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
