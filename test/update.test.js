@@ -290,6 +290,7 @@ test('the silent-update relaunch is a real watchdog script, byte-verified', () =
   assert.match(script, /-ArgumentList 'start'/, 'the relaunched app opens its visible user window');
   assert.doesNotMatch(script, /--no-window/, 'update must not silently relaunch headless');
   assert.match(script, /update-relaunch\.log/, 'every step is logged — a failed relaunch must be debuggable');
+  assert.match(script, /New-Item -Path \$logDir/, 'create relaunch log directory before writing');
 });
 
 test('Windows updater acknowledges only a successfully spawned installer', { skip: process.platform !== 'win32' }, async (t) => {
