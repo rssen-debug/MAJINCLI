@@ -1,0 +1,31 @@
+name: V1 Quality Lab
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Quality lab (real browser + mock agent + security regression)
+        run: node scripts/quality-lab.mjs
+      - name: Preserve quality evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: majin-v1-quality-report
+          path: work/quality/
+          retention-days: 7
+          if-no-files-found: warn
