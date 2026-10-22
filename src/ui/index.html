@@ -413,6 +413,13 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
   #composer #work-progress[data-phase="verified"] .pulse::before,
   #composer #work-progress[data-phase="problem"] .pulse::before{animation:none}
 }
+/* A quiet, unmistakable signal when MAJIN is revising its approach.
+   Lives in the existing composer; no new panel or overlay. */
+#composer #work-progress[data-phase="recover"]{color:#ecc2ff;border-top-color:rgba(214,139,245,.38)}
+#composer #work-progress[data-phase="recover"] .pulse{background:#d5a5ff;box-shadow:0 0 0 4px rgba(177,114,246,.12);animation:majin-rethink 1.6s ease-in-out infinite}
+#composer #work-progress[data-phase="recover"]::after{background:linear-gradient(90deg,transparent,#b87cff,transparent);animation-duration:1.4s}
+@keyframes majin-rethink{50%{opacity:.5;transform:scale(.72);box-shadow:0 0 0 7px rgba(177,114,246,0)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recover"] .pulse{animation:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>

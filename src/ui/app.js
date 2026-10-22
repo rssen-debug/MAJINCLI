@@ -239,6 +239,12 @@ function onEvent(ev) {
         workPulse('Click blocked · checking page overlay');
       } else workPulse(ev.ok?'Tool finished · checking result':'Tool failed · adjusting approach');
     }
+    else if (ev.type === 'agent_recovery') {
+      const stage = ev.phase === 'blocked' ? 'Stopped a repeating action' : 'Switching strategy after a failed action';
+      const tool = String(ev.tool || '').replace(/[^a-zA-Z0-9._-]/g,'').slice(0,48);
+      workPulse(tool ? stage + ' · ' + tool : stage);
+      const bar=$('work-progress');if(bar)bar.dataset.phase=ev.phase==='blocked'?'problem':'recover';
+    }
     else if (ev.type === 'verify' || ev.type === 'verification') workPulse('Verifying the real result');
     else if (ev.type === 'thinking') workPulse('Thinking through the next step');
     else if (ev.type === 'delta') workPulse('Writing the response');

@@ -179,8 +179,14 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       return { text: answer || '(time-boxed turn)', steps, toolLog, usage: tally, escalated, stopReason: 'turn_timeout', blocked: 'the turn exceeded its time box — split the work or raise agent.maxTurnSec deliberately' };
     }
     if (wdRepeatBlocked) {
-      bus.warn('loop.repeat_block', { label, steps });
-      return { text: answer || '(blocked: repeated identical tool call — see toolLog)', steps, toolLog, usage: tally, escalated, stopReason: 'repeat_block', blocked: 'no progress: identical tool call repeated >= maxRepeatCalls' };
+      const last = [...toolLog].reverse().find((entry) => entry.ok === false);
+      const detail = last?.tool ? 'Last failing tool: ' + last.tool + '.' : 'No failing tool recorded.';
+      onEvent({ type: 'agent_recovery', label, step: steps, phase: 'blocked',
+        tool: last?.tool || null, message: 'Repeated action blocked safely. ' + detail });
+      bus.warn('loop.repeat_block', { label, steps, tool: last?.tool || null });
+      return { text: answer || 'MAJIN stopped a repeated action. ' + detail + ' Review the activity log to choose a different approach.',
+        steps, toolLog, usage: tally, escalated, stopReason: 'repeat_block',
+        blocked: 'no progress: identical tool call repeated >= maxRepeatCalls' };
     }
     if (signal?.aborted) {
       bus.warn('loop.aborted', { label, steps });
