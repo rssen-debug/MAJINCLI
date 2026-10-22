@@ -9,7 +9,7 @@ function classify(input,busy){
  if(interrupt.test(s))return {kind:'cancel',text:''};
  // Strip conversational interjections only when immediately followed by
  // a clear replacement action, never from an ordinary mention of "nej".
- const prefix=/^(?:(?:nej[!,.]?\s*)?(?:vänta[!,.]?\s*)?|istället[!,.]?\s*|wait[!,.]?\s*)/i;
+ const prefix=/^(?:istället[!,.]?\s*|wait[!,.]?\s*|(?:nej[!,.]?\s*)?vänta[!,.]?\s*|nej[!,.]?\s*)/i;
  const action=/^(?:gör|öppna|sök|visa|skapa|bygg|hitta|gå till|open|search|show|create|build)\b/i;
  const remaining=raw.replace(prefix,'').trim();
  const wasCorrection=remaining!==raw && action.test(remaining);
