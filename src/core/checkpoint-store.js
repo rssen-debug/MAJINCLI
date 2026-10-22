@@ -16,6 +16,7 @@ export function saveCheckpoint(root, id, state) {
   fs.mkdirSync(root, { recursive: true, mode: 0o700 });
   const tmp = path.join(root, '.checkpoint-' + crypto.randomUUID() + '.tmp');
   const payload = JSON.stringify({ schema: 1, id, savedAt: new Date().toISOString(), state });
+  if (typeof payload !== 'string') throw new Error('Checkpoint serialization failed');
   if (Buffer.byteLength(payload) > 1024 * 1024) throw new Error('Checkpoint too large');
   try {
     fs.writeFileSync(tmp, payload, { flag: 'wx', mode: 0o600 });
@@ -28,6 +29,9 @@ export function saveCheckpoint(root, id, state) {
 export function loadCheckpoint(root, id) {
   const file = checkpointPath(root, id);
   let data;
+  const stat = (() => { try { return fs.statSync(file); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } })();
+  if (!stat) return null;
+  if (!stat.isFile() || stat.size > 1024 * 1024) throw new Error('Invalid checkpoint file size');
   try { data = JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (e) { if (e.code === 'ENOENT') return null; throw e; }
   if (data?.schema !== 1 || data?.id !== id || !data?.state || typeof data.state !== 'object' || Array.isArray(data.state)) throw new Error('Invalid checkpoint schema');
