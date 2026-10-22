@@ -14,7 +14,8 @@ function hashPage({url='',title='',text='',controls=[]}={}){
   h.update(salt);
   h.update(JSON.stringify([
     String(url).slice(0,1500),String(title).slice(0,300),
-    String(text).slice(0,12000),
+    // Include bounded tail evidence, since successful SPAs append status below long lists.
+    String(text).slice(0,9000),String(text).slice(-3000),
     Array.isArray(controls)?controls.slice(0,30).map(c=>[
       String(c.selector||'').slice(0,100),
       String(c.label||'').slice(0,100),Boolean(c.checked)
