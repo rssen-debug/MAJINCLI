@@ -12,7 +12,7 @@
 | MAJIN V2 | `origin/v2/main` | `b2533097ca3c744fa7e9b152b221a97186507835` | `git ls-remote`, then `git rev-parse origin/v2/main` |
 | V3 starting point | local `v3/main` | `b2533097ca3c744fa7e9b152b221a97186507835` | Branch created from `origin/v2/main`; no remote V3 ref was present at inspection |
 
-V1 and V2 refs are not V3 write targets. They were not checked out for editing. The V3 implementation adds new files only; it does not modify a protected branch.
+V1 and V2 refs are not V3 write targets; work remains on the separate `v3/main` branch. The initial vertical slice added new V3 files. This Node-floor follow-up also updates shared package/install/startup policy and the V2 Doctor's runtime check on `v3/main`; it does not switch to or alter the protected V1/V2 refs.
 
 ## V1 inventory and classification
 

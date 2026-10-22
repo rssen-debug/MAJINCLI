@@ -64,4 +64,4 @@ V3 imports and composes `src/v2/runtime/goal.js` and `src/v2/runtime/verifiers.j
 - Goal persistence must be fault-injected and tested on Windows (including concurrent checkpoints) before it is used as a release durability claim.
 - The server is a development preview, not yet part of the CLI/installer/update flow.
 - A static/source-level UI test does not establish rendered browser accessibility or visual quality; use the existing Playwright tooling for that acceptance.
-- Node package engine metadata and some installed dependency engine declarations disagree; resolve before setting V3's supported Node floor.
+- The supported Node floor is now `>=22.0.0`, matching installed dependency engine declarations. The runtime guard and Linux Node 22 tests pass; Windows installer execution remains unverified.

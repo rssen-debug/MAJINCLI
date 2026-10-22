@@ -26,4 +26,4 @@ Decision principle: reuse verified in-repository components first. External sour
 - **Reused internal V2 code:** durable Goal/state/receipt model and independent V2 file verifier.
 - **Reused standard library:** `node:fs`, `node:path`, `node:crypto`, `node:http`, browser `fetch`.
 - **New code is an adapter and a preview UI, not copied upstream source.**
-- Rollback is limited to `src/v3/`, `test/v3-vertical-slice.test.js` and `docs/v3/`; V1/V2 implementation files remain unchanged.
+- V3 runtime-floor work is a separate compatibility change touching package/lock metadata, shared installer/startup surfaces, the V2 Doctor's Node check, V3 runtime/tests/CI and evidence docs. Revert only its dedicated commit on `v3/main` if necessary; never move or reset protected refs. V2 Goal/verifier implementations remain unchanged.

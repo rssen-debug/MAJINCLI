@@ -22,5 +22,5 @@
 - The UI is a local proof surface, not the finished conversational product. The first task requires the user to provide content explicitly; it does not generate content with a model.
 - Browser-rendered accessibility and visual behavior were not run in a browser during this round. Static/source tests are not equivalent to visual/assistive-technology acceptance.
 - Real Windows desktop/voice/browser validation was unavailable in this Linux sandbox.
-- `package.json` says Node >=20.11, but several installed dependency declarations require Node >=22. This must be resolved before release support is promised.
+- Node `>=22.0.0` is aligned across package/lock, install preflights, doctor, V3 runtime and V3 CI. The clean locked install, full suite, syntax scan and i18n scan pass on Node `22.23.4`. Windows installer/doctor behavior has not been executed on a Windows host, and the GitHub workflow itself has not run remotely.
 - Push was attempted without credentials and failed because Git could not read a GitHub username with terminal prompts disabled. Remote `v3/main` is still not published. This environment has no GitHub connector. Do not use the chat-exposed credentials; revoke/rotate them and use a secure auth path.

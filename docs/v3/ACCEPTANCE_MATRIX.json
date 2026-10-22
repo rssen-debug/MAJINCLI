@@ -19,9 +19,9 @@
     "windows_release_and_packaging": 3
   },
   "total_required_weight": 100,
-  "verified_points": 18,
-  "remaining_points": 82,
-  "completion_percent": "18.00",
+  "verified_points": 19,
+  "remaining_points": 81,
+  "completion_percent": "19.00",
   "criteria": [
     {
       "id": "SRC-01",
@@ -30,7 +30,8 @@
       "weight": 2,
       "status": "VERIFIED",
       "relevant_commits": [
-        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05",
+        "fcac710a2dd571228f01d3ddc5ed16697999ea2f"
       ],
       "test_evidence": [
         "docs/v3/BASELINE.md: exact SHAs and branch ancestry",
@@ -40,7 +41,7 @@
       "blockers": [
         "Remote V3 ref is not established until a safe authorized push succeeds"
       ],
-      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      "last_verified_sha": "fcac710a2dd571228f01d3ddc5ed16697999ea2f"
     },
     {
       "id": "SRC-02",
@@ -67,15 +68,16 @@
       "weight": 2,
       "status": "VERIFIED",
       "relevant_commits": [
-        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05",
+        "fcac710a2dd571228f01d3ddc5ed16697999ea2f"
       ],
       "test_evidence": [
         "docs/v3/ARCHITECTURE.md",
-        "V3 source imports V2 Goal and runVerifier; no V1/V2 implementation files changed"
+        "V3 source imports V2 Goal and runVerifier; V2 Goal/verifier implementations remain unchanged. The Node-floor follow-up changes only the shared V2 doctor runtime check, on v3/main."
       ],
       "validation_environment": "Source-level inspection and git diff boundary check on Linux",
       "blockers": [],
-      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      "last_verified_sha": "fcac710a2dd571228f01d3ddc5ed16697999ea2f"
     },
     {
       "id": "ARC-02",
@@ -502,19 +504,20 @@
       "weight": 2,
       "status": "VERIFIED",
       "relevant_commits": [
-        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05",
+        "fcac710a2dd571228f01d3ddc5ed16697999ea2f"
       ],
       "test_evidence": [
-        "npm test: 1,183 passed, 0 failed, 19 skipped of 1,202",
-        "npm run check: 450/450 files parse cleanly",
-        "npm run i18n: 0 Swedish literals in 235 files",
-        "git diff --check: clean"
+        "Node v22.23.4 npm test: 1,186 passed, 0 failed, 19 skipped of 1,205 total",
+        "Node v22.23.4 npm run check: 452/452 files parse cleanly",
+        "Node v22.23.4 npm run i18n: 0 Swedish literals in 236 files",
+        "git diff --check: clean after evidence docs whitespace cleanup"
       ],
       "validation_environment": "Node v20.20.2, npm 10.8.2, sandbox Linux",
       "blockers": [
         "19 environment-gated tests are not real Windows, microphone or live-provider acceptance"
       ],
-      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      "last_verified_sha": "fcac710a2dd571228f01d3ddc5ed16697999ea2f"
     },
     {
       "id": "VER-03",
@@ -561,20 +564,22 @@
     {
       "id": "PKG-03",
       "category": "windows_release_and_packaging",
-      "description": "Documentation, CI, dependency notices, SBOM and release acceptance report accurately match the verified V3 feature set.",
+      "description": "Declared Node floor matches production dependency engines and is consistently enforced by package/lock, V3 runtime, Windows preflights, doctor and V3 CI with a regression test.",
       "weight": 1,
-      "status": "IN_PROGRESS",
+      "status": "VERIFIED",
       "relevant_commits": [
-        "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+        "fcac710a2dd571228f01d3ddc5ed16697999ea2f"
       ],
       "test_evidence": [
-        "Initial docs/v3 audit, research, dependency and license records exist"
+        "test/v3-runtime-floor.test.js verifies Node >=22 package/lock/dependency-engine agreement and runtime rejection of Node 20/21",
+        "The same regression test checks V3 entry points, Windows preflights, doctor, docs and the Node 22 V3 workflow",
+        "Node v22.23.4: clean npm ci completed without EBADENGINE; full suite 1,186 passed, 0 failed, 19 skipped; static checks passed"
       ],
-      "validation_environment": "Documentation/source inspection only; no release CI/SBOM run",
+      "validation_environment": "Linux sandbox, Node v22.23.4, npm 10.8.2; platform scripts contract-tested; no Windows host or remote Actions run",
       "blockers": [
-        "Public V3 release workflow, SBOM and complete acceptance evidence remain outstanding"
+        "Actual Windows installer/doctor execution and GitHub-hosted workflow remain unverified; tracked by platform/release gates"
       ],
-      "last_verified_sha": "6b27fa6d93ce95d113569a408174ea4bfcbaaa05"
+      "last_verified_sha": "fcac710a2dd571228f01d3ddc5ed16697999ea2f"
     }
   ]
 }

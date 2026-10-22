@@ -1,10 +1,10 @@
 # MAJIN V3 dependency decisions
 
-**Round:** initial vertical slice · 2026-10-22.
+**Round:** initial vertical slice plus Node 22 runtime alignment · 2026-10-22.
 
 ## Added in V3
 
-**None.** V3 uses Node built-ins (`fs`, `path`, `crypto`, `http`) and internal V2 modules (`Goal`, `runVerifier`). The browser client uses native `fetch`. No package manifest or lockfile change is required for this slice.
+No new production package was added. V3 uses Node built-ins (`fs`, `path`, `crypto`, `http`) and internal V2 modules (`Goal`, `runVerifier`); the browser client uses native `fetch`. The root package manifest/lock engine metadata was updated to Node `>=22.0.0` because required locked dependencies declare Node `>=22`. A V3 runtime contract test, Windows guards/docs and a read-only V3 workflow accompany that compatibility change.
 
 | Requirement | Reused component | Why it is sufficient now | License / notice |
 |---|---|---|---|
@@ -25,11 +25,8 @@
 
 Details and source links: [`UPSTREAM_RESEARCH.md`](./UPSTREAM_RESEARCH.md).
 
-## Runtime compatibility blocker
+## Runtime compatibility decision — Node 22
 
-The repository declares Node `>=20.11.0`, while `npm ci` on Node `20.20.2` reported engine requirements `>=22` for several installed packages (including `canonicalize`, `p-queue`, and transitive packages). The current tests pass on Node 20 but this is not proof of supported runtime compatibility. Before a V3 release, either:
+The installed lockfile declares Node `>=22` for `canonicalize`, `p-queue` and a transitive package, so V3 now declares `>=22.0.0` rather than advertise a Node 20 floor. The floor is aligned across `package.json`, `package-lock.json`, Windows install/build preflights, the doctor, V3 runtime guards, README/Windows docs and the new read-only V3 CI workflow. The bundled setup selects Node `22.23.2`, matching the repository's established Windows build line.
 
-1. raise the supported runtime/install requirement to Node 22 and validate Windows packaging, or
-2. select compatible dependency versions and rerun the full test, security and packaging suites on Node 20.
-
-Do not silently change the engine floor without updating the installer, docs, CI and clean-install tests.
+Regression coverage checks the lockfile/manifest floor, required dependency engines, runtime rejection of Node 20/21, and alignment across V3 entry points, installers, doctor, documentation and CI. Under Node `22.23.4`, the clean locked install completed without `EBADENGINE`, the full suite passed (1,186 passed, 0 failed, 19 skipped), `npm run check` parsed 452/452 files, and i18n found zero Swedish literals in 236 files. The install used `--ignore-scripts`; npm emitted a deprecated-package notice and retried a corrupt-tarball warning, then exited successfully. Windows behavior and the remote GitHub workflow remain unverified. Older V2 dependency notes and `BASELINE.md` preserve the initial Node 20 observation as historical evidence; no V1/V2 protected branch was edited.

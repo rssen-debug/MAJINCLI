@@ -17,7 +17,7 @@ The initial `git ls-remote` found only `main` and `v2/main` among the requested 
 
 - V1 has the mature Node desktop/browser/tool/provider code under `src/core/` plus Windows install and release infrastructure.
 - V2 adds `src/v2/` goal, DAG, scheduler, receipts, verifiers, context/memory, provider profiles, voice adapters, safe execution, approvals, telemetry, audit and Studio surfaces.
-- `package.json` is MAJIN `2.0.0-alpha`; its `engines.node` says `>=20.11.0`. During `npm ci` on Node `v20.20.2`, installed packages emitted `EBADENGINE` warnings requiring Node `>=22` for `canonicalize`, `p-queue` and other transitive packages. The suite passed here, but the supported engine floor needs reconciliation.
+- At the initial V3 audit, `package.json` was MAJIN `2.0.0-alpha` with `engines.node >=20.11.0`; `npm ci` on Node `v20.20.2` emitted `EBADENGINE` warnings for locked dependencies requiring Node `>=22`. This historical mismatch was resolved in the Node 22 follow-up: current manifest/lock and runtime contract align at `>=22.0.0`; see `TEST_EVIDENCE.md`. The original baseline run still only establishes historical test behavior on Node 20.
 - No additional V3 dependency is introduced.
 
 ## Baseline test run (before V3 implementation)
