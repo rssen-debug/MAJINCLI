@@ -108,3 +108,15 @@ test('MAJIN progress uses a minimal animated thread that respects reduced motion
   assert.match(html, /data-phase="verified"/);
   assert.match(html, /prefers-reduced-motion:reduce/);
 });
+
+test('MAJIN distinguishes a browser click from a verified outcome in UI',async()=>{
+  const fs=await import('node:fs');
+  const tools=fs.readFileSync('src/core/tools/web.js','utf8');
+  const app=fs.readFileSync('src/ui/app.js','utf8');
+  const html=fs.readFileSync('src/ui/index.html','utf8');
+  assert.match(tools,/outcomeEvidence: proof\?\.ok \? 'postcondition' : 'action_only'/);
+  assert.match(tools,/OUTCOME NOT VERIFIED: call browser\.verify/);
+  assert.match(app,/Click sent · checking its effect/);
+  assert.match(app,/bar\.dataset\.phase=verified\?'verified':'action'/);
+  assert.match(html,/#composer #work-progress\[data-phase="action"\]/);
+});

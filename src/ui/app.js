@@ -232,7 +232,11 @@ function onEvent(ev) {
     else if (ev.type === 'step') workPulse('Step '+ev.step+'/'+ev.of+' · '+(ev.model||'model'));
     else if (ev.type === 'tool' || ev.type === 'tool_begin') workPulse('Using '+(ev.name||ev.tool||'a tool'));
     else if (ev.type === 'tool_result') {
-      if(ev.tool==='browser.verify' && ev.ok){
+      if(ev.tool==='browser.click' && ev.ok){
+        const verified=ev.meta?.verified===true;
+        workPulse(verified?'Click result verified':'Click sent · checking its effect');
+        const bar=$('work-progress');if(bar)bar.dataset.phase=verified?'verified':'action';
+      } else if(ev.tool==='browser.verify' && ev.ok){
         workPulse('Browser result verified');
         const bar=$('work-progress');if(bar)bar.dataset.phase='verified';
       } else if(ev.tool==='browser.elements' && ev.ok){
