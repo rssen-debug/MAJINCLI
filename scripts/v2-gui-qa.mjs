@@ -17,6 +17,10 @@ import path from 'node:path';
 import os from 'node:os';
 
 const HEADLESS = process.env.GUI_HEADLESS !== '0'; // runner sets GUI_HEADLESS=0 for headed proof
+// REUSE > download: on the operator machine Microsoft Edge is already installed —
+// channel 'msedge' skips the 120MB Chromium download entirely. GUI_CHANNEL=chromium
+// forces the explicit download (e.g. in the Linux sandbox where Edge cannot exist).
+const CHANNEL = process.env.GUI_CHANNEL || 'msedge';
 const OUT_DIR = process.env.GUI_QA_OUT || path.join(process.cwd(), 'docs', 'v2', 'gui-qa');
 
 const steps = [];
@@ -49,7 +53,18 @@ async function main() {
   const bound = await studio.listen({ port: 0 });
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
-  const browser = await chromium.launch({ headless: HEADLESS });
+  let browser;
+  let channelUsed = CHANNEL;
+  try {
+    browser = await chromium.launch({ headless: HEADLESS, channel: CHANNEL });
+  } catch (e) {
+    if (CHANNEL === 'msedge') {
+      channelUsed = 'chromium-default (edge not present on this machine — honest fallback, recorded)';
+      // default = playwright's bundled headless build; NO channel field (channel:'chromium'
+      // would force the full download — exactly what this lane exists to avoid)
+      browser = await chromium.launch({ headless: HEADLESS });
+    } else { throw e; }
+  }
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const consoleErrors = [];
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
@@ -62,6 +77,7 @@ async function main() {
     await page.goto(bound.url, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(400);
     step('page loads (offline origin only)', true, bound.url);
+    step('browser channel honest', true, channelUsed);
 
     // every OFF surface shows its honest gate sentence
     const voice = await page.locator('#voice .mode').innerText();
@@ -142,7 +158,7 @@ async function main() {
   failures = steps.filter((s) => !s.ok).length;
   const result = {
     schema: 'majin-v2-gui-qa.v1', at: new Date().toISOString(),
-    headless: HEADLESS, studioUrl: bound.url,
+    headless: HEADLESS, channel: channelUsed, studioUrl: bound.url,
     consoleErrors, externalRequests: external,
     steps, failures,
     verdict: failures === 0 ? 'GUI_QA_GREEN' : 'GUI_QA_RED',

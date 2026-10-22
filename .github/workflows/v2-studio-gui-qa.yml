@@ -36,23 +36,9 @@ jobs:
           npm ci --no-audit --no-fund
           if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
           Write-Host ("npm ci: {0:N1}s" -f $t.Elapsed.TotalSeconds)
-      - name: Cache Playwright browsers (the 120MB Chromium must not download every run)
-        id: pw-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/AppData/Local/ms-playwright
-          key: pw-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-      - name: Install Chromium for Playwright (cache-hit = seconds, miss = full download once)
-        shell: powershell
-        run: |
-          $t=[Diagnostics.Stopwatch]::StartNew()
-          if (Test-Path "$env:LOCALAPPDATA\ms-playwright") {
-            $existing=(Get-ChildItem "$env:LOCALAPPDATA\ms-playwright" -Directory).Name -join ','
-            Write-Host "existing browser dirs: $existing"
-          }
-          npx playwright install chromium
-          if ($LASTEXITCODE -ne 0) { throw 'playwright install failed' }
-          Write-Host ("playwright install: {0:N1}s" -f $t.Elapsed.TotalSeconds)
+      # REUSE: the operator machine already ships Microsoft Edge — Playwright drives it via
+      # channel 'msedge' (harness falls back to chromium honestly if Edge is absent).
+      # No 120MB browser download in this lane, by design.
       - name: Run the GUI-QA evidence harness against a real Studio instance
         shell: powershell
         env:
