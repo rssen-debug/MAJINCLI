@@ -448,3 +448,14 @@ body.simple .msg .appr button:focus-visible {
 @media(max-width:600px){
  body.simple .msg .appr button { min-height:44px; }
 }
+
+/* Aurora: show clearly when an action is disabled without visual noise. */
+body.simple .msg .appr button:disabled {
+ opacity:.5;
+ filter:grayscale(.2);
+ box-shadow:none!important;
+}
+@media (prefers-contrast:more) {
+ body.simple .msg .appr { border-width:2px; }
+ body.simple .msg .appr button:focus-visible { outline-width:3px; }
+}
