@@ -1,6 +1,6 @@
 # MAJIN V2 — LATEST HANDOFF (owner-facing, 2026-10-21)
 
-V2 HEAD (v2/main): 91be19d ← RELEASE v2.0.0-godmode tagged+published (cold-clone gate: 1137/1120/0/17 green + smoke pass) ← f380c399 (runbook + doc-guard) ← b11c6134 (JCS) ← 641e69e5 (voice)
+V2 HEAD (v2/main): doctor merged (--doctor honest preflight, real probes only, key as fingerprint) ← 91be19d = RELEASE v2.0.0-godmode ← f380c399 (runbook) ← b11c6134 (JCS)
 
 COMPLETED (this working day, verified):
 - v2/main created from V1 tip 282a8ff; V1 untouched (policy: only v2/* branches carry V2 code)
