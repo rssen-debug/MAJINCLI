@@ -519,6 +519,13 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="stalled"] #work-progress-symbol,
 #composer #work-progress[data-phase="problem"] #work-progress-symbol{color:#ffabb4}
 @media(prefers-reduced-motion:reduce){#composer #work-progress-symbol{transition:none}}
+
+/* One inline recovery shimmer; no popovers, cards or duplicated activity panels. */
+#composer #work-progress[data-phase="recovery"]{color:#ffc4dc;border-top-color:rgba(255,119,189,.32)}
+#composer #work-progress[data-phase="recovery"] #work-progress-symbol{color:#ff8dcd;animation:majin-recovery-turn 1.4s ease-in-out infinite}
+#composer #work-progress[data-phase="recovery"] .pulse{background:#ff91c6;box-shadow:0 0 11px rgba(255,91,179,.32)}
+@keyframes majin-recovery-turn{50%{transform:rotate(-145deg) scale(1.12)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recovery"] #work-progress-symbol{animation:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>

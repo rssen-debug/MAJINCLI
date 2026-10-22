@@ -72,3 +72,21 @@ export function verifyObserved(criteria, observed) {
     observed:{url:String(observed.url||'').slice(0,500),title:String(observed.title||'').slice(0,200),
       matchCount:Number.isInteger(observed.matchCount) ? observed.matchCount : null}};
 }
+
+/**
+ * Failure-directed next step. Adapted from Playwright MCP's fresh snapshot
+ * after stale refs and LangGraph's bounded recovery concept. This is advice,
+ * not an automatic click and never bypasses approvals.
+ */
+export function suggestVerificationRecovery(verdict){
+  if(!verdict?.failures?.length)return 'Capture a fresh page observation before retrying.';
+  const types=new Set(verdict.failures.map(f=>f.name));
+  if(types.has('element_unique'))return 'Multiple controls match this selector. Call browser.elements({query:"specific label"}) or browser.read({mode:"structure"}) and choose a unique, live reference.';
+  if(types.has('element_present')||types.has('element_visible'))return 'Target missing or hidden. Refresh browser.elements on the current page, check dialogs or scroll position, then choose a different grounded control.';
+  if(types.has('element_enabled'))return 'Control is disabled. Inspect required fields and validation errors; do not repeat the same click.';
+  if(types.has('checkbox_checked'))return 'Checkbox did not reach the expected state. Inspect its current state and any blocking overlay before another action.';
+  if(types.has('url_contains')||types.has('title_contains'))return 'Navigation was not observed. Check current URL, open tabs and page errors before continuing.';
+  if(types.has('stable_duration'))return 'Success state flickered. Wait for stable UI state and verify again without repeating the side-effecting action.';
+  if(types.has('element_text_contains'))return 'Text did not match. Read current visible content and update the plan using page evidence.';
+  return 'Re-observe browser.elements or browser.read before taking another action; do not blindly repeat the failed tool.';
+}
