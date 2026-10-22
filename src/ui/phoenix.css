@@ -382,3 +382,17 @@ body.simple .msg .appr button:focus-visible {
 @media(max-width:600px) {
   body.simple .msg .appr button { min-height:44px; }
 }
+
+/* Aurora: make approval actions unmistakable without adding interface clutter. */
+body.simple .msg .appr button {
+  min-height:40px;
+  border-radius:10px;
+  font-weight:600;
+}
+body.simple .msg .appr button:hover {
+  border-color:var(--warn);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--warn) 18%,transparent);
+}
+@media(prefers-reduced-motion:reduce) {
+  body.simple .msg .appr button { transition:none!important; }
+}
