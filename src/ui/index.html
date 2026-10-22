@@ -472,6 +472,29 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="structure"] .pulse{background:#bc95ff;box-shadow:0 0 0 3px rgba(188,149,255,.09),0 0 15px rgba(188,149,255,.32);animation-duration:1.9s}
 #composer #work-progress[data-phase="structure"] #work-progress-label{color:#e1c9f6}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="structure"] .pulse{animation:none!important}}
+/* Round 2026-10-22: a single, subtle recovery shimmer within the existing
+   composer, never a modal, card or a second activity panel. */
+#composer #work-progress[data-phase="recover"]{
+  border-top-color:rgba(195,132,245,.27);
+  background:linear-gradient(90deg,rgba(176,90,224,.035),transparent 70%);
+  transition:border-color .25s ease,background .25s ease;
+}
+#composer #work-progress[data-phase="recover"] .pulse{
+  width:13px;height:13px;flex-shrink:0;background:radial-gradient(circle at 35% 30%,#fff2fc,#cb85f8 44%,#7c45bd 80%);
+  border:1px solid rgba(215,152,245,.43);
+  box-shadow:0 0 0 3px rgba(207,132,243,.07),0 0 17px rgba(195,112,241,.22);
+  animation:majin-recovery-breath 1.75s ease-in-out infinite;
+}
+#composer #work-progress[data-phase="recover"] #work-progress-label{
+  color:#e7d1f6;letter-spacing:.005em;
+}
+@keyframes majin-recovery-breath{
+  0%,100%{transform:scale(.8);opacity:.76}
+  50%{transform:scale(1.07);opacity:1}
+}
+@media(prefers-reduced-motion:reduce){
+  #composer #work-progress[data-phase="recover"] .pulse{animation:none!important;transform:none!important}
+}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>

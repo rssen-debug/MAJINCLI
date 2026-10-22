@@ -12,6 +12,7 @@ import { compact, estimateTokens } from './context.js';
 import { bus } from './log.js';
 import { isFreeRoute, priceKnownForRoute } from './pricing.js';
 import { guardToolContent } from './injection.js';
+import { suggestBrowserRecovery } from './browser-recovery-policy.js';
 import { inspectRequestedArtifact, pinSingleFileWrite, feedbackForJavaScriptWrite, feedbackForExactContentWrite, verifySingleFileDeletion, pinSingleExactTextWrite, verifySingleExactTextCreation, repairSimpleCommanderCliWrite, repairSimpleMixedEsmCliWrite, repairSimpleCommonJsEchoCliWrite, repairRecordedQwenEscapedCommonJsCliWrite, repairLiteralEscapedNewlineEchoCliWrite, repairSimpleFileWritingEchoCliWrite, unchangedInvalidJavaScriptWrite, verifyLocalTokenDemoFiles, isLocalTokenDemoGoal } from './goal-artifact.js';
 import { verifyJobIdLineage, pinJobShortlistWrite } from './mission-data-evidence.js';
 import { verifyFollowupJobSelection } from './mission-data-evidence.js';
@@ -443,6 +444,16 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         }
       }
       const ok = r.out.ok !== false;
+      const browserRecovery = !ok ? suggestBrowserRecovery(r.name,r.out.error) : null;
+      if(browserRecovery){
+        // Suggest a different READ first. Never auto-replay potentially
+        // completed writes after a timeout or a stale element reference.
+        onEvent({type:'browser_recovery',label,step:steps,tool:r.name,
+          phase:browserRecovery.phase,next:browserRecovery.next,code:browserRecovery.code});
+        r.out.error = {...r.out.error,
+          recoveryHint:browserRecovery.message,
+          suggestedReadTool:browserRecovery.next};
+      }
       if (!ok) errors += 1;
       else errors = Math.max(0, errors - 1);
       toolLog.push({ tool: r.name, args: r.args ?? {}, ok, repeatKey: r.repeatKey, error: ok ? null : r.out.error?.message || 'unknown error', ms: r.out.ms, summary: summarize(r.out) });
