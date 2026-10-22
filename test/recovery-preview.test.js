@@ -103,3 +103,10 @@ test('single-pass decision counts match every preview action',()=>{
  assert.equal(r.steps.length,3);
  assert.deepEqual(r.counts,{resume:2,skip:0,inspect:0,approval:1});
 });
+
+test('own valid step id passes while inherited id is rejected',()=>{
+ const valid={id:'own',risk:'read',status:'pending'};
+ const inherited=Object.assign(Object.create({id:'borrowed'}),{risk:'read',status:'pending'});
+ assert.equal(recoveryPreview({schema:1,id:'session',state:{steps:[valid]}}).ready,true);
+ assert.equal(recoveryPreview({schema:1,id:'session',state:{steps:[inherited]}}).ready,false);
+});
