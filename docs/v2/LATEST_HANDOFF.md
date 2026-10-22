@@ -1,6 +1,6 @@
 # MAJIN V2 — LATEST HANDOFF (owner-facing, 2026-10-21)
 
-V2 HEAD (v2/main): 33ec0a50 (studio receipts panel: chain-only source, broken chain withholds receipts; RFC 8785 noted for interop) ← 2c9007e7 (audit anchors Ed25519) ← 2cc6777f (opencode profiles) ← 180553df (consent UI)
+V2 HEAD (v2/main): 0e3a44b5 (studio goal runs: dogfooded consent gate, 1 grant = 1 run, busy-before-gate bug found by test, injection-proof fixed workspace) ← 33ec0a50 (receipts panel) ← 2c9007e7 (anchors Ed25519) ← 2cc6777f (opencode profiles)
 
 COMPLETED (this working day, verified):
 - v2/main created from V1 tip 282a8ff; V1 untouched (policy: only v2/* branches carry V2 code)
