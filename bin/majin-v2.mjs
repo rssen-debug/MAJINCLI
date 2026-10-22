@@ -94,6 +94,7 @@ try {
     'voice-dir': { type: 'string' },
     'voice-tts': { type: 'string' },
     'voice-stt-command': { type: 'string' },
+    'bundle-dir': { type: 'string' },
     port: { type: 'string' },
     host: { type: 'string' },
     'audit-dir': { type: 'string' },
@@ -282,7 +283,7 @@ async function main() {
       auditBind = new AuditBind(new AuditChain(auditDir));
       auditBind.attach(bus);
     }
-    const studio = createStudioServer({ bus, telemetryDir, auditDir, approvals, enableWrites: !!values['enable-writes'], enableGoals: goalOpts, voice: voiceOpts });
+    const studio = createStudioServer({ bus, telemetryDir, auditDir, approvals, enableWrites: !!values['enable-writes'], enableGoals: goalOpts, voice: voiceOpts, enableBundle: values['bundle-dir'] ? { dir: path.resolve(values['bundle-dir']) } : null });
     const bound = await studio.listen({ port: Number(values.port) || 0, host: values.host || '127.0.0.1' });
     console.log(`MAJIN V2 Studio ${goalOpts ? '(goal runs ENABLED — every run consumes a studio:run-goals grant; workspace ' + goalOpts.workspaceDir + (goalOpts.provider ? ', provider ' + goalOpts.provider.name : '' ) + ')' : values['enable-writes'] ? '(consent writes ENABLED — every grant/revoke audit-chained)' : '(read-only scaffold)'} at ${bound.url}`);
     console.log(`observing: telemetry=${telemetryDir} audit=${auditDir}`);

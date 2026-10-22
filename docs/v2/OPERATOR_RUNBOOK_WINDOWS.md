@@ -122,6 +122,20 @@ transcript någonsin.
 
 ---
 
+## 3.4 Bevispärm (evidence dossier)
+
+Exportera en bärbar verifieringspärm — publikt material endast, t.ex. att
+skicka till en granskare som aldrig sett din maskin:
+
+```powershell
+node bin/majin-v2.mjs --audit-export .\v2-audit --out .\v2-dossier
+node bin/majin-v2.mjs --bundle-verify .\v2-dossier
+```
+
+Studio-varianten: lägg till `--bundle-dir .\v2-dossier` i studio-kommandot →
+"Evidence dossier"-panelen får Export/Verify-knappar (samma API:er, samma
+vägransklasser, destinationen kan aldrig styras av klienten).
+
 ## 4. Audit-spår: verifiera, signera, bevittna
 
 Kedjan bevisar intern konsistens; **anchors** stänger hålet "hel kedjan

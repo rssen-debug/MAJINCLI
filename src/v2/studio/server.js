@@ -70,6 +70,7 @@ export function createStudioServer({
   enableWrites = false,  // consent write surface; OFF unless explicitly enabled
   enableGoals = null,    // { workspaceDir, provider? } — objective runs; OFF unless explicitly enabled
   voice = null,          // { outDir, tts?, stt? } — speak/listen surfaces; OFF unless explicitly enabled
+  enableBundle = null,   // { dir } — evidence dossier export/verify; OFF unless explicitly enabled
 } = {}) {
   if (!bus) throw new Error('studio requires an EventBus');
   if (!telemetryDir) throw new Error('studio requires telemetryDir');
@@ -83,7 +84,9 @@ export function createStudioServer({
     ? { workspaceDir: enableGoals.workspaceDir, provider: enableGoals.provider || null, busy: false, current: null }
     : null;
   if (voice && !voice.outDir) throw new Error('voice requires outDir');
-  if (page == null) page = renderStudioPage({ enableWrites, enableGoals: !!enableGoals, enableVoice: !!voice });
+  if (enableBundle && !enableBundle.dir) throw new Error('bundle surface requires a FIXED dir (client-supplied destinations are never honoured)');
+  const bundle = enableBundle ? { dir: enableBundle.dir } : null;
+  if (page == null) page = renderStudioPage({ enableWrites, enableGoals: !!enableGoals, enableVoice: !!voice, enableBundle: !!bundle });
 
   const clients = new Set();
   const unsubs = STUDIO_EVENT_NAMES.map((name) =>
@@ -329,6 +332,36 @@ export function createStudioServer({
         goals.busy = false;
         goals.current = null;
       }
+      return;
+    }
+
+    if (url.pathname === '/api/bundle/export' && req.method === 'POST') {
+      if (!bundle) {
+        json(res, 403, { error: 'bundle surface disabled — start with --bundle-dir. Disabled means NO dossier (honest gate)', cls: 'SURFACE_DISABLED' });
+        return;
+      }
+      try {
+        const { exportBundle } = await import('../audit/export.js');
+        const r = exportBundle(auditDir, bundle.dir);
+        json(res, 200, { ok: true, files: r.files, stats: r.stats });
+      } catch (e) {
+        json(res, 409, { ok: false, cls: e.cls || 'FAILED', error: e.message });
+      }
+      return;
+    }
+
+    if (url.pathname === '/api/bundle/verify' && req.method === 'POST') {
+      if (!bundle) {
+        json(res, 403, { error: 'bundle surface disabled — start with --bundle-dir. Disabled means NO dossier (honest gate)', cls: 'SURFACE_DISABLED' });
+        return;
+      }
+      const { verifyBundle } = await import('../audit/export.js');
+      const v = verifyBundle(bundle.dir);
+      json(res, 200, {
+        ok: v.ok, cls: v.cls, detail: v.detail || '',
+        chainEntries: v.chain?.entries ?? null,
+        anchors: v.anchors?.cls ?? null, tsr: v.tsr?.cls ?? null, genTime: v.tsr?.genTime ?? null,
+      });
       return;
     }
 
