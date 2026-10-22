@@ -695,3 +695,58 @@ body.simple header #b-voice.on {
   border-color:var(--cy);
   box-shadow:0 0 0 2px var(--cysoft),0 0 15px var(--cysoft);
 }
+
+/* One calm voice surface, without double tool/status lines crowding the chat. */
+body.simple .msg .who{letter-spacing:.045em;font-weight:550}
+body.simple .msg .body{line-height:1.7}
+body.simple .msg .foot{opacity:.55;font-size:10px}
+body.simple[data-voice-mode="speaking"] #composer .composer-talk{color:var(--cy);box-shadow:0 0 0 4px var(--cysoft)}
+
+/* MAJIN V1 — Quiet Mode: restrained messenger layout, original MAJIN rose accent.
+   Only simple mode; expert tools, task history, voice controls remain functional. */
+body.simple:not(.light){
+  --bg:#202023;--bg2:#2d2d31;--bg3:#17171a;
+  --ink:#f1eff2;--dim:#aaa5ae;--muted:#89848e;--line:#37353b;
+  --cy:#f296ca;--pink:#f2b2d6;--cysoft:#f296ca16;
+  --sidebar:260px;--chat-width:740px;
+}
+body.simple header{min-height:54px;padding:9px 19px;background:var(--bg);border-bottom:1px solid var(--line);gap:10px}
+body.simple header h1{letter-spacing:.025em;font-size:13px;text-shadow:none}
+body.simple #rail{padding:14px 12px 125px;background:var(--bg3)}
+body.simple #rail h3{letter-spacing:.08em;margin:23px 11px 7px}
+body.simple .chat-search{margin:10px 4px 14px;background:#26262a;border:1px solid #3a393e;border-radius:11px;min-height:38px}
+body.simple #chat-search{font-size:12px}
+body.simple .nav-new{background:transparent;border-color:transparent;padding:11px 12px}
+body.simple .nav-new:hover{background:var(--bg2)}
+body.simple .sess{margin:3px 0;border-radius:11px}
+body.simple .sess.act{background:#303035!important;box-shadow:none}
+body.simple .sess .sess-open{padding:10px 9px 10px 12px}
+body.simple .sess .session-label{font-weight:550;font-size:12.5px}
+body.simple .sess .sess-meta{font-size:11px;margin-top:3px;color:var(--muted)}
+body.simple #scroller{padding-top:30px}
+body.simple #scroller>.msg{margin-bottom:21px}
+body.simple .msg .body{font-size:14px;line-height:1.65}
+body.simple .msg .who{margin-bottom:6px;color:var(--dim);letter-spacing:.015em;font-size:11px}
+body.simple .msg.user .body{border:0;background:#eae9e6;color:#242326;border-radius:17px;padding:11px 15px;max-width:78%;box-shadow:none}
+body.simple .msg.majin .body{border:0;background:transparent;padding:0}
+body.simple .msg .foot{opacity:.55}
+body.simple footer{background:var(--bg);padding-bottom:12px}
+body.simple footer #composer{border:1px solid #444148;border-radius:24px;background:#28282c;box-shadow:none;padding:6px 7px;min-height:54px}
+body.simple footer #composer:focus-within{border-color:#98728c;box-shadow:0 0 0 2px #f296ca0d}
+body.simple #composer #input{font-size:14px;min-height:40px;padding:9px 8px}
+body.simple #composer #mic{border-radius:50%;color:var(--cy);background:transparent;box-shadow:none}
+body.simple #composer #mic:hover{background:var(--cysoft)}
+body.simple #composer #send{width:44px;height:44px;min-width:44px;min-height:44px;background:#efeaee;border-radius:50%;color:#252329;box-shadow:none}
+body.simple #composer #send:disabled{opacity:.38}
+body.simple .crow{font-size:10px;color:var(--muted)}
+body.simple #run-state{border:0;background:transparent;box-shadow:none;padding-block:6px}
+body.simple #run-details{color:var(--dim)}
+body.simple #studio{border-left:1px solid var(--line)}
+@media(max-width:960px){body.simple #rail{padding-bottom:15px}}
+@media(max-width:600px){
+ body.simple #scroller{padding:18px 12px 8px}
+ body.simple #scroller>.msg{margin-bottom:18px}
+ body.simple .msg.user .body{max-width:91%}
+ body.simple footer{padding:8px 12px 11px}
+}
+@media(prefers-reduced-motion:reduce){body.simple .sess,body.simple #composer{transition:none}}

@@ -86,7 +86,7 @@ test('real turn endpoint stops infinite background listening and voice UI is a s
   const html=fs.readFileSync('src/ui/index.html','utf8');
   assert.match(src,/voiceSilenceTimer=setTimeout\(\(\)=>dispatchVoiceTurn\(r\)/);
   assert.match(src,/voiceSessionTimer=setTimeout/);
-  assert.match(src,/S\.handsFree=false;stopVoiceMeter\(\)/);
+  assert.match(src,/stopVoiceMeter\(\);if\(S\.handsFree\)startMic\(\)/);
   assert.match(src,/echoCancellation:true,noiseSuppression:true,autoGainControl:true/);
   assert.match(html,/class="orb-core"/);
   assert.match(html,/class="orb-halo orb-halo-a"/);

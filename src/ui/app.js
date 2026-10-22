@@ -561,6 +561,10 @@ async function send(text, options = {}) {
   setStatus('working…');
   const ac = new AbortController();
   S.abort = ac;
+  // No endless Thinking on a stalled stream. A slow model gets a clear retryable error.
+  let streamTimedOut = false;
+  let streamWatchdog = setTimeout(() => { streamTimedOut = true; ac.abort(); }, 90000);
+  const resetStreamWatchdog = () => { clearTimeout(streamWatchdog); streamWatchdog = setTimeout(() => { streamTimedOut = true; ac.abort(); }, 90000); };
   try {
     const r = await fetch('/api/chat?t=' + encodeURIComponent(TOKEN), {
       method: 'POST',
@@ -575,6 +579,7 @@ async function send(text, options = {}) {
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
+      resetStreamWatchdog();
       buf += dec.decode(value, { stream: true });
       let i;
       while ((i = buf.indexOf('\n\n')) >= 0) {
@@ -607,13 +612,15 @@ async function send(text, options = {}) {
       } else closeAnswer({ text: S.curBody, meta: {} });
     }
   } catch (e) {
-    if (e.name !== 'AbortError') err('connection lost: ' + e.message);
+    if (streamTimedOut) err('The model stopped responding for 90 seconds. Try again or switch models.');
+    else if (e.name !== 'AbortError') err('connection lost: ' + e.message);
     else {
       S.cancelled = true;
       if (S.cur) closeAnswer({ text: S.curBody, meta: {} });
       if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.onEvent({ type: 'cancelled' });
     }
   } finally {
+    clearTimeout(streamWatchdog);
     S.busy = false;
     S.abort = null;
     syncSendButton();
@@ -1076,6 +1083,12 @@ function listen() {
 
 /* ------------------------- hands-free voice -------------------------- */
 let recog=null, speechActive=false, voiceArmed=false;
+let lastSpokenReply='';
+function isVoicePlaybackEcho(heard){
+ const words=text=>String(text||'').toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[];
+ const utterance=words(heard),reply=new Set(words(lastSpokenReply));
+ return utterance.length>0 && utterance.filter(word=>reply.has(word)).length/utterance.length>=0.8;
+}
 let voiceSilenceTimer=null, voiceSessionTimer=null, voiceTranscript='', voiceFinal='', voiceFinished=false;
 let voiceMeterStream=null, voiceMeterContext=null, voiceMeterFrame=null;
 let voiceGate=null, voiceGateReady=false;
@@ -1189,7 +1202,7 @@ function dispatchVoiceTurn(r){
 function startMic(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){S.handsFree=false;S.listening=false;voiceState('error','Speech recognition unavailable — use Chrome or Edge and allow microphone access');return;}
-  if(speechActive||!S.handsFree||recog)return;
+  if(!S.handsFree||recog)return;
   const r=new SR();recog=r;voiceArmed=true;voiceFinished=false;
   voiceTranscript='';voiceFinal='';S.listening=true;
   r.lang=S.st?.config?.ui?.voice?.lang||'sv-SE';
@@ -1201,7 +1214,7 @@ function startMic(){
     voiceSessionTimer=setTimeout(()=>{
       if(recog!==r)return;
       if(voiceFinal.trim())dispatchVoiceTurn(r);
-      else {stopMic();S.handsFree=false;voiceState('paused','Tap the orb to speak again');}
+      else {recog=null;S.listening=false;clearVoiceTimers();stopVoiceMeter();if(S.handsFree)startMic();}
     },12000);
   };
   r.onresult=e=>{
@@ -1213,7 +1226,13 @@ function startMic(){
       if(e.results[i].isFinal)complete+=chunk;
     }
     if(!words.trim())return;
+    if(speechActive && isVoicePlaybackEcho(words))return;
     voiceTranscript=words.trim();voiceFinal=complete.trim();
+    if(speechActive){
+      speechActive=false;
+      try{window.speechSynthesis?.cancel();}catch{}
+      try{voiceRequest?.abort();currentVoiceAudio?.pause();}catch{}
+    }
     voiceState('listening',voiceTranscript);
     clearTimeout(voiceSilenceTimer);
     // Web Speech sometimes never sets isFinal in a noisy room. Commit the
@@ -1233,7 +1252,7 @@ function startMic(){
     if(voiceTranscript.trim()){dispatchVoiceTurn(r);return;}
     recog=null;S.listening=false;clearVoiceTimers();
     // No speech: stop gracefully. A TV should not create an infinite restart loop.
-    S.handsFree=false;stopVoiceMeter();voiceState('paused','Tap to talk again');
+    stopVoiceMeter();if(S.handsFree)startMic();else voiceState('paused','Tap to talk again');
   };
   void startVoiceMeter();
   try{r.start();$('mic')?.classList.add('on');}
@@ -1313,7 +1332,8 @@ async function speak(t){
   if(!S.voice)return;
   const clean=String(t).replace(/\`[^\`]+\`/g,' ').replace(/https?:\/\/\S+/g,' link ').replace(/[*_#]/g,'').slice(0,1200).trim();
   if(!clean)return;
-  stopMic();
+  // Keep the conversation armed; recognizer remains available for user barge-in.
+  lastSpokenReply=clean;
   speechActive=true;voiceState('speaking','MAJIN speaking…');
   try {
     // A locally configured Kokoro narrator is optional; never silently
