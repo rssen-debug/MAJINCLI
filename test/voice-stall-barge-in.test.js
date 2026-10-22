@@ -18,3 +18,9 @@ test('voice recognizer stays armed while MAJIN speaks and speech cancels playbac
 test('speaking state remains visible without visual chatter',()=>{
  assert.match(css,/body\.simple\[data-voice-mode="speaking"\]/);
 });
+
+test('simple playback echo filtering avoids immediate self-trigger',()=>{
+ assert.match(app,/function isVoicePlaybackEcho\(heard\)/);
+ assert.match(app,/speechActive && isVoicePlaybackEcho\(words\)/);
+ assert.match(app,/lastSpokenReply=clean/);
+});
