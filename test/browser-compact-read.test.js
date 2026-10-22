@@ -50,7 +50,7 @@ test('browser evidence UI uses only existing composer and reduced motion',()=>{
 
 test('compact browser does not merge distinct rows sharing a long prefix',()=>{
  const prefix='Result '+('x'.repeat(190));
- const source=prefix+' FAILED\\n'+prefix+' SAVED';
+ const source=prefix+' FAILED\n'+prefix+' SAVED';
  const out=compactBrowserText(source,{maxChars:1200});
  assert.equal(out.uniqueLines,2);
  assert.match(out.text,/FAILED/);
