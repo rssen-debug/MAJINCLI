@@ -14,7 +14,7 @@ function element(tag, label, extras={}) {
   };
 }
 test('semantic observation reaches an OPEN shadow root and does not emit form values',()=>{
-  const secret=element('INPUT','', { value:'secret-token',getAttribute(k){return k==='placeholder'?'Search':k==='type'?'text':null;} });
+  const secret=element('INPUT','', { value:'secret-token',getAttribute(k){return k==='placeholder'?'Search':k==='type'?'text':null;},matches(sel){return sel.includes('input');} });
   const save=element('BUTTON','Save changes');
   const shadow={querySelectorAll(q){return q==='*'?[save,secret]:[save,secret];}};
   const host=element('DIV','',{shadowRoot:shadow,matches(){return false;}});
