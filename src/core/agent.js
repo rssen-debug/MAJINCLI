@@ -5,6 +5,7 @@
  */
 import os from 'node:os';
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { serial } from './serialize.js';
 import { bus as globalBus } from './log.js';
 import { classify, llmClassify, plan as planTurn } from './router.js';
@@ -44,7 +45,8 @@ export class Agent {
   planPath(session) {
     try {
       const hp = historyPath(session);
-      return hp.replace(/\.jsonl$/, '.plan.json');
+      // Never let an unexpected history filename become a journal destination.
+      return typeof hp === 'string' && hp.endsWith('.jsonl') ? hp.slice(0, -6) + '.plan.json' : null;
     } catch { return null; }
   }
 
@@ -55,9 +57,16 @@ export class Agent {
     try {
       const file = this.planPath(session);
       if (!file) return false;
-      const tmp = `${file}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify({ session, plan: this.plans.get(session) || [], updated: Date.now() }) + '\n');
-      fs.renameSync(tmp, file);
+      // Unique per-write temporary files prevent concurrent sessions colliding.
+      const payload = JSON.stringify({ session, plan: this.plans.get(session) || [], updated: Date.now() }) + '\n';
+      if (Buffer.byteLength(payload, 'utf8') > 1024 * 1024) throw Object.assign(new Error('plan journal exceeds 1 MiB limit'), { code: 'EPLAN_TOO_LARGE' });
+      const tmp = `${file}.${randomUUID()}.tmp`;
+      try {
+        fs.writeFileSync(tmp, payload, { flag: 'wx', mode: 0o600 });
+        fs.renameSync(tmp, file);
+      } finally {
+        try { fs.unlinkSync(tmp); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+      }
       this.lastPlanPersistError = null;
       return true;
     } catch (err) {
@@ -73,8 +82,19 @@ export class Agent {
       const file = this.planPath(session);
       if (!file) return null;
       let data;
-      try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
-      if (Array.isArray(data.plan) && data.plan.length) {
+      try {
+        const stat = fs.lstatSync(file);
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024) return null;
+        const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+        try {
+          const opened = fs.fstatSync(fd);
+          if (!opened.isFile() || opened.size > 1024 * 1024) return null;
+          data = JSON.parse(fs.readFileSync(fd, 'utf8'));
+        } finally { fs.closeSync(fd); }
+      } catch { return null; }
+      // Reject stale/mismatched journals instead of importing another session's plan.
+      if (data?.session !== session) return null;
+      if (Array.isArray(data.plan) && data.plan.length && data.plan.length <= 1000 && data.plan.every(step => step && typeof step === 'object' && !Array.isArray(step) && Object.keys(step).length <= 100 && !['__proto__', 'constructor', 'prototype'].some(key => Object.hasOwn(step, key)))) {
         this.plans.set(session, data.plan);
         return data.plan;
       }

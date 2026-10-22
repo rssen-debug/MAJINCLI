@@ -285,3 +285,359 @@ body.light .model-detail-use,body.light .ob-go{color:#fff}
 
 body.simple .msg .tools,body.simple .msg .trace,body.simple .msg .gauge{display:none}
 body:is([data-run-state=connecting],[data-run-state=thinking],[data-run-state=working]) #status{visibility:hidden}
+
+/* Aurora polish: subtle, readable keyboard interaction on chat actions. */
+body.simple .msg button:focus-visible,
+body.simple .msg a:focus-visible {
+  outline:2px solid var(--cy);
+  outline-offset:3px;
+  border-radius:8px;
+}
+body.simple .msg button:not(:disabled):hover {
+  box-shadow:0 0 0 1px var(--cysoft);
+}
+@media (prefers-reduced-motion:reduce) {
+  body.simple .msg button { transition:none!important; }
+}
+
+/* Aurora: compact file previews remain easy to inspect without busy panels. */
+body.simple .chat-open-file {
+  min-height:32px;
+  padding:5px 10px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:var(--cysoft);
+  color:var(--cy);
+  font-weight:600;
+}
+body.simple .chat-open-file:hover { border-color:var(--cy);box-shadow:0 0 12px var(--cysoft); }
+body.simple .chat-open-file:focus-visible { outline:2px solid var(--cy);outline-offset:3px; }
+@media(prefers-reduced-motion:reduce) { body.simple .chat-open-file { transition:none!important; } }
+
+/* Aurora: file-preview actions feel tactile while remaining quiet. */
+body.simple .chat-open-file {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:36px;
+  max-width:100%;
+  overflow-wrap:anywhere;
+  transition:border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+body.simple .chat-open-file:not(:disabled):active { transform:scale(.98); }
+@media(prefers-reduced-motion:reduce) {
+  body.simple .chat-open-file:not(:disabled):active { transform:none; }
+}
+
+/* Aurora: robust keyboard focus on interactive file results. */
+body.simple .chat-open-file { position:relative; isolation:isolate; }
+body.simple .chat-open-file:focus-visible {
+  outline:2px solid var(--cy);
+  outline-offset:4px;
+  box-shadow:0 0 0 5px var(--cysoft);
+}
+@media(max-width:600px){ body.simple .chat-open-file { min-height:44px; } }
+@media(prefers-reduced-motion:reduce){ body.simple .chat-open-file{transition:none!important} }
+
+/* MAJIN Aurora: refined inline preview controls and dark/light legibility. */
+body.simple .msg .chat-open-file {
+  vertical-align:middle;
+  line-height:1.3;
+  text-decoration:none;
+  white-space:normal;
+}
+body.light.simple .msg .chat-open-file {
+  background:var(--cysoft);
+  color:var(--cy);
+  border-color:var(--line);
+}
+@media (hover:none) {
+  body.simple .chat-open-file:hover { box-shadow:none; }
+}
+
+/* Aurora: unobtrusive tactile clarity for preview actions, no extra panels. */
+body.simple .msg .chat-open-file {
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+  letter-spacing:.01em;
+}
+body.simple .msg .chat-open-file:focus-visible {
+  outline:2px solid var(--cy);
+  outline-offset:4px;
+}
+@media(prefers-reduced-motion:reduce) {
+  body.simple .msg .chat-open-file { transition:none!important; }
+}
+
+/* Aurora: clearly distinguish an approval request within an otherwise quiet chat. */
+body.simple .msg .appr {
+  border:1px solid var(--warn);
+  border-radius:14px;
+  background:var(--bg2);
+  padding:14px 16px;
+}
+body.simple .msg .appr button:focus-visible {
+  outline:2px solid var(--warn);
+  outline-offset:3px;
+}
+@media(max-width:600px) {
+  body.simple .msg .appr button { min-height:44px; }
+}
+
+/* Aurora: make approval actions unmistakable without adding interface clutter. */
+body.simple .msg .appr button {
+  min-height:40px;
+  border-radius:10px;
+  font-weight:600;
+}
+body.simple .msg .appr button:hover {
+  border-color:var(--warn);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--warn) 18%,transparent);
+}
+@media(prefers-reduced-motion:reduce) {
+  body.simple .msg .appr button { transition:none!important; }
+}
+
+/* Aurora: approval choices stay readable and reachable on compact displays. */
+@media(max-width:600px) {
+ body.simple .msg .appr { padding:12px; overflow-wrap:anywhere; }
+ body.simple .msg .appr button { min-height:44px; margin-block:3px; }
+}
+body.simple .msg .appr button:focus-visible {
+ outline:2px solid var(--warn);outline-offset:4px;
+ box-shadow:0 0 0 4px var(--cysoft);
+}
+
+/* Aurora: legible recovery and approval states without heavy alert surfaces. */
+body.simple .msg .appr {
+  box-shadow:inset 3px 0 0 var(--warn);
+}
+body.simple .msg .appr button:not(:disabled):active {
+  filter:brightness(1.08);
+}
+@media(hover:none) {
+  body.simple .msg .appr button:hover { box-shadow:none; }
+}
+
+/* Aurora: improve approval contrast in both themes without another panel. */
+body.simple .msg .appr {
+  border-inline-start:3px solid var(--warn);
+  overflow-wrap:anywhere;
+}
+body.simple .msg .appr button:disabled {
+  opacity:.55;
+  cursor:not-allowed;
+}
+body.simple .msg .appr button:focus-visible {
+  outline:2px solid var(--warn);
+  outline-offset:3px;
+}
+@media(prefers-reduced-motion:reduce){
+ body.simple .msg .appr button{transition:none!important}
+}
+
+/* Aurora polish: actionable plan updates remain quiet but visibly accessible. */
+body.simple .msg .appr button {
+  min-height:40px;
+  border-radius:10px;
+  outline-offset:3px;
+}
+body.simple .msg .appr button:focus-visible {
+  outline:2px solid var(--cy);
+  box-shadow:0 0 0 4px var(--cysoft);
+}
+@media(max-width:600px){
+ body.simple .msg .appr button { min-height:44px; }
+}
+
+/* Aurora: show clearly when an action is disabled without visual noise. */
+body.simple .msg .appr button:disabled {
+ opacity:.5;
+ filter:grayscale(.2);
+ box-shadow:none!important;
+}
+@media (prefers-contrast:more) {
+ body.simple .msg .appr { border-width:2px; }
+ body.simple .msg .appr button:focus-visible { outline-width:3px; }
+}
+
+/* Aurora: predictable approval button hover for pointer-capable devices only. */
+@media(hover:hover) and (pointer:fine) {
+ body.simple .msg .appr button:not(:disabled):hover {
+   box-shadow:0 0 0 2px var(--cysoft);
+   border-color:var(--cy);
+ }
+}
+body.simple .msg .appr button:focus-visible { outline-offset:4px; }
+
+/* Aurora: approval actions are comfortable on touch and keyboard. */
+@media (pointer:coarse) {
+  body.simple .msg .appr button { min-width:44px; min-height:44px; }
+}
+body.simple .msg .appr button:focus-visible {
+  outline:2px solid var(--warn);
+  outline-offset:4px;
+}
+
+/* Aurora: approval choices are visually distinct for keyboard and touch. */
+body.simple .msg .appr button:not(:disabled):focus-visible {
+  outline:3px solid var(--warn);
+  outline-offset:4px;
+}
+body.simple .msg .appr button:disabled {
+  cursor:not-allowed;
+  opacity:.55;
+}
+@media(prefers-reduced-motion:reduce) {
+  body.simple .msg .appr button { animation:none!important; transition:none!important; }
+}
+
+/* Aurora: stable keyboard and touch feedback on permission prompts. */
+body.simple .msg .appr button:not(:disabled):active { transform:translateY(1px); }
+@media(prefers-reduced-motion:reduce) {
+ body.simple .msg .appr button:not(:disabled):active { transform:none; }
+}
+@media(prefers-contrast:more) {
+ body.simple .msg .appr button:not(:disabled):focus-visible { outline-width:4px; }
+}
+
+/* Aurora: crisp permission prompt separation in compact layouts. */
+body.simple .msg .appr {
+  border-radius:12px;
+  background:var(--bg2);
+}
+body.simple .msg .appr button:not(:disabled):focus-visible {
+  outline-offset:4px;
+  box-shadow:0 0 0 4px var(--cysoft);
+}
+@media(max-width:600px) { body.simple .msg .appr { padding:12px; } }
+
+/* Aurora: clean action focus on high-density displays, no new visual clutter. */
+@media (min-resolution:2dppx) {
+  body.simple .msg .appr button:focus-visible {
+    outline-offset:3px;
+    box-shadow:0 0 0 3px var(--cysoft);
+  }
+}
+body.simple .msg .appr button:disabled { pointer-events:none; }
+
+/* Aurora: high-contrast, accessible permission actions. */
+body.simple .msg .appr button:focus-visible {
+  outline:3px solid var(--warn);
+  outline-offset:3px;
+}
+@media(prefers-contrast:more) {
+  body.simple .msg .appr button:focus-visible {
+    box-shadow:0 0 0 5px var(--bg);
+  }
+}
+
+/* Aurora: permission prompt actions remain comfortably spaced on mobile. */
+@media (max-width:480px) {
+  body.simple .msg .appr button {
+    min-height:44px;
+    margin-inline-end:8px;
+    margin-block:4px;
+    touch-action:manipulation;
+  }
+}
+
+/* Aurora: intentional keyboard focus for high-contrast permission decisions. */
+body.simple .msg .appr button:focus-visible {
+  outline:3px solid var(--warn);
+  outline-offset:4px;
+  text-decoration:underline;
+  text-underline-offset:3px;
+}
+@media (prefers-reduced-motion:reduce) {
+  body.simple .msg .appr button { transition:none!important; }
+}
+
+/* Aurora recovery status: compact inline progress, no additional panels. */
+body.simple .msg [data-recovery-status] {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 9px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  color:var(--dim);
+  background:var(--bg2);
+  font-size:.82em;
+}
+body.simple .msg [data-recovery-status="approval"] { border-color:var(--warn);color:var(--ink); }
+
+/* Aurora: distinct readable recovery states in the existing inline treatment. */
+body.simple .msg [data-recovery-status="resume"] { border-color:var(--ok);color:var(--ink); }
+body.simple .msg [data-recovery-status="inspect"] { border-style:dashed;color:var(--ink); }
+body.simple .msg [data-recovery-status="skip"] { opacity:.75; }
+@media(prefers-contrast:more) {
+ body.simple .msg [data-recovery-status] { border-width:2px; }
+}
+
+/* Aurora: glanceable recovery statuses, readable at small sizes. */
+body.simple .msg [data-recovery-status] { font-weight:600; letter-spacing:.01em; }
+body.simple .msg [data-recovery-status="approval"] { border-inline-start:3px solid var(--warn); }
+@media(max-width:480px) { body.simple .msg [data-recovery-status] { max-width:100%; overflow-wrap:anywhere; } }
+
+/* Aurora: clearer recovery approval focus without layout clutter. */
+body.simple .msg [data-recovery-status="approval"] { font-weight:700; }
+body.simple .msg [data-recovery-status="inspect"] { border-width:2px; }
+@media(prefers-reduced-motion:reduce) { body.simple .msg [data-recovery-status] { transition:none!important; } }
+
+/* Aurora: compact recovery labels stay legible in light and dark themes. */
+body.simple .msg [data-recovery-status] { line-height:1.4; vertical-align:middle; }
+body.light.simple .msg [data-recovery-status="inspect"] { color:var(--ink); }
+@media(max-width:480px) { body.simple .msg [data-recovery-status] { white-space:normal; } }
+
+/* Aurora: actual approval cards support clear keyboard focus and readable controls. */
+body.simple .msg .appr { border-inline-start:3px solid var(--warn); }
+body.simple .msg .appr :is(button,a):focus-visible { outline:3px solid var(--warn);outline-offset:3px; }
+@media(max-width:600px) { body.simple .msg .appr button { min-height:44px; } }
+
+/* Aurora: make the real permission prompt easier to scan on mobile. */
+@media(max-width:560px){body.simple .msg .appr{padding:14px;border-radius:14px}body.simple .msg .appr :is(button,a){min-height:44px}}
+body.simple .msg .appr :is(button,a):focus-visible{outline:3px solid var(--warn);outline-offset:4px}
+
+/* Aurora: warn before irreversible tool approvals, without extra UI panels. */
+body.simple .msg .appr { box-shadow: inset 3px 0 0 var(--warn); }
+@media (prefers-contrast: more) { body.simple .msg .appr { border-width:2px; } }
+
+/* Aurora: restrained and accessible keyboard affordance on existing approval cards. */
+@media (hover:hover) {
+  body.simple .msg .appr button:not(:disabled):hover { filter:brightness(1.06); }
+}
+@media (prefers-reduced-motion:reduce) {
+  body.simple .msg .appr button { animation:none!important; }
+}
+
+/* Aurora: keep approval actions usable when keyboard focus moves across choices. */
+body.simple .msg .appr:focus-within { border-color:var(--warn); }
+@media (max-width:560px) { body.simple .msg .appr button { line-height:1.4; } }
+
+/* Aurora: clear active approval choice in the real chat permission card. */
+body.simple .msg .appr:focus-within { box-shadow:inset 3px 0 0 var(--warn),0 0 0 2px var(--cysoft); }
+@media(prefers-contrast:more){body.simple .msg .appr:focus-within{outline:2px solid currentColor;outline-offset:2px}}
+
+/* Aurora: support keyboard navigation without making permission cards visually noisy. */
+body.simple .msg .appr :is(button,a):focus-visible { text-decoration:underline; text-underline-offset:3px; }
+@media (prefers-contrast:more) { body.simple .msg .appr :is(button,a):focus-visible { outline-width:4px; } }
+
+/* Aurora: approved action surfaces remain tappable and readable in forced-colors mode. */
+@media (forced-colors:active) {
+  body.simple .msg .appr { border:2px solid CanvasText; }
+  body.simple .msg .appr :is(button,a):focus-visible { outline:3px solid Highlight; }
+}
+
+/* Aurora: show a readable active target on real permission controls. */
+body.simple .msg .appr :is(button,a):focus-visible { border-radius:6px; text-decoration-thickness:2px; }
+@media (max-width:520px) { body.simple .msg .appr :is(button,a) { min-height:44px; } }
+
+/* Aurora: avoid cropped keyboard outlines near the edges of approval cards. */
+body.simple .msg .appr { overflow:visible; }
+body.simple .msg .appr :is(button,a):focus-visible { outline-offset:3px; }
+
+/* Aurora: permission choices stay clearly grouped at narrow widths. */
+@media (max-width:520px) {
+ body.simple .msg .appr { display:flow-root; }
+ body.simple .msg .appr :is(button,a) { max-width:100%; overflow-wrap:anywhere; }
+}
