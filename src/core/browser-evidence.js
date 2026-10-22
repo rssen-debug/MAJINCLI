@@ -39,7 +39,7 @@ export const VERIFY_JS = String.raw`((args) => {
   const text = el ? String(el.innerText || el.textContent || '') : '';
   const state = { valid: true, url: location.href, title: document.title,
     exists: selector ? count > 0 : null, unique: selector ? count === 1 : null,
-    matchCount: selector ? Math.min(count, 1000) : null, fromShadowRoot: Boolean(el?.getRootNode?.()?.host), visible: selector ? visible(el) : null,
+    matchCount: selector ? count > 1000 ? 1001 : count : null, fromShadowRoot: Boolean(el?.getRootNode?.()?.host), visible: selector ? visible(el) : null,
     checked: el?.matches?.('input[type="checkbox"],input[type="radio"]') ? !!el.checked : null,
     enabled: el ? !el.matches(':disabled,[aria-disabled="true"],[inert]') && !el.closest('[inert]') : null,
     textMatch: args.text ? text.toLowerCase().includes(args.text.toLowerCase()) : null,
@@ -126,7 +126,9 @@ export function browserRecoveryAdvice(verdict, criteria, controls = []) {
   if (verdict?.ok) return { action:'none', hint:'Outcome verified', candidates:[] };
   const names = new Set((verdict?.failures || []).map(f=>f.name));
   let action='inspect_page', hint='Inspect live page state with browser.read or browser.elements before choosing a new action.';
-  if (names.has('element_unique')) {
+  if (names.has('element_count_exact')) {
+    action='inspect_result_count'; hint='Expected result count differs from the page. Re-read the list after rendering settles; never assume a capped count proves success.';
+  } else if (names.has('element_unique')) {
     action='narrow_selector'; hint='Selector matches multiple elements. Use browser.elements and an exact unique ref; do not guess a different nth-child.';
   } else if (names.has('element_present')) {
     action='refresh_grounding'; hint='Expected control or confirmation is absent. Re-read the current page and refresh element refs; do not repeat the previous click blindly.';
