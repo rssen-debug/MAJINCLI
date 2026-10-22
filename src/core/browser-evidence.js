@@ -69,9 +69,9 @@ export function verificationCriteria(input = {}) {
     } catch { return {ok:false,reason:'urlOrigin must be an exact HTTP(S) origin'}; }
   }
   const title = String(input.title || '').trim().slice(0, 200);
-  const present = ['true','false'].includes(String(input.present)) ? String(input.present) === 'true' : null;
-  const checked = ['true','false'].includes(String(input.checked)) ? String(input.checked) === 'true' : null;
-  const enabled = ['true','false'].includes(String(input.enabled)) ? String(input.enabled) === 'true' : null;
+  const present = input.present === true || input.present === false || input.present === 'true' || input.present === 'false' ? (input.present === true || input.present === 'true') : null;
+  const checked = input.checked === true || input.checked === false || input.checked === 'true' || input.checked === 'false' ? (input.checked === true || input.checked === 'true') : null;
+  const enabled = input.enabled === true || input.enabled === false || input.enabled === 'true' || input.enabled === 'false' ? (input.enabled === true || input.enabled === 'true') : null;
   // Explicit list/card count assertions: unlike clicks, lists can legitimately
   // contain many matches. Stay read-only and don't inspect element values.
   const countRaw = input.count;
