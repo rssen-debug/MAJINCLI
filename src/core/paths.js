@@ -100,6 +100,7 @@ export function rel(p) {
 export function safeJoin(root, target) {
   const abs = path.resolve(expand(root), target ?? '.');
   const r = path.relative(path.resolve(root), abs);
-  const outside = r.startsWith('..') || path.isAbsolute(r);
+  // V1: a sibling path starts with '..' plus a separator; '..backup' is inside.
+  const outside = r === '..' || r.startsWith('..' + path.sep) || path.isAbsolute(r);
   return { abs, outside, root: path.resolve(root) };
 }
