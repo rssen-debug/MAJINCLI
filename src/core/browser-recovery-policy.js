@@ -14,9 +14,10 @@ const HELP = Object.freeze({
   repeat_loop: {phase:'stop_repeat',next:null,message:'Repeated identical actions are not progress. Change approach and never replay the blocked call.'},
 });
 export function suggestBrowserRecovery(tool,error){
-  const name=String(tool||'');
-  if(!name.startsWith('browser.'))return null;
-  const code=String(error?.code||'');
+  if(typeof tool!=='string'||!tool.startsWith('browser.'))return null;
+  const name=tool;
+  if(!error||typeof error!=='object'||typeof error.code!=='string')return null;
+  const code=error.code;
   const match=Object.hasOwn(HELP,code)?HELP[code]:null;if(!match)return null;
   return {phase:match.phase,next:match.next,message:match.message,code,tool:name};
 }
