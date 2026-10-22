@@ -673,3 +673,12 @@ body.simple #composer #voice-stage{max-width:100%;min-width:0;box-sizing:border-
 body.simple #composer #voice-caption{color:var(--ink);overflow-wrap:anywhere;white-space:normal;max-width:min(65ch,100%)}
 body.simple[data-voice-mode="listening"] #composer .composer-talk{box-shadow:0 0 0 3px var(--cysoft),0 0 16px var(--cysoft)}
 @media(max-width:520px){body.simple #composer #voice-stage{flex-wrap:wrap}body.simple #composer .voice-stage-copy{min-width:0;flex:1}}
+
+/* V1 quiet header: keep operational telemetry live in the DOM but move it out
+   of the default visual hierarchy. No handlers, status updates or APIs change.
+   Model selection, approvals, workspace, emergency stop and voice stay visible. */
+body.simple header #c-route,
+body.simple header #c-moa,
+body.simple header #c-tools { display:none; }
+body.simple header { background:radial-gradient(ellipse at 45% -150%,var(--cysoft),transparent 72%),var(--bg); }
+body.simple header #brand { text-shadow:0 0 18px var(--cysoft); }
