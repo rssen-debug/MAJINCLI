@@ -245,7 +245,14 @@ function onEvent(ev) {
       if($('work-progress-symbol'))$('work-progress-symbol').textContent='◌';
     }
     else if (ev.type === 'tool_result') {
-      if(ev.tool==='browser.read' && ev.ok && ev.meta?.mode==='compact'){
+      if(ev.tool==='browser.read' && ev.ok && ev.meta?.stagnation?.stagnant===true){
+        const n=Math.min(20,Number(ev.meta.stagnation.unchangedActions)||0);
+        workPulse('Page unchanged after '+n+' actions · changing approach');
+        const bar=$('work-progress');
+        if(bar){bar.dataset.phase='stagnation';bar.title='Live page fingerprint has not changed after multiple actions. Re-observe and pick a new strategy; no automatic click is repeated.';}
+        const glyph=$('work-progress-symbol');if(glyph)glyph.textContent='↝';
+      }
+      else if(ev.tool==='browser.read' && ev.ok && ev.meta?.mode==='compact'){
         const original=Math.max(0,Number(ev.meta.sourceChars)||0);
         const delivered=Math.max(0,Number(ev.meta.visibleChars)||0);
         workPulse('Page distilled · '+delivered+'/'+original+' chars');

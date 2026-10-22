@@ -654,6 +654,11 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="shadow-verified"] .pulse{background:#b9a1ff;box-shadow:0 0 10px rgba(176,126,253,.55);animation:none}
 #composer #work-progress[data-phase="shadow-verified"] #work-progress-symbol{color:#e3cfff;filter:drop-shadow(0 0 5px rgba(185,133,255,.7))}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="shadow-verified"] *{animation:none!important}}
+/* Subtle stagnation awareness: one amber whisper in the EXISTING chat status. */
+#composer #work-progress[data-phase="stagnation"]{color:#f3c89b;border-top-color:rgba(229,162,104,.23)}
+#composer #work-progress[data-phase="stagnation"] .pulse{background:#f4bb7b;box-shadow:0 0 9px rgba(239,179,91,.35);animation:none}
+#composer #work-progress[data-phase="stagnation"] #work-progress-symbol{color:#ffcd92;filter:drop-shadow(0 0 3px rgba(255,173,94,.35))}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] *{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
