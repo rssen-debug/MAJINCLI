@@ -10,21 +10,40 @@ export const VERSION = 'majin-watchdog/1';
 
 /* Race a promise against a hard timeout. The timeout error is explicit and
    tagged — callers must not confuse it with a tool-produced failure. */
-export function withTimeout(promise, { ms, code = 'tool_timeout', label = 'tool' } = {}) {
-  const limit = Math.max(250, Number(ms) || 300_000);
+export function withTimeout(promise, { ms, code = 'tool_timeout', label = 'tool', signal } = {}) {
+  const requested = Number(ms);
+  const limit = Number.isFinite(requested) && requested > 0 ? Math.max(250, Math.min(Math.ceil(requested), 2_147_483_647)) : 300_000;
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => {
-      const err = new Error(`${label} exceeded the hard timeout of ${Math.round(limit / 1000)}s — killed, no silent wait beyond the bound`);
+    let settled = false;
+    let timer;
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener?.('abort', onAbort);
+    };
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn(value);
+    };
+    const onAbort = () => {
+      const err = new Error(label + ' cancelled');
+      err.code = 'aborted';
+      finish(reject, err);
+    };
+    if (signal?.aborted) { onAbort(); return; }
+    signal?.addEventListener?.('abort', onAbort, { once: true });
+    // Close the race between checking aborted and registering the listener.
+    if (signal?.aborted) { onAbort(); return; }
+    timer = setTimeout(() => {
+      const err = new Error(`${label} exceeded the hard timeout of ${Math.round(limit / 1000)}s — deadline reached`);
       err.code = code;
       err.timeoutMs = limit;
-      reject(err);
+      finish(reject, err);
     }, limit);
-    /* deliberately ref'd: withTimeout self-clears on settle/timeout, and an
-       unref'd sole-timer lets node:test's runner think the loop is idle
-       (cancelledByParent trap) — plus never lets a real process live forever. */
     Promise.resolve(promise).then(
-      (v) => { clearTimeout(t); resolve(v); },
-      (e) => { clearTimeout(t); reject(e); },
+      (value) => finish(resolve, value),
+      (error) => finish(reject, error),
     );
   });
 }
