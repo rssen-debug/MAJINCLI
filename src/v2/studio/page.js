@@ -10,7 +10,7 @@
 
 export const STUDIO_REVISION = 'studio-scaffold.r1'; // not product semver — the single VERSION literal rule lives in src/core/version.js
 
-export function renderStudioPage({ title = 'MAJIN V2 Studio', enableWrites = false, enableGoals = false, enableVoice = false, enableBundle = false } = {}) {
+export function renderStudioPage({ title = 'MAJIN V2 Studio', enableWrites = false, enableGoals = false, enableVoice = false, enableBundle = false, enableDoctor = false } = {}) {
   return `<!doctype html>
 <html lang="sv">
 <head>
@@ -61,6 +61,9 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
 #bundle{grid-column:1/-1}
 #bundle button{background:var(--accent);border:0;border-radius:4px;color:#0b0e12;padding:5px 10px;font:inherit;font-size:12px;cursor:pointer;font-weight:600;margin-right:8px}
 #bundle pre{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px;font-size:12px;white-space:pre-wrap;max-height:180px;overflow:auto}
+#doctor{grid-column:1/-1}
+#doctor button{background:var(--accent);border:0;border-radius:4px;color:#0b0e12;padding:5px 10px;font:inherit;font-size:12px;cursor:pointer;font-weight:600}
+#doctor pre{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px;font-size:12px;white-space:pre-wrap;max-height:240px;overflow:auto}
 #voice audio{width:100%;margin-top:6px}
 #v-out.err,#v-transcript.err{color:var(--bad)} #v-out.ok2,#v-transcript.ok2{color:var(--ok)}
 #goals input{background:var(--bg);border:1px solid var(--line);border-radius:4px;color:var(--fg);padding:4px 6px;font:inherit;font-size:12px}
@@ -124,6 +127,14 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
         <button id="v-listen" type="button">Transcribe</button>
       </div>
       <div id="v-transcript" style="font-size:12px;margin-top:6px;white-space:pre-wrap"></div>
+    </div>
+  </section>
+  <section id="doctor">
+    <h2>Doctor</h2>
+    <div class="mode ${enableDoctor ? 'on">doctor panel ENABLED — every row is a real probe on THIS machine; secrets render as fingerprints only' : 'off">doctor panel disabled (start with --enable-doctor-panel; disabled means NO probe)'}</div>
+    <div ${enableDoctor ? '' : 'hidden'}>
+      <button id="d-run" type="button">Run preflight</button>
+      <pre id="d-out" style="display:none"></pre>
     </div>
   </section>
   <section id="bundle">
@@ -287,6 +298,21 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:va
 
   var VOICE=${enableVoice ? 'true' : 'false'};
   var BUNDLE=${enableBundle ? 'true' : 'false'};
+  var DOCTOR=${enableDoctor ? 'true' : 'false'};
+  if(DOCTOR){
+    var dOut=document.getElementById('d-out');
+    document.getElementById('d-run').addEventListener('click',function(){
+      dOut.style.display='block';dOut.className='';dOut.textContent='probing…';
+      fetch('/api/doctor/run',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})
+        .then(function(r){return r.json().then(function(b){return{code:r.status,body:b}})})
+        .then(function(x){var b=x.body;
+          if(x.code!==200){dOut.className='err';dOut.textContent='REFUSED '+x.code+': '+esc(b.error||'');return}
+          var lines=['VERDICT: '+b.verdict+' (core-fail '+b.summary.coreFailed+' · gated-optional '+b.summary.gatedOpt+')',''];
+          for(var i=0;i<b.checks.length;i++){var c=b.checks[i];lines.push((c.state+'             ').slice(0,15)+' ['+c.req+'] '+c.name+' — '+c.detail)}
+          dOut.className=b.verdict==='NOT_READY'?'err':'ok2';dOut.textContent=lines.join('\n');
+        }).catch(function(e){dOut.className='err';dOut.textContent='doctor failed: '+e.message});
+    });
+  }
   if(BUNDLE){
     var bVerdict=document.getElementById('b-verdict');
     function bShow(cls,txt){bVerdict.style.display='block';bVerdict.className=cls;bVerdict.textContent=txt}
