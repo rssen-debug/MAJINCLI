@@ -64,3 +64,9 @@ test('recovery preview rejects malformed step records',()=>{
   else assert.equal(result.reason,'invalid-step');
  }
 });
+
+test('recovery decision output remains in the supported action set',()=>{
+ const preview=recoveryPreview({schema:1,id:'known',state:{steps:[{id:'read',risk:'read',status:'pending'},{id:'unsafe',risk:'write',status:'pending'}]}});
+ assert.equal(preview.ready,true);
+ assert.deepEqual(preview.steps.map(s=>s.action),['resume','approval']);
+});
