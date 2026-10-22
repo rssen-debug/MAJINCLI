@@ -5,6 +5,7 @@
  */
 import os from 'node:os';
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { serial } from './serialize.js';
 import { bus as globalBus } from './log.js';
 import { classify, llmClassify, plan as planTurn } from './router.js';
@@ -55,9 +56,14 @@ export class Agent {
     try {
       const file = this.planPath(session);
       if (!file) return false;
-      const tmp = `${file}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify({ session, plan: this.plans.get(session) || [], updated: Date.now() }) + '\n');
-      fs.renameSync(tmp, file);
+      // Unique per-write temporary files prevent concurrent sessions colliding.
+      const tmp = `${file}.${randomUUID()}.tmp`;
+      try {
+        fs.writeFileSync(tmp, JSON.stringify({ session, plan: this.plans.get(session) || [], updated: Date.now() }) + '\n', { flag: 'wx', mode: 0o600 });
+        fs.renameSync(tmp, file);
+      } finally {
+        try { fs.unlinkSync(tmp); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+      }
       this.lastPlanPersistError = null;
       return true;
     } catch (err) {
