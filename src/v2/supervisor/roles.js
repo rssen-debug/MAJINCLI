@@ -9,6 +9,7 @@
  */
 import { z } from 'zod';
 import { chatValidated, ModelError } from '../model/provider.js';
+import { pack } from '../context/engine.js';
 
 export const ROLES = Object.freeze(['planner', 'researcher', 'executor', 'verifier', 'qa']);
 
@@ -48,11 +49,22 @@ function rolePrompt(role) {
  * roleCall(role, userText, provider, {schema?}) -> value
  * Errors surface via ModelError classes; schema mismatch -> INVALID_TOOL_OUTPUT.
  */
-export async function roleCall(role, userText, provider, { timeoutMs = 60_000 } = {}) {
+/**
+ * roleCall(role, userText, provider, {context}) — optional context: engine.pack()
+ * sections (goal/acceptance/receipt summaries). When present the packed context
+ * is prepended to the system prompt, with the locked token budget and any
+ * truncate-markers preserved (never silently dropped).
+ */
+export async function roleCall(role, userText, provider, { timeoutMs = 60_000, contextSections = null, contextBudget = 2000 } = {}) {
   if (!ROLES.includes(role)) throw new ModelError('INVALID_TOOL_OUTPUT', `unknown role: ${role}`);
   const schema = ROLE_OUTPUT_SCHEMAS[role];
+  let system = `${rolePrompt(role)}\nReturn keys: ${Object.keys(schema.shape).join(', ')}`;
+  if (Array.isArray(contextSections) && contextSections.length) {
+    const packed = pack({ budgetTokens: contextBudget, sections: contextSections });
+    system += `\n\nCONTEXT:\n${packed.context}`;
+  }
   const res = await chatValidated(provider, [
-    { role: 'system', content: `${rolePrompt(role)}\nReturn keys: ${Object.keys(schema.shape).join(', ')}` },
+    { role: 'system', content: system },
     { role: 'user', content: userText },
   ], { schema, timeoutMs });
   return { role, value: res.value, meta: { model: res.model, elapsedMs: res.elapsedMs, provider: provider.name } };
