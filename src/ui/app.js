@@ -239,6 +239,10 @@ function onEvent(ev) {
       } else if(ev.tool==='browser.verify' && ev.ok){
         workPulse('Browser result verified');
         const bar=$('work-progress');if(bar)bar.dataset.phase='verified';
+      } else if(ev.tool==='browser.read' && ev.ok && ev.meta?.mode==='structure'){
+        const count=Math.max(0,Number(ev.meta?.count)||0);
+        workPulse('Mapping page structure · '+count+' accessible elements');
+        const bar=$('work-progress');if(bar){bar.dataset.phase='structure';bar.title='Read-only page outline; no form values or passwords';}
       } else if(ev.tool==='browser.elements' && ev.ok){
         const matched=Number(ev.meta?.matched);
         const total=Number(ev.meta?.count);
