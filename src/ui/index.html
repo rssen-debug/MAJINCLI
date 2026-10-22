@@ -604,6 +604,13 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="compact"]{--ember:#cba6ff;--halo:rgba(203,166,255,.19);color:#d9c2ff;border-top-color:rgba(203,166,255,.15)}
 #composer #work-progress[data-phase="compact"] .pulse{animation-duration:2.8s;box-shadow:0 0 9px rgba(203,166,255,.25)}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="compact"] .pulse{animation:none}}
+/* Round: restrained focus glow, one chat surface; no additional panels. */
+#composer{transition:border-color .22s ease,box-shadow .22s ease}
+#composer:focus-within{
+  border-color:rgba(244,129,222,.42);
+  box-shadow:0 0 0 1px rgba(255,158,227,.10),0 0 23px rgba(226,98,200,.08);
+}
+@media(prefers-reduced-motion:reduce){#composer{transition:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>

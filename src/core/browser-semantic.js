@@ -13,9 +13,26 @@ export const SEMANTIC_SNAPSHOT_JS = String.raw`(() => {
     return r.width > 0 && r.height > 0 && st.visibility !== 'hidden' &&
       st.display !== 'none' && Number(st.opacity) > 0;
   };
-  const nodes = [...document.querySelectorAll(
-    'main,nav,aside,header,footer,h1,h2,h3,button,a,input,textarea,select,summary,[role="button"],[role="link"],[role="checkbox"],[role="textbox"]'
-  )];
+  const pick = 'main,nav,aside,header,footer,h1,h2,h3,button,a,input,textarea,select,summary,[role="button"],[role="link"],[role="checkbox"],[role="textbox"]';
+  const nodes = [...document.querySelectorAll(pick)].slice(0,65);
+  // Like accessibility-first automation, inspect open shadow roots. Closed
+  // roots remain opaque. Limit both scanned nodes and roots to avoid stalls.
+  const roots = [document], seen = new Set();
+  let shadowRoots = 0, scanned = 0;
+  for (let index = 0; index < roots.length && index < 16 && scanned < 350; index++) {
+    const root = roots[index];
+    if (!root || seen.has(root)) continue;
+    seen.add(root);
+    const descendants = [...root.querySelectorAll('*')].slice(0, 350 - scanned);
+    scanned += descendants.length;
+    for (const node of descendants) {
+      if (index > 0 && node.matches?.(pick) && nodes.length < 65) nodes.push(node);
+      if (node.shadowRoot && roots.length < 16 && !seen.has(node.shadowRoot)) {
+        roots.push(node.shadowRoot);
+        shadowRoots++;
+      }
+    }
+  }
   const out = [];
   for (const el of nodes) {
     if (out.length >= 65) break;
@@ -34,7 +51,7 @@ export const SEMANTIC_SNAPSHOT_JS = String.raw`(() => {
     out.push({role:safe(role),label:safe(label),level:/^h[1-6]$/.test(tag)?Number(tag[1]):null,
       disabled:el.matches(':disabled') || el.getAttribute('aria-disabled') === 'true'});
   }
-  return {url:location.origin + location.pathname,title:safe(document.title),elements:out};
+  return {url:location.origin + location.pathname,title:safe(document.title),elements:out,shadowRoots};
 })()`;
 
 export function formatSemanticSnapshot(payload,{cap=55}={}){
