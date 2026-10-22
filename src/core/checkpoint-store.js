@@ -36,7 +36,14 @@ export function loadCheckpoint(root, id) {
   const stat = (() => { try { return fs.lstatSync(file); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } })();
   if (!stat) return null;
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024) throw new Error('Invalid checkpoint file size');
-  try { data = JSON.parse(fs.readFileSync(file, 'utf8')); }
+  try {
+    const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    try {
+      const opened = fs.fstatSync(fd);
+      if (!opened.isFile() || opened.size > 1024 * 1024) throw new Error('Invalid checkpoint file size');
+      data = JSON.parse(fs.readFileSync(fd, 'utf8'));
+    } finally { fs.closeSync(fd); }
+  }
   catch (e) { if (e.code === 'ENOENT') return null; throw e; }
   if (data?.schema !== 1 || data?.id !== id || !data?.state || typeof data.state !== 'object' || Array.isArray(data.state)) throw new Error('Invalid checkpoint schema');
   return data;
