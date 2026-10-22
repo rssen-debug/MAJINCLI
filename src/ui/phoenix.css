@@ -519,3 +519,14 @@ body.simple .msg .appr button:not(:disabled):focus-visible {
   }
 }
 body.simple .msg .appr button:disabled { pointer-events:none; }
+
+/* Aurora: high-contrast, accessible permission actions. */
+body.simple .msg .appr button:focus-visible {
+  outline:3px solid var(--warn);
+  outline-offset:3px;
+}
+@media(prefers-contrast:more) {
+  body.simple .msg .appr button:focus-visible {
+    box-shadow:0 0 0 5px var(--bg);
+  }
+}
