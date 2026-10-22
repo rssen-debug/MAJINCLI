@@ -306,7 +306,7 @@ function onEvent(ev) {
           bar.dataset.phase=shadow?'shadow-verified':'verified';
           bar.title=shadow?'Verified a unique accessible control inside an open shadow root':'Confirmed against the live page — not just a successful click';
         }
-        const glyph=$('work-progress-symbol');if(glyph)glyph.textContent=shadow?'✧':'✓';
+        const glyph=$('work-progress-symbol');if(glyph){glyph.textContent='✓';if(shadow)glyph.textContent='✧';}
       } else if(ev.tool==='browser.read' && ev.ok && ev.meta?.mode==='structure'){
         const count=Math.max(0,Number(ev.meta?.count)||0);
         workPulse('Mapping page structure · '+count+' accessible elements');
