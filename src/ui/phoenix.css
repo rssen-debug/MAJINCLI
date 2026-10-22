@@ -573,3 +573,8 @@ body.simple .msg [data-recovery-status="skip"] { opacity:.75; }
 @media(prefers-contrast:more) {
  body.simple .msg [data-recovery-status] { border-width:2px; }
 }
+
+/* Aurora: glanceable recovery statuses, readable at small sizes. */
+body.simple .msg [data-recovery-status] { font-weight:600; letter-spacing:.01em; }
+body.simple .msg [data-recovery-status="approval"] { border-inline-start:3px solid var(--warn); }
+@media(max-width:480px) { body.simple .msg [data-recovery-status] { max-width:100%; overflow-wrap:anywhere; } }
