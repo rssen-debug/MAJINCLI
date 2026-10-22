@@ -506,6 +506,11 @@ body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinkin
 #composer #work-progress[data-phase="delta"] #work-progress-label{color:#caeadd}
 @keyframes majin-delta-glow{50%{opacity:.45;transform:scale(.74)}}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="delta"] .pulse{animation:none!important}}
+/* Round 1 visual: quiet amber 'action sent, not verified' ember in the single composer. */
+#composer #work-progress[data-phase="action"]{color:#e9cdac;border-top-color:rgba(255,188,114,.17)}
+#composer #work-progress[data-phase="action"] .pulse{background:#ffbd83;box-shadow:0 0 0 3px rgba(255,189,131,.08),0 0 12px rgba(255,189,131,.2);animation:majin-action-pulse 1.9s ease-in-out infinite}
+@keyframes majin-action-pulse{50%{transform:scale(.74);opacity:.5}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="action"] .pulse{animation:none}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
