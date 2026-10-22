@@ -30,3 +30,14 @@ test('agent refuses a plan journal belonging to another session', t => {
  assert.equal(agent.loadPlan('current'),null);
  assert.equal(agent.plans.size,0);
 });
+
+test('agent refuses oversized plan journal before parsing', t => {
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'majin-plan-large-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const agent=Object.create(Agent.prototype);
+ agent.plans=new Map();
+ agent.planPath=()=>path.join(dir,'too-large.plan.json');
+ fs.writeFileSync(agent.planPath(),'x'.repeat(1100000));
+ assert.equal(agent.loadPlan('demo'),null);
+ assert.equal(agent.plans.size,0);
+});
