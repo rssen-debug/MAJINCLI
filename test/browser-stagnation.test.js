@@ -40,3 +40,21 @@ test('tool and one-line UI are actually wired to browser stagnation evidence',()
   assert.match(app,/meta\?\.stagnation\?\.stagnant===true/);
   assert.match(html,/data-phase="stagnation"/);
 });
+
+test('late page controls are included in a private stagnation fingerprint',()=>{
+ const s='late-controls';
+ const controls=Array.from({length:55},(_,i)=>({selector:'#item-'+i,label:'Item '+i,checked:false}));
+ const before={...page('Static'),controls};
+ observeBrowserPage(s,before);
+ noteBrowserAction(s);observeBrowserPage(s,before);
+ noteBrowserAction(s);assert.equal(observeBrowserPage(s,before).stagnant,true);
+ const changed=controls.map(c=>({...c}));changed[54].checked=true;
+ noteBrowserAction(s);
+ assert.equal(observeBrowserPage(s,{...before,controls:changed}).stagnant,false);
+ clearBrowserStagnation(s);
+});
+test('late control signal remains an accessible composer-only cue',()=>{
+ const html=fs.readFileSync('src/ui/index.html','utf8');
+ assert.match(html,/majin-stagnation-soft-halo/);
+ assert.match(html,/prefers-reduced-motion:reduce/);
+});
