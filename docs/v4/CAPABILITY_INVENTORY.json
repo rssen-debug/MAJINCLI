@@ -1,6 +1,6 @@
 {
   "schema": "majin.v4.capability-inventory/v1",
-  "generatedAt": "2026-10-23T14:09:48.846Z",
+  "generatedAt": "2026-10-23T15:34:06.666Z",
   "platform": "linux",
   "v1": {
     "modules": [
@@ -296,6 +296,16 @@
           {
             "name": "fs.delete",
             "risk": "destructive",
+            "exportName": "fileTools",
+            "status": "integrated",
+            "lanes": [
+              "files"
+            ],
+            "requires": null
+          },
+          {
+            "name": "fs.find",
+            "risk": "read",
             "exportName": "fileTools",
             "status": "integrated",
             "lanes": [
@@ -1798,8 +1808,8 @@
     ],
     "totals": {
       "modules": 26,
-      "tools": 139,
-      "integrated": 109,
+      "tools": 140,
+      "integrated": 110,
       "excluded": 30,
       "lanes": 19
     }
@@ -2282,7 +2292,7 @@
   },
   "v4": {
     "builtinTools": 8,
-    "registeredOnThisHost": 107,
+    "registeredOnThisHost": 108,
     "lanes": [
       {
         "lane": "desktop",
@@ -2328,6 +2338,7 @@
           "fs.move",
           "fs.copy",
           "fs.delete",
+          "fs.find",
           "fs.stat",
           "fs.mkdir",
           "fs.tar"
@@ -2528,8 +2539,8 @@
   "domains": {
     "tools": {
       "builtin": 8,
-      "v1Integrated": 109,
-      "registeredOnHost": 107
+      "v1Integrated": 110,
+      "registeredOnHost": 108
     },
     "skills": {
       "shipped": [

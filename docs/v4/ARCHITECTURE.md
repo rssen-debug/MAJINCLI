@@ -200,6 +200,29 @@ current turn (exposure handle, goal, signal, depth) without changing that
 contract or every adapted V1 tool. The agent wraps the one `runTool` call it
 already makes in `runInTurn(state, fn)`; only the tools that ask see the turn.
 
+## 5.6 Files, history and the shared chat contract
+
+**Files.** `src/v4/path-access.js` answers one question for every V1 filesystem call: is this path
+inside the workspace or a folder the owner granted? It is used twice — the adapter refuses before
+the tool runs, and the agent puts the same list in the system prompt so the model searches the right
+place. Symlinks are judged by their real target; a relative path resolves against the workspace; a
+revocation is read at call time.
+
+```
+owner-mode.json ──► grantedFolders() ──┬─► registerHostTools(folders) ──► assertPathsAllowed()
+                                       ├─► createToolRegistry(allowedRoots) ──► document_read(path)
+                                       └─► agent access() ──► system prompt ("granted folder: …")
+```
+
+**History.** One store, `src/v4/store.js`. The list endpoint is a query over it (`view`, `q`,
+`since`), mutations are `PATCH` (rename/archive) and `DELETE …&confirm=1`, and deletions leave a
+bounded tombstone file so a second device drops the row instead of resurrecting it. Clients poll
+with the cursor returned as `serverTime` and reload the open conversation when its `version` moves.
+
+**Import.** `src/v4/import-history.js` reads V1's `sessions/*.jsonl` + `chats-index.json` and writes
+through the same `ConversationStore` every device already reads. It is read-only on the source,
+dry-run by default in the API and the UI, and idempotent through `sourceId = "v1:<chat>"`.
+
 ## 6. Platform kernel
 
 `kernel.js` defines `KERNEL_API_VERSION = 1` and a frozen capability contract

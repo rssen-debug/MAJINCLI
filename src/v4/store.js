@@ -64,15 +64,20 @@ export class ConversationStore {
     return path.join(this.dir, `${id}.json`);
   }
 
-  create({ title = 'Ny konversation' } = {}) {
+  create({ title = 'Ny konversation', sourceId = null, titlePolicy = 'fallback' } = {}) {
     const now = new Date().toISOString();
     const conv = {
       schema: 'majin.v4.conversation/v1',
       id: newId('conv'),
       title,
+      // Same title policy vocabulary as V1's chats.js: a manual rename wins
+      // forever, an auto title is set once from the first user message.
+      titlePolicy,
       createdAt: now,
       updatedAt: now,
       version: 1,
+      archivedAt: null,
+      ...(sourceId ? { sourceId } : {}),
       messages: [],
       goalIds: [],
       pendingApproval: null,
@@ -80,6 +85,37 @@ export class ConversationStore {
     };
     this.save(conv);
     return conv;
+  }
+
+  /**
+   * Tombstones for deleted conversations.
+   *
+   * Two devices must not resurrect a chat one of them deleted. A tombstone is
+   * tiny, bounded and kept next to the conversations; the list endpoint hands
+   * them out so a stale client can drop the row instead of showing a chat that
+   * no longer exists. Bounded to the newest 500 so the file cannot grow forever.
+   */
+  #tombstoneFile() {
+    return path.join(this.dir, '..', 'conversations-deleted.json');
+  }
+
+  tombstones() {
+    const data = readJson(this.#tombstoneFile());
+    const list = Array.isArray(data?.deleted) ? data.deleted : [];
+    return list.filter((t) => t && typeof t.id === 'string');
+  }
+
+  #addTombstone(id) {
+    const file = this.#tombstoneFile();
+    const now = new Date().toISOString();
+    const list = this.tombstones().filter((t) => t.id !== id);
+    list.push({ id, at: now });
+    const bounded = list.slice(-500);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ schema: 'majin.v4.conversation-tombstones/v1', deleted: bounded }, null, 2));
+    fs.renameSync(tmp, file);
+    return bounded;
   }
 
   save(conv) {
@@ -104,7 +140,14 @@ export class ConversationStore {
     return this.#remember(conv);
   }
 
-  list() {
+  /**
+   * The conversation list, the way every device reads it.
+   *
+   * `view` selects active (default), archived or all. `q` searches title and
+   * message text. `since` returns only what changed after that ISO timestamp,
+   * which is what a second device polls: an unchanged list costs nothing.
+   */
+  list({ view = 'active', q = '', since = null } = {}) {
     const out = [];
     let files = [];
     try {
@@ -112,24 +155,79 @@ export class ConversationStore {
     } catch {
       return out;
     }
+    const query = String(q || '').trim().toLowerCase();
+    const after = since ? Date.parse(since) : null;
     for (const f of files) {
       const conv = readJson(path.join(this.dir, f));
       if (!conv) continue;
-      out.push({
+      const archived = Boolean(conv.archivedAt);
+      if (view === 'active' && archived) continue;
+      if (view === 'archived' && !archived) continue;
+      const lastMessage = conv.messages.filter((m) => m.role !== 'system').slice(-1)[0];
+      const summary = {
         id: conv.id,
         title: conv.title,
+        titlePolicy: conv.titlePolicy || 'fallback',
+        createdAt: conv.createdAt,
         updatedAt: conv.updatedAt,
+        version: conv.version || 0,
+        archivedAt: conv.archivedAt || null,
         messages: conv.messages.length,
-        last: conv.messages.filter((m) => m.role !== 'system').slice(-1)[0]?.content?.slice(0, 120) || '',
-      });
+        last: lastMessage?.content?.slice(0, 120) || '',
+        lastRole: lastMessage?.role || null,
+      };
+      if (after && Number.isFinite(after) && Date.parse(conv.updatedAt) <= after) continue;
+      if (query) {
+        // Search the whole transcript, not only the title: "hitta chatten där
+        // vi pratade om dokumentet" is the normal way people look.
+        const haystack = `${conv.title}\n${conv.messages.map((m) => m.content).join('\n')}`.toLowerCase();
+        if (!haystack.includes(query)) continue;
+      }
+      out.push(summary);
     }
     // Bounded: the phone's drawer never needs every conversation ever written,
     // and an unbounded list turns the menu into a full scan of the data dir.
-    return out.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)).slice(0, CONVERSATION_LIST_MAX);
+    return out.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0)).slice(0, CONVERSATION_LIST_MAX);
+  }
+
+  /** Rename with V1's title policy: a manual title is never overwritten. */
+  rename(id, title) {
+    const text = String(title ?? '').replace(/\s+/g, ' ').trim();
+    if (!text || text.length > 80) {
+      throw Object.assign(new Error('title must be 1..80 visible characters'), { status: 400, code: 'INVALID_TITLE' });
+    }
+    const conv = this.get(id);
+    if (!conv) throw Object.assign(new Error('conversation not found'), { status: 404, code: 'NOT_FOUND' });
+    conv.title = text;
+    conv.titlePolicy = 'manual';
+    this.save(conv);
+    return conv;
+  }
+
+  /** Archive is reversible; delete is not. They are different operations. */
+  setArchived(id, archived) {
+    const conv = this.get(id);
+    if (!conv) throw Object.assign(new Error('conversation not found'), { status: 404, code: 'NOT_FOUND' });
+    conv.archivedAt = archived ? new Date().toISOString() : null;
+    this.save(conv);
+    return conv;
+  }
+
+  /** Set the automatic title from the first user message, once. */
+  #autoTitle(conv, text) {
+    const policy = conv.titlePolicy || 'fallback';
+    if (policy === 'manual') return;
+    const title = String(text).replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (!title) return;
+    conv.title = title;
+    conv.titlePolicy = 'auto';
   }
 
   remove(id) {
     const file = this.#file(id);
+    // Validate before touching the tombstone: an invalid id must not be
+    // remembered as deleted, or the list would filter a real id forever.
+    if (!/^conv_[a-z0-9_]+$/.test(String(id))) return false;
     let removed = false;
     try {
       fs.unlinkSync(file);
@@ -138,6 +236,7 @@ export class ConversationStore {
       removed = false;
     }
     this.cache.delete(id);
+    if (removed) this.#addTombstone(id);
     return removed;
   }
 
@@ -152,9 +251,7 @@ export class ConversationStore {
       ...(message.meta ? { meta: message.meta } : {}),
     };
     conv.messages.push(entry);
-    if (conv.title === 'Ny konversation' && entry.role === 'user') {
-      conv.title = entry.content.replace(/\s+/g, ' ').trim().slice(0, 60) || 'Ny konversation';
-    }
+    if (entry.role === 'user') this.#autoTitle(conv, entry.content);
     this.save(conv);
     return entry;
   }

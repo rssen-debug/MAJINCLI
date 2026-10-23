@@ -44,6 +44,33 @@ Remove it with:
 powershell -ExecutionPolicy Bypass -File .\scripts\v4\install-v4-windows.ps1 -Uninstall
 ```
 
+## 2.1 Files, history and the phone after this release
+
+Three things behave differently from the first V4 build, and one of them needs a grant you make from
+the phone:
+
+1. **A granted folder is real access.** Behörigheter → *Mapp att ge åtkomst till* → add e.g.
+   `C:\Users\<you>\Documents`. From that moment `fs_find`, `fs_read`, `fs_write`, `fs_search` and
+   `document_read` can use absolute paths inside it, and MAJIN is told the path in its system prompt.
+   Everything else on the disk stays refused. Revoke the folder and the next call is refused too.
+2. **The chat history is the server's.** Open MAJIN on the computer, then on the phone (or the other
+   way round): the left drawer lists the same conversations, search covers the whole transcript,
+   archive is reversible and deletion is permanent and confirmed. An installed PWA picks up the new
+   shell on its next launch (the cache version was bumped); if it looks stale, close it from the app
+   switcher and reopen.
+3. **Importing the old history is one button.** Historik → *Importera tidigare historik* shows what
+   would be imported, asks, then writes through the same store. The V1 files under
+   `%LOCALAPPDATA%\MAJIN\sessions` are only read.
+
+Verify all three on the host:
+
+```powershell
+npm run v4:accept -- --url https://<your-address> --write
+```
+
+`history.rename`, `history.archive_restore`, `history.search`, `history.two_devices`,
+`files.fs_find_registered` and `files.granted_folders` are the rows that prove it.
+
 ## 3. Cloudflare Tunnel ⚠ (owner action)
 
 Assumes a domain you control is on Cloudflare (free plan is enough).

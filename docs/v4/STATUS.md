@@ -5,6 +5,68 @@
 Det här dokumentet svarar på frågan *"körs det?"* — inte *"finns koden?"*. Allt som kräver Windows,
 en telefon eller en provider-nyckel står som **BLOCKERAT** tills kommandot som bevisar det har körts.
 
+## 2026-10-23 — filåtkomst, delad historik och chatt­hantering
+
+Den här omgången svarar på de tre sakerna du rapporterade från Windows och iPhone. Allt nedan är
+kört i den här miljön; det som kräver din maskin står kvar under **BLOCKERAT**.
+
+### 1. Filåtkomst: godkända mappar fungerar nu på riktigt
+
+Felet var inte en saknad fil utan att **Owner Mode registrerade mappar som ingen verkade läsa**:
+
+| Före | Efter |
+|---|---|
+| `allowsPath()` fanns men anropades aldrig | `src/v4/path-access.js` verkställer på varje anrop |
+| `fs.*` fick vilken absolut sökväg som helst | en sökväg måste ligga i arbetsytan eller en godkänd mapp |
+| modellen fick aldrig veta vilka mappar som var godkända | systemprompten listar dem, med instruktionen att söka där |
+| ingen kunde söka upp en fil på namn | nytt återanvänt V1-verktyg `fs.find` (namn/glob, bounded) |
+| `document_read` läste bara arbetsytan | läser nu även `path` i en godkänd mapp, via samma extraktor |
+
+Verifierat med riktiga filer (`test/v4/file-access.test.js`): `fs_find` hittar `CV Anders 2026.pdf`
+i en godkänd mapp, `document_read` läser texten ur PDF:en, allt utanför nekas med
+`PERMISSION_DENIED`, `..`-traversering nekas, och en återkallad mapp är stängd på nästa anrop.
+Symlänkar avgörs på sitt verkliga mål.
+
+### 2. Delad historik mellan enheter
+
+Samma V4-lagring, inget nytt chattsystem:
+
+- `GET /api/conversations?view=active|archived|all&q=…&since=…` — sökning i hela transkriptet,
+  arkivvy och en tidsmarkör så en andra enhet bara hämtar det som ändrats.
+- `PATCH /api/conversations` — byt namn (manuellt namn vinner för alltid) och arkivera/återställ.
+- `DELETE …&confirm=1` — bekräftelse krävs; kör en uppgift fortfarande svarar servern `409`,
+  och `&cancel=1` stoppar den först.
+- Tombstones (`conversations-deleted.json`) — en radering på telefonen återuppstår inte på datorn.
+- Klienten pollar var 6:e sekund när fliken är synlig och hämtar om den öppna konversationen när
+  dess `version` ändrats. Enheten minns vilket samtal som var öppet och öppnar det igen efter omstart.
+- Import av V1-historik (`POST /api/conversations/import`, torrkörning först): läser
+  `<MAJIN_HOME>/sessions/*.jsonl` + `chats-index.json`, bevarar titel/arkivstatus, hoppar över
+  system- och verktygsrader, rör aldrig källfilerna och är idempotent (en växande V1-logg fylls på,
+  den dupliceras inte). V2 och V3 hade ingen bestående chattlogg — det står i svaret.
+
+### 3. UI/UX
+
+- **En enda centrerad kolumn** (`--content-w: 820px`) för topbar, hero/spirit, transkript,
+  composer och godkännandekort. Den gamla mixen 900/780 px är borta, och `100vh` är ersatt av
+  `100dvh` så iOS-tangentbordet inte knuffar layouten.
+- **Historikpanel** som drawer (stängd som standard, öppnas från topbaren eller med swipe från
+  vänsterkanten), med sökfält, flikarna Aktiva/Arkiverade, aktiv markering och en `⋯`-meny per rad:
+  Byt namn, Arkivera/Återställ, Radera permanent.
+- **Bekräftelsedialog** för radering, skild från arkivering, med texten att radering gäller alla enheter.
+- **Nytt samtal** skapar ett tomt samtal med hero och bokmärker det inte.
+
+### Tester
+
+`479 tester, 478 pass, 0 fail, 1 skipped` (webbläsarbinary saknas) samt nya:
+`history-sync.test.js` (10), `file-access.test.js` (7), fyra nya DOM-tester i `client-dom.test.js`
+och tre layoutkontrakt i `ui.test.js`.
+
+Acceptanskörningen (`npm run v4:accept`) visar nu filåtkomsten själv, med en riktig fil i en mapp
+utanför arbetsytan: `files.folder_grant` (godkänn via HTTP-API:t), `files.fs_find_registered`,
+`files.search_granted_folder` (hittar `acceptans-cv.docx`) och `files.refuses_ungranted`
+(`PERMISSION_DENIED` för en mapp som inte är godkänd). Enda kvarvarande FAIL i den här miljön är
+`model.configured`, eftersom ingen provider-nyckel finns här.
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är

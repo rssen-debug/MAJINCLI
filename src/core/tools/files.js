@@ -348,6 +348,77 @@ export const fileTools = [
   }),
 
   def({
+    name: 'fs.find',
+    group: 'files',
+    risk: 'read',
+    desc: 'Find files by name under a folder, recursively. Use this to locate a document you only know the name or extension of (e.g. a CV or an invoice) before reading it. Matches the file name, not the content.',
+    params: {
+      path: 'string: folder to search in (default: workspace)',
+      name: 'string: part of the file name, case-insensitive, e.g. "cv" (optional: omit to match by glob only)',
+      glob: 'string: optional name filter, e.g. *.pdf, *.docx (default * = all files)',
+      maxResults: 'number: maximum hits (optional, default: 50)',
+      maxDepth: 'number: how deep to descend (optional, default: 6)',
+      maxEntries: 'number: safety cap on visited entries (optional, default: 20000)',
+    },
+    examples: ['fs.find({path:"C:\\Users\\du\\Documents", name:"cv", glob:"*.pdf"})'],
+    // One argument, destructured in the body: V1 derives "required" parameters
+    // from the run signature, and a renamed binding (`path: root = "."`) made
+    // that heuristic treat every parameter as required.
+    async run(input = {}, ctx) {
+      const { path: root = '.', name = '', glob = '', maxResults = 50, maxDepth = 6, maxEntries = 20000 } = input || {};
+      const { abs } = resolveIn(ctx, root);
+      const needle = String(name || '').trim().toLowerCase();
+      const re = glob ? globToRe(glob) : null;
+      const hits = [];
+      let visited = 0;
+      let truncated = false;
+      async function step(dir, depth) {
+        if (hits.length >= maxResults || depth > maxDepth || visited >= maxEntries) {
+          if (hits.length >= maxResults || visited >= maxEntries) truncated = true;
+          return;
+        }
+        let ents = [];
+        try {
+          ents = await fsp.readdir(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const e of ents) {
+          if (hits.length >= maxResults || visited >= maxEntries) {
+            truncated = true;
+            return;
+          }
+          if (IGNORE.has(e.name) || e.name.startsWith('.')) continue;
+          visited += 1;
+          const full = path.join(dir, e.name);
+          if (e.isDirectory()) {
+            await step(full, depth + 1);
+            continue;
+          }
+          if (needle && !e.name.toLowerCase().includes(needle)) continue;
+          if (re && !re.test(e.name)) continue;
+          let st = null;
+          try {
+            st = await fsp.stat(full);
+          } catch {
+            /* unreadable file: still a real match by name */
+          }
+          hits.push({ path: full, name: e.name, size: st?.size ?? null, mtime: st?.mtime?.toISOString?.()?.slice(0, 19) ?? null });
+        }
+      }
+      await step(abs, 0);
+      // Newest first: a document someone edited lately is the likely target.
+      hits.sort((a, b) => String(b.mtime || '').localeCompare(String(a.mtime || '')));
+      return {
+        ok: true,
+        result: `${abs} — ${hits.length} match(es)${truncated ? ' (stopped at the search cap)' : ''}\n${hits.map((h) => `${String(h.size ?? '?').padStart(10)} ${h.mtime || ''}  ${h.path}`).join('\n')}`,
+        meta: { root: abs, count: hits.length, visited, truncated, hits },
+        summary: `${hits.length} file(s) matching "${needle || glob || '*'}" in ${path.basename(abs)}`,
+      };
+    },
+  }),
+
+  def({
     name: 'fs.stat',
     group: 'files',
     risk: 'read',

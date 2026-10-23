@@ -87,8 +87,8 @@ function clientBundle() {
   return parts.join('\n');
 }
 
-async function bootApp() {
-  const server = await startTestServer();
+async function bootApp({ server: reuse = null, prepare = null, session = '' } = {}) {
+  const server = reuse || await startTestServer();
   const html = fs.readFileSync(path.join(UI, 'index.html'), 'utf8');
 
   const dom = new JSDOM(html, {
@@ -98,10 +98,13 @@ async function bootApp() {
   });
   const { window } = dom;
   window.eval(PRELUDE);
+  // A reload keeps localStorage: this is how a returning device is simulated.
+  if (prepare) prepare(window);
 
   // Cookies: jsdom's own fetch is not used; the session cookie is forwarded here.
   // `hooks` lets a test break the network or expire the session on purpose.
-  let cookie = '';
+  // A real reload keeps the session cookie; seeding it is how that is simulated.
+  let cookie = session;
   const hooks = { dropChatOnce: false, expireSession: false, dropEveryChat: false, dropStreamAfterOpen: false };
   const realFetch = globalThis.fetch;
   window.fetch = async (input, init = {}) => {
@@ -181,9 +184,9 @@ async function bootApp() {
     get cookie() {
       return cookie;
     },
-    async close() {
+    async close({ keep = false } = {}) {
       window.close();
-      await server.close();
+      if (!keep) await server.close();
     },
   };
 }
@@ -542,5 +545,182 @@ test('client: the skills list shows what is ready and what is blocked', { skip }
     assert.match(items[0].textContent, /kräver/);
   } finally {
     await app.close();
+  }
+});
+
+/* ------------------------------------------------------------- history UI -- */
+
+async function bootPaired(boot = bootApp) {
+  const app = await boot();
+  await until(() => visible(app.document.querySelector('#gate')), { label: 'gate' });
+  app.document.querySelector('#gate-code').value = app.server.context.pairingFresh;
+  app.document.querySelector('#gate-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+  await until(() => app.document.querySelector('#gate').hidden, { label: 'paired' });
+  return app;
+}
+
+async function sendMessage(app, text) {
+  const input = app.document.querySelector('#input');
+  input.value = text;
+  input.dispatchEvent(new app.window.Event('input', { bubbles: true }));
+  app.document.querySelector('#composer').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+  await until(() => app.document.querySelector('#stop-btn').hidden === true, { label: 'turn to finish', timeoutMs: 15_000 });
+}
+
+const rows = (app) => [...app.document.querySelectorAll('#history-list .history-item')];
+
+test('history ui: the drawer opens, lists the conversation and reopens it', { skip }, async () => {
+  const app = await bootPaired();
+  try {
+    await sendMessage(app, 'Skriv filen historia.txt med innehåll: hej');
+    app.document.querySelector('#history-btn').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => app.document.querySelector('#history').hidden === false, { label: 'the drawer to open' });
+    await until(() => rows(app).length === 1, { label: 'one row in the drawer' });
+
+    const title = rows(app)[0].querySelector('.history-title').textContent;
+    assert.match(title, /Skriv filen historia/);
+
+    // New chat clears the screen...
+    app.document.querySelector('#new-chat').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => app.document.querySelector('#thread').children.length === 0, { label: 'an empty thread' });
+    assert.equal(app.document.querySelector('#hero').hidden, false, 'the hero is back');
+
+    // ...and reopening the row restores the transcript.
+    app.document.querySelector('#history-btn').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => rows(app).length === 1, { label: 'the row again' });
+    rows(app)[0].querySelector('.history-open').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => app.document.querySelectorAll('#thread .msg').length >= 2, { label: 'the transcript to come back' });
+    assert.equal(app.errors.length, 0, `uncaught errors: ${app.errors.join('; ')}`);
+  } finally {
+    await app.close();
+  }
+});
+
+test('history ui: search, rename, archive and restore work from the drawer', { skip }, async () => {
+  const app = await bootPaired();
+  try {
+    await sendMessage(app, 'Skriv filen sökbar.txt med innehåll: unik markör');
+    // A second conversation, the way the owner makes one: "Nytt samtal".
+    app.document.querySelector('#history-btn').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => rows(app).length === 1, { label: 'the first conversation' });
+    app.document.querySelector('#new-chat').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => app.document.querySelector('#history').hidden === true, { label: 'the drawer to close' });
+    await sendMessage(app, 'Skriv filen annan.txt med innehåll: annat');
+
+    app.document.querySelector('#history-btn').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => rows(app).length === 2, { label: 'two rows' });
+
+    // Search is server-side over the transcript.
+    const query = app.document.querySelector('#history-query');
+    query.value = 'unik markör';
+    query.dispatchEvent(new app.window.Event('input', { bubbles: true }));
+    await until(() => rows(app).length === 1, { label: 'the search to filter' });
+    query.value = '';
+    query.dispatchEvent(new app.window.Event('input', { bubbles: true }));
+    await until(() => rows(app).length === 2, { label: 'the list to come back' });
+
+    // Rename through the action sheet.
+    rows(app)[0].querySelector('.history-more').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => app.document.querySelector('#confirm-dialog').hidden === false, { label: 'the action sheet' });
+    const actions = [...app.document.querySelectorAll('#confirm-dialog .dialog-extra button')];
+    assert.deepEqual(actions.map((b) => b.textContent), ['Byt namn', 'Arkivera', 'Radera permanent']);
+    actions[0].dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => app.document.querySelector('#rename-dialog').hidden === false, { label: 'the rename dialog' });
+    const rename = app.document.querySelector('#rename-input');
+    rename.value = 'Nytt namn';
+    app.document.querySelector('#rename-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+    await until(() => rows(app).some((r) => r.querySelector('.history-title').textContent === 'Nytt namn'), { label: 'the new name' });
+
+    // Archive: it leaves the active tab and appears under Arkiverade.
+    rows(app).find((r) => r.querySelector('.history-title').textContent === 'Nytt namn')
+      .querySelector('.history-more').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => app.document.querySelector('#confirm-dialog').hidden === false, { label: 'the action sheet again' });
+    [...app.document.querySelectorAll('#confirm-dialog .dialog-extra button')][1]
+      .dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => rows(app).length === 1, { label: 'the archived chat to leave the list' });
+
+    app.document.querySelector('#history-tab-archived').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => rows(app).length === 1, { label: 'the archived tab' });
+    assert.equal(rows(app)[0].querySelector('.history-title').textContent, 'Nytt namn');
+
+    // Restore.
+    rows(app)[0].querySelector('.history-more').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => app.document.querySelector('#confirm-dialog').hidden === false, { label: 'the action sheet' });
+    [...app.document.querySelectorAll('#confirm-dialog .dialog-extra button')][1]
+      .dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => rows(app).length === 0, { label: 'the archived list to empty' });
+
+    const server = await app.window.fetch('/api/conversations?view=all');
+    const data = await server.json();
+    assert.equal(data.conversations.length, 2, 'a conversation disappeared');
+    assert.ok(data.conversations.every((c) => !c.archivedAt), 'restore did not clear the archive');
+  } finally {
+    await app.close();
+  }
+});
+
+test('history ui: delete needs the confirmation dialog, and archive is a different action', { skip }, async () => {
+  const app = await bootPaired();
+  try {
+    await sendMessage(app, 'Skriv filen radera.txt med innehåll: x');
+    app.document.querySelector('#history-btn').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => rows(app).length === 1, { label: 'the row' });
+
+    rows(app)[0].querySelector('.history-more').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => app.document.querySelector('#confirm-dialog').hidden === false, { label: 'the action sheet' });
+    [...app.document.querySelectorAll('#confirm-dialog .dialog-extra button')][2]
+      .dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => app.document.querySelector('#confirm-dialog').hidden === false, { label: 'the confirm dialog' });
+    assert.equal(app.document.querySelector('#confirm-delete').hidden, false);
+
+    // Cancel leaves it alone.
+    app.document.querySelector('#confirm-cancel').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    const still = await (await app.window.fetch('/api/conversations?view=all')).json();
+    assert.equal(still.conversations.length, 1, 'cancel deleted the conversation');
+
+    // Confirm removes it, and the drawer empties.
+    rows(app)[0].querySelector('.history-more').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => app.document.querySelector('#confirm-dialog').hidden === false, { label: 'the action sheet' });
+    [...app.document.querySelectorAll('#confirm-dialog .dialog-extra button')][2]
+      .dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => app.document.querySelector('#confirm-dialog').hidden === false, { label: 'the confirm dialog' });
+    app.document.querySelector('#confirm-delete').dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await until(() => rows(app).length === 0, { label: 'the list to empty after deletion' });
+
+    const after = await (await app.window.fetch('/api/conversations?view=all')).json();
+    assert.equal(after.conversations.length, 0);
+  } finally {
+    await app.close();
+  }
+});
+
+test('history ui: a reload lands back in the conversation that was open', { skip }, async () => {
+  const app = await bootPaired();
+  let id = null;
+  try {
+    await sendMessage(app, 'Skriv filen minne.txt med innehåll: kom ihåg mig');
+    const listed = await (await app.window.fetch('/api/conversations')).json();
+    id = listed.conversations[0].id;
+    assert.equal(app.window.localStorage.getItem('majin.conversationId'), id,
+      'the client did not bookmark the conversation it is showing');
+  } finally {
+    await app.close({ keep: true });
+  }
+
+  const again = await bootApp({
+    server: app.server,
+    session: app.cookie,
+    prepare: (w) => w.localStorage.setItem('majin.conversationId', id),
+  });
+  try {
+    await until(() => again.document.querySelectorAll('#thread .msg').length >= 2, { label: 'the transcript to come back after reload' });
+    assert.match(again.document.querySelector('#thread').textContent, /kom ihåg mig/);
+    // Let the boot chain finish before tearing the window down, so no fetch is
+    // left in flight when the server closes.
+    await until(() => again.document.querySelector('#model-label').textContent !== 'ansluter…', { label: 'boot to settle' });
+  } finally {
+    again.window.dispatchEvent(new again.window.Event('pagehide'));
+    await again.close();
+    await app.server.close();
   }
 });

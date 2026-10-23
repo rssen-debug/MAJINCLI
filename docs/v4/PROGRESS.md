@@ -615,3 +615,30 @@ A second test proves delegation: the child request has a subagent system prompt,
 Windows execution, the interactive desktop, a real browser runtime, real model inference, the phone
 over a tunnel, Task Scheduler firing the update task, and OCR. Commands that would settle each are
 in `STATUS.md`.
+
+
+## File access, shared history and chat management — 2026-10-23
+
+Reported from the owner's real Windows host and iPhone: the server works and 6/6 tool probes pass,
+but MAJIN could not find a granted document, the two devices did not share a history, and the layout
+was not centred. What changed, and what is measured:
+
+| Item | Before | After | Evidence |
+|---|---|---|---|
+| Granted folders | recorded, never enforced or advertised | enforced per call by `src/v4/path-access.js`; listed in the system prompt | `file-access.test.js` (7) |
+| Finding a file by name | no such tool | V1 `fs.find` (reused, bounded, glob + name) | `file-access.test.js` |
+| Reading a document outside the workspace | `document_read` was workspace-only | `path` inside a granted folder, same extractor | `file-access.test.js` |
+| Revocation | next boot | next call | `file-access.test.js` |
+| Conversation list | flat, unbounded, no views | `view` + `q` + `since` + tombstones | `history-sync.test.js` |
+| Rename / archive / restore | missing | `PATCH /api/conversations` | `history-sync.test.js` |
+| Delete | no confirmation, possible mid-turn | `confirm=1` required; `409` while a turn runs; `cancel=1` stops it | `history-sync.test.js` |
+| Two devices | no sync | cursor polling, version-based reload, bookmarked open chat | `history-sync.test.js`, `client-dom.test.js` |
+| V1 history import | none | dry-run + idempotent merge, source untouched | `history-sync.test.js` (2) |
+| Layout | 900/780 px mix, `100vh` | one `--content-w` column, `100dvh`, centred hero | `ui.test.js` (3) |
+| Chat management UI | a list in the settings sheet | drawer with search, tabs, per-row actions, confirm dialog | `client-dom.test.js` (4) |
+
+Suite after this pass: **479 tests, 478 pass, 1 skipped** (no browser binary). Static gates:
+558/558 files parse, 0 Swedish literals in 293 files, inventory has a decision for every module.
+
+The score is unchanged: no matrix criterion was added or reinterpreted. The host rows (H1–H6) and
+the device rows (M10, H3, H4) still need the owner's machine and phone.

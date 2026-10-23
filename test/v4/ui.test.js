@@ -20,6 +20,49 @@ function pngSize(file) {
   return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 }
 
+test('layout: one centred content column for topbar, hero, transcript and composer', () => {
+  const css = fs.readFileSync(path.join(UI, 'app.css'), 'utf8');
+  assert.match(css, /--content-w:\s*820px/, 'the shared column width is not declared');
+  for (const selector of ['.topbar', '.stage', '.composer']) {
+    const block = new RegExp(`\\${selector} \\{[^}]*\\}`).exec(css)?.[0] || '';
+    assert.match(block, /max-width:\s*var\(--content-w\)/, `${selector} does not use the shared column`);
+    assert.match(block, /margin-inline:\s*auto/, `${selector} is not centred`);
+  }
+  // The old 900px/780px mix is what made the composer and the transcript sit on
+  // different axes on a desktop monitor.
+  assert.ok(!/max-width:\s*900px/.test(css), 'a second, wider column came back');
+  assert.ok(!/max-width:\s*780px/.test(css), 'the transcript uses a narrower column than the composer');
+  // The spirit is centred inside the hero.
+  const hero = (/\n\.hero \{[^}]*\}/.exec(css)?.[0] || '');
+  assert.match(hero, /align-items:\s*center/);
+  assert.match(hero, /justify-content:\s*center/);
+});
+
+test('layout: the history drawer is closed by default and never a permanent sidebar', () => {
+  const html = fs.readFileSync(path.join(UI, 'index.html'), 'utf8');
+  const drawer = /<aside class="history"[^>]*>/.exec(html)?.[0] || '';
+  assert.match(drawer, /\bhidden\b/, 'the drawer is visible before the user opens it');
+  assert.match(html, /id="history-btn"/);
+  assert.match(html, /id="history-close"/);
+  const css = fs.readFileSync(path.join(UI, 'app.css'), 'utf8');
+  // The base rule (not the >=720px override) decides the overlay behaviour.
+  const block = (/\n\.history \{[^}]*\}/.exec(css)?.[0] || '');
+  assert.match(block, /position:\s*fixed/, 'the drawer must overlay, not resize the transcript');
+  assert.ok(css.includes('width: min(86vw, 380px)'), 'the phone drawer width is missing');
+  // Swipe gestures are bound, from the edge only.
+  const js = fs.readFileSync(path.join(UI, 'app.js'), 'utf8');
+  assert.match(js, /touchstart/);
+  assert.match(js, /edge:/);
+  assert.match(js, /openHistory\(\)/);
+});
+
+test('layout: a fixed height floor is not used, so iOS keyboard and desktop agree', () => {
+  const css = fs.readFileSync(path.join(UI, 'app.css'), 'utf8');
+  assert.ok(!/height:\s*100vh\b/.test(css), '100vh is broken under the iOS keyboard');
+  assert.match(css, /100dvh/);
+  assert.match(css, /env\(safe-area-inset-bottom/);
+});
+
 test('pwa: manifest is valid and installable', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(UI, 'manifest.webmanifest'), 'utf8'));
   assert.equal(manifest.display, 'standalone');

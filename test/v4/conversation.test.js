@@ -142,7 +142,14 @@ test('conversation: deleting a conversation removes it from disk', async () => {
     const { cookie } = await s.pair();
     const first = await chat(s, cookie, 'Skriv filen del.txt med innehåll: x');
     const convId = first.events.find((e) => e.type === 'done').data.conversationId;
-    const del = await fetch(`${s.base}/api/conversations?id=${convId}`, {
+    // Permanent deletion is confirmed. Without the flag the server refuses,
+    // because "delete" and "archive" must never be the same click.
+    const refusals = await fetch(`${s.base}/api/conversations?id=${convId}`, {
+      method: 'DELETE',
+      headers: { cookie, 'x-majin-csrf': '1', origin: s.base },
+    });
+    assert.equal(refusals.status, 400);
+    const del = await fetch(`${s.base}/api/conversations?id=${convId}&confirm=1`, {
       method: 'DELETE',
       headers: { cookie, 'x-majin-csrf': '1', origin: s.base },
     });

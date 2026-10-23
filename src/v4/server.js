@@ -43,6 +43,7 @@ import { TurnJournal } from './turns.js';
 import { hostCapabilities, describeCapabilities, registerHostTools } from './tools/host.js';
 import { UploadStore, UploadError, serveHeadersFor, typeForName, MAX_UPLOAD_BYTES } from './uploads.js';
 import { OwnerMode, OwnerModeError, GRANTABLE_LANES } from './owner-mode.js';
+import { planV1Import, applyV1Import } from './import-history.js';
 import { discoverSkills, usableSkills, describeSkills } from './skills.js';
 import { parseMcpConfig, connectServers } from './mcp.js';
 import { registerMcpTools } from './mcp-tools.js';
@@ -147,7 +148,22 @@ export function createV4Server({ config }) {
   // already has and the phone sees the same file the model saw.
   const uploads = new UploadStore({ dir: workspaceDir });
 
-  const tools = createToolRegistry({ workspaceDir, memoryDir: paths.memory });
+  let hostCaps = null;
+  let hostTools = { registered: [], skipped: [] };
+  const forcedLanes = config.platform?.hostTools ? ['*'] : [];
+  // Owner Mode exists before the tools do: the filesystem tools must ask it
+  // which folders are granted on every single call.
+  const ownerMode = new OwnerMode({
+    file: path.join(paths.root, 'owner-mode.json'),
+    forceLanes: forcedLanes.includes('*') ? [...GRANTABLE_LANES] : [],
+  });
+  const grantedFolders = () => ownerMode.folders();
+
+  const tools = createToolRegistry({
+    workspaceDir,
+    memoryDir: paths.memory,
+    allowedRoots: grantedFolders,
+  });
   const model = createModelClient(config, { workspaceDir });
   // Structured, privacy-preserving telemetry: V2's ledger keeps a fixed field
   // allowlist per event, so message text, paths and secrets cannot land in it.
@@ -174,7 +190,22 @@ export function createV4Server({ config }) {
   }
   const skillsBridge = { usable: () => skillsNow().usable };
 
-  const agent = createAgent({ config, conversations, goals, tools, model, telemetry, skills: skillsBridge });
+  const agent = createAgent({
+    config,
+    conversations,
+    goals,
+    tools,
+    model,
+    telemetry,
+    skills: skillsBridge,
+    // The model is told where it may look. Without this it only ever tried the
+    // workspace, which is why a granted folder was never searched.
+    access: () => ({
+      workspace: workspaceDir,
+      folders: grantedFolders(),
+      lanes: ownerMode.activeLanes(),
+    }),
+  });
   // Mobile connections drop. The journal lets a phone reattach to a turn that
   // kept running instead of losing the work.
   const journal = new TurnJournal();
@@ -182,16 +213,6 @@ export function createV4Server({ config }) {
   // Host capability detection runs at boot: what this machine can actually do,
   // decided by asking, never by assuming. Which lanes are ACTIVE is the owner's
   // decision, persisted in owner-mode.json and changeable from the phone.
-  let hostCaps = null;
-  let hostTools = { registered: [], skipped: [] };
-  const forcedLanes = config.platform?.hostTools ? ['*'] : [];
-  const ownerMode = new OwnerMode({
-    file: path.join(paths.root, 'owner-mode.json'),
-    forceLanes: forcedLanes.includes('*')
-      ? [...GRANTABLE_LANES]
-      : [],
-  });
-
   /**
    * Register exactly the lanes the owner currently allows. Called at boot and
    * again after every grant or revoke, so a revocation from the phone takes
@@ -234,6 +255,9 @@ export function createV4Server({ config }) {
       // through the same approval policy as a direct call.
       approvals: agent.approvals,
       session: 'v4',
+      // The V1 filesystem lane may touch the workspace plus exactly the folders
+      // the owner granted — enforced per call, not just recorded.
+      folders: grantedFolders,
     });
     for (const r of partial.registered) {
       if (!stillThere.some((e) => e.name === r.name)) stillThere.push(r);
@@ -791,7 +815,16 @@ export function createV4Server({ config }) {
         workspace: { label: 'arbetsyta', files: listWorkspace(tools.root) },
         conversations: conversations.list().slice(0, 30),
         goals: goals.list().slice(-10).reverse(),
-        caps: { voice: true, voiceEngine: 'browser', streaming: true, tools: ['workspace_write', 'workspace_read', 'workspace_list', 'memory_save', 'memory_search'] },
+        caps: {
+          voice: true,
+          voiceEngine: 'browser',
+          streaming: true,
+          // The real registry, not a remembered list: this field used to name
+          // five workspace tools long after the host lanes existed.
+          tools: tools.registry.list().map((t) => t.name),
+          toolCount: tools.registry.list().length,
+          folders: ownerMode.folders(),
+        },
       });
     },
 
@@ -873,24 +906,139 @@ export function createV4Server({ config }) {
       }
     },
 
-    'GET /api/conversations': async (req, res) => {
+    /**
+     * The conversation list every device reads.
+     *
+     *   ?view=active|archived|all   (default active)
+     *   ?q=text                     searches titles AND transcript text
+     *   ?since=<ISO>                only what changed after this timestamp
+     *
+     * `deleted` carries tombstones so a second device drops a chat that was
+     * deleted elsewhere instead of showing a row that no longer opens.
+     */
+    'GET /api/conversations': async (req, res, url) => {
       requireSession(req);
-      sendJson(res, 200, { ok: true, conversations: conversations.list() });
+      const view = ['active', 'archived', 'all'].includes(url.searchParams.get('view'))
+        ? url.searchParams.get('view')
+        : 'active';
+      const q = String(url.searchParams.get('q') || '').slice(0, 200);
+      const sinceRaw = url.searchParams.get('since');
+      const since = sinceRaw && Number.isFinite(Date.parse(sinceRaw)) ? new Date(Date.parse(sinceRaw)).toISOString() : null;
+      sendJson(res, 200, {
+        ok: true,
+        view,
+        conversations: conversations.list({ view, q, since }),
+        deleted: conversations.tombstones(),
+        serverTime: new Date().toISOString(),
+      });
     },
 
     'POST /api/conversations': async (req, res) => {
       requireSession(req);
       assertCsrfHeader(req);
-      const conv = conversations.create();
+      const body = await readJsonBody(req, 4096).catch(() => ({}));
+      const conv = conversations.create({
+        title: typeof body.title === 'string' && body.title.trim()
+          ? body.title.trim().slice(0, 80)
+          : 'Ny konversation',
+        titlePolicy: typeof body.title === 'string' && body.title.trim() ? 'manual' : 'fallback',
+      });
       sendJson(res, 201, { ok: true, conversation: { id: conv.id, title: conv.title, modelId: conv.modelId || null } });
     },
 
+    /** Rename or archive. Archive is reversible; delete is a different route. */
+    'PATCH /api/conversations': async (req, res) => {
+      requireSession(req);
+      assertCsrfHeader(req);
+      const body = await readJsonBody(req, 8192);
+      const id = String(body.id || '');
+      if (!id) throw new HttpError(400, 'ID_REQUIRED', 'id is required.');
+      try {
+        let conv;
+        if (typeof body.title === 'string') {
+          conv = conversations.rename(id, body.title);
+        } else if (typeof body.archived === 'boolean') {
+          conv = conversations.setArchived(id, body.archived);
+        } else {
+          throw new HttpError(400, 'NOTHING_TO_CHANGE', 'Send title or archived.');
+        }
+        sendJson(res, 200, {
+          ok: true,
+          conversation: {
+            id: conv.id,
+            title: conv.title,
+            titlePolicy: conv.titlePolicy,
+            archivedAt: conv.archivedAt || null,
+            updatedAt: conv.updatedAt,
+            version: conv.version,
+          },
+        });
+      } catch (err) {
+        if (err?.code === 'INVALID_TITLE') throw new HttpError(400, err.code, err.message);
+        if (err?.code === 'NOT_FOUND') throw new HttpError(404, err.code, err.message);
+        throw err;
+      }
+    },
+
+    /**
+     * Delete is permanent, so it needs an explicit `confirm`.
+     *
+     * An active turn is work in progress: deleting under it would let a tool
+     * finish and write into a conversation that no longer exists. Unless the
+     * caller asks to stop it, the delete is refused with 409 and the number of
+     * running turns, so the phone can ask "stop it and delete?".
+     */
     'DELETE /api/conversations': async (req, res, url) => {
       requireSession(req);
       assertCsrfHeader(req);
       const id = url.searchParams.get('id') || '';
+      if (url.searchParams.get('confirm') !== '1') {
+        throw new HttpError(400, 'CONFIRM_REQUIRED', 'Permanent deletion requires confirm=1.');
+      }
+      const running = agent.isRunning(`conv:${id}`);
+      if (running && url.searchParams.get('cancel') !== '1') {
+        throw new HttpError(409, 'TURN_RUNNING', 'A task is still running in this conversation. Cancel it and delete, or wait.');
+      }
+      const cancelled = running ? agent.cancel(`conv:${id}`) : false;
       const removed = conversations.remove(id);
-      sendJson(res, 200, { ok: true, removed });
+      if (!removed) throw new HttpError(404, 'NOT_FOUND', 'Conversation not found.');
+      sendJson(res, 200, { ok: true, removed, cancelled });
+    },
+
+    /**
+     * Import earlier MAJIN history (V1 transcripts) through the SAME store.
+     * Dry run by default: nothing is written until the owner has seen the plan.
+     */
+    'POST /api/conversations/import': async (req, res) => {
+      requireSession(req);
+      assertCsrfHeader(req);
+      const body = await readJsonBody(req, 8192).catch(() => ({}));
+      const source = String(body.source || 'v1');
+      if (source !== 'v1') {
+        throw new HttpError(400, 'UNKNOWN_SOURCE', 'Only the V1 transcript store can be imported; V2 kept goals and V3 kept a single deliverable, neither has a chat log.');
+      }
+      const plan = planV1Import({
+        sessionsDir: path.join(paths.home, 'sessions'),
+        conversations,
+      });
+      if (plan.error) throw new HttpError(404, 'NO_SOURCE', plan.error);
+      if (body.dryRun !== false) {
+        sendJson(res, 200, {
+          ok: true,
+          dryRun: true,
+          plan: {
+            found: plan.found,
+            create: plan.create.map((c) => ({ chatId: c.chatId, title: c.title, messages: c.messages.length, archived: Boolean(c.archivedAt) })),
+            merge: plan.merge,
+            skip: plan.skip,
+            malformed: plan.malformed,
+            unreadable: plan.unreadable,
+          },
+        });
+        return;
+      }
+      const result = applyV1Import({ plan, conversations });
+      sendJson(res, 200, { ok: true, dryRun: false, result });
     },
 
     'GET /api/conversation': async (req, res, url) => {
@@ -902,6 +1050,8 @@ export function createV4Server({ config }) {
         conversation: {
           id: conv.id,
           title: conv.title,
+          titlePolicy: conv.titlePolicy || 'fallback',
+          archivedAt: conv.archivedAt || null,
           modelId: conv.modelId || null,
           version: conv.version,
           updatedAt: conv.updatedAt,

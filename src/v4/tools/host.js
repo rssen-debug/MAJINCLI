@@ -24,6 +24,7 @@
 import { z } from 'zod';
 import { runTool } from '../../v2/tools/runner.js';
 import { searchRegistry } from '../tool-exposure.js';
+import { assertPathsAllowed } from '../path-access.js';
 
 /**
  * The V1 tool modules and the arrays they export.
@@ -332,6 +333,7 @@ export function v1Context({
   approvals = null,
   session = 'v4',
   emit = null,
+  folders = () => [],
 } = {}) {
   const values = { workspace: workspaceDir };
   // Nested V1 tools (research.run -> web.search, flows.fire -> any tool) call
@@ -399,6 +401,9 @@ export function v1Context({
     }),
     workspaceDir,
     session,
+    // Read at call time, never captured: a folder granted on the phone must be
+    // usable on the very next tool call, not after a restart.
+    folders,
     ...(emit ? { emit } : {}),
     ...(facade ? { registry: facade } : {}),
   });
@@ -420,6 +425,14 @@ export function adaptV1Tool(v1tool, { lane, ctx = null }) {
     outputSchema: OUTPUT,
     lane,
     execute: async (input = {}) => {
+      // The grant is only real if it is enforced here: a path outside the
+      // workspace and every granted folder never reaches V1's filesystem code.
+      if (v1tool.group === 'files') {
+        assertPathsAllowed(v1tool.name, input, {
+          workspace: ctx?.workspaceDir || null,
+          folders: typeof ctx?.folders === 'function' ? ctx.folders() : [],
+        });
+      }
       let result;
       try {
         result = await v1tool.run(input, ctx);
@@ -479,8 +492,9 @@ export function registerHostTools(registry, caps, {
   approvals = null,
   session = 'v4',
   emit = null,
+  folders = () => [],
 } = {}) {
-  const ctx = v1Context({ workspaceDir, cfg, dataFile, registry, approvals, session, emit });
+  const ctx = v1Context({ workspaceDir, cfg, dataFile, registry, approvals, session, emit, folders });
   const browserReady = Boolean(caps.browserRuntime?.available);
   const registered = [];
   const skipped = [];

@@ -47,7 +47,6 @@ const els = {
   modelSource: $('#model-source'),
   refreshModels: $('#refresh-models'),
   sheetFiles: $('#file-list'),
-  sheetConvs: $('#conv-list'),
   sheetGoals: $('#goal-list'),
   ownerState: $('#owner-state'),
   ownerNote: $('#owner-note'),
@@ -73,6 +72,27 @@ const els = {
   suggestions: $('#suggestions'),
   newChat: $('#new-chat'),
   logout: $('#logout'),
+  historyBtn: $('#history-btn'),
+  history: $('#history'),
+  historyBackdrop: $('#history-backdrop'),
+  historyClose: $('#history-close'),
+  historyQuery: $('#history-query'),
+  historyList: $('#history-list'),
+  historyEmpty: $('#history-empty'),
+  historyTabActive: $('#history-tab-active'),
+  historyTabArchived: $('#history-tab-archived'),
+  importHistory: $('#import-history'),
+  importNote: $('#import-note'),
+  dialogBackdrop: $('#dialog-backdrop'),
+  renameDialog: $('#rename-dialog'),
+  renameForm: $('#rename-form'),
+  renameInput: $('#rename-input'),
+  renameCancel: $('#rename-cancel'),
+  confirmDialog: $('#confirm-dialog'),
+  confirmTitle: $('#confirm-title'),
+  confirmCopy: $('#confirm-copy'),
+  confirmCancel: $('#confirm-cancel'),
+  confirmDelete: $('#confirm-delete'),
 };
 
 const state = {
@@ -94,6 +114,17 @@ const state = {
   requestSeq: 0,
   previewOn: true,
   session: { ...INITIAL },
+  // Conversation management: the list the drawer renders, the view it shows,
+  // and the sync cursor that makes two devices converge without re-sending the
+  // whole history on every poll.
+  conversations: [],
+  historyView: 'active',
+  historyQuery: '',
+  historyOpen: false,
+  syncCursor: null,
+  conversationVersion: 0,
+  syncTimer: null,
+  remoteBusy: false,
 };
 
 const spirit = createSpirit($('#spirit'), { reducedMotion, lowPower });
@@ -147,8 +178,10 @@ function renderRich(container, text) {
   }
 }
 
-function timeLabel() {
-  return new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+function timeLabel(at = null) {
+  const when = at ? new Date(at) : new Date();
+  return (Number.isNaN(when.getTime()) ? new Date() : when)
+    .toLocaleTimeString(document.documentElement.lang || 'sv-SE', { hour: '2-digit', minute: '2-digit' });
 }
 
 function scrollDown(force = false) {
@@ -159,6 +192,7 @@ function scrollDown(force = false) {
 function setHero(visible) {
   els.hero.hidden = !visible;
   if (!visible) els.hero.classList.add('is-compact');
+  document.getElementById('topbar')?.setAttribute('data-conversation', String(!visible || Boolean(state.conversationId)));
 }
 
 function resizeInput() {
@@ -582,6 +616,9 @@ async function pair(code) {
     }
     hideGate();
     await loadState();
+    // A device that pairs again (or comes back after a session expiry) lands
+    // back in the conversation it had open, not in an empty one.
+    await restoreConversation();
     toast(t('conn.back'));
   } catch {
     showGate(t('gate.offline'));
@@ -610,6 +647,7 @@ async function boot() {
   }
   hideGate();
   await loadState();
+  await restoreConversation();
 }
 
 async function loadState() {
@@ -634,7 +672,7 @@ async function loadState() {
   loadOwnerMode();
   loadSkills();
   renderGoals(data.goals || []);
-  renderConversations(data.conversations || []);
+  refreshConversations({ force: true });
   loadModels();
   if (demo) els.hint.textContent = t('hero.demoHint');
   state.started = true;
@@ -711,30 +749,217 @@ async function resumeGoal(goalId, button) {
   }
 }
 
-function renderConversations(list) {
-  els.sheetConvs.textContent = '';
-  for (const conv of list.slice(0, 12)) {
+/**
+ * The history drawer.
+ *
+ * One row per conversation with the actions that exist server-side: open,
+ * rename, archive/restore, delete. Archive and delete are deliberately
+ * different: archiving is a filter, deleting is permanent and confirmed.
+ */
+function renderHistory() {
+  const list = state.conversations;
+  els.historyList.textContent = '';
+  const archivedView = state.historyView === 'archived';
+  els.historyTabActive.setAttribute('aria-selected', String(!archivedView));
+  els.historyTabArchived.setAttribute('aria-selected', String(archivedView));
+
+  const visible = list.filter((c) => (archivedView ? Boolean(c.archivedAt) : !c.archivedAt));
+  els.historyEmpty.hidden = visible.length > 0;
+  if (!visible.length) {
+    els.historyEmpty.textContent = state.historyQuery
+      ? t('history.noMatches')
+      : archivedView ? t('history.noArchived') : t('history.empty');
+  }
+
+  for (const conv of visible) {
     const li = document.createElement('li');
-    const btn = document.createElement('button');
-    btn.type = 'button';
+    li.className = 'history-item';
+    li.dataset.id = conv.id;
+    if (conv.id === state.conversationId) li.dataset.active = 'true';
+
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'history-open';
     const title = document.createElement('span');
+    title.className = 'history-title';
     title.textContent = conv.title;
     const meta = document.createElement('span');
-    meta.className = 'meta';
-    meta.textContent = `${conv.messages} medd.`;
-    btn.append(title, meta);
-    btn.addEventListener('click', () => openConversation(conv.id));
-    li.append(btn);
-    els.sheetConvs.append(li);
+    meta.className = 'history-meta';
+    meta.textContent = `${conv.messages} medd. · ${relativeTime(conv.updatedAt)}`;
+    open.append(title, meta);
+    open.addEventListener('click', () => openConversation(conv.id));
+
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'history-more';
+    more.setAttribute('aria-label', t('history.actionsFor', { title: conv.title }));
+    more.textContent = '⋯';
+    more.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      openConversationMenu(conv);
+    });
+
+    li.append(open, more);
+    els.historyList.append(li);
   }
+}
+
+/** A small action sheet for one conversation. */
+function openConversationMenu(conv) {
+  const archived = Boolean(conv.archivedAt);
+  const choice = globalThis.prompt
+    ? null
+    : null;
+  void choice;
+  showDialog({
+    title: conv.title,
+    copy: archived ? t('history.archivedNote') : '',
+    actions: [
+      { label: t('history.rename'), run: () => askRename(conv) },
+      { label: archived ? t('history.restore') : t('history.archive'), run: () => setArchived(conv, !archived) },
+      { label: t('history.delete'), danger: true, run: () => askDelete(conv) },
+    ],
+  });
+}
+
+/** One reusable dialog shell: rename, confirm, and the action sheet use it. */
+function showDialog({ title, copy = '', actions = [] }) {
+  els.confirmTitle.textContent = title;
+  els.confirmCopy.textContent = copy;
+  els.confirmCopy.hidden = !copy;
+  els.confirmDelete.hidden = true;
+  const extra = els.confirmDialog.querySelector('.dialog-extra');
+  if (extra) extra.remove();
+  const list = document.createElement('div');
+  list.className = 'dialog-extra';
+  for (const action of actions) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `btn ${action.danger ? 'danger' : 'ghost'} wide`;
+    btn.textContent = action.label;
+    btn.addEventListener('click', async () => {
+      closeDialogs();
+      await action.run();
+    });
+    list.append(btn);
+  }
+  els.confirmCancel.textContent = t('common.cancel');
+  els.confirmCancel.onclick = closeDialogs;
+  els.confirmDialog.append(list);
+  els.confirmDialog.hidden = false;
+  els.dialogBackdrop.hidden = false;
+  list.querySelector('button')?.focus();
+}
+
+function closeDialogs() {
+  els.renameDialog.hidden = true;
+  els.confirmDialog.hidden = true;
+  els.dialogBackdrop.hidden = true;
+  const extra = els.confirmDialog.querySelector('.dialog-extra');
+  if (extra) extra.remove();
+}
+
+function askRename(conv) {
+  els.renameDialog.hidden = false;
+  els.dialogBackdrop.hidden = false;
+  els.renameInput.value = conv.title;
+  els.renameInput.dataset.id = conv.id;
+  els.renameInput.focus();
+  els.renameInput.select();
+}
+
+async function submitRename() {
+  const id = els.renameInput.dataset.id;
+  const title = els.renameInput.value.trim();
+  if (!id || !title) return;
+  closeDialogs();
+  try {
+    const res = await api('/api/conversations', { method: 'PATCH', body: { id, title } });
+    if (!res.ok) throw new Error(t('history.renameFailed'));
+    await refreshConversations({ force: true });
+    if (id === state.conversationId) els.heroTitle.textContent = title;
+  } catch (err) {
+    toast(err.message || t('msg.genericError'));
+  }
+}
+
+async function setArchived(conv, archived) {
+  try {
+    const res = await api('/api/conversations', { method: 'PATCH', body: { id: conv.id, archived } });
+    if (!res.ok) throw new Error(t('history.archiveFailed'));
+    await refreshConversations({ force: true });
+    toast(archived ? t('history.archived') : t('history.restored'));
+  } catch (err) {
+    toast(err.message || t('msg.genericError'));
+  }
+}
+
+function askDelete(conv) {
+  els.confirmTitle.textContent = t('history.deleteTitle');
+  els.confirmCopy.textContent = t('history.deleteCopy', { title: conv.title });
+  els.confirmCopy.hidden = false;
+  els.confirmDelete.hidden = false;
+  els.confirmDelete.textContent = t('history.delete');
+  els.confirmCancel.textContent = t('common.cancel');
+  els.confirmCancel.onclick = closeDialogs;
+  const extra = els.confirmDialog.querySelector('.dialog-extra');
+  if (extra) extra.remove();
+  els.confirmDelete.onclick = () => deleteConversation(conv);
+  els.confirmDialog.hidden = false;
+  els.dialogBackdrop.hidden = false;
+  els.confirmCancel.focus();
+}
+
+/**
+ * Delete is permanent, so the server requires confirm=1. If a turn is still
+ * running it answers 409: we then show exactly that and offer to stop it,
+ * instead of silently killing work or deleting underneath it.
+ */
+async function deleteConversation(conv) {
+  try {
+    let res = await api(`/api/conversations?id=${encodeURIComponent(conv.id)}&confirm=1`, { method: 'DELETE' });
+    if (res.status === 409) {
+      const proceed = globalThis.confirm
+        ? globalThis.confirm(t('history.deleteRunning'))
+        : false;
+      if (!proceed) return;
+      res = await api(`/api/conversations?id=${encodeURIComponent(conv.id)}&confirm=1&cancel=1`, { method: 'DELETE' });
+    }
+    if (!res.ok) throw new Error(t('history.deleteFailed'));
+    if (state.conversationId === conv.id) startNewChat();
+    await refreshConversations({ force: true });
+  } catch (err) {
+    toast(err.message || t('msg.genericError'));
+  } finally {
+    closeDialogs();
+  }
+}
+
+function relativeTime(iso) {
+  const then = Date.parse(iso || '');
+  if (!Number.isFinite(then)) return '';
+  const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (seconds < 60) return t('time.now');
+  if (seconds < 3600) return t('time.minutes', { n: Math.round(seconds / 60) });
+  if (seconds < 86400) return t('time.hours', { n: Math.round(seconds / 3600) });
+  return t('time.days', { n: Math.round(seconds / 86400) });
 }
 
 async function openConversation(id) {
   closeSheet();
+  closeHistory();
   const res = await api(`/api/conversation?id=${encodeURIComponent(id)}`);
-  if (!res.ok) return;
+  if (!res.ok) {
+    if (res.status === 404) {
+      toast(t('history.deletedElsewhere'));
+      refreshConversations({ force: true });
+    }
+    return;
+  }
   const data = await res.json();
   state.conversationId = data.conversation.id;
+  state.conversationVersion = data.conversation.version;
+  rememberConversation(state.conversationId);
   els.thread.textContent = '';
   state.bubble = null;
   state.bubbleText = '';
@@ -898,7 +1123,12 @@ function dispatch(event, data) {
   const before = state.session;
   const { state: next, intents } = applyEvent(before, event, data);
   state.session = next;
-  if (next.conversationId) state.conversationId = next.conversationId;
+  if (next.conversationId && next.conversationId !== state.conversationId) {
+    state.conversationId = next.conversationId;
+    state.conversationVersion += 1;
+    // Bookmark it: a reload on this device must reopen the same conversation.
+    rememberConversation(next.conversationId);
+  }
   return viewIntents(event, data, intents);
 }
 
@@ -1273,6 +1503,163 @@ async function selectModel(modelId) {
   }
 }
 
+/**
+ * Fetch the conversation list.
+ *
+ * `since` is the sync cursor: the server returns only conversations updated
+ * after it, so a poll on an idle machine transfers almost nothing. Tombstones
+ * are merged too, so a chat deleted on the other device disappears here.
+ * Rendering is driven by state.conversations, which is the merge of both.
+ */
+async function refreshConversations({ force = false } = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (!force && state.syncCursor) params.set('since', state.syncCursor);
+    if (state.historyQuery) params.set('q', state.historyQuery);
+    params.set('view', 'all');
+    const res = await api(`/api/conversations?${params.toString()}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    // A filtered search or a full refresh REPLACES the list. Only an
+    // incremental poll (since) merges, because only that response is a delta.
+    const incremental = Boolean(params.get('since')) && !state.historyQuery;
+    const byId = new Map(incremental ? state.conversations.map((c) => [c.id, c]) : []);
+    for (const conv of data.conversations || []) byId.set(conv.id, conv);
+    for (const tomb of data.deleted || []) byId.delete(tomb.id);
+    state.conversations = [...byId.values()].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+    state.syncCursor = data.serverTime || state.syncCursor;
+    renderHistory();
+    // The open conversation may have changed on another device.
+    if (state.conversationId && !state.streaming) {
+      const current = byId.get(state.conversationId);
+      if (current && current.version !== state.conversationVersion) {
+        reloadOpenConversation(current.version);
+      }
+    }
+  } catch { /* the drawer is not critical to sending a message */ }
+}
+
+/** Reload the open conversation from the server, preserving scroll position. */
+async function reloadOpenConversation(version = null) {
+  if (!state.conversationId || state.streaming) return;
+  const id = state.conversationId;
+  try {
+    const res = await api(`/api/conversation?id=${encodeURIComponent(id)}`);
+    if (!res.ok) {
+      // It was deleted elsewhere: go back to an empty, honest state.
+      if (res.status === 404) {
+        startNewChat();
+        toast(t('history.deletedElsewhere'));
+      }
+      return;
+    }
+    const data = await res.json();
+    const atBottom = els.stage.scrollHeight - els.stage.scrollTop - els.stage.clientHeight < 80;
+    els.thread.textContent = '';
+    state.bubble = null;
+    state.bubbleText = '';
+    for (const m of data.conversation.messages) {
+      if (m.role === 'user') addMessage('user', m.content, { meta: timeLabel(m.at), at: m.at });
+      else addMessage('assistant', m.content, { error: m.meta?.error === true, meta: timeLabel(m.at), at: m.at });
+    }
+    state.conversationVersion = data.conversation.version;
+    if (data.conversation.pendingApproval) {
+      showApproval({ tool: data.conversation.pendingApproval.tool, reason: '' });
+    } else {
+      hideApproval();
+    }
+    setHero(!data.conversation.messages.length);
+    if (atBottom) scrollDown(true);
+    void version;
+    renderHistory();
+  } catch { /* keep what is on screen */ }
+}
+
+/** Poll only while the tab is visible; iOS may pause timers in the background. */
+function startSync() {
+  if (state.syncTimer) clearInterval(state.syncTimer);
+  state.syncTimer = setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    if (state.streaming) return;
+    refreshConversations();
+  }, 6000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      refreshConversations({ force: true });
+    }
+  });
+  // Stop polling when the page goes away; a timer that outlives the document
+  // only produces noise (and, in tests, a failure attributed to a later test).
+  window.addEventListener('pagehide', () => {
+    if (state.syncTimer) clearInterval(state.syncTimer);
+    state.syncTimer = null;
+  });
+}
+
+function openHistory() {
+  state.historyOpen = true;
+  els.history.hidden = false;
+  els.historyBackdrop.hidden = false;
+  els.historyBtn.setAttribute('aria-expanded', 'true');
+  refreshConversations({ force: true });
+  setTimeout(() => els.historyQuery?.focus(), 40);
+}
+
+function closeHistory() {
+  state.historyOpen = false;
+  els.history.hidden = true;
+  els.historyBackdrop.hidden = true;
+  els.historyBtn.setAttribute('aria-expanded', 'false');
+}
+
+/**
+ * Which conversation was last open on THIS device.
+ *
+ * Switching between the phone and the computer is the normal case, so a reload
+ * must land back in the same chat instead of an empty one. The id is not data
+ * (the transcript lives on the server); it is a bookmark, and a stale one is
+ * dropped the first time the server answers 404.
+ */
+function rememberConversation(id) {
+  try {
+    if (id) localStorage.setItem('majin.conversationId', id);
+    else localStorage.removeItem('majin.conversationId');
+  } catch { /* private mode may refuse storage; the app still works */ }
+}
+
+async function restoreConversation() {
+  // Fully guarded: this runs while the shell is still settling (and after a
+  // reload, when the session may already be gone). A failure here must never
+  // surface as an unhandled rejection in the console.
+  try {
+    let id = null;
+    try {
+      id = localStorage.getItem('majin.conversationId');
+    } catch {
+      return;
+    }
+    if (!id) return;
+    const res = await api(`/api/conversation?id=${encodeURIComponent(id)}`);
+    if (!res.ok) {
+      rememberConversation(null);
+      return;
+    }
+    await openConversation(id);
+  } catch { /* keep the empty state; the drawer still lists everything */ }
+}
+
+function startNewChat() {
+  state.conversationId = null;
+  state.conversationVersion = 0;
+  rememberConversation(null);
+  els.thread.textContent = '';
+  state.bubble = null;
+  state.bubbleText = '';
+  setHero(true);
+  hideApproval();
+  renderHistory();
+}
+
 async function refreshSidebar() {
   try {
     const res = await api('/api/state');
@@ -1280,7 +1667,7 @@ async function refreshSidebar() {
     const data = await res.json();
     renderFiles(data.workspace?.files || []);
     renderGoals(data.goals || []);
-    renderConversations(data.conversations || []);
+    refreshConversations({ force: true });
   } catch { /* sidebar is non-critical */ }
 }
 
@@ -1354,13 +1741,93 @@ function bindEvents() {
   els.menu.addEventListener('click', openSheet);
   els.sheetBackdrop.addEventListener('click', closeSheet);
   els.newChat.addEventListener('click', () => {
-    state.conversationId = null;
-    els.thread.textContent = '';
-    state.bubble = null;
-    setHero(true);
-    hideApproval();
-    closeSheet();
+    startNewChat();
+    closeHistory();
+    els.input.focus();
   });
+  els.historyBtn.addEventListener('click', openHistory);
+  els.historyClose.addEventListener('click', closeHistory);
+  els.historyBackdrop.addEventListener('click', closeHistory);
+  els.historyTabActive.addEventListener('click', () => {
+    state.historyView = 'active';
+    renderHistory();
+  });
+  els.historyTabArchived.addEventListener('click', () => {
+    state.historyView = 'archived';
+    renderHistory();
+  });
+  let searchTimer = null;
+  els.historyQuery.addEventListener('input', () => {
+    state.historyQuery = els.historyQuery.value.trim();
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => refreshConversations({ force: true }), 220);
+  });
+  els.importHistory.addEventListener('click', async () => {
+    els.importNote.textContent = t('history.importChecking');
+    try {
+      const res = await api('/api/conversations/import', { method: 'POST', body: { source: 'v1', dryRun: true } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || t('history.importFailed'));
+      const plan = data.plan || {};
+      const creates = plan.create?.length || 0;
+      const merges = plan.merge?.length || 0;
+      if (!creates && !merges) {
+        els.importNote.textContent = t('history.importNothing');
+        return;
+      }
+      els.importNote.textContent = t('history.importAsk', { creates, merges });
+      const go = globalThis.confirm
+        ? globalThis.confirm(t('history.importConfirm', { creates, merges }))
+        : false;
+      if (!go) return;
+      const applied = await api('/api/conversations/import', { method: 'POST', body: { source: 'v1', dryRun: false } });
+      const result = await applied.json();
+      if (!applied.ok) throw new Error(result?.error?.message || t('history.importFailed'));
+      els.importNote.textContent = t('history.importDone', {
+        created: result.result?.created?.length || 0,
+        merged: result.result?.merged?.length || 0,
+      });
+      await refreshConversations({ force: true });
+    } catch (err) {
+      els.importNote.textContent = err.message || t('history.importFailed');
+    }
+  });
+  els.renameForm.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    submitRename();
+  });
+  els.renameCancel.addEventListener('click', closeDialogs);
+  els.confirmCancel.addEventListener('click', closeDialogs);
+  els.dialogBackdrop.addEventListener('click', closeDialogs);
+  // Swipe: from the left screen edge to open the drawer, back to the left to
+  // close it. Deliberately narrow triggers — a gesture that fires during a
+  // scroll is worse than no gesture at all.
+  let touch = null;
+  document.addEventListener('touchstart', (ev) => {
+    if (ev.touches.length !== 1) { touch = null; return; }
+    const t0 = ev.touches[0];
+    touch = {
+      x: t0.clientX,
+      y: t0.clientY,
+      at: Date.now(),
+      edge: t0.clientX <= 28,
+      inDrawer: els.history.contains(ev.target),
+    };
+  }, { passive: true });
+  document.addEventListener('touchend', (ev) => {
+    if (!touch) return;
+    const t1 = ev.changedTouches[0];
+    const dx = t1.clientX - touch.x;
+    const dy = touch.y - t1.clientY;
+    const quick = Date.now() - touch.at < 700;
+    const horizontal = Math.abs(dx) > 64 && Math.abs(dy) < 48;
+    if (quick && horizontal) {
+      if (touch.edge && dx > 0) openHistory();
+      else if (touch.inDrawer && dx < 0) closeHistory();
+    }
+    touch = null;
+  }, { passive: true });
+
   els.folderAdd.addEventListener('click', addFolder);
   els.folderInput.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter') {
@@ -1411,7 +1878,10 @@ function bindEvents() {
     els.input.focus();
   });
   document.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape' && !els.sheet.hidden) closeSheet();
+    if (ev.key !== 'Escape') return;
+    if (!els.sheet.hidden) closeSheet();
+    if (state.historyOpen) closeHistory();
+    if (!els.renameDialog.hidden || !els.confirmDialog.hidden) closeDialogs();
   });
   window.addEventListener('online', () => {
     els.offline.hidden = true;
@@ -1455,6 +1925,8 @@ async function main() {
   resizeInput();
   if (reducedMotion) spirit.set('idle');
   await boot();
+  await restoreConversation();
+  startSync();
 }
 
 main();

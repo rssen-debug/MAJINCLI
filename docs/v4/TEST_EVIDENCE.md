@@ -241,3 +241,43 @@ unable to boot (directory swap deleting `node_modules`) or unable to download
 Windows desktop control, the browser lane, Task Scheduler firing the update task,
 `npm ci` on a real dependency change, a physical phone, and real model inference.
 Each has the exact command that would settle it in `STATUS.md`.
+
+## 6. File access, shared history and UI — 2026-10-23
+
+```
+$ node --test --test-concurrency=1 test/v4/*.test.js
+# tests 479
+# pass 478
+# fail 0
+# skipped 1        (e2e.browser.test.js — no browser binary in this sandbox)
+
+$ node scripts/parse-all.js        558/558 files parse cleanly
+$ node scripts/i18n-check.mjs      0 Swedish string literals in 293 files
+$ node scripts/v4/inventory.mjs    every V1 module and V2/V3 component has a decision
+$ node scripts/v4/accept.mjs         23/24 checks passed; the only FAIL is model.configured
+                                     (no provider key in this environment)
+```
+
+### What is executed, not asserted
+
+| Area | Real input | Result |
+|---|---|---|
+| Granted folder | `/tmp/.../Documents/Privat/CV Anders 2026.pdf`, a real PDF built byte by byte | `fs_find` returns exactly that hit; `document_read` returns `confidence: "text"` and the text |
+| Denial | a real file outside every grant | `PERMISSION_DENIED` naming the path and the rule |
+| Traversal | `Privat/../../Secret/losenord.txt` | refused |
+| Symlink | a link inside the workspace pointing outside it | refused (judged on the real target) |
+| Revocation | the same call before/after removing the folder | allowed, then refused |
+| Prompt | the agent's first model call | contains the exact granted path and `fs_find` |
+| Two devices | two sessions, one host | same conversation id, continued transcript, `since` delta, tombstone after delete |
+| Restart | server closed with `keep: true`, started again | title, messages and archive state intact |
+| Import | two V1 JSONL transcripts + `chats-index.json` | dry run writes nothing; apply creates 2; second apply creates 0; source files byte-identical |
+| Growing V1 log | one line appended between two imports | merged (+1), no duplicate conversation |
+| Delete while running | a registered turn in the agent | `409 TURN_RUNNING`, then `200` with `cancelled: true` |
+| UI | the real `app.js` in jsdom against the real server | drawer lists/opens, search filters, rename, archive, restore, confirm-delete, reload restores the chat |
+
+### Not executed here
+
+Anything that requires Windows: the real filesystem paths (`C:\Users\…`), Windows junctions, the
+desktop lanes, Task Scheduler, and the phone. The same code path is exercised on Linux with real
+files; the Windows check is one command on the host (`npm run v4:accept -- --url …`) and is listed
+under BLOCKED in `STATUS.md` until that output exists.

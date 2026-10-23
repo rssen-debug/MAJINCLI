@@ -18,6 +18,7 @@ import { modelSchemaOf } from './mcp-tools.js';
 import { jsonSchemaFor } from './schema.js';
 import { createToolExposure, searchRegistry } from './tool-exposure.js';
 import { turnState } from './turn-state.js';
+import { checkPath } from './path-access.js';
 
 export const MAX_FILE_BYTES = 1_000_000;
 export const MAX_READ_BYTES = 200_000;
@@ -84,10 +85,20 @@ const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
  * Build the registry. `workspaceDir` is resolved once; `memory` is the V2
  * store so preferences written by MAJIN are readable by the rest of MAJIN.
  */
-export function createToolRegistry({ workspaceDir, memoryDir }) {
+export function createToolRegistry({ workspaceDir, memoryDir, allowedRoots = () => [] }) {
   const root = workspaceRoot(workspaceDir);
   const memory = new MemoryStore(memoryDir);
   const registry = new ToolRegistry();
+  // The owner's granted folders, read at call time so a grant from the phone
+  // works immediately. Without this, document_read could only see the sandbox.
+  const grantedFolders = () => {
+    try {
+      const value = typeof allowedRoots === 'function' ? allowedRoots() : allowedRoots;
+      return Array.isArray(value) ? value : [];
+    } catch {
+      return [];
+    }
+  };
 
   registry.define({
     name: 'workspace_write',
@@ -191,10 +202,14 @@ export function createToolRegistry({ workspaceDir, memoryDir }) {
    */
   registry.define({
     name: 'document_read',
-    description: 'Read the text inside a document in the workspace (PDF, DOCX, XLSX, txt, md, csv, json).',
+    description:
+      'Read the text inside a document (PDF, DOCX, XLSX, txt, md, csv, json). '
+      + 'Use fileName for a file in the workspace, or path for a real file on the machine inside a '
+      + 'folder the owner granted. Find it first with fs_find or fs_list.',
     tier: 'read',
     inputSchema: z.object({
-      fileName: z.string().min(1).max(120),
+      fileName: z.string().min(1).max(120).optional(),
+      path: z.string().min(1).max(1000).optional(),
       maxChars: z.number().int().min(100).max(100_000).optional(),
     }),
     outputSchema: z.object({
@@ -206,13 +221,28 @@ export function createToolRegistry({ workspaceDir, memoryDir }) {
       text: z.string(),
       warning: z.string().optional(),
     }),
-    execute: async ({ fileName, maxChars = 20_000 }) => {
-      const { name, target } = targetFor(root, fileName);
+    execute: async ({ fileName, path: realPath, maxChars = 20_000 }) => {
+      if (!fileName && !realPath) {
+        throw new WorkspaceError('INVALID_INPUT', 'give either fileName (workspace) or path (a real file)');
+      }
+      let name;
+      let target;
+      if (realPath) {
+        // A path outside the workspace is allowed only inside a granted folder.
+        const check = checkPath(realPath, { workspace: root, folders: grantedFolders() });
+        if (!check.allowed) {
+          throw new WorkspaceError('PERMISSION_DENIED', `${realPath} is ${check.reason}`);
+        }
+        target = check.abs;
+        name = path.basename(target);
+      } else {
+        ({ name, target } = targetFor(root, fileName));
+      }
       let stat;
       try {
         stat = fs.statSync(target);
       } catch {
-        throw new WorkspaceError('NOT_FOUND', `"${name}" does not exist in the workspace`);
+        throw new WorkspaceError('NOT_FOUND', `"${realPath || name}" does not exist`);
       }
       if (!stat.isFile()) throw new WorkspaceError('NOT_A_FILE', `"${name}" is not a regular file`);
       let result;
@@ -437,14 +467,15 @@ export const TOOL_SCHEMAS = [
   },
   {
     name: 'document_read',
-    description: 'Read the text inside a document in the workspace (PDF, DOCX, XLSX, txt).',
+    description: 'Read the text inside a document (PDF, DOCX, XLSX, txt) from the workspace or a folder the owner granted.',
     parameters: {
       type: 'object',
       properties: {
         fileName: { type: 'string', description: 'Leaf filename in the workspace, e.g. "cv.pdf".' },
+        path: { type: 'string', description: 'Real file path inside a granted folder.' },
         maxChars: { type: 'number', description: 'How much text to return (default 20000).' },
       },
-      required: ['fileName'],
+      required: [],
       additionalProperties: false,
     },
   },

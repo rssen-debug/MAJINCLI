@@ -143,6 +143,91 @@ async function exerciseLocalHost() {
       const read = await jsonFetch(`${base}/api/conversation?id=${convId}`, { headers: { cookie } });
       const messages = read.body?.conversation?.messages?.length || 0;
       record('persist.conversation_reloads', messages >= 2, `${messages} messages`);
+
+      // ---- conversation management (the shared history contract) ----------
+      const patched = await jsonFetch(`${base}/api/conversations`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', origin: base, cookie, 'x-majin-csrf': '1' },
+        body: JSON.stringify({ id: convId, title: 'Acceptanskörning' }),
+      });
+      record('history.rename', patched.res.status === 200 && patched.body?.conversation?.title === 'Acceptanskörning',
+        `PATCH -> ${patched.res.status}`);
+
+      await jsonFetch(`${base}/api/conversations`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', origin: base, cookie, 'x-majin-csrf': '1' },
+        body: JSON.stringify({ id: convId, archived: true }),
+      });
+      const archived = await jsonFetch(`${base}/api/conversations?view=archived`, { headers: { cookie } });
+      const inArchive = (archived.body?.conversations || []).some((c) => c.id === convId);
+      await jsonFetch(`${base}/api/conversations`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', origin: base, cookie, 'x-majin-csrf': '1' },
+        body: JSON.stringify({ id: convId, archived: false }),
+      });
+      const active = await jsonFetch(`${base}/api/conversations?view=active`, { headers: { cookie } });
+      const backActive = (active.body?.conversations || []).some((c) => c.id === convId);
+      record('history.archive_restore', inArchive && backActive, `archived=${inArchive} restored=${backActive}`);
+
+      const search = await jsonFetch(`${base}/api/conversations?view=all&q=${encodeURIComponent('acceptanskörning')}`, { headers: { cookie } });
+      record('history.search', (search.body?.conversations || []).some((c) => c.id === convId), `${(search.body?.conversations || []).length} hit(s)`);
+
+      // Two devices: a second session must see the same conversation.
+      const secondSession = context.sessions.create({ ip: 'accept', userAgent: 'second-device' });
+      const secondCookie = `${config.auth.cookieName}=${encodeURIComponent(secondSession.token)}`;
+      const other = await jsonFetch(`${base}/api/conversations?view=all`, { headers: { cookie: secondCookie } });
+      record('history.two_devices', (other.body?.conversations || []).some((c) => c.id === convId),
+        `${(other.body?.conversations || []).length} conversation(s) on the second session`);
+
+      // ---- file access ----------------------------------------------------
+      // ---- real file access, through the same objects the agent uses ------
+      // A scratch folder OUTSIDE the workspace, granted through the HTTP API,
+      // then searched with the registered tool. This is the exact chain that
+      // failed on the owner's machine: owner mode -> adapter -> fs.find.
+      const folder = path.join(home, 'Documents', 'Acceptans');
+      fs.mkdirSync(folder, { recursive: true });
+      const needle = 'acceptans-cv.docx';
+      fs.writeFileSync(path.join(folder, needle), 'inte en riktig docx, men ett riktigt filnamn');
+      const granted = await jsonFetch(`${base}/api/owner-mode`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: base, cookie, 'x-majin-csrf': '1' },
+        body: JSON.stringify({ action: 'grant', folders: [folder] }),
+      });
+      record('files.folder_grant', granted.res.status === 200 && (granted.body?.ownerMode?.folders || []).includes(folder),
+        `grant -> ${granted.res.status}, folders: ${(granted.body?.ownerMode?.folders || []).join(', ') || 'none'}`);
+
+      const findDef = context.tools.registry.get('fs_find');
+      record('files.fs_find_registered', Boolean(findDef),
+        findDef
+          ? 'fs_find is registered once a folder is granted (the files lane is inert without one)'
+          : 'fs_find is still not registered after granting a folder',
+        findDef ? null : 'Check that the host capabilities list the files lane; npm run v4:tools shows why.');
+
+      if (findDef) {
+        let found = null;
+        try {
+          found = await findDef.execute({ path: folder, name: 'acceptans-cv' });
+        } catch (err) {
+          record('files.search_granted_folder', false, String(err?.message || err));
+        }
+        const hits = found?.meta?.hits || [];
+        record('files.search_granted_folder', hits.some((h) => h.name === needle),
+          hits.length ? `${hits.length} hit(s): ${hits.map((h) => h.name).join(', ')}` : 'no hit in a granted folder',
+          hits.length ? null : 'The files lane and the folder grant must both be active for a search to work.');
+
+        // And the same tool must refuse a folder nobody granted.
+        const outside = path.join(home, 'Documents', 'InteGodkand');
+        fs.mkdirSync(outside, { recursive: true });
+        fs.writeFileSync(path.join(outside, 'hemlig.txt'), 'x');
+        let refused = null;
+        try {
+          await findDef.execute({ path: outside, name: 'hemlig' });
+        } catch (err) {
+          refused = err;
+        }
+        record('files.refuses_ungranted', Boolean(refused) && /PERMISSION_DENIED|outside/i.test(String(refused?.cls || '') + String(refused?.message || '')),
+          refused ? `${refused.cls || 'refused'}: ${String(refused.message).slice(0, 90)}` : 'an ungranted folder was searched');
+      }
     }
   } finally {
     await new Promise((resolve) => server.close(resolve));

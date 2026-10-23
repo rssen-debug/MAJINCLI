@@ -1,25 +1,25 @@
 # MAJIN capability inventory (generated)
 
-Generated 2026-10-23T14:09:48.846Z on linux. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
+Generated 2026-10-23T15:34:06.666Z on linux. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
 
 ## Totals
 
 | Version | Unit | Count |
 | --- | --- | --- |
 | V1 | tool modules | 26 |
-| V1 | tools | 139 |
-| V1 | integrated into V4 lanes | 109 |
+| V1 | tools | 140 |
+| V1 | integrated into V4 lanes | 110 |
 | V1 | excluded with a recorded reason | 30 |
 | V2 | components reused | 18/51 |
 | V3 | components reused | 0/4 |
 | V4 | built-in tools | 8 |
-| V4 | tools registered on this host | 107 |
+| V4 | tools registered on this host | 108 |
 
 ## Capability domains
 
 | Domain | What exists |
 | --- | --- |
-| tools | builtin: 8; v1Integrated: 109; registeredOnHost: 107 |
+| tools | builtin: 8; v1Integrated: 110; registeredOnHost: 108 |
 | skills | shipped: ["fix-code","job-search"]; mechanism: src/v4/skills.js — declared required/preferred tools decide visibility, not app code |
 | mcp | state: configured by the owner in <data>/v4/mcp.json; mechanism: src/v4/mcp.js + mcp-tools.js — stdio JSON-RPC, scrubbed env, tools at process tier |
 | agentFunctions | turnEngine: src/v4/agent.js — goal, rounds, receipts, verification, recovery advisor; discovery: tools_search + tools_activate (src/v4/tool-exposure.js); delegation: agent_delegate — bounded subagent, owner-gated; resume: resumeGoal — re-verifies every artifact against the recorded SHA-256 |
@@ -40,7 +40,7 @@ Generated 2026-10-23T14:09:48.846Z on linux. Every row is computed from the code
 | `channels.js` | 1 | — | excluded | Needs V1 channel credentials (Telegram/WhatsApp/webhook) that V4 does not use. A tool that is registered but always reports "not configured" is the lie this project exists to avoid. |
 | `computer.js` | 2 | computer | lane | reused through computer |
 | `exec.js` | 5 | shell | lane | reused through shell |
-| `files.js` | 12 | files | lane | reused through files |
+| `files.js` | 13 | files | lane | reused through files |
 | `flows.js` | 6 | flows | lane | reused through flows |
 | `github.js` | 2 | github | lane | reused through github |
 | `heartbeat.js` | 1 | — | excluded | V1 heartbeat is driven by V1's journal and scheduler. V4 runs a supervisor and a Windows scheduled task; two heartbeat owners would fight. |
@@ -88,6 +88,7 @@ Generated 2026-10-23T14:09:48.846Z on linux. Every row is computed from the code
 | `fs.move` | write | integrated | files | — |
 | `fs.copy` | write | integrated | files | — |
 | `fs.delete` | destructive | integrated | files | — |
+| `fs.find` | read | integrated | files | — |
 | `fs.stat` | read | integrated | files | — |
 | `fs.mkdir` | write | integrated | files | — |
 | `fs.tar` | write | integrated | files | — |
@@ -279,7 +280,7 @@ Generated 2026-10-23T14:09:48.846Z on linux. Every row is computed from the code
 | computer | no | 0 | Windows-only (this host is linux) |
 | screen | no | 0 | Windows-only (this host is linux) |
 | net | yes | 5 |  |
-| files | yes | 12 |  |
+| files | yes | 13 |  |
 | shell | yes | 5 |  |
 | shelltools | yes | 5 |  |
 | sys | yes | 6 |  |

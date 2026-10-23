@@ -43,6 +43,8 @@ tools; they run on the owner's machine and sensitive ones require the owner's ap
 Choosing tools:
 - Prefer the narrowest tool that answers the question. workspace_read lists files; fs_read reads
   a real path on the host; exec_start runs a command.
+- To find a file you only know the name of, use fs_find with the folder as its path argument.
+  Do not assume the workspace is the only place the owner keeps things.
 - A tool call that returns failure is a failure. Never describe it as done.
 - The tool list can be partial on a large host. If the capability you need is not listed, call
   tools_search with a plain-words description, then tools_activate with the exact names, and call
@@ -131,7 +133,16 @@ function safeJson(value) {
  * field outside a fixed allowlist — message contents, paths and secrets cannot
  * reach the log even by accident.
  */
-export function createAgent({ config, conversations, goals, tools, model, telemetry = null, skills = null }) {
+export function createAgent({
+  config,
+  conversations,
+  goals,
+  tools,
+  model,
+  telemetry = null,
+  skills = null,
+  access = null,
+}) {
   const record = (event, payload) => {
     if (!telemetry) return;
     try {
@@ -166,6 +177,33 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
       .filter((m) => (m.role === 'user' || m.role === 'assistant') && !m.meta?.error)
       .map((m) => ({ role: m.role, content: m.content }));
 
+    // Where the tools may actually look. A grant the model is not told about is
+    // a grant it never uses — the reported "MAJIN cannot find my CV".
+    let accessSection = '';
+    try {
+      const view = access?.() || null;
+      if (view) {
+        const lines = [];
+        if (view.workspace) lines.push(`- sandbox workspace: ${view.workspace}`);
+        for (const folder of view.folders || []) lines.push(`- granted folder: ${folder}`);
+        if (lines.length) {
+          accessSection = [
+            'Filesystem access (real paths on this machine):',
+            ...lines,
+            'Use fs_find to locate a file by name inside a granted folder (or fs_list / fs_grep for content), '
+            + 'then fs_read or document_read with the absolute path. If a file is outside every listed folder, '
+            + 'say which folder would need to be granted instead of guessing a path.',
+            view.folders?.length
+              ? ''
+              : 'No folder is granted yet, so only the sandbox workspace is reachable. Say that plainly if the '
+                + 'request needs a real file the owner did not upload.',
+          ].filter(Boolean).join('\n');
+        }
+      }
+    } catch {
+      accessSection = '';
+    }
+
     // What the owner stored, injected only when it is relevant to this turn.
     // Retrieval failure must never take a turn down, so it is guarded here.
     let memorySection = '';
@@ -186,7 +224,9 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     const delegationNote = tools.registry.get('agent_delegate')
       ? ''
       : 'Delegation is not granted on this host. Do the work yourself with the tools that are listed.';
-    const system = [SYSTEM_PROMPT, delegationNote, memorySection, skillSection].filter(Boolean).join('\n\n');
+    const system = [SYSTEM_PROMPT, delegationNote, accessSection, memorySection, skillSection]
+      .filter(Boolean)
+      .join('\n\n');
 
     return buildMessages({
       system,

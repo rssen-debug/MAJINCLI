@@ -5,7 +5,9 @@
  * state and session cookies are never cached — a shared or public cache must
  * not hold private conversation data.
  */
-const VERSION = 'majin-v4-shell-1';
+// Bump this whenever the shell changes: an installed PWA otherwise keeps the
+// old HTML/CSS/JS until every cache entry expires independently.
+const VERSION = 'majin-v4-shell-2';
 const SHELL = [
   '/',
   '/index.html',

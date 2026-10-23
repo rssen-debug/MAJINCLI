@@ -257,3 +257,25 @@ supervisor, outer loop), the V2 studio, the V2 executor and the gauntlet.
 V3 is 0/4: its four files are a superseded vertical slice (single file
 deliverable, static page, loopback server, Node check). The *method* — machine
 validated acceptance — is what V4 kept.
+
+
+## 6. Reuse decisions in the 2026-10-23 pass
+
+| Need | What was reused | Why not new code |
+|---|---|---|
+| Rename / archive / delete semantics | V1 `src/core/chats.js` (title policy `manual` > `auto` > `fallback`, archive as a reversible flag, delete as a separate confirmed operation) | the vocabulary and the rules already existed and are the ones the owner knows; V4 implements them on its own store instead of V1's JSONL files |
+| Chat index shape | V1 `chats-index.json` fields (`title`, `titlePolicy`, `archivedAt`, `lastActivityAt`) | an import can map them one-to-one, and the UI already uses those words |
+| Reading a file by name | V1 `fs.find` (new, in `src/core/tools/files.js`, built on the existing `walk`/`globToRe` helpers) | a generic capability for every version, not a CV feature |
+| Document text | V4 `src/v4/extract.js` (PDF/DOCX/XLSX, no dependencies) | unchanged; only the path check in front of it is new |
+| Path rules | Owner Mode's existing `folders()` / `allowsPath()` | the data model was right; what was missing was enforcement and disclosure |
+| Chat persistence | V4 `ConversationStore` (the pre-existing store) | the owner's instruction: no second chat system |
+
+Rejected in this pass, with reasons:
+
+- **V1's `chats-index.json` as V4's storage.** It is keyed to `<id>.jsonl` transcripts and a single
+  `dirs.sessions`; V4 needs per-conversation versions and a goal link. Importing the *semantics* is
+  reuse; adopting the *files* would fork the store the owner asked to keep.
+- **V2/V3 history import.** Neither has a durable chat transcript (V2 kept goals/receipts/telemetry,
+  V3 a single-file deliverable). The import endpoint says so instead of inventing conversations.
+- **A permanent sidebar.** It would take width from the transcript on a phone; the drawer overlays
+  and is closed by default.

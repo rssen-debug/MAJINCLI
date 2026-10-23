@@ -57,6 +57,12 @@
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
   --topbar-h: 52px;
+
+  /* One column. The topbar, the hero/spirit, the transcript, the composer and
+     the approval card all share it, so nothing is off-centre against anything
+     else at any width. It also caps line length on a desktop monitor. */
+  --content-w: 820px;
+  --gutter: 16px;
 }
 
 * { box-sizing: border-box; }
@@ -137,9 +143,13 @@ body[data-spirit="listening"] .aurora { animation-duration: 8s; }
   align-items: center;
   justify-content: space-between;
   gap: var(--s3);
-  padding: calc(var(--safe-t) + 10px) var(--s4) 10px;
+  width: 100%;
+  max-width: var(--content-w);
+  margin-inline: auto;
+  padding: calc(var(--safe-t) + 10px) var(--gutter) 10px;
   min-height: calc(var(--safe-t) + var(--topbar-h));
 }
+.topbar-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .brand { display: flex; align-items: baseline; gap: 8px; }
 .brand-mark {
   width: 9px; height: 9px; border-radius: 50%;
@@ -159,7 +169,7 @@ body[data-spirit="listening"] .aurora { animation-duration: 8s; }
   background: rgba(20, 16, 31, 0.6);
   backdrop-filter: blur(12px);
   font-size: 12px; color: var(--text-dim);
-  max-width: 46vw;
+  max-width: 40vw;
   transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease);
 }
 .pill span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -182,12 +192,16 @@ body[data-spirit="listening"] .aurora { animation-duration: 8s; }
   z-index: 2;
   flex: 1;
   min-height: 0;
+  width: 100%;
+  max-width: var(--content-w);
+  margin-inline: auto;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
 }
 .stage::-webkit-scrollbar { display: none; }
 
@@ -195,8 +209,13 @@ body[data-spirit="listening"] .aurora { animation-duration: 8s; }
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   text-align: center;
-  padding: var(--s5) var(--s5) var(--s4);
+  width: 100%;
+  /* Fill the viewport above the composer so the spirit sits in the optical
+     centre of the empty screen, on a phone and on a desktop alike. */
+  min-height: min(58dvh, 520px);
+  padding: var(--s5) var(--gutter) var(--s4);
   transition: opacity var(--base) var(--ease), transform var(--base) var(--ease);
 }
 .hero[hidden] { display: none; }
@@ -207,7 +226,9 @@ body[data-spirit="listening"] .aurora { animation-duration: 8s; }
 
 .spirit-wrap {
   position: relative;
-  width: min(68vw, 260px);
+  margin-inline: auto;
+  width: min(62vw, 260px);
+  max-width: 100%;
   aspect-ratio: 1;
   display: grid;
   place-items: center;
@@ -254,10 +275,10 @@ body[data-spirit="listening"] .aurora { animation-duration: 8s; }
   display: flex;
   flex-direction: column;
   gap: var(--s4);
-  padding: var(--s3) var(--s4) var(--s5);
-  max-width: 780px;
+  padding: var(--s3) var(--gutter) var(--s5);
   width: 100%;
-  margin: 0 auto;
+  max-width: 100%;
+  margin-inline: auto;
 }
 .thread:empty { display: none; }
 
@@ -379,14 +400,17 @@ body[data-spirit="listening"] .aurora { animation-duration: 8s; }
 .composer {
   position: relative;
   z-index: 6;
-  padding: var(--s2) var(--s3) calc(var(--safe-b) + 10px);
+  width: 100%;
+  max-width: var(--content-w);
+  margin-inline: auto;
+  padding: var(--s2) var(--gutter) calc(var(--safe-b) + 10px);
   background: linear-gradient(180deg, rgba(6, 5, 11, 0), rgba(6, 5, 11, 0.92) 38%, var(--ink-0));
 }
 .composer-inner {
   display: flex;
   align-items: flex-end;
   gap: var(--s2);
-  max-width: 780px;
+  width: 100%;
   margin: 0 auto;
   padding: 6px 6px 6px 6px;
   border: 1px solid var(--line);
@@ -455,7 +479,7 @@ body[data-spirit="listening"] .aurora { animation-duration: 8s; }
   background: linear-gradient(160deg, rgba(60, 43, 15, 0.92), rgba(24, 18, 10, 0.92));
   backdrop-filter: blur(16px);
   animation: rise 260ms var(--ease) both;
-  max-width: 780px;
+  max-width: calc(var(--content-w) - 2 * var(--gutter));
   margin-inline: auto;
 }
 .approval-head { display: flex; align-items: center; justify-content: space-between; }
@@ -583,8 +607,7 @@ input[type="checkbox"] { accent-color: var(--pink); width: 18px; height: 18px; }
 /* ------------------------------------------------------------ responsive -- */
 
 @media (min-width: 720px) {
-  .thread { padding-inline: var(--s6); }
-  .composer { padding-inline: var(--s6); }
+  :root { --gutter: 24px; }
   .sheet {
     left: auto; right: var(--s5); bottom: var(--s5);
     width: 420px;
@@ -593,12 +616,7 @@ input[type="checkbox"] { accent-color: var(--pink); width: 18px; height: 18px; }
     max-height: 80vh;
   }
   .hero { padding-top: var(--s6); }
-}
-@media (min-width: 1100px) {
-  body { align-items: center; }
-  .topbar { width: 100%; max-width: 900px; }
-  .stage { width: 100%; max-width: 900px; }
-  .composer { width: 100%; max-width: 900px; }
+  .history { width: 380px; }
 }
 
 @media (orientation: landscape) and (max-height: 520px) {
@@ -831,3 +849,128 @@ input[type="checkbox"] { accent-color: var(--pink); width: 18px; height: 18px; }
 .skill-meta { font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-mute); }
 .skill-item[data-ready="true"] .skill-meta { color: var(--ok); }
 .skill-summary { margin: 4px 0 0; font-size: 11.5px; color: var(--text-mute); line-height: 1.5; }
+
+/* --------------------------------------------------------------- history -- */
+/* A drawer, not a permanent sidebar: it is closed by default on every screen
+   and never steals width from the conversation. */
+
+.drawer-backdrop {
+  position: fixed; inset: 0; z-index: 30;
+  background: rgba(3, 2, 7, 0.62);
+  backdrop-filter: blur(3px);
+  animation: fade 160ms var(--ease) both;
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-in { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+.history {
+  position: fixed; z-index: 31;
+  top: 0; bottom: 0; left: 0;
+  width: min(86vw, 380px);
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--safe-t) + 10px) 8px calc(var(--safe-b) + 8px);
+  background: linear-gradient(180deg, rgba(16, 13, 26, 0.98), rgba(8, 7, 14, 0.99));
+  border-right: 1px solid var(--line-strong);
+  box-shadow: 24px 0 60px rgba(0, 0, 0, 0.55);
+  animation: slide-in 220ms var(--ease) both;
+  touch-action: pan-y;
+}
+.history-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s3); padding: 4px 8px 10px;
+}
+.history-head h2 { margin: 0; font-size: 15px; font-weight: 620; letter-spacing: 0.04em; }
+.history-search { padding: 0 8px 10px; }
+.history-search input {
+  width: 100%; padding: 10px 12px; font-size: 15px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.04); color: var(--text); outline: none;
+}
+.history-search input:focus { border-color: rgba(255, 79, 184, 0.4); }
+.history-tabs { display: flex; gap: 4px; padding: 0 8px 8px; }
+.history-tab {
+  padding: 6px 12px; font-size: 12.5px; color: var(--text-mute);
+  border-radius: var(--r-pill); border: 1px solid transparent;
+}
+.history-tab[aria-selected="true"] {
+  color: var(--text); border-color: var(--line-strong); background: rgba(255, 255, 255, 0.06);
+}
+.history-list {
+  list-style: none; margin: 0; padding: 4px; overflow-y: auto; flex: 1;
+  display: flex; flex-direction: column; gap: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+.history-item {
+  position: relative;
+  display: flex; align-items: stretch; gap: 2px;
+  border-radius: var(--r-sm);
+  transition: background var(--fast) var(--ease);
+}
+.history-item:hover { background: rgba(255, 255, 255, 0.05); }
+.history-item[data-active="true"] { background: rgba(255, 79, 184, 0.12); }
+.history-item[data-active="true"]::before {
+  content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 2px;
+  border-radius: 2px; background: linear-gradient(180deg, var(--pink), var(--violet));
+}
+.history-open {
+  flex: 1; min-width: 0; text-align: left;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 9px 8px 9px 12px; border-radius: var(--r-sm); color: var(--text-dim);
+}
+.history-open:hover { color: var(--text); }
+.history-title {
+  font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.history-meta { font-size: 11.5px; color: var(--text-mute); }
+.history-more {
+  width: 38px; flex: none; color: var(--text-mute); font-size: 18px; line-height: 1;
+  border-radius: var(--r-sm); opacity: 0.55;
+}
+.history-more:hover, .history-more:focus-visible { opacity: 1; color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.history-empty { margin: 12px 16px; font-size: 13px; color: var(--text-mute); text-align: center; }
+.history-foot {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 8px 4px; border-top: 1px solid var(--line);
+}
+.history-foot .sheet-note { margin: 0; text-align: center; }
+
+/* --------------------------------------------------------------- dialogs -- */
+
+.dialog-backdrop {
+  position: fixed; inset: 0; z-index: 41;
+  background: rgba(3, 2, 7, 0.72);
+  backdrop-filter: blur(4px);
+  animation: fade 150ms var(--ease) both;
+}
+.dialog {
+  position: fixed; z-index: 42;
+  left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(92vw, 420px);
+  padding: var(--s5);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(180deg, rgba(22, 18, 34, 0.99), rgba(12, 10, 20, 0.99));
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  animation: pop-in 180ms var(--ease) both;
+}
+.dialog h2 { margin: 0 0 var(--s3); font-size: 17px; font-weight: 620; }
+.dialog-copy { margin: 0 0 var(--s4); font-size: 14px; color: var(--text-dim); line-height: 1.55; }
+.dialog input {
+  width: 100%; padding: 11px 12px; font-size: 16px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.05); color: var(--text); outline: none;
+}
+.dialog input:focus { border-color: rgba(255, 79, 184, 0.45); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: var(--s2); margin-top: var(--s4); }
+.dialog-extra { display: flex; flex-direction: column; gap: 6px; }
+.btn.danger {
+  color: #ffe4e9;
+  border: 1px solid rgba(251, 113, 133, 0.5);
+  background: linear-gradient(180deg, rgba(251, 113, 133, 0.22), rgba(251, 113, 133, 0.12));
+}
+.btn.danger:hover { border-color: rgba(251, 113, 133, 0.8); }
+
+/* An active conversation is marked in the topbar, not only in the drawer. */
+.topbar[data-conversation="true"] .brand-name { color: var(--text); }
