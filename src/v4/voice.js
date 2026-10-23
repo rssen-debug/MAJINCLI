@@ -61,6 +61,7 @@ export function makeSttProvider({ command = null } = {}) {
 /** Which lanes are actually available on this host, without pretending. */
 export function voiceCapabilities(env = process.env) {
   return {
+    streamingTts: { available: env.MAJIN_V4_STREAM_TTS === '1' && Boolean(commandTemplateFromEnv(env)), format: 'wav-ndjson', provider: 'kokoro-onnx' },
     tts: [
       { mode: 'buffer', kind: 'offline', description: 'Deterministic silent WAV. Proves the pipeline, not a voice.' },
       { mode: 'command', kind: 'local', available: Boolean(commandTemplateFromEnv(env)), description: 'Operator-configured local binary (piper, kokoro, …). Preflight-gated.' },
@@ -71,6 +72,19 @@ export function voiceCapabilities(env = process.env) {
       { mode: 'command', kind: 'local', available: Boolean(sttTemplateFromEnv(env)), description: 'Local whisper-style CLI. Preflight-gated.' },
     ],
   };
+}
+
+/** The explicitly enabled, host-local narrator. No client-supplied URL/command. */
+export async function localNarratorStream({ text, signal, fetchImpl = globalThis.fetch }) {
+  const response = await fetchImpl('http://127.0.0.1:18765/speak-stream', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text }), signal: AbortSignal.any([signal, AbortSignal.timeout(90000)].filter(Boolean)),
+  });
+  if (!response.ok || !response.headers.get('content-type')?.startsWith('application/x-ndjson') || !response.body) {
+    await response.body?.cancel();
+    throw new Error('Local narrator stream unavailable');
+  }
+  return response;
 }
 
 /**

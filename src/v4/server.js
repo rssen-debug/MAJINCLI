@@ -39,7 +39,9 @@ import { createAgent } from './agent.js';
 import { discoverModels, refreshAllCatalogs } from './models.js';
 import { Kernel } from './kernel.js';
 import { t } from './ui/strings.js';
-import { synthesize, transcribe, sttTemplateFromEnv, VOICE_MODES, voiceCapabilities } from './voice.js';
+import { synthesize, transcribe, sttTemplateFromEnv, VOICE_MODES, voiceCapabilities, localNarratorStream } from './voice.js';
+import { pipeline } from 'node:stream/promises';
+import { Readable } from 'node:stream';
 import { protectAuditFile } from '../v2/audit/permissions.js';
 import { TurnJournal } from './turns.js';
 import { hostCapabilities, describeCapabilities, registerHostTools } from './tools/host.js';
@@ -636,6 +638,19 @@ export function createV4Server({ config }) {
       const text = String(body.text || '').trim();
       if (!text) throw new HttpError(400, 'EMPTY_TEXT', 'text is required.');
       if (text.length > 1500) throw new HttpError(413, 'TEXT_TOO_LONG', 'text is limited to 1500 characters.');
+      if (body.stream === true) {
+        if (!voiceCapabilities().streamingTts.available) throw new HttpError(503, 'VOICE_STREAM_DISABLED', 'Streaming narrator is not configured.');
+        if (text.length > 700) throw new HttpError(413, 'TEXT_TOO_LONG', 'Streaming text is limited to 700 characters.');
+        const controller = new AbortController();
+        const disconnected = () => { if (!res.writableFinished) controller.abort(); };
+        res.once('close', disconnected);
+        try {
+          const upstream = await localNarratorStream({ text, signal: controller.signal });
+          res.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-store', 'x-accel-buffering': 'no', 'x-majin-tts-provider': 'kokoro-onnx', 'x-majin-tts-synthetic': 'false' });
+          await pipeline(Readable.fromWeb(upstream.body), res, { signal: controller.signal });
+        } finally { controller.abort(); res.off('close', disconnected); }
+        return;
+      }
       const mode = VOICE_MODES.includes(body.mode) ? body.mode : 'auto';
       const result = await synthesize({
         text,

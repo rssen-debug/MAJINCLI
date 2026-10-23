@@ -1,6 +1,6 @@
 # MAJIN V4 — continuation handover
 
-Status: **NOT READY**. Last pushed starting point: `930e2fb121451a120b87a193110d55002a85807e`.
+Status: **NOT READY**. Handover first pushed in `f62e6f6f9d27d16e63228125cb041e129324d437`; product starting point `930e2fb121451a120b87a193110d55002a85807e`.
 Branch `codex/v4-final-integration-20261023`, draft [PR 401](https://github.com/rssen-debug/MAJINCLI/pull/401), target `v4/main`; no merge or production publication.
 
 ## Mission and scope
@@ -58,18 +58,24 @@ Initial successful synthetic HTTPS STT -> actual model -> WAV: 11.266 s. This is
 not a physical latency measurement. Real iPhone natural interruption, explicit
 5G reconnect and full Ghost audio acceptance remain unconfirmed.
 
-Current unsaved milestone adds optional segmented WAV streaming to the SAME
-Kokoro service and authenticated voice endpoint, plus abortable client playback.
-It must be tested before committing/enabling `MAJIN_V4_STREAM_TTS=1`. The current
-production worker does not yet have these edits. A temporary isolated streaming
-worker on loopback 18766 was launched from the working checkout for measurement;
-identify its exact command/PID before stopping it. Do not kill the production
-worker/host by name. Tests and measurement are still in progress.
+Segmented WAV streaming now reuses the SAME Kokoro service and authenticated
+voice endpoint, with bounded text, abortable playback, sequential segment
+validation and URL/listener cleanup. Explicit activation: `MAJIN_V4_STREAM_TTS=1`
+and an existing local TTS command. Hosts without it keep the full-WAV route.
+PWA shell 9 prevents old client code remaining cached.
 
-Files being changed: `scripts/majin-kokoro-voice.py`, `src/v4/voice.js`,
-`src/v4/server.js`, `src/v4/ui/voice.js`, `src/v4/ui/app.js`. Add focused stream,
-abort/truncation and authenticated endpoint regressions. Preserve full-WAV fallback
-for hosts not explicitly configured for streaming. Keep physical acceptance open.
+Focused voice tests: 25 passed, 0 failed, 0 skipped. Synthetic loopback benchmark
+in `evidence/ghost-voice/stream-latency.json`: first audio 4270 ms, stream completion
+13503 ms (three segments), whole-WAV comparison 11563 ms, identical text/model.
+Kokoro create_stream alone gave one batch for a normal reply; sentence-sized
+inference units fix that first-audio bottleneck. This does NOT measure iPhone
+end-to-end latency or prove physical interruption. The production worker and host
+still need fast-forward deployment, explicit activation and HTTPS verification.
+Temporary test worker on loopback 18766: identify exact command/PID before stopping.
+
+Files: `scripts/majin-kokoro-voice.py`, `scripts/v4/benchmark-narrator.mjs`,
+`src/v4/voice.js`, `src/v4/server.js`, `src/v4/ui/voice.js`, `src/v4/ui/app.js`,
+PWA shell references, and `test/v4/voice-stream.test.js`.
 
 ## Latest evidence and failures
 

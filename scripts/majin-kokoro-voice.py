@@ -4,10 +4,12 @@ Install dependencies and model separately. The server never uploads speech.
 It accepts only JSON /speak calls from loopback app origins and returns WAV.
 """
 import argparse
+import asyncio
 import base64
 import io
 import json
 import os
+import re
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,6 +18,21 @@ from urllib.parse import urlparse
 
 MAX_TEXT_BYTES = 4096
 PORT = 18765
+
+def speech_segments(text, max_chars=160):
+    """Sentence-sized inference units: Kokoro's default phoneme batch can hold
+    an entire reply, so create_stream alone does not reduce first-audio delay.
+    Preserve every word and punctuation; bound long sentences at whitespace.
+    """
+    for sentence in re.split(r'(?<=[.!?])\s+', text.strip()):
+        while len(sentence) > max_chars:
+            boundary = sentence.rfind(' ', 0, max_chars + 1)
+            if boundary < 1:
+                boundary = max_chars
+            yield sentence[:boundary]
+            sentence = sentence[boundary:].lstrip()
+        if sentence:
+            yield sentence
 
 def valid_origin(origin):
     if not origin:
@@ -69,9 +86,11 @@ def serve(args):
         def do_GET(self):
             if self.path != "/health":
                 return self.send(404, b'{"error":"not_found"}')
-            return self.send(200, json.dumps({"ok": True, "engine": "kokoro-onnx", "voice": args.voice, "local": True, "stt": bool(stt)}).encode())
+            return self.send(200, json.dumps({"ok": True, "engine": "kokoro-onnx", "voice": args.voice, "local": True, "stt": bool(stt), "streamingTts": True}).encode())
 
         def do_POST(self):
+            if self.path == '/speak-stream':
+                return self.speak_stream()
             if self.path == '/transcribe':
                 return self.transcribe()
             if self.path != "/speak":
@@ -138,6 +157,61 @@ def serve(args):
                 return self.send(422, b'{"error":"recognition_failed"}')
             finally:
                 stt_lock.release()
+
+        def speak_stream(self):
+            if not valid_origin(self.headers.get('Origin')):
+                return self.send(403, b'{"error":"origin_not_allowed"}')
+            if self.headers.get('Content-Type', '').split(';')[0].strip() != 'application/json':
+                return self.send(415, b'{"error":"json_required"}')
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 1 <= length <= MAX_TEXT_BYTES:
+                    return self.send(413, b'{"error":"request_too_large"}')
+                phrase = json.loads(self.rfile.read(length)).get('text')
+                if not isinstance(phrase, str) or not phrase.strip() or len(phrase) > 700:
+                    return self.send(400, b'{"error":"invalid_text"}')
+            except (ValueError, TypeError, AttributeError):
+                return self.send(400, b'{"error":"invalid_text"}')
+            if not lock.acquire(blocking=False):
+                return self.send(429, b'{"error":"tts_busy"}')
+            try:
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/x-ndjson')
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('Connection', 'close')
+                self.end_headers()
+                def frame(payload):
+                    self.wfile.write((json.dumps(payload) + '\n').encode('utf-8'))
+                    self.wfile.flush()
+                async def stream():
+                    sequence = 0
+                    for part in speech_segments(phrase):
+                        generator = model.create_stream(part, voice=args.voice, speed=args.speed, lang='en-us')
+                        try:
+                            async for samples, rate in generator:
+                                wav = io.BytesIO()
+                                sf.write(wav, samples, rate, format='WAV', subtype='PCM_16')
+                                frame({'type': 'audio', 'sequence': sequence, 'data': base64.b64encode(wav.getvalue()).decode('ascii')})
+                                sequence += 1
+                        finally:
+                            # Stop future batches on a disconnected/aborted phone.
+                            # Kokoro bounds prefetch to one pending batch; in-flight
+                            # ONNX work finishes before this lock can be reused.
+                            await generator.aclose()
+                    frame({'type': 'done', 'chunks': sequence})
+                asyncio.run(stream())
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            except Exception as error:
+                self.log_error('Streaming TTS failed: %s', type(error).__name__)
+                try:
+                    self.wfile.write(b'{"type":"error","message":"synthesis_failed"}\n')
+                    self.wfile.flush()
+                except OSError:
+                    pass
+            finally:
+                self.close_connection = True
+                lock.release()
 
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print(f"MAJIN_KOKORO_READY http://127.0.0.1:{args.port} voice={args.voice}", flush=True)

@@ -5,11 +5,11 @@
  * never claims a task succeeded on its own. iOS voice uses foreground capture
  * and host-local STT; other browsers retain Web Speech with recording fallback.
  */
-import { createSpirit } from '/spirit.js?v=8';
-import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage } from '/voice.js?v=8';
-import { t } from '/strings.js?v=8';
-import { INITIAL, applyEvent, createSseParser } from '/session.js?v=8';
-import { VoiceCapture } from '/recorder.js?v=8';
+import { createSpirit } from '/spirit.js?v=9';
+import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage, playNarratorStream } from '/voice.js?v=9';
+import { t } from '/strings.js?v=9';
+import { INITIAL, applyEvent, createSseParser } from '/session.js?v=9';
+import { VoiceCapture } from '/recorder.js?v=9';
 
 const $ = (sel) => document.querySelector(sel);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1497,8 +1497,15 @@ async function speak(text) {
     const capabilities = await api('/api/voice', { signal: controller.signal }).then((r) => r.ok ? r.json() : null);
     if (controller.signal.aborted) return;
     if (capabilities?.serverSide?.tts?.some((lane) => lane.mode === 'command' && lane.available)) {
-      const response = await api('/api/voice/speak', { method: 'POST', body: { text: clean, mode: 'command' }, signal: controller.signal });
+      const streamed = capabilities.serverSide.streamingTts?.available === true;
+      const response = await api('/api/voice/speak', { method: 'POST', body: { text: clean, mode: 'command', ...(streamed ? { stream: true } : {}) }, signal: controller.signal });
       if (!response.ok) throw new Error(t('voice.narrator.failed'));
+      if (streamed) {
+        narratorAudio ||= new Audio();
+        await playNarratorStream({ response, audio: narratorAudio, signal: controller.signal, onStart: () => spirit.set('speaking') });
+        if (!controller.signal.aborted) spirit.set(capture.active ? 'listening' : 'idle');
+        return;
+      }
       const audio = await response.blob();
       if (controller.signal.aborted) return;
       narratorAudio ||= new Audio();
