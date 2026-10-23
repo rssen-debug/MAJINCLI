@@ -198,6 +198,24 @@ Both are now copied from `install.ps1`, V4's restart-on-failure is kept, and
 `test/v4/windows-installer.test.js` fails if either disappears. This is the honest
 answer to "is there something on GitHub to reuse": yes, and ignoring it cost a bug.
 
+## The commands are tested as commands
+
+Every earlier test called a library function. `test/v4/cli.test.js` spawns the scripts the
+owner actually types, with a real environment, and asserts on **exit code** as well as output —
+because a scheduled job and a human both depend on the exit code:
+
+- `host-doctor` (text and `--json`), exit 0 on a usable host
+- `progress --json`, and exit 1 on a broken matrix
+- `backup → verify → restore` round trip across two data directories
+- `restore` without `--force` exits **1** and says `REFUSED (ALREADY_EXISTS)`
+- a single tampered byte makes `verify` exit **1**
+- `plugin list` / `plugin quarantine` on an empty host
+- `upgrade --dry` changes nothing (HEAD asserted before and after)
+- `benchmark` exits 0 only when all seven scenarios pass
+
+The upgrade output also now explains the detached checkout and how to return to the branch,
+which was the one place a user could get stuck without knowing why.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in

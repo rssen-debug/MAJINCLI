@@ -69,11 +69,15 @@ switch (result.status) {
   case 'UPGRADED':
     line(`  Upgraded ${result.previousSha.slice(0, 7)} -> ${result.newSha.slice(0, 7)}.`);
     line(`  To undo: ${result.rollbackCommand}`);
+    line('  The checkout is detached at that commit on purpose: an upgrade must not');
+    line('  move a branch pointer, and a failed gate can then be undone exactly.');
+    line('  To work on the branch again: git checkout v4/main && git reset --hard ' + result.newSha.slice(0, 7));
     break;
   case 'ROLLED_BACK':
     line(`  Gate "${result.failedGate}" failed. Rolled back to ${result.previousSha.slice(0, 7)}.`);
     line(`  Dependencies reinstalled: ${result.restored ? 'yes' : 'NO — run npm ci'}`);
     if (result.reason) line(`  ${result.reason}`);
+    line('  The host is on the last commit that passed. Start it again when ready.');
     break;
   case 'ESCALATE':
   default:

@@ -98,3 +98,18 @@ test('upgrade: missing inputs are refused instead of half-running', async () => 
   await assert.rejects(() => upgrade({ run: () => ({ code: 0 }) }), (e) => e.code === 'NO_REPO');
   await assert.rejects(() => upgrade({ repo: '/r' }), (e) => e.code === 'NO_RUNNER');
 });
+
+test('upgrade: the plan explains the detached checkout and how to leave it', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const out = spawnSync(process.execPath, [path.join(root, 'scripts/v4/upgrade.mjs'), '--dry'], {
+    cwd: root,
+    encoding: 'utf8',
+    timeout: 60_000,
+  });
+  assert.equal(out.status, 0, out.stdout + out.stderr);
+  assert.match(out.stdout, /plan only/);
+  assert.match(out.stdout, /nothing was changed/);
+});
