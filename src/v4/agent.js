@@ -20,6 +20,7 @@ import { Goal } from '../v2/runtime/goal.js';
 import { STATES } from '../v2/runtime/states.js';
 import { runVerifier } from '../v2/runtime/verifiers.js';
 import { runTool } from '../v2/tools/runner.js';
+import { nextRecoveryStep, recoveryPlan } from '../v2/recover/advisor.js';
 import { TOOL_SCHEMAS, safeFileName } from './tools.js';
 import { publicGoal, newId } from './store.js';
 import { explainModelError } from './model.js';
@@ -113,6 +114,66 @@ export function createAgent({ config, conversations, goals, tools, model }) {
       .filter((m) => (m.role === 'user' || m.role === 'assistant') && !m.meta?.error)
       .slice(-30)
       .map((m) => ({ role: m.role, content: m.content }));
+  }
+
+  /**
+   * Run one tool call, and when it fails, ask V2's recovery advisor what to do.
+   *
+   * The advisor (`src/v2/recover/advisor.js`) is pure and proven: failure class
+   * -> ordered, bounded plan. V4 executes only the steps that are safe here:
+   *
+   *   retry_simple / retry_backoff  — re-run identical input, but ONLY for tools
+   *                                   without side effects (tier 'read'). Retrying
+   *                                   a write could duplicate an effect that
+   *                                   actually landed before the error surfaced.
+   *   everything else               — reported, never silently attempted.
+   *
+   * The budget comes from the advisor, so no class can retry forever.
+   */
+  async function executeToolWithRecovery({ call, goal, conversationId, emit }) {
+    const toolName = String(call.name || '');
+    const def = tools.registry.get(toolName);
+    const retryable = def?.tier === 'read';
+    const consumed = {};
+    let attempt = 0;
+    let last = null;
+
+    for (;;) {
+      attempt += 1;
+      const outcome = await executeToolCall({ call, goal, conversationId, emit, attempt });
+      if (outcome.ok || outcome.waiting) return outcome;
+      last = outcome;
+
+      if (!retryable) return outcome;
+
+      const step = nextRecoveryStep(outcome.code || 'UNKNOWN', consumed);
+      if (!step || !['retry_simple', 'retry_backoff'].includes(step.step)) {
+        // The advisor may still have advice (escalate, ask, replan) — but those
+        // are decisions for a human, not something a tool loop may invent.
+        if (outcome.code) {
+          const plan = recoveryPlan(outcome.code);
+          emit('recovery', {
+            tool: toolName,
+            failureClass: outcome.code,
+            action: 'none',
+            advice: plan.plan.map((p) => p.step),
+            budget: plan.totalBudget,
+          });
+        }
+        return outcome;
+      }
+
+      consumed[step.step] = (consumed[step.step] || 0) + 1;
+      emit('recovery', {
+        tool: toolName,
+        failureClass: outcome.code || 'UNKNOWN',
+        action: step.step,
+        attempt: step.attempt,
+      });
+      if (step.step === 'retry_backoff') {
+        await new Promise((r) => setTimeout(r, 50 * 2 ** (step.attempt - 1)));
+      }
+    }
   }
 
   async function executeToolCall({ call, goal, conversationId, emit }) {
@@ -389,7 +450,7 @@ export function createAgent({ config, conversations, goals, tools, model }) {
         for (const call of response.toolCalls) {
           if (signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
           toolCallsUsed += 1;
-          const outcome = await executeToolCall({ call, goal, conversationId: conversation.id, emit });
+          const outcome = await executeToolWithRecovery({ call, goal, conversationId: conversation.id, emit });
           goals.save(goal);
           emit('goal', publicGoal(goal));
 
@@ -655,7 +716,7 @@ export function createAgent({ config, conversations, goals, tools, model }) {
     }
 
     emit('state', { state: 'working' });
-    const outcome = await executeToolCall({
+    const outcome = await executeToolWithRecovery({
       call: { id: pending.callId, name: pending.tool, argsJson: JSON.stringify(pending.input) },
       goal,
       conversationId,

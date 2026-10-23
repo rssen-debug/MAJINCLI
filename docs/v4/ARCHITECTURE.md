@@ -41,6 +41,7 @@ untrusted client; every tool runs on the host behind an approval decision.
 | Live model catalog | `src/core/provider/catalog.js` (pagination, per-provider auth, origin pinning) | `/api/models?refresh=1` |
 | Speech synthesis + verification | `src/v2/voice/speak.js`, `tts.js` | `POST /api/voice/speak` (opt-in) |
 | Speech recognition | `src/v2/voice/listen.js`, `stt.js` | `transcribe()` in `src/v4/voice.js` (library lane) |
+| Failure recovery plan | `src/v2/recover/advisor.js` | tool failures inside a turn (bounded retry, read tools only) |
 | Rate limiting + classification | `src/core/ratelimit.js` | model admission |
 | Config layout | `src/core/paths.js` rules (re-implemented narrowly in `config.js`) | data dir |
 

@@ -625,6 +625,18 @@ function viewIntents(event, data, intents) {
       break;
     }
 
+    case 'recovery': {
+      // The host is retrying on its own; say so instead of looking frozen.
+      spirit.set('working');
+      const reason = data.failureClass || t('common.unknownError');
+      if (data.action && data.action !== 'none') {
+        els.hint.textContent = t('state.recovering', { attempt: data.attempt || 1, reason });
+      } else if (Array.isArray(data.advice) && data.advice.length) {
+        els.hint.textContent = t('state.recoveryAdvice', { advice: data.advice.join(', ') });
+      }
+      break;
+    }
+
     case 'approval_required':
       state.pendingApproval = data;
       showApproval(data);

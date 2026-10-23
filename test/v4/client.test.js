@@ -186,3 +186,13 @@ test('client: a dropped stream is reattached to the same turn instead of losing 
     await s.close();
   }
 });
+
+test('client: a recovery event is surfaced in the turn instead of looking frozen', () => {
+  let state = { ...INITIAL };
+  state = applyEvent(state, 'user', { content: 'läs' }).state;
+  state = applyEvent(state, 'delta', { text: 'ett ögonblick' }).state;
+  const { state: after, intents } = applyEvent(state, 'recovery', { tool: 'x', failureClass: 'TIMEOUT', action: 'retry_simple', attempt: 1 });
+  // The reducer must not lose the partial answer while the host retries.
+  assert.equal(after.text, 'ett ögonblick');
+  assert.deepEqual(intents, [], 'recovery is a view hint, not a message');
+});

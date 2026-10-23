@@ -31,6 +31,8 @@ export const SV = {
   'state.running': 'kör…',
   'state.failed': 'misslyckades',
   'state.replayed': 'återuppspelat svar',
+  'state.recovering': 'Försöker igen ({attempt}) efter {reason}',
+  'state.recoveryAdvice': 'Kunde inte återhämta automatiskt: {advice}',
   'state.truncated': 'Det svaret ligger inte kvar i historiken längre — uppgiften kördes bara en gång.',
   'state.receipt': 'kvitto',
 

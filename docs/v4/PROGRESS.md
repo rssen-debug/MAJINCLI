@@ -216,6 +216,28 @@ because a scheduled job and a human both depend on the exit code:
 The upgrade output also now explains the detached checkout and how to return to the branch,
 which was the one place a user could get stuck without knowing why.
 
+## Bounded tool recovery, reusing V2's advisor
+
+A failed tool call used to end the turn immediately. V2 already ships a pure recovery
+advisor (`src/v2/recover/advisor.js`): failure class → ordered, bounded plan. V4 now consults it.
+
+The rule that makes this safe:
+
+- **read tools** may be retried (`retry_simple` / `retry_backoff`), bounded by the advisor's
+  budget — `TIMEOUT` gets 1 retry, `NETWORK_FAILURE` gets 2, never more;
+- **write tools are never retried.** An error can surface *after* the effect landed, and a retry
+  would duplicate it. The test asserts a write is attempted exactly once.
+- failure classes whose plan needs a human (`PERMISSION_DENIED` → `escalate`) execute nothing and
+  surface the advice instead of inventing a step.
+
+Both attempts stay in the goal's receipts, so the evidence shows what happened.
+The UI shows "Försöker igen (1) efter TIMEOUT" instead of appearing frozen.
+
+**This does not move the score.** "Bounded tool recovery" was not one of the 75 criteria when the
+matrix was written, and adding a criterion now — then marking it verified — would be scoring my
+own homework. It is recorded here as delivered capability with evidence
+(`test/v4/recovery.test.js`), and the matrix stays at 78.5/100.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in

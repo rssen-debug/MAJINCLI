@@ -43,6 +43,8 @@ needs a host/credential; **scaffold** = structure without runtime evidence.
 | Memory store | `memory/store.js` | proven | **used directly** |
 | DAG / scheduler / orchestrator | `runtime/dag.js`, `scheduler.js`, `orchestrator.js` | usable | not used yet — single-turn execution first (stage 2) |
 | Supervisor / roles | `supervisor/*` | scaffold | not used; no multi-agent claims |
+| Recovery advisor | `recover/advisor.js` | proven (pure, no deps) | **used directly** — maps a tool failure class to a bounded retry plan |
+| Outer recovery loop | `recover/outer-loop.js` | usable | not used: it drives V2's `runObjective`, which V4 does not run |
 | Studio server/page | `studio/server.js` (517 lines) | usable | **not reused**: V4 needs a different trust model (session + tunnel) |
 | Voice adapters | `voice/tts.js`, `stt.js` | scaffold (host binaries) | planned for server-side voice (matrix V7) |
 | Telemetry / audit | `telemetry/*`, `audit/*` | usable | not wired yet |
