@@ -282,23 +282,106 @@ export class GoalStore {
     return Goal.list(this.dir);
   }
 
-  /** Mark goals that were mid-flight when the host stopped. Returns the ids. */
-  reconcileOnBoot() {
-    const blocked = [];
+  /**
+   * Mark goals that were mid-flight when the host stopped. Returns the ids.
+   *
+   * The old version only looked at RUNNING and VERIFYING, and attempted
+   * VERIFYING -> BLOCKED directly. That hop is not legal in V2
+   * (VERIFYING exits to COMPLETED/RECOVERING/FAILED) and the throw was caught
+   * and discarded — so VERIFYING goals were never reconciled at all while the
+   * code claimed they were. WAITING_FOR_TOOL had the same shape and was not
+   * even considered.
+   *
+   * Each interrupted state is now routed through hops the state machine allows.
+   * A state with no honest path is left alone and reported, not silently
+   * swallowed.
+   */
+  reconcileOnBoot({ conversations = null } = {}) {
+    const moved = [];
+    const stuck = [];
+
     for (const summary of this.list()) {
-      if (summary.state !== STATES.RUNNING && summary.state !== STATES.VERIFYING) continue;
+      const path = interruptPath(summary.state);
+      if (!path) continue; // already terminal or untouched
       const goal = this.get(summary.id);
       if (!goal) continue;
       try {
-        goal.transition(STATES.BLOCKED, 'host restarted mid-task; resume explicitly');
+        for (const step of path) {
+          goal.transition(step.to, step.reason);
+        }
         this.save(goal);
-        blocked.push(goal.id);
-      } catch {
-        /* a goal that cannot be reconciled is reported by its stored state */
+        moved.push(goal.id);
+      } catch (err) {
+        // Never silent: an unreconciled goal keeps its stored state and is named.
+        stuck.push({ id: goal.id, state: summary.state, error: String(err?.message || err) });
       }
     }
-    return blocked;
+
+    const cleared = conversations ? clearDeadApprovals(conversations, this) : 0;
+    return Object.assign(moved, { stuck, clearedApprovals: cleared });
   }
+}
+
+/**
+ * How to bring an interrupted goal to a state a human can act on.
+ *
+ *   nothing yet executed  -> CANCELLED (no work was lost, nothing to resume)
+ *   work was in flight    -> BLOCKED (resumable, and resume re-verifies)
+ *
+ * Returns null for states that need no change.
+ */
+export function interruptPath(state) {
+  const reason = 'host restarted mid-task; resume explicitly';
+  switch (state) {
+    // nothing had run: cancelling is honest and cannot lose an effect
+    case STATES.CREATED:
+    case STATES.READY:
+      return [{ to: STATES.CANCELLED, reason: 'host restarted before any work started' }];
+    // exits straight to BLOCKED
+    case STATES.RUNNING:
+    case STATES.WAITING_FOR_APPROVAL:
+    case STATES.RECOVERING:
+    case STATES.PLANNING:
+      return [{ to: STATES.BLOCKED, reason }];
+    // no direct BLOCKED exit: go through RECOVERING
+    case STATES.VERIFYING:
+    case STATES.WAITING_FOR_TOOL:
+      return [
+        { to: STATES.RECOVERING, reason: 'host restarted mid-task' },
+        { to: STATES.BLOCKED, reason },
+      ];
+    default:
+      return null; // terminal, or BLOCKED already
+  }
+}
+
+/**
+ * A pending approval belongs to a turn that no longer exists after a restart.
+ * Leaving it in place makes the UI ask the owner to approve work that was
+ * already abandoned.
+ */
+function clearDeadApprovals(conversations, goals) {
+  let cleared = 0;
+  let listed = [];
+  try {
+    listed = conversations.list();
+  } catch {
+    return 0;
+  }
+  for (const summary of listed) {
+    const conv = conversations.get(summary.id);
+    if (!conv?.pendingApproval) continue;
+    const goal = goals.get(conv.pendingApproval.goalId);
+    if (goal && goal.state === STATES.WAITING_FOR_APPROVAL) continue; // still real
+    conv.pendingApproval = null;
+    try {
+      conversations.save(conv);
+      cleared += 1;
+    } catch {
+      /* an unwritable conversation is reported by its absence, not crash-looping */
+    }
+  }
+  return cleared;
 }
 
 export function publicGoal(goal) {

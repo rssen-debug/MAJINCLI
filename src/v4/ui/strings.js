@@ -147,6 +147,8 @@ export const SV = {
   'cli.pairExists': 'En parkod finns redan. Kör med --rotate för att ersätta den.',
   'cli.pairEnter': '  Ange den i webbläsaren på telefonen.',
   'cli.pairRotate': '  Parkod finns redan. Ny kod: npm run v4:pair -- --rotate',
+  'cli.reconcileStuck': '  {count} uppgift(er) kunde inte flyttas vid omstart — de ligger kvar i sitt gamla tillstånd:',
+  'cli.approvalsCleared': '  {count} föråldrat godkännande togs bort (turen finns inte längre).',
   'cli.reconciled': '  {count} pågående uppgift(er) markerades BLOCKED efter omstart:',
   'cli.shutdown': '{signal} — stänger av.',
   'cli.help.serve': '  node src/v4/main.js          starta servern',

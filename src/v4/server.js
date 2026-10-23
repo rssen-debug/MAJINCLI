@@ -133,7 +133,9 @@ export function createV4Server({ config }) {
     maxMessages: config.limits.maxStoredMessages,
   });
   const goals = new GoalStore({ dir: paths.goals });
-  const reconciled = goals.reconcileOnBoot();
+  // Reconciled goals are reported by the doctor and the boot banner; the
+  // pending approvals they orphan are cleared with the same call.
+  const reconciled = goals.reconcileOnBoot({ conversations });
 
   const tools = createToolRegistry({ workspaceDir, memoryDir: paths.memory });
   const model = createModelClient(config, { workspaceDir });

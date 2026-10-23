@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 264
-# pass 263
+# tests 272
+# pass 271
 # skipped 1
 # fail 0
 # skipped 0
@@ -47,6 +47,7 @@ $ npm run v4:test
 | `test/v4/upgrade.test.js` | 8 | clean upgrade, up-to-date, rollback on a failed gate, escalation when rollback fails, fetch/checkout classification |
 | `test/v4/leaks.test.js` | 7 | bounded rate limiter and conversation cache, cache eviction loses nothing, bounded listing, abort-key collision, truncated replay |
 | `test/v4/leaks2.test.js` | 3 | bounded goal cache, evicted goals reload from disk intact, in-flight goals are never evicted |
+| `test/v4/crash.test.js` | 8 | every interrupted state is reconciled through legal hops (WAITING_FOR_TOOL, WAITING_FOR_APPROVAL, RUNNING, VERIFYING, PLANNING), a pre-execution goal is cancelled, a completed goal is untouched, orphaned approvals are cleared, a reconciled goal is resumable, and the boot banner announces it |
 | `test/v4/journal-live.test.js` | 6 | a running turn survives the TTL, a finished one expires, ten newer turns do not evict a live one, finished turns are still bounded, a live burst is bounded generously, and a client can reattach to a turn that outlived the TTL |
 | `test/v4/timeout.test.js` | 3 | a cooperative tool is told about its deadline and stops before the effect lands; a tool that ignores the signal never earns a success receipt and is recorded as TIMEOUT; a plugin worker is stopped at its call deadline |
 | `test/v4/cancel.test.js` | 6 | a long tool receives a signal and stops; a template-ignoring tool still finishes as before; a cancelled turn records CANCELLED with no success receipt; a plugin worker is stopped on abort; logout stops the revoked session's turns and leaves another device running; a revoked session cannot reattach |
@@ -111,6 +112,7 @@ POST /api/chat  "Skriv filen valkomst.txt med innehåll: Hej från MAJIN"
 | Cancelling a turn left the running tool working, and its effect landed with no receipt | `cancel.test.js` | the tool receives an AbortSignal through a per-call registry facade; plugin calls stop their worker on abort |
 | A tool that overran its deadline kept running and its effect landed after the goal was failed | `timeout.test.js` | the same facade fires on the deadline too; overruns are recorded as TIMEOUT and never as success |
 | The turn journal pruned and evicted turns that were still running, so a phone reconnecting to a long turn got 404 | `journal-live.test.js` | only finished turns expire or are evicted; live turns have a separate ceiling |
+| Crash reconciliation attempted an illegal `VERIFYING → BLOCKED` hop and swallowed the throw, so VERIFYING and WAITING_FOR_TOOL goals were never recovered | `crash.test.js` | `interruptPath()` uses hops the state machine allows; unreconciled goals are named on the boot banner, orphaned approvals cleared |
 | Logging out left the turn running to completion | `cancel.test.js` | turns record their owning session; logout aborts that session's turns |
 
 ## 3.2 Browser attempt, documented

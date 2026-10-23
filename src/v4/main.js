@@ -56,6 +56,16 @@ async function serve() {
     line(t('cli.reconciled', { count: context.reconciled.length }));
     for (const id of context.reconciled) line(`    ${id}`);
   }
+  // A goal the state machine would not let us move is reported, never hidden:
+  // it is still on disk in its old state and a human needs to know.
+  if (context.reconciled.stuck?.length) {
+    line('');
+    line(t('cli.reconcileStuck', { count: context.reconciled.stuck.length }));
+    for (const item of context.reconciled.stuck) line(`    ${item.id} (${item.state}): ${item.error}`);
+  }
+  if (context.reconciled.clearedApprovals) {
+    line(t('cli.approvalsCleared', { count: context.reconciled.clearedApprovals }));
+  }
   line('');
 
   const shutdown = (signal) => {

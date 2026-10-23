@@ -382,6 +382,31 @@ contract.
 
 Proven by stashing the fix: four of the six new tests fail against the old `turns.js`.
 
+## Crash reconciliation was partly imaginary
+
+A crash can leave a goal in any state a turn passes through. `reconcileOnBoot` looked at only two of
+them, and attempted `VERIFYING → BLOCKED` directly — **a hop V2 does not allow** (`VERIFYING` exits
+to COMPLETED/RECOVERING/FAILED). The throw was caught by an empty `catch`, so the function reported
+success while doing nothing. The behaviour had been "tested" only by a test that asserted the
+function returned the ids it claimed to.
+
+What was actually broken:
+
+| Interrupted state | Old behaviour |
+|---|---|
+| `RUNNING` | reconciled correctly |
+| `VERIFYING` | **silently did nothing** — unrecoverable and invisible |
+| `WAITING_FOR_TOOL` | not considered at all |
+| `WAITING_FOR_APPROVAL` | not considered, and its pending approval survived the restart |
+| `CREATED`, `PLANNING`, `READY` | never cleaned up |
+
+`interruptPath()` now returns the hops the state machine actually permits: work that reached
+execution goes to `BLOCKED` (via `RECOVERING` where there is no direct exit), work that never
+started goes to `CANCELLED`, terminal states are untouched. A goal with no legal path is **named on
+the boot banner**, not swallowed. Orphaned approvals are cleared with the same call.
+
+Proven by stashing the fix: five of the eight tests fail against the old code.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in
