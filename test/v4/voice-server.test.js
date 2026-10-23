@@ -138,7 +138,9 @@ const sttTemplate = () => `"${process.execPath}" "${FIXTURE}" stt {WAV}`;
 test('voice/command: a real local binary is spawned without a shell and its audio is verified', async () => {
   const fs = await import('node:fs');
   const os = await import('node:os');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-tts-cmd-'));
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-tts-cmd-'));
+  const dir = path.join(parent, 'fresh-voice-directory');
+  assert.equal(fs.existsSync(dir), false);
   const result = await synthesize({ text: 'tre ord här', mode: 'command', command: ttsTemplate(), dir });
   assert.equal(result.ok, true);
   assert.equal(result.provider, 'command');
@@ -146,7 +148,7 @@ test('voice/command: a real local binary is spawned without a shell and its audi
   assert.equal(result.synthetic, false, 'a real subprocess produced it');
   assert.ok(result.bytes > 44);
   assert.ok(fs.existsSync(result.audioPath));
-  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(parent, { recursive: true, force: true });
 });
 
 test('voice/command: longer text produces a longer file (the text really reaches the binary)', async () => {

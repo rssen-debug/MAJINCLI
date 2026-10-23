@@ -81,6 +81,8 @@ test('iOS client: uses capture instead of Siri, sends transcript, interrupts syn
   await context.addCookies([{ name: cookie.slice(0, eq), value: cookie.slice(eq + 1), url: server.base }]);
   const page = await context.newPage();
   let uploads = 0;
+  let sentAsVoice = false;
+  page.on('request', (request) => { if (request.url().endsWith('/api/chat') && request.method() === 'POST') sentAsVoice = request.postDataJSON().voiceTurn === true; });
   let narratorCalls = 0;
   await page.route('**/api/voice', (route) => route.fulfill({ json: { serverSide: { tts: [{ mode: 'command', available: true }] } } }));
   await page.route('**/api/voice/speak', (route) => {
@@ -125,6 +127,7 @@ test('iOS client: uses capture instead of Siri, sends transcript, interrupts syn
   await page.waitForFunction(() => document.querySelector('.tool[data-state="verified"]'));
   assert.equal(fs.readFileSync(path.join(server.home, 'workspace/ios-voice.txt'), 'utf8'), 'voice capture works');
   assert.equal(uploads, 1);
+  assert.equal(sentAsVoice, true, 'spoken input requests concise same-language replies');
   await page.waitForFunction(() => window.__narratorStarts === 1);
   assert.equal(narratorCalls, 1, 'configured host voice is requested instead of the browser default');
   await page.evaluate(() => { window.__micSource.gain.gain.value = 0.2; });

@@ -16,7 +16,7 @@ import { ConversationStore, GoalStore } from '../../src/v4/store.js';
 import { createAgent } from '../../src/v4/agent.js';
 import { tempHome } from './helpers.mjs';
 
-function build({ toolDef, modelScript, policy = 'sandbox-auto' } = {}) {
+function build({ toolDef, modelScript, policy = 'sandbox-auto', onRequest = () => {} } = {}) {
   const home = tempHome();
   const config = {
     version: 'test',
@@ -35,7 +35,8 @@ function build({ toolDef, modelScript, policy = 'sandbox-auto' } = {}) {
   const model = {
     info: { demo: false, provider: 'fake', model: 'fake-1', label: 'Fake' },
     infoFor: () => ({ demo: false, provider: 'fake', model: 'fake-1', label: 'Fake' }),
-    async chat() {
+    async chat(request) {
+      onRequest(request);
       const step = modelScript[Math.min(call, modelScript.length - 1)];
       call += 1;
       return { text: step.text || '', toolCalls: step.toolCalls || [], demo: false, provider: 'fake', model: 'fake-1' };
@@ -44,6 +45,17 @@ function build({ toolDef, modelScript, policy = 'sandbox-auto' } = {}) {
   const agent = createAgent({ config, conversations, goals, tools, model });
   return { home, config, conversations, goals, agent, cleanup: () => fs.rmSync(home, { recursive: true, force: true }) };
 }
+
+test('spoken turns ask for concise same-language replies without affecting typed turns', async () => {
+  const requests = [];
+  const s = build({ modelScript: [{ text: 'Hello.' }], onRequest: (request) => requests.push(request) });
+  try {
+    await s.agent.runTurn({ text: 'Hello', voiceTurn: true });
+    await s.agent.runTurn({ text: 'A separate typed question' });
+    assert.match(requests[0].messages[0].content, /spoken conversation.*language the user just spoke/);
+    assert.doesNotMatch(requests[1].messages[0].content, /This is a spoken conversation/);
+  } finally { s.cleanup(); }
+});
 
 const explodingTool = {
   name: 'explode',

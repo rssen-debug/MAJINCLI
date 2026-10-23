@@ -81,6 +81,7 @@ export function voiceCapabilities(env = process.env) {
 export async function synthesize({ text, mode = 'auto', voice = null, approvals, dir, command = null }) {
   const provider = makeTtsProvider({ mode, voice, command: command || commandTemplateFromEnv() });
   const target = path.join(dir || fs.mkdtempSync(path.join(os.tmpdir(), 'majin-tts-')), `speech-${Date.now()}.${provider.name === 'edge-tts' ? 'mp3' : 'wav'}`);
+  fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
   const started = Date.now();
   let result;
   try {

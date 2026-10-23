@@ -70,6 +70,16 @@ Kokoro `am_adam` produced actual WAV audio (117132 bytes for an English sentence
 3140 ms warm). These are synthetic-input component timings, **not end-to-end phone
 latency**, voice-quality equivalence, or accepted natural barge-in.
 
+The first complete deployed HTTPS roundtrip recognized English (`en`) and the
+real OpenCode model replied in English. It exposed a fresh-install TTS error:
+the command output directory did not exist, yielding HTTP 502 after synthesis.
+The synthesis adapter now creates its output directory; the local command test
+explicitly begins with a nonexistent nested directory. Spoken turns also carry
+an explicit `voiceTurn` flag requesting concise same-language replies, avoiding
+slow capability recitations. This instruction is isolated from typed turns and
+does not relax tool/verification rules. Both repairs passed 23 targeted tests.
+Actual final deployed audio evidence is recorded separately from these tests.
+
 The subsequent full V4 run exposed a test harness omission: its concatenated
 module list lacked recorder.js, causing 18 DOM tests to fail and leave servers
 open. The module list and failure teardown were fixed; all 18 DOM tests passed.

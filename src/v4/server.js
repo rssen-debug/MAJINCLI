@@ -535,6 +535,7 @@ export function createV4Server({ config }) {
     const finished = agent.runTurn({
       conversationId,
       text,
+      voiceTurn: body.voiceTurn === true,
       requestId,
       signal: controller.signal,
       emit: (type, data) => journal.append(turn, type, data),

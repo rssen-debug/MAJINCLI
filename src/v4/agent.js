@@ -551,7 +551,7 @@ export function createAgent({
    * Run one turn. `emit(type, payload)` is the SSE sink. Returns a summary the
    * HTTP layer can log without leaking content.
    */
-  async function runTurn({ conversationId, text, requestId = null, signal, emit = () => {} }) {
+  async function runTurn({ conversationId, text, voiceTurn = false, requestId = null, signal, emit = () => {} }) {
     const conv = conversationId ? conversations.get(conversationId) : null;
     if (conversationId && !conv) throw Object.assign(new Error('conversation not found'), { status: 404 });
 
@@ -629,6 +629,9 @@ export function createAgent({
     const turn = { exposure, depth: 0, goal, conversationId: conversation.id, emit, signal, model };
     const packed = historyFor(conversations.get(conversation.id), message);
     const modelMessages = packed.messages;
+    if (voiceTurn && modelMessages[0]?.role === 'system') {
+      modelMessages[0].content += '\nThis is a spoken conversation. Reply in the language the user just spoke. Usually use one short natural sentence, around 20 words, unless the task needs detail. Do not recite capabilities or menus. Keep all tool and verification rules.';
+    }
     if (packed.dropped > 0 || packed.truncated) {
       // Say it once in the stream; the UI shows a quiet note, not an error.
       emit('context', { dropped: packed.dropped, truncated: packed.truncated, tokens: packed.tokens });

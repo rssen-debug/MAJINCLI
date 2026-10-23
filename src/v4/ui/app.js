@@ -1016,7 +1016,7 @@ function newRequestId() {
   return `req_${Date.now()}_${state.requestSeq}`;
 }
 
-async function send(text) {
+async function send(text, { voiceTurn = false } = {}) {
   const message = String(text || '').trim();
   if (!message || state.streaming) return;
 
@@ -1038,6 +1038,7 @@ async function send(text) {
   state.controller = controller;
 
   const body = { text: message, requestId: newRequestId() };
+  if (voiceTurn) body.voiceTurn = true;
   if (state.conversationId) body.conversationId = state.conversationId;
 
   try {
@@ -1363,7 +1364,7 @@ const capture = new VoiceCapture({
       detectedVoiceLanguage = result.language || null;
       if (!text) return;
       els.input.value = text; resizeInput();
-      if (shouldAutoSend({ finalTranscript: text, autosend: state.autosend, streaming: state.streaming })) send(text);
+      if (shouldAutoSend({ finalTranscript: text, autosend: state.autosend, streaming: state.streaming })) send(text, { voiceTurn: true });
     } finally { clearTimeout(timer); if (voiceRequest === request) voiceRequest = null; }
   },
 });
@@ -1440,7 +1441,7 @@ function setupVoice() {
     if (shouldAutoSend({ finalTranscript: spoken, autosend: state.autosend, streaming: state.streaming })) {
       els.input.value = '';
       resizeInput();
-      send(spoken);
+      send(spoken, { voiceTurn: true });
     }
   };
   state.recognition = rec;
