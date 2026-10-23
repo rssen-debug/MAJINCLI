@@ -537,3 +537,34 @@ FAIL530/1/7. Sole failure was real-browser-lifecycle 'both distinct task browser
 remain open during consent', after~39.5seconds. Preserve run40031941788/job
 120682045655. The assertion is retained; next work must diagnose real startup/
 deadline/cleanup rather than skip it or relax isolation. No full release PASS.
+
+### Browser abort/resource follow-up — 24 October
+
+Verified code defects repaired in the existing browser engine: CDP request timers
+closed over a mutable request counter, allowing an old timeout to remove a newer
+pending RPC; socket close did not settle pending calls. Requests now own their
+IDs/timers/listeners, support AbortSignal, and settle on disconnect/send errors.
+V4 adapters propagate the actual per-call signal through a derived call context
+without mutating shared context. Browser startup/HTTP/socket/navigation and
+click/fill/upload mutations now receive/check cancellation. Aborted launches
+close their owned browser, release the fleet slot and cannot later register a
+session. Existing visible owner windows are not globally enumerated or killed.
+
+Actual local browser stalled-navigation abort test confirms the owned debug
+endpoint closes, slot count returns0, no late session appears and a pre-aborted
+open claims no slot. Existing two-goal consent isolation and real form-control
+regressions pass. Agent/approval/cancel/browser follow-up24/0/0; combined RPC,
+browser, host, exposure and actual-browser regressions57/0/0. No actual Go form
+rerun and no physical-device PASS. The older intermittent Linux lifecycle CI
+failure's root cause is NOT proven to be the RPC defect; its assertion remains,
+with tool error diagnostics added for the next failure rather than a skip.
+
+7ec1008 CI: Linux531pass/1fail/7skip, Windows537pass/1fail/1skip, runnerPASS.
+Both failures were the same legacy synthetic tool-exposure fixture: fs.stat C:\x
+without any allowed root. It now explicitly supplies a temporary workspace and
+also asserts that an outside path is denied; enforcement stays fail-closed.
+Focused exposure/RPC/host tests38/0/0 before the later combined57-test run.
+Owner disk-space question remains pending;~111MB free at last observation.
+Do not perform more live form attempts; retain five FAIL receipts and every
+original/Genesis release gate. Next independent milestone: existing scheduler
+validation/persistence and V4 binding, without starting a duplicate engine.

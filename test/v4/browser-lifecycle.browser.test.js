@@ -37,16 +37,18 @@ test('goal browsers stay isolated through consent and close on completion or den
   registry.define({ name: 'controlled_hold', description: 'Controlled no-op awaiting separate consent', tier: 'process', inputSchema: z.object({}), outputSchema: z.object({ ok: z.boolean() }), execute: async () => ({ ok: true }) });
   registerHostTools(registry, { browserRuntime: { available: true }, lanes: { web: { available: true, module: { webTools }, exportName: 'webTools', tools: ['browser.open'] } } }, { workspaceDir: config.workspaceDir, approvals: agent.approvals, session: 'v4' });
   const sessions = [];
+  const outcomes=[];
+  const emit=(event,data)=>{if(event==='tool_result')outcomes.push({name:data.name,ok:data.ok,error:data.error,summary:data.summary});};
   try {
-    const first = await agent.runTurn({ text: 'Controlled task A' });
-    const second = await agent.runTurn({ text: 'Controlled task B' });
+    const first = await agent.runTurn({ text: 'Controlled task A', emit });
+    const second = await agent.runTurn({ text: 'Controlled task B', emit });
     sessions.push(`v4:${first.goalId}`, `v4:${second.goalId}`);
     assert.notEqual(sessions[0], sessions[1]);
     for (const task of [first, second]) {
-      assert.equal((await agent.resolveApproval({ conversationId: task.conversationId, approve: true })).status, 'awaiting_approval');
+      assert.equal((await agent.resolveApproval({ conversationId: task.conversationId, approve: true, emit })).status, 'awaiting_approval');
       assert.equal(conversations.get(task.conversationId).pendingApproval.tool, 'controlled_hold');
     }
-    assert.ok(sessions.every((session) => isOpen(session)), 'both distinct task browsers remain open during consent');
+    assert.ok(sessions.every((session) => isOpen(session)), 'both distinct task browsers remain open during consent: '+JSON.stringify(outcomes));
     assert.equal((await agent.resolveApproval({ conversationId: first.conversationId, approve: true })).status, 'completed');
     assert.equal(isOpen(sessions[0]), false);
     assert.equal(isOpen(sessions[1]), true, 'completing A never closes B');

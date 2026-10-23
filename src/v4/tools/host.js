@@ -436,7 +436,7 @@ export function adaptV1Tool(v1tool, { lane, ctx = null }) {
     inputSchema: zodFromV1Params(v1tool.raw || {}, v1tool.parameters?.required || []).strip(),
     outputSchema: OUTPUT,
     lane,
-    execute: async (input = {}) => {
+    execute: async (input = {}, {signal = null} = {}) => {
       // The grant is only real if it is enforced here: a path outside the
       // workspace and every granted folder never reaches V1's filesystem code.
       assertPathsAllowed(v1tool.name, input, {
@@ -445,7 +445,8 @@ export function adaptV1Tool(v1tool, { lane, ctx = null }) {
       });
       let result;
       try {
-        result = await v1tool.run(input, ctx);
+        const callContext = signal ? Object.assign(Object.create(ctx || null), {signal}) : ctx;
+        result = await v1tool.run(input, callContext);
       } catch (err) {
         // A thrown V1 tool is a classified failure, never a silent success.
         const e = new Error(String(err?.message || err));

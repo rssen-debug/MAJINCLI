@@ -63,6 +63,17 @@ test('host: browser uploads enforce live folder grants before reaching the brows
   } finally { fs.rmSync(home,{recursive:true,force:true}); }
 });
 
+test('host: adapted V1 calls receive the real per-call abort signal without mutating shared context', async()=>{
+  const ctl=new AbortController(), ctx=v1Context(); let observed;
+  const adapted=adaptV1Tool({name:'controlled.wait',risk:'read',desc:'Controlled abort propagation',raw:{},run:async(_,callContext)=>{
+    observed=callContext.signal;
+    await new Promise((_,reject)=>callContext.signal.addEventListener('abort',()=>reject(callContext.signal.reason),{once:true}));
+  }},{lane:'web',ctx});
+  const stopped=assert.rejects(adapted.execute({}, {signal:ctl.signal}),/controlled stop/);
+  assert.equal(observed,ctl.signal); assert.equal(ctx.signal,undefined);
+  ctl.abort(new Error('controlled stop'));await stopped;
+});
+
 test('host: capability detection is self-consistent on whatever host runs it', async () => {
   const caps = await hostCapabilities({ platform: 'linux' });
   // Desktop is Windows-only, always, on Linux.

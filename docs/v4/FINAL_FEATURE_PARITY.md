@@ -1,5 +1,15 @@
 # Final feature parity audit — MAJIN V4
 
+**24 October continuation — NOT READY:** grounded file uploads now share the
+existing live workspace/folder-grant enforcement; real local DOM tests verify
+actual uploaded bytes and reject stale/ambiguous targets. Browser cancellation
+now reaches startup/navigation/RPC and mutating controls. A real stalled local
+navigation test verifies closed debug endpoint, returned slot and no late
+session. These are scoped deterministic/browser results, not real-model or
+physical-device acceptance. Five live Go form attempts remain FAIL; no new form
+attempt was run. Disk-space remediation requires owner action after policy denied
+cache cleanup. See the chronological handover for current CI failures/fixes.
+
 **24 October Ghost checkpoint — NOT READY:** installed `527b021d8077d1aabf1ea8ef7bb764d3caaf58ca`.
 All five real Go unknown-form attempts failed and are preserved, with zero server
 submissions. Browser repairs and bounded model guidance pass focused regressions;

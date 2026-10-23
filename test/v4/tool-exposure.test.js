@@ -15,7 +15,7 @@ import { ToolRegistry } from '../../src/v2/tools/registry.js';
 import { ConversationStore, GoalStore } from '../../src/v4/store.js';
 import { createAgent } from '../../src/v4/agent.js';
 import { createToolRegistry, schemasFromRegistry, jsonSchemaFor } from '../../src/v4/tools.js';
-import { adaptV1Tool, registerHostTools } from '../../src/v4/tools/host.js';
+import { adaptV1Tool, registerHostTools, v1Context } from '../../src/v4/tools/host.js';
 import { tempHome } from './helpers.mjs';
 
 function agentWith(tools) {
@@ -137,7 +137,7 @@ test('exposure: an unconvertible schema is skipped, not fatal', () => {
   assert.equal(jsonSchemaFor(null).type, 'object');
 });
 
-test('exposure: a registered host tool is actually CALLABLE through the agent', async () => {
+test('exposure: a registered host tool is callable through the runner within its granted workspace', async () => {
   // Registration alone is not enough: the model must be able to call it and the
   // call must reach the implementation.
   const home = tempHome();
@@ -152,7 +152,7 @@ test('exposure: a registered host tool is actually CALLABLE through the agent', 
       called += 1;
       return { ok: true, result: `stat ${input.path}`, summary: 'ok' };
     },
-  }, { lane: 'files' }));
+  }, { lane: 'files', ctx:v1Context({workspaceDir:home}) }));
 
   const h = agentWith(tools);
   // make the fake model call the tool once
@@ -162,14 +162,17 @@ test('exposure: a registered host tool is actually CALLABLE through the agent', 
     void originalChat;
     // drive the tool directly through the same runner path the agent uses
     const { runTool } = await import('../../src/v2/tools/runner.js');
-    const out = await runTool({ tool: 'fs_stat', input: { path: 'C:\\x' } }, {
+    const target=path.join(home,'x');
+    const out = await runTool({ tool: 'fs_stat', input: { path: target } }, {
       registry: tools.registry,
       approvals: { check: () => ({ decision: 'allow' }) },
       timeoutMs: 2000,
     });
     assert.equal(out.ok, true, JSON.stringify(out));
     assert.equal(called, 1);
-    assert.match(out.data.result, /stat C:\\x/);
+    assert.equal(out.data.result, `stat ${target}`);
+    await assert.rejects(runTool({tool:'fs_stat',input:{path:path.join(home,'..','not-granted')}},{registry:tools.registry}),e=>e.cls==='PERMISSION_DENIED');
+    assert.equal(called,1,'rejected paths never reach the fake host implementation');
   } finally {
     h.cleanup();
     fs.rmSync(home, { recursive: true, force: true });

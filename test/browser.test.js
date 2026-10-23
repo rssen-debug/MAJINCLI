@@ -117,7 +117,7 @@ test('openFor reuse never navigates the page away (the eval-vs-goto coin flip)',
      pin: the reuse branch may only goto for an explicit, non-blank url. */
   const src = (await import('node:fs')).readFileSync(new URL('../src/core/browser.js', import.meta.url), 'utf8');
   const reuse = src.slice(src.indexOf('const existing = sess.get(session)'), src.indexOf('const thePool'));
-  assert.match(reuse, /if \(url && url !== 'about:blank'\)\s+await existing\.goto\(url\)/, 'reuse navigates ONLY on explicit url');
+  assert.match(reuse, /if \(url && url !== 'about:blank'\)\s+await existing\.goto\(url, \{signal\}\)/, 'reuse navigates ONLY on explicit url and carries cancellation');
   assert.doesNotMatch(reuse, /url = 'about:blank'/, 'no silent default navigation target');
   assert.match(src, /return waitForNavigation\(navigation/, 'goto waits for the new document before asking questions');
 });

@@ -240,7 +240,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const session = ctx.session || 'default';
       journal.guard(session, `browser.open:${url}`);
       try {
-        const b = await openFor({ session, url: String(url), headless, cfgGet: (k) => ctx.cfg.get(k) });
+        const b = await openFor({ session, url: String(url), headless, cfgGet: (k) => ctx.cfg.get(k), signal:ctx.signal });
         const meta = await b.eval('(() => ({ url: location.href, title: document.title }))()');
         const controls = await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
         return {
@@ -264,7 +264,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     async run({ selector = '', mode = '' }, ctx) {
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
-      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) }).catch(() => null);
+      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k), signal:ctx.signal }).catch(() => null);
       if (!b) return { ok: false, error: { code: 'browser_closed', message: 'browser is not open' } };
       if(String(mode).toLowerCase()==='structure'){
         const payload=await b.eval(SEMANTIC_SNAPSHOT_JS).catch(e=>({error:String(e?.message||e)}));
@@ -315,6 +315,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     },
     examples: ['browser.click({selector:"button[type=submit]",expectSelector:"#success",expectText:"Saved"})', 'browser.click({ref:"e3",expectUrl:"/dashboard"})'],
     async run({ selector, ref, role, accessibleName, expectSelector, expectText, expectUrl, expectChecked, verifyWaitMs }, ctx) {
+      ctx.signal?.throwIfAborted();
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
       const semantic=Boolean(role || accessibleName);
@@ -334,7 +335,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         ok:false,error:{code:'bad_expectation',message:expected.reason}
       };
       journal.guard(session, `browser.click:${selector || ref || role+":"+accessibleName}`);
-      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
+      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k), signal:ctx.signal });
       let sel, identity = null;
       if (ref) {
         const cached = recallRef(session, ref);
@@ -350,6 +351,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       }
       const semanticTarget=JSON.stringify(semantic ? {role:String(role),name:String(accessibleName).trim()} : null);
       const expectedIdentity=JSON.stringify(identity);
+      ctx.signal?.throwIfAborted();
       const hit = await b.eval(`(() => {
         // Playwright-MCP-style unique target selection: acting on the first
         // of multiple matching buttons is unsafe, especially Submit/Buy.
@@ -448,7 +450,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         return { found: true, fromShadowRoot: Boolean(el.getRootNode?.()?.host), tag: String(el.tagName).toLowerCase(), text: t,
           checked: isCheckbox ? Boolean(el.checked) : null,
           changed: isCheckbox ? Boolean(el.checked) !== before : null };
-      })()`);
+      })()`, {signal:ctx.signal});
       if (hit.found && hit.blocked) {
         return {ok:false,error:{code:'click_blocked',
           message:'Browser click was NOT attempted: '+hit.blocked+' ('+hit.text+'). '+(
@@ -525,6 +527,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     desc: 'Fill one input/textarea/select with the required value argument (string). For selects, value may be an exact option value or unique visible option label. Real events and retention verification. Use browser.click for buttons and checkboxes.',
     params: { selector: 'string optional CSS selector of the field', ref: 'string optional numbered ref from browser.elements, e.g. e4 (exclusive with selector)', value: 'string: what to type' },
     async run({ selector, ref, value }, ctx) {
+      ctx.signal?.throwIfAborted();
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
       if (Boolean(selector) === Boolean(ref)) return {ok:false,error:{code:'bad_input',message:'Give exactly one live ref from browser.elements OR a CSS selector'}};
@@ -533,10 +536,11 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const identity=grounded?{tag:String(grounded.tag||'').toLowerCase(),id:String(grounded.id||''),
         name:String(grounded.name||''),type:String(grounded.type||'').toLowerCase()}:null;
       journal.guard(session, `browser.fill:${ref || selector}`);
-      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
+      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k), signal:ctx.signal });
       const sel = JSON.stringify(ref?`[data-majin-ref="${String(ref).replace(/[^a-zA-Z0-9_-]/g,'')}"]`:String(selector));
       const expectedIdentity=JSON.stringify(identity);
       const val = JSON.stringify(String(value ?? ''));
+      ctx.signal?.throwIfAborted();
       const r = await b.eval(`(() => {
         let nodes;
         try { nodes = document.querySelectorAll(${sel}); }
@@ -579,7 +583,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         el.dispatchEvent(new Event('change', { bubbles: true }));
         // Report only equality with the requested input, never the raw value.
         return { found: true, stuck: el.value === targetValue, targetValue };
-      })()`);
+      })()`, {signal:ctx.signal});
       if (!r.found) {
         const controls = await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
         return { ok: false, error: { code: 'no_such_element', message: `no field matches ${selector}`,
@@ -622,7 +626,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     async run({ifChanged='false'}={},ctx){
       const session=ctx.session||'default';
       if(!isOpen(session))return {ok:false,error:{code:'browser_closed',message:'no browser open for this task'}};
-      const b=await openFor({session,cfgGet:k=>ctx.cfg.get(k)});
+      const b=await openFor({session,cfgGet:k=>ctx.cfg.get(k),signal:ctx.signal});
       const shot=await b.send('Page.captureScreenshot',{format:'png'});
       if(!shot?.data)return {ok:false,error:{code:'screenshot_empty',message:'Browser returned no image'}};
       const bytes=Buffer.from(shot.data,'base64');
@@ -652,6 +656,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     desc: 'Attach a local file to one page file input (<input type=file>). Supply either a live ref from browser.elements or an exact CSS selector, plus path. Never put a ref in CSS brackets. Confirmation comes from the page itself.',
     params: { selector: 'string optional: exact CSS selector of the file input, exclusive with ref', ref: 'string optional: live numbered ref from browser.elements, exclusive with selector', path: 'string: local file to upload (inside the workspace)' },
     async run({ selector, ref, path: p }, ctx) {
+      ctx.signal?.throwIfAborted();
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
       if (Boolean(selector) === Boolean(ref)) return {ok:false,error:{code:'bad_input',message:'Give exactly one live ref from browser.elements OR an exact CSS selector'}};
@@ -665,7 +670,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const { abs } = resolveIn(ctx, p);
       const st = await fs.stat(abs).catch(() => null);
       if (!st || !st.isFile()) return { ok: false, error: { code: 'no_file', message: `no such file: ${abs}` } };
-      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
+      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k), signal:ctx.signal });
       const sel = JSON.stringify(target);
       const checked = await b.eval(`(() => {
         let nodes; try { nodes=document.querySelectorAll(${sel}); } catch { return {ok:false,code:'invalid_selector'}; }
@@ -676,19 +681,20 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         if(el.tagName!=='INPUT' || el.type!=='file')return {ok:false,code:'wrong_control_type'};
         if(el.disabled || el.closest('[inert]'))return {ok:false,code:'disabled_or_inert'};
         return {ok:true};
-      })()`);
+      })()`, {signal:ctx.signal});
       if (!checked.ok) return {ok:false,error:{code:checked.code,message:'File upload target is '+checked.code+'; nothing uploaded. Re-observe browser.elements and choose one current file input.'}};
-      await b.send('DOM.enable');
-      const { root } = await b.send('DOM.getDocument');
-      const { nodeId } = await b.send('DOM.querySelector', { nodeId: root.nodeId, selector: target });
+      await b.send('DOM.enable',{}, {signal:ctx.signal});
+      const { root } = await b.send('DOM.getDocument',{}, {signal:ctx.signal});
+      const { nodeId } = await b.send('DOM.querySelector', { nodeId: root.nodeId, selector: target }, {signal:ctx.signal});
       if (!nodeId) return { ok: false, error: { code: 'no_such_element', message: 'File input changed before upload; re-observe browser.elements' } };
-      await b.send('DOM.setFileInputFiles', { files: [abs], nodeId });
+      ctx.signal?.throwIfAborted();
+      await b.send('DOM.setFileInputFiles', { files: [abs], nodeId }, {signal:ctx.signal});
       await new Promise(resolve => setTimeout(resolve, 120));
       const confirm = await b.eval(`(() => {
         const el = document.querySelector(${sel});
         const f = el && el.files && el.files[0];
         return f ? { ok: true, name: f.name, size: f.size } : { ok: false };
-      })()`);
+      })()`, {signal:ctx.signal});
       if (!confirm.ok || confirm.name !== path.basename(abs) || confirm.size !== st.size) return { ok: false, error: { code: 'no_upload', message: 'the input did not retain the requested file name and size', hint: 're-observe the current page and check validation or a custom uploader before retrying' } };
       return { ok: true, result: `uploaded — page now holds "${confirm.name}" (${confirm.size} bytes)`, meta: { name: confirm.name, size: confirm.size, path: abs }, summary: `uploaded ${confirm.name}` };
     },
@@ -720,7 +726,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const criteria=verificationCriteria(input);
       if(!criteria.ok)return {ok:false,error:{code:'bad_expectation',message:criteria.reason}};
       journal.guard(session, 'browser.verify:' + JSON.stringify(criteria).slice(0,250));
-      const b=await openFor({session,cfgGet:k=>ctx.cfg.get(k)});
+      const b=await openFor({session,cfgGet:k=>ctx.cfg.get(k),signal:ctx.signal});
       const script=VERIFY_JS.replace('__MAJIN_ARGS__',JSON.stringify(criteria));
       const waitMs=Math.min(5000,Math.max(0,Math.trunc(Number(input?.waitMs ?? 1800)||0)));
       // React/Vue apps may briefly show a success node and immediately replace
@@ -772,7 +778,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const session = ctx.session || 'default';
       journal.guard(session, 'browser.elements');
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
-      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
+      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k), signal:ctx.signal });
       if (String(refresh) === 'true') clearRefs(session);
       const payload = await b.eval(GROUND_JS).catch((e) => ({ error: String(e?.message || e) }));
       if (payload?.error) return { ok: false, error: { code: 'ground_eval', message: 'page walk failed: ' + payload.error } };
@@ -816,7 +822,7 @@ def({
       const session = ctx.session || 'default';
       journal.guard(session, 'browser.clear_marks');
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser open' } };
-      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
+      const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k), signal:ctx.signal });
       await b.eval(CLEAR_JS).catch(() => undefined);
       clearRefs(session);
       return { ok: true, result: 'marks + cached refs cleared on the page', summary: 'marks cleared' };

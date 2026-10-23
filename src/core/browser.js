@@ -132,29 +132,40 @@ export function createBrowserPool({ locks = fileLocks, max = 3 } = {}) {
 
 const RPC_TIMEOUT_MS = 20000;
 
-async function wsConnect(wsUrl, factory) {
+async function wsConnect(wsUrl, factory, signal = null) {
+  signal?.throwIfAborted();
   const make = factory || ((u) => new globalThis.WebSocket(u));
   if (typeof make !== 'function' || (factory == null && typeof globalThis.WebSocket !== 'function')) {
     throw new Error('this runtime has no built-in WebSocket (needs node ≥22 — the packaged MAJIN exe already has one)');
   }
   const ws = make(wsUrl);
   await new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('browser debug port never answered (10 s)')), 10000);
-    ws.onopen = () => {
+    let finished = false;
+    const finish = (error) => {
+      if(finished)return;
+      finished=true;
       clearTimeout(t);
-      resolve();
+      signal?.removeEventListener('abort', onAbort);
+      if(error) { try { ws.close(); } catch {} reject(error); } else resolve();
     };
-    ws.onerror = () => {
-      clearTimeout(t);
-      reject(new Error('could not open the browser debug connection'));
-    };
+    const onAbort = () => finish(signal.reason || new Error('browser connection cancelled'));
+    const t = setTimeout(() => finish(new Error('browser debug port never answered (10 s)')), 10000);
+    ws.onopen = () => finish();
+    ws.onerror = () => finish(new Error('could not open the browser debug connection'));
+    signal?.addEventListener('abort', onAbort, {once:true});
+    if(signal?.aborted)onAbort();
   });
   return ws;
 }
 
-function cdpRpc(ws) {
+export function cdpRpc(ws) {
   let id = 0;
   const waiting = new Map();
+  const disconnected = () => {
+    for (const request of [...waiting.values()]) request.reject(new Error('browser debug connection closed'));
+  };
+  ws.onclose = disconnected;
+  ws.onerror = disconnected;
   ws.onmessage = (msg) => {
     let ev;
     try {
@@ -169,24 +180,27 @@ function cdpRpc(ws) {
       else w.resolve(ev.result || {});
     }
   };
-  return (method, params = {}, { timeoutMs = RPC_TIMEOUT_MS, sessionId = null } = {}) => {
-    id += 1;
-    ws.send(JSON.stringify(sessionId ? { id, method, params, sessionId } : { id, method, params }));
+  return (method, params = {}, { timeoutMs = RPC_TIMEOUT_MS, sessionId = null, signal = null } = {}) => {
+    const requestId = ++id;
     return new Promise((resolve, reject) => {
+      if(signal?.aborted) { reject(signal.reason || new Error('browser operation cancelled')); return; }
+      const finish = (error, value) => {
+        waiting.delete(requestId);
+        clearTimeout(t);
+        signal?.removeEventListener('abort', onAbort);
+        if(error) reject(error); else resolve(value);
+      };
+      const onAbort = () => finish(signal.reason || new Error('browser operation cancelled'));
       const t = setTimeout(() => {
-        waiting.delete(id);
-        reject(new Error(`CDP timeout after ${timeoutMs}ms on ${method}`));
+        finish(new Error(`CDP timeout after ${timeoutMs}ms on ${method}`));
       }, timeoutMs);
-      waiting.set(id, {
-        resolve: (v) => {
-          clearTimeout(t);
-          resolve(v);
-        },
-        reject: (e) => {
-          clearTimeout(t);
-          reject(e);
-        },
+      waiting.set(requestId, {
+        resolve: (v) => finish(null,v),
+        reject: (e) => finish(e),
       });
+      signal?.addEventListener('abort',onAbort,{once:true});
+      try { ws.send(JSON.stringify(sessionId ? { id:requestId, method, params, sessionId } : { id:requestId, method, params })); }
+      catch(error) { finish(error); }
     });
   };
 }
@@ -199,8 +213,8 @@ function profileFor(session) {
   return path.join(dirs.cache, 'browser-' + String(session).replace(/[^\w.-]/g, '_'));
 }
 
-async function httpJson(url, { timeoutMs = 5000 } = {}) {
-  const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), redirect: 'follow' });
+async function httpJson(url, { timeoutMs = 5000, signal = null } = {}) {
+  const r = await fetch(url, { signal: signal ? AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs), redirect: 'follow' });
   if (!r.ok) throw new Error(`${url} → ${r.status}`);
   return r.json();
 }
@@ -213,21 +227,23 @@ export function isChildTarget(target, browser) {
   return target.type === 'page' && target.openerId === browser.targetId && target.targetId !== browser.targetId && !target.attached && !browser.knownTabs.has(target.targetId);
 }
 
-export async function waitForNavigation(navigation, read, { attempts = 150, delayMs = 100, wait = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+export async function waitForNavigation(navigation, read, { attempts = 150, delayMs = 100, wait = ms => new Promise(resolve => setTimeout(resolve, ms)), signal = null } = {}) {
   if (navigation.errorText) throw new Error(`Navigation failed: ${navigation.errorText}`);
   if (navigation.isDownload) throw new Error('The URL started a download instead of opening a page');
   for (let attempt = 0; attempt < attempts; attempt++) {
+    signal?.throwIfAborted();
     try {
       const document = await read();
       if ((!navigation.loaderId || document.loaderId === navigation.loaderId) && ['interactive', 'complete'].includes(document.readyState)) return document;
-    } catch { /* execution contexts can disappear while a document commits */ }
+    } catch { signal?.throwIfAborted(); /* execution contexts can disappear while a document commits */ }
     await wait(delayMs);
   }
   throw new Error('Navigation did not produce a ready document before the timeout');
 }
 
 /** Launch (or reuse) the browser for ONE agent session and navigate it. */
-export async function openFor({ session, url = null, headless = true, cfgGet = null, pool = null, exe = null, wsFactory = null } = {}) {
+export async function openFor({ session, url = null, headless = true, cfgGet = null, pool = null, exe = null, wsFactory = null, signal = null } = {}) {
+  signal?.throwIfAborted();
   session = String(session || 'default');
   const existing = sess.get(session);
   if (existing) {
@@ -235,11 +251,21 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
        defaulted to 'about:blank' and raced the user's page away — tool
        chaining (open → read → fill → click) lived or died on eval-vs-navigate
        luck. Pinned by test: no goto here without an explicit url. */
-    if (url && url !== 'about:blank') await existing.goto(url);
+    if (url && url !== 'about:blank') await existing.goto(url, {signal});
     return existing;
   }
   const thePool = pool || createBrowserPool({ max: Number(cfgGet?.('browser.maxInstances')) || 3 });
   const slot = await thePool.claim(session);
+  let proc = null, ws = null, cdp = null;
+  const onAbort = () => {
+    const disconnect = () => { try { ws?.close(); } catch { /* already closed */ } };
+    if(cdp) cdp('Browser.close',{}, {timeoutMs:500}).catch(()=>{}).finally(disconnect);
+    else disconnect();
+    try { proc?.kill(); } catch { /* already exited */ }
+  };
+  signal?.addEventListener('abort',onAbort,{once:true});
+  try {
+  signal?.throwIfAborted();
   const bin = exe || findBrowser();
   if (!bin) {
     thePool.release(session);
@@ -247,7 +273,6 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
   }
   const profile = profileFor(`${session}-s${slot}`);
   fs.mkdirSync(profile, { recursive: true });
-  let proc = null;
   let version = null;
   let lastErr = null;
   /* Del 5ABE flake-hardening (CI evidence: runs 39261715303 + 39265517682):
@@ -256,6 +281,7 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
      red suite. Bounded retry: attempt 1 as before, attempt 2 with a fresh
      random port + longer deadline. Honest: the final error text is unchanged. */
   for (let attempt = 1; attempt <= 2 && !version; attempt++) {
+    signal?.throwIfAborted();
     if (proc && !proc.killed) { try { proc.kill(); } catch { /* gone */ } }
     const port = randomPort();
     const args = [
@@ -266,13 +292,18 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     if (headless !== false) args.push('--headless=new');
     args.push('about:blank');
     proc = spawn(bin, args, { detached: false, stdio: 'ignore' });
+    let spawnError = null;
+    proc.once('error',error=>{spawnError=error;});
     const base = `http://127.0.0.1:${port}`;
     const deadline = Date.now() + (attempt === 1 ? 10000 : 15000);
     while (Date.now() < deadline) {
+      signal?.throwIfAborted();
+      if(spawnError)throw spawnError;
       try {
-        version = await httpJson(`${base}/json/version`, { timeoutMs: 1200 });
+        version = await httpJson(`${base}/json/version`, { timeoutMs: 1200, signal });
         break;
       } catch (e2) {
+        signal?.throwIfAborted();
         lastErr = e2;
         await new Promise((r) => setTimeout(r, 250));
       }
@@ -286,9 +317,8 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     thePool.release(session);
     throw new Error('the browser debug port never came up — the browser may be blocked by a policy on this machine');
   }
-  let ws = null, cdp = null;
-  try {
-    ws = await wsConnect(version.webSocketDebuggerUrl, wsFactory);
+    signal?.throwIfAborted();
+    ws = await wsConnect(version.webSocketDebuggerUrl, wsFactory, signal);
   cdp = cdpRpc(ws);
   const sendRaw = ({ sessionId = null, method, params = {} }, opts = null) =>
     cdp(method, params, { sessionId, ...(opts || {}) });
@@ -324,23 +354,25 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
   /* send reads b.sessionId EVERY call — smarttab can re-wire it later */
   const send = (method, params = {}, opts = null) => sendRaw({ sessionId: b.sessionId, method, params }, opts);
   b.send = send;
-  b.goto = async (u) => {
-    await send('Page.enable');
-    const navigation = await send('Page.navigate', { url: u });
+  b.goto = async (u, {signal: navigationSignal = null} = {}) => {
+    navigationSignal?.throwIfAborted();
+    await send('Page.enable', {}, {signal:navigationSignal});
+    const navigation = await send('Page.navigate', { url: u }, {signal:navigationSignal});
     // readyState from the previous about:blank is not navigation evidence.
     // CDP's loaderId identifies the document committed by this navigation.
     return waitForNavigation(navigation, async () => {
-      const { frameTree } = await send('Page.getFrameTree');
-      const meta = await b.eval('(() => ({ readyState: document.readyState, url: location.href, title: document.title }))()');
+      const { frameTree } = await send('Page.getFrameTree', {}, {signal:navigationSignal});
+      const meta = await b.eval('(() => ({ readyState: document.readyState, url: location.href, title: document.title }))()', {signal:navigationSignal});
       return { ...meta, loaderId: frameTree.frame.loaderId };
-    });
+    }, {signal:navigationSignal});
   };
-  b.eval = async (expression) => {
-    const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+  b.eval = async (expression, {signal: evaluationSignal = null} = {}) => {
+    const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }, {signal:evaluationSignal});
     if (r.exceptionDetails) throw new Error(String(r.exceptionDetails.text || 'evaluate threw'));
     return r.result ? r.result.value : undefined;
   };
-  await b.goto(url);
+  await b.goto(url, {signal});
+  signal?.throwIfAborted();
   sess.set(session, b);
 
   /* smarttab: a click that opens a NEW page target must not strand the agent
@@ -372,11 +404,11 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
        whatever broke between spawn and a working session */
     try { if (cdp) await cdp('Browser.close', {}, { timeoutMs: 3000 }); } catch { /* gone */ }
     try { ws?.close(); } catch { /* gone */ }
-    try { if (!proc.killed) proc.kill(); } catch { /* gone */ }
+    try { if (proc && !proc.killed) proc.kill(); } catch { /* gone */ }
     thePool.release(session);
     sess.delete(session);
     throw e;
-  }
+  } finally { signal?.removeEventListener('abort',onAbort); }
 }
 
 const randomPort = () => 49152 + Math.floor(Math.random() * 12000);
