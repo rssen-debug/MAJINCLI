@@ -1,10 +1,10 @@
 # MAJIN V4 release verification — 23 October 2026
 
-Follow-up: alpha.3 implements durable inline tool history using the existing server receipts. See [HISTORY_RECEIPTS_ALPHA3.md](HISTORY_RECEIPTS_ALPHA3.md) for the change and targeted acceptance. The alpha.2 build identity and original failures below remain historical evidence, not claims about a newer package. Alpha.3 packaging/full regression evidence is tracked separately.
+Latest tested candidate: **4.0.0-alpha.3** implements durable inline tool history using the existing server receipts. See [HISTORY_RECEIPTS_ALPHA3.md](HISTORY_RECEIPTS_ALPHA3.md) for installed-package verification, the 30/30 targeted tests, the 492-pass/1-fail full local run and the successful 12-test isolated rerun. Its installer and bundled-host history recovery passed on krist. The alpha.2 build identity and original failures below remain historical evidence, not claims about the newer package. Alpha.3 evidence is recorded separately; production status remains NOT READY.
 
 ## Verdict: NOT READY for the requested production release
 
-The repository is accessible through the owner's GitHub connection. The work is on `codex/v4-final-integration-20261023`, with draft [PR #401](https://github.com/rssen-debug/MAJINCLI/pull/401) targeting `v4/main`. The Windows candidate is **4.0.0-alpha.2**. No production release was published, no PR was merged, and no production signing identity or update channel was invented.
+The repository is accessible through the owner's GitHub connection. The work is on `codex/v4-final-integration-20261023`, with draft [PR #401](https://github.com/rssen-debug/MAJINCLI/pull/401) targeting `v4/main`. The initial Windows candidate was **4.0.0-alpha.2**; the tested alpha.3 follow-up is described above. No production release was published, no PR was merged, and no production signing identity or update channel was invented.
 
 Development and local acceptance ran on **krist**, with owner authorization. **Ghost was not connected**: its installation path was absent and its private Tailscale hostname did not resolve. GitHub access did not provide Ghost access.
 
@@ -28,7 +28,7 @@ The machine-readable [test report](FINAL_TEST_RESULTS.json) separates overlappin
 * Live provider test: existing krist **OpenCode / glm-5.3**, streaming, actual tool execution, file byte verification. The dependent graph test used **8 model calls with peak concurrency 2**. See `evidence/live-model.json` and `evidence/live-orchestration.json`. Credential contents were neither recorded nor changed; test conversation data was isolated.
 * Actual Windows control acceptance: synthetic Win32 window listing, typing, reading, button/save, pointer movement/restoration, cropped capture and visible pixel/overlay checks passed. The computer-use planner was injected; cloud desktop planning was not verified. See `evidence/windows-control.json`.
 * Chromium UI acceptance passed at iPhone 13, Pixel 7, iPhone SE, iPad and desktop viewports, including pairing/chat/verified file flow. These were simulated viewports, not physical devices, Safari or a 5G connection. See `evidence/browser-run.json`.
-* Installer, installed native-window and packaged cold-start results are in `evidence/windows-install.json`, `evidence/desktop-smoke.json` and `evidence/desktop-cold-smoke.json`. Inference in those tests was explicitly demo. Upgrade data preservation was tested using a disposable sentinel file.
+* Original alpha.2 installer, installed native-window and packaged cold-start results are in `evidence/windows-install.json`, `evidence/desktop-smoke-alpha2.json` and `evidence/desktop-cold-smoke-alpha2.json`. The unversioned smoke evidence now describes the current alpha.3 candidate. Inference in those tests was explicitly demo. Upgrade data preservation was tested using a disposable sentinel file.
 
 ## Production blockers
 
@@ -38,11 +38,12 @@ The machine-readable [test report](FINAL_TEST_RESULTS.json) separates overlappin
 4. Signed host updates do not replace the running Electron shell. Native-shell automatic update activation and rollback remain unimplemented.
 5. Functional gaps remain for outbound channels, proactive event digests, separate-store memory synchronization, some typed self-configuration/reset behavior, V2 cryptographic audit anchoring, durable graph pause/replanning and whole-team token/currency accounting. See the parity table. Scanned-PDF OCR is unsupported.
 6. The 44 legacy test failures remain unresolved. Latest CI must be evaluated for the actual PR head, not an earlier commit.
-7. The alpha.2 inline-history receipt gap is fixed in alpha.3 source: both opening and refreshing a conversation render its durable server receipts. Historical verifications are labelled with their original time and do not assert current file existence. See the follow-up acceptance report; target/device verification remains separate.
 
-## Build identity
+Closed in alpha.3: the inline-history receipt gap. Both opening and refreshing a conversation render durable server receipts, with visible historical labels, original times, and no assertion of current file existence. Physical target/device verification remains separate.
 
-The installer contains runtime source matching GitHub commit `99d55a29b452e5d8f050b5cf70581de2c5ccd739` (later commits contain test/evidence updates only). The local and uploaded source tree hashes were verified equal. Installer SHA-256: `82f239635fb267f228f2aed2d9c3abec65f985a0cda226080fca92ad91317b06`. Size: 138,438,415 bytes. Bundled Node: 24.14.0 x64, Authenticode Valid. Installer Authenticode: NotSigned. See `evidence/build-provenance.json`.
+## Initial alpha.2 build identity
+
+The initial alpha.2 installer contains runtime source matching GitHub commit `99d55a29b452e5d8f050b5cf70581de2c5ccd739`. The local and uploaded source tree hashes were verified equal. Installer SHA-256: `82f239635fb267f228f2aed2d9c3abec65f985a0cda226080fca92ad91317b06`. Size: 138,438,415 bytes. Bundled Node: 24.14.0 x64, Authenticode Valid. Installer Authenticode: NotSigned. See `evidence/build-provenance.json`. The alpha.3 package has its own source/hash record in the follow-up report.
 
 ## Single target handoff
 
