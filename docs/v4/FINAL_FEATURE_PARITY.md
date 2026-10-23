@@ -9,6 +9,10 @@ session. These are scoped deterministic/browser results, not real-model or
 physical-device acceptance. Five live Go form attempts remain FAIL; no new form
 attempt was run. Disk-space remediation requires owner action after policy denied
 cache cleanup. See the chronological handover for current CI failures/fixes.
+The existing scheduler now has bounded expression validation, atomic explicit
+store support, pre-dispatch/crash checkpoints and duplicate-run protection
+(16 focused tests passed). V4 binding, durable conditional monitoring and actual
+notification delivery remain FAIL; these foundations do not close that gate.
 
 **24 October Ghost checkpoint — NOT READY:** installed `527b021d8077d1aabf1ea8ef7bb764d3caaf58ca`.
 All five real Go unknown-form attempts failed and are preserved, with zero server

@@ -568,3 +568,54 @@ Owner disk-space question remains pending;~111MB free at last observation.
 Do not perform more live form attempts; retain five FAIL receipts and every
 original/Genesis release gate. Next independent milestone: existing scheduler
 validation/persistence and V4 binding, without starting a duplicate engine.
+
+### Existing scheduler hardening and owner-authorized cleanup — 24 October
+
+Owner explicitly renewed cleanup authorization: clean the computer while
+preserving all scrapers. A same-target retry of guarded native pip cache removal
+was still REJECTED as 'blocked by policy'. No alternate CLI/API was used on pip,
+and the earlier two denied Temp directories remain untouched.
+Different, individually verified temporary installer files were safely removed:
+- VS Code setup248776320bytes: valid signatures and exactly the already installed
+  1.143.0 version; installer process not active.
+- ChatGPT-x64.msix486461102bytes: inactive, truncated ZIP/MSIX central directory;
+  SHA2569CEF90B1686DBC1A316A8341B4A44FC754A3DA825CB5DFBF590C6C82CF82FC5E.
+- GitHub Runner2.338.1 ZIP104210469bytes: ALL276 archived files SHA256 matched
+  retained installed copies before removing only the ZIP.
+No scraper code/data/environments/browser profiles or original MAJIN installer/
+backup was removed. A recursive diagnostic inventory grew to1.5GB RAM and was
+stopped by its verified exact PID6920; no scraper process was stopped. Later
+inventory used a10second/depth8/skip-reparse bound. Last observed free space
+1353191424bytes; below the requested5GB headroom, but no longer zero. At22:44:59UTC
+the23 original selected hashes still match and39 restored-file hashes match.
+
+Exact f01dc187e6007f940412dfa2c8fda7623dfe253c CI all THREE SUCCESS:
+V4 run40033857013/job120688427577=534pass/0fail/7skip of541;
+Windows run40033856808/job120688426945=540pass/0fail/1skip of541, packaging and
+native smoke/cold start passed on hosted runner; runner40033856759passed.
+Ghost source health200 observed; this is not production signing/native Ghost PASS.
+
+The SAME src/core/schedule.js engine now validates zero cron steps/huge ranges
+before loops; start/step0/15 means0,15,30,45; malformed calendar dates/intervals
+fail. Next-cron search compiles fields once instead of reparsing each minute.
+Scheduler accepts an explicit store path/clock for V4 reuse, retaining the V1
+default. Store writes are private, fsync'd temp+rename; corrupt stores throw and
+remain untouched, and save failure rolls back add/remove/pause acknowledgement.
+Every dispatch checkpoints running/runId before calling a tool; failure to save
+dispatches nothing. Completed/interrupted history is bounded50 entries. On boot,
+interrupted mutating work is paused rather than replayed. Only an explicit
+resumeReadOnlyOnBoot option permits immediate retry of read-only jobs. A held
+approval pauses subsequent scheduled dispatch. Concurrent manual/timer attempts
+cannot run the same job twice; repeated start no longer leaks interval handles.
+Focused scheduler+V1 read-only regression16/0/0, including actual child-process
+crash/reload, corrupt-store preservation and failed-start checkpoint. New scheduler
+changes are NOT yet connected to V4 tasks/monitoring and NOT an always-on PASS.
+
+Next engineering: bind this existing Scheduler to V4 server lifecycle and its
+same agent/TurnJournal/conversations. Refactor the existing handleChat launch into
+a shared helper rather than a second agent loop. Add typed approval-gated task
+tools, authenticated management, durable conditions/dedup/outbox/budgets and
+edit/pause/cancel. Reuse core Heartbeat for delivery/event digests. Web Push and
+physical locked-iPhone receipt remain unimplemented/unverified. Do not initialize
+legacy schedule.json or any unrelated production automation during tests.
+Run: node --test test/core-schedule.test.js test/readonly.test.js
