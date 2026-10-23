@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 309
-# pass 308
+# tests 327
+# pass 326
 # skipped 1
 # fail 0
 # skipped 0
@@ -47,6 +47,7 @@ $ npm run v4:test
 | `test/v4/upgrade.test.js` | 8 | clean upgrade, up-to-date, rollback on a failed gate, escalation when rollback fails, fetch/checkout classification |
 | `test/v4/leaks.test.js` | 7 | bounded rate limiter and conversation cache, cache eviction loses nothing, bounded listing, abort-key collision, truncated replay |
 | `test/v4/leaks2.test.js` | 3 | bounded goal cache, evicted goals reload from disk intact, in-flight goals are never evicted |
+| `test/v4/uploads.test.js` | 16 | leaf names, executable types refused, real PNG stored with a hash, lying payloads refused, size enforced, collisions suffixed, `data:` URLs accepted, traversal impossible, sandbox headers for HTML/SVG, session + CSRF required, a photo lands in the workspace, an agent-written page is served sandboxed |
 | `test/v4/tool-exposure.test.js` | 8 | a tool registered after startup reaches the model; host tools are offered when enabled; the list is bounded and every entry is valid JSON Schema; an unconvertible schema is skipped; a host tool is actually callable; with host tools ON the model sees >5 tools (the reported bug); with them OFF it sees exactly the workspace five; the capability report and the model list agree |
 | `test/v4/host-tools.test.js` | 23 | lane discovery, absent lanes register nothing, tiers drive approval, held shell needs consent, a real file read, allowlist narrowing, structured V1 failures classified, protected-path refusal classified, the `v4:tools` CLI |
 | `test/v4/upgrade-git.test.js` | 5 | real `git` with a real bare origin: a clean tree upgrades; uncommitted tracked changes stop it before anything moves; untracked files do not block; a failing gate rolls the real checkout back; an up-to-date repo is a no-op |
@@ -70,7 +71,7 @@ $ npm run check
 506/506 files parse cleanly.
 
 $ npm run i18n
-0 Swedish string literal(s) in 275 files
+0 Swedish string literal(s) in 276 files
 
 $ npm run v4:progress --check
 67.5/100 verified points, matrix valid (exit 0)

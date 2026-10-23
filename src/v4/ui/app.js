@@ -24,6 +24,11 @@ const els = {
   send: $('#send-btn'),
   stop: $('#stop-btn'),
   mic: $('#mic-btn'),
+  attach: $('#attach-btn'),
+  fileInput: $('#file-input'),
+  lightbox: $('#lightbox'),
+  lightboxImg: $('#lightbox-img'),
+  lightboxX: $('#lightbox-x'),
   hint: $('#composer-hint'),
   gate: $('#gate'),
   gateForm: $('#gate-form'),
@@ -78,6 +83,7 @@ const state = {
   bubbleText: '',
   version: null,
   requestSeq: 0,
+  previewOn: true,
   session: { ...INITIAL },
 };
 
@@ -150,6 +156,164 @@ function resizeInput() {
   els.input.style.height = 'auto';
   els.input.style.height = `${Math.min(els.input.scrollHeight, 132)}px`;
   els.send.disabled = !els.input.value.trim() || state.streaming;
+}
+
+/* --------------------------------------------------------- attachments -- */
+
+const ATTACH_TYPES = {
+  'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif',
+  'application/pdf': 'pdf', 'text/plain': 'txt', 'text/markdown': 'md', 'text/csv': 'csv',
+  'application/json': 'json',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+};
+
+function humanBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} kB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function readAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+    reader.onerror = () => reject(reader.error || new Error('read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function openLightbox(src) {
+  els.lightboxImg.src = src;
+  els.lightbox.hidden = false;
+}
+
+/**
+ * Upload one file and show it in the thread as a real card.
+ *
+ * The bytes land in the workspace, which is the same directory the agent's own
+ * tools read — so what the phone shows and what the model can use are the same
+ * file, not two copies.
+ */
+async function uploadFile(file) {
+  const type = file.type || 'application/octet-stream';
+  if (!ATTACH_TYPES[type]) {
+    toast(t('attach.unsupported'));
+    return null;
+  }
+  const limits = await api('/api/uploads').then((r) => r.json()).catch(() => ({}));
+  const maxBytes = limits?.maxBytes || 6 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    toast(t('attach.tooBig', { mb: Math.round(maxBytes / (1024 * 1024)) }));
+    return null;
+  }
+
+  els.attach.disabled = true;
+  els.hint.textContent = t('attach.uploading');
+  try {
+    const data = await readAsBase64(file);
+    const res = await api('/api/upload', { method: 'POST', body: { name: file.name, type, data } });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.ok) throw new Error(body?.error?.message || `HTTP ${res.status}`);
+    renderAttachment(body.upload);
+    els.hint.textContent = t('attach.ready', { name: body.upload.name });
+    return body.upload;
+  } catch (err) {
+    els.hint.textContent = '';
+    toast(t('attach.failed', { error: err.message }));
+    return null;
+  } finally {
+    els.attach.disabled = false;
+  }
+}
+
+/** A card in the thread: an image, or a chip with the file's name and size. */
+function renderAttachment(upload) {
+  const node = document.createElement('figure');
+  node.className = 'attach-card';
+  const body = document.createElement('div');
+  body.className = 'attach-body';
+  const url = `/api/uploads/${encodeURIComponent(upload.name)}`;
+
+  if (String(upload.type).startsWith('image/')) {
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = upload.name;
+    img.loading = 'lazy';
+    img.addEventListener('click', () => openLightbox(url));
+    body.append(img);
+  } else {
+    const chip = document.createElement('div');
+    chip.className = 'file-chip';
+    const icon = document.createElement('span');
+    icon.className = 'file-icon';
+    icon.textContent = (upload.name.split('.').pop() || 'bin').slice(0, 4);
+    const label = document.createElement('span');
+    label.textContent = upload.name;
+    chip.append(icon, label);
+    body.append(chip);
+  }
+
+  const meta = document.createElement('figcaption');
+  meta.className = 'attach-meta';
+  const left = document.createElement('span');
+  left.textContent = humanBytes(upload.bytes || 0);
+  const right = document.createElement('a');
+  right.href = url;
+  right.target = '_blank';
+  right.rel = 'noopener noreferrer';
+  right.textContent = t('preview.open');
+  meta.append(left, right);
+
+  node.append(body, meta);
+  els.thread.append(node);
+  setHero(false);
+  scrollDown(true);
+}
+
+/**
+ * Render an HTML file MAJIN created inside the conversation.
+ *
+ * The iframe carries `sandbox="allow-scripts"` WITHOUT `allow-same-origin`, so
+ * the page runs in an opaque origin and cannot reach this app's DOM, storage or
+ * session cookie. The server adds a matching `CSP: sandbox` header, so even a
+ * client that forgot the attribute is contained.
+ */
+function renderPreview(name) {
+  const url = `/api/uploads/${encodeURIComponent(name)}`;
+  const node = document.createElement('div');
+  node.className = 'preview';
+  const head = document.createElement('div');
+  head.className = 'preview-head';
+  const label = document.createElement('span');
+  label.className = 'preview-name';
+  label.textContent = name;
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'preview-open';
+  open.textContent = t('preview.open');
+  open.addEventListener('click', () => window.open(url, '_blank', 'noopener'));
+  head.append(label, open);
+
+  const frame = document.createElement('iframe');
+  frame.className = 'preview-frame';
+  frame.setAttribute('sandbox', 'allow-scripts');
+  frame.setAttribute('referrerpolicy', 'no-referrer');
+  frame.setAttribute('loading', 'lazy');
+  frame.title = t('preview.label', { name });
+  frame.src = url;
+
+  node.append(head, frame);
+  els.thread.append(node);
+  setHero(false);
+  scrollDown(true);
+}
+
+/** A file the agent just wrote, offered as a preview if the interface can show it. */
+function offerPreview(name) {
+  if (!state.previewOn) return;
+  if (!/\.(html?|htm)$/i.test(name)) return;
+  renderPreview(name);
 }
 
 /* ------------------------------------------------------------- rendering -- */
@@ -613,6 +777,11 @@ function viewIntents(event, data, intents) {
     }
 
     case 'tool_result': {
+      if (data.ok && data.verified && data.name === 'workspace_write' && data.summary) {
+        // "name · 1234 byte" -> name
+        const fileName = String(data.summary).split(' · ')[0].trim();
+        if (fileName) offerPreview(fileName);
+      }
       const card = activeTools.get(data.id || data.name) || [...activeTools.values()].pop();
       if (card) {
         card.node.dataset.state = data.ok ? (data.verified ? 'verified' : 'ok') : 'failed';
@@ -989,6 +1158,43 @@ function bindEvents() {
     spirit.set('idle');
   });
   els.mic.addEventListener('click', toggleListening);
+
+  // Attach: one tap on a phone, drag-and-drop on a desktop.
+  els.attach.addEventListener('click', () => els.fileInput.click());
+  els.fileInput.addEventListener('change', async () => {
+    const files = [...(els.fileInput.files || [])];
+    els.fileInput.value = '';
+    for (const f of files) await uploadFile(f); // sequential: the phone may be on 5G
+  });
+  const dropZone = els.stage;
+  for (const type of ['dragenter', 'dragover']) {
+    dropZone.addEventListener(type, (ev) => {
+      if (!ev.dataTransfer?.types?.includes('Files')) return;
+      ev.preventDefault();
+      dropZone.dataset.dropping = 'true';
+    });
+  }
+  for (const type of ['dragleave', 'drop']) {
+    dropZone.addEventListener(type, () => { delete dropZone.dataset.dropping; });
+  }
+  dropZone.addEventListener('drop', async (ev) => {
+    if (!ev.dataTransfer?.files?.length) return;
+    ev.preventDefault();
+    for (const f of [...ev.dataTransfer.files]) await uploadFile(f);
+  });
+
+  els.lightbox.addEventListener('click', () => { els.lightbox.hidden = true; els.lightboxImg.src = ''; });
+  els.lightboxX.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    els.lightbox.hidden = true;
+    els.lightboxImg.src = '';
+  });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && !els.lightbox.hidden) {
+      els.lightbox.hidden = true;
+      els.lightboxImg.src = '';
+    }
+  });
   els.menu.addEventListener('click', openSheet);
   els.sheetBackdrop.addEventListener('click', closeSheet);
   els.newChat.addEventListener('click', () => {

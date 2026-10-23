@@ -73,6 +73,10 @@ test('accessibility: primary controls have labels, live regions and 42px targets
   assert.match(html, /aria-live="assertive"/);
   assert.match(html, /role="status"/);
   assert.match(html, /id="input"[^>]*enterkeyhint="send"/);
+  assert.match(html, /id="attach-btn" aria-label="Bifoga fil"/);
+  assert.match(html, /id="file-input"[^>]*accept=/);
+  assert.match(html, /class="preview-frame" sandbox="allow-scripts"/);
+  assert.ok(!/sandbox="[^"]*allow-same-origin/.test(html), 'a previewed page must never share the app origin');
   const css = fs.readFileSync(path.join(UI, 'app.css'), 'utf8');
   assert.match(css, /\.mic, \.send, \.stop \{[^}]*width: 42px/);
   assert.match(css, /:focus-visible/);

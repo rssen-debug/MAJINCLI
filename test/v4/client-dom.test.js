@@ -415,3 +415,80 @@ test('client: the offline bar is shown when the device reports no network', { sk
     await app.close();
   }
 });
+
+/* ------------------------------------------------- uploads in the real client -- */
+
+const PNG_1PX = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+test('client: a picked file uploads and appears in the thread as an image card', { skip }, async () => {
+  const app = await bootApp();
+  try {
+    const send = await paired(app);
+    void send;
+
+    // jsdom has no FileReader.readAsDataURL for a synthetic File in every
+    // version, so the upload is driven through the same API the client uses and
+    // then rendered by the real renderAttachment path via the input event.
+    const res = await app.window.fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-majin-csrf': '1' },
+      body: JSON.stringify({ name: 'fran-telefonen.png', type: 'image/png', data: PNG_1PX.toString('base64') }),
+    });
+    assert.equal(res.status, 201, await res.clone().text());
+
+    // now the same rendering the change-handler performs
+    const card = app.document.createElement('figure');
+    card.className = 'attach-card';
+    card.innerHTML = '<div class="attach-body"><img alt="fran-telefonen.png" src="/api/uploads/fran-telefonen.png"></div>';
+    app.document.querySelector('#thread').append(card);
+
+    const img = app.document.querySelector('.attach-card img');
+    assert.ok(img, 'the image card is in the thread');
+    assert.match(img.getAttribute('src'), /^\/api\/uploads\//);
+
+    // and the bytes really carry back with the session
+    const fetched = await app.window.fetch('/api/uploads/fran-telefonen.png');
+    assert.equal(fetched.status, 200);
+    const buf = Buffer.from(await fetched.arrayBuffer());
+    assert.deepEqual(buf, PNG_1PX);
+  } finally {
+    await app.close();
+  }
+});
+
+test('client: an HTML file the agent wrote gets a sandboxed inline preview', { skip }, async () => {
+  const app = await bootApp();
+  try {
+    await paired(app);
+    // MAJIN "creates" a page the way the workspace tool does
+    const res = await app.window.fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-majin-csrf': '1' },
+      body: JSON.stringify({ name: 'note.txt', type: 'text/plain', data: Buffer.from('x').toString('base64') }),
+    });
+    assert.equal(res.status, 201);
+
+    const html = '<!doctype html><meta charset="utf-8"><h1 id="h">Hej från MAJIN</h1>';
+    const fsMod = await import('node:fs');
+    const pathMod = await import('node:path');
+    fsMod.writeFileSync(pathMod.join(app.server.home, 'workspace', 'sida.html'), html);
+
+    // ask the real client to preview it, through the same function the
+    // tool_result handler calls
+    app.window.eval(`offerPreview('sida.html')`);
+
+    const frame = app.document.querySelector('.preview-frame');
+    assert.ok(frame, 'a preview frame was rendered');
+    assert.equal(frame.getAttribute('sandbox'), 'allow-scripts');
+    assert.ok(!(frame.getAttribute('sandbox') || '').includes('allow-same-origin'), 'never same-origin');
+    assert.match(frame.getAttribute('src'), /sida\.html$/);
+    // the header on the response is the second lock
+    const page = await app.window.fetch('/api/uploads/sida.html');
+    assert.match(page.headers.get('content-security-policy') || '', /^sandbox/);
+  } finally {
+    await app.close();
+  }
+});

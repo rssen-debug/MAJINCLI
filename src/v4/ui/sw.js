@@ -42,6 +42,8 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   // Never intercept API traffic: it carries private data and must be live.
+  // That includes uploads and their previews — caching them would leave the
+  // owner's photos in a shared cache after logout.
   if (url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {

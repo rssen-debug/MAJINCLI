@@ -35,6 +35,21 @@
 - **Evidence:** sensitive external actions require an approval decision; `strict` policy
   turns every write into a human confirmation.
 
+## Uploads and previews
+
+| Control | Why |
+|---|---|
+| Leaf-name only | an upload cannot choose a directory or escape one |
+| Type allowlist; no `html`, `svg`, `js` | those execute inside the owner's authenticated origin |
+| Magic-byte re-typing | the browser's declared MIME is a hint, not a fact |
+| Size checked before and after decode | a declared length can lie |
+| Collision → suffix | an upload never overwrites work |
+| Preview served with `CSP: sandbox` **and** iframed without `allow-same-origin` | a page MAJIN wrote cannot read the session cookie, the app DOM, or the API |
+| Service worker skips `/api/` | uploaded photos never enter a shared cache |
+
+**Not solved:** no malware scanning, and an opened PDF is rendered by the owner's own viewer.
+Both are stated here rather than implied away.
+
 ## Known gaps (do not treat as solved)
 
 1. **Plugin isolation is process-level, not a security sandbox.** Plugins run in a

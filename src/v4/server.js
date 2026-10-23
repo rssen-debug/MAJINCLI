@@ -41,6 +41,7 @@ import { t } from './ui/strings.js';
 import { synthesize, VOICE_MODES, voiceCapabilities } from './voice.js';
 import { TurnJournal } from './turns.js';
 import { hostCapabilities, describeCapabilities, registerHostTools } from './tools/host.js';
+import { UploadStore, UploadError, serveHeadersFor, typeForName, MAX_UPLOAD_BYTES } from './uploads.js';
 import { TelemetryLedger } from '../v2/telemetry/ledger.js';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui');
@@ -137,6 +138,10 @@ export function createV4Server({ config }) {
   // Reconciled goals are reported by the doctor and the boot banner; the
   // pending approvals they orphan are cleared with the same call.
   const reconciled = goals.reconcileOnBoot({ conversations });
+
+  // Uploads go INTO the workspace, so the agent reads them with the tools it
+  // already has and the phone sees the same file the model saw.
+  const uploads = new UploadStore({ dir: workspaceDir });
 
   const tools = createToolRegistry({ workspaceDir, memoryDir: paths.memory });
   const model = createModelClient(config, { workspaceDir });
@@ -493,6 +498,39 @@ export function createV4Server({ config }) {
       });
     },
 
+    'GET /api/uploads': async (req, res) => {
+      requireSession(req);
+      sendJson(res, 200, { ok: true, uploads: uploads.list(), maxBytes: MAX_UPLOAD_BYTES });
+    },
+
+    'POST /api/upload': async (req, res) => {
+      requireSession(req);
+      assertCsrfHeader(req);
+      limiter.take('general', clientKey(req, config));
+      const body = await readJsonBody(req, MAX_UPLOAD_BYTES * 2);
+      try {
+        const stored = uploads.save({ name: body.name, type: body.type, data: body.data });
+        sendJson(res, 201, { ok: true, upload: stored });
+      } catch (err) {
+        if (err instanceof UploadError) throw new HttpError(err.status, err.code, err.message);
+        throw err;
+      }
+    },
+
+    'DELETE /api/uploads': async (req, res, url) => {
+      requireSession(req);
+      assertCsrfHeader(req);
+      const name = String(url.searchParams.get('name') || '');
+      const found = uploads.resolve(name);
+      if (!found) throw new HttpError(404, 'NOT_FOUND', 'No such file.');
+      try {
+        fs.unlinkSync(found.path);
+      } catch {
+        throw new HttpError(500, 'DELETE_FAILED', 'The file could not be removed.');
+      }
+      sendJson(res, 200, { ok: true, removed: found.name });
+    },
+
     'GET /api/capabilities': async (req, res) => {
       requireSession(req);
       await hostReady;
@@ -730,6 +768,22 @@ export function createV4Server({ config }) {
 
       if (req.method === 'GET' && STATIC[url.pathname]) {
         serveStatic(req, res, STATIC[url.pathname]);
+        return;
+      }
+
+      // Serving a stored file needs a path parameter, which the exact-match
+      // route table cannot express. Handled here so the security headers come
+      // from one place (serveHeadersFor) and never from a caller's guess.
+      if (req.method === 'GET' && url.pathname.startsWith('/api/uploads/')) {
+        const { session } = sessionFromRequest(req);
+        if (!session) throw new HttpError(401, 'UNAUTHORIZED', 'Pair this device first.');
+        const raw = decodeURIComponent(url.pathname.slice('/api/uploads/'.length));
+        const found = uploads.resolve(raw);
+        if (!found) throw new HttpError(404, 'NOT_FOUND', 'No such file.');
+        const type = typeForName(found.name);
+        const headers = serveHeadersFor(found.name, type);
+        res.writeHead(200, { ...headers, 'content-length': String(found.bytes) });
+        fs.createReadStream(found.path).pipe(res);
         return;
       }
 

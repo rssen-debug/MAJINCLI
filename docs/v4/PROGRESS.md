@@ -482,6 +482,39 @@ types into Notepad, or `jobs.search` really returns Danish listings, is proven b
 `npm run v4:tools --probe` **on your Windows host**, not here. The acceptance test
 you wrote needs that host, a browser binary and a credential.
 
+## Uploads from the phone, and live previews of what MAJIN creates
+
+Two surfaces that make the phone usable as a real client rather than a text box.
+
+**Upload (`POST /api/upload`).** The phone sends `{name, type, data(base64)}`; the bytes land
+in the workspace, so the file the phone shows and the file the agent can read are the same
+file — not two copies. What is enforced:
+
+- a **leaf name** only (no separators, no traversal, no reserved Windows device names)
+- a **type allowlist**, and `html`/`svg`/`js` are deliberately absent: they execute, and an
+  uploaded HTML file would be a script inside the owner's authenticated session
+- size enforced twice — before decoding and again on the decoded bytes
+- the payload is **re-typed from its magic bytes**; a "PNG" that is a PDF is refused
+- a collision becomes `namn-2.ext`, never an overwrite
+- `DELETE /api/uploads?name=…` removes one; nothing is deleted implicitly
+
+**Preview.** When MAJIN writes an `.html` page, the chat renders it inline in an iframe with
+`sandbox="allow-scripts"` and **without** `allow-same-origin`. The server sends
+`Content-Security-Policy: sandbox` on the same response. Two independent locks: even a client
+that forgot the attribute cannot let the page reach this app's DOM, storage or session cookie.
+SVG is treated the same way because it can carry script.
+
+Images show as cards with tap-to-zoom; PDFs and documents show as chips with a download link;
+the service worker never caches `/api/` so a photo cannot linger in a shared cache.
+
+Proven in the **real client**: `client-dom.test.js` uploads a PNG through the app's own
+`fetch`, fetches the bytes back and compares them, then asks the app to preview an HTML file
+and asserts the frame's sandbox attributes and the response header.
+
+**Honest limit:** MAJIN cannot *see* an uploaded image unless the configured model accepts
+image input. The upload is attached and described; whether the model reads the picture is a
+provider capability, not a claim this release makes.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in
