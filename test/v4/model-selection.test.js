@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import http from 'node:http';
 import { startTestServer, tempHome } from './helpers.mjs';
-import { discoverModels, providerOffering, refreshProviderCatalog } from '../../src/v4/models.js';
+import { discoverModels, providerOffering, refreshProviderCatalog, fetchGoUsage } from '../../src/v4/models.js';
 import { publicModelSelection, selectCanonicalModel, assertModelBillingAuthorized } from '../../src/v4/model-selection.js';
 import { createModelClient } from '../../src/v4/model.js';
 import { loadConfig } from '../../src/v4/config.js';
@@ -18,8 +18,9 @@ function setup(baseUrl = 'https://opencode.ai/zen/go/v1') {
 
 test('Go and Zen identity follows exact endpoint, never labels or shared model names', () => {
   assert.equal(providerOffering('https://opencode.ai/zen/go/v1'), 'opencode-go');
+  for (const path of ['v1', 'openai/v1', 'anthropic/v1', 'google/v1beta']) assert.equal(providerOffering(`https://opencode.ai/inference/go/${path}`), 'opencode-go');
   assert.equal(providerOffering('https://opencode.ai/zen/v1'), 'opencode-zen');
-  for (const url of ['https://opencode.ai.evil/zen/go/v1', 'http://opencode.ai/zen/go/v1', 'https://example.com/glm-5.3-flash', 'broken']) assert.equal(providerOffering(url), 'other');
+  for (const url of ['https://opencode.ai.evil/zen/go/v1', 'http://opencode.ai/zen/go/v1', 'https://opencode.ai/inference/gopher/v1', 'https://opencode.ai/inference/go/v10', 'https://example.com/glm-5.3-flash', 'broken']) assert.equal(providerOffering(url), 'other');
   const f = setup();
   try {
     const entry = discoverModels({ home: f.home, env: {} }).models[0];
@@ -125,4 +126,21 @@ test('corrupt saved selection fails closed without silently overwriting it', () 
     assert.throws(() => selectCanonicalModel({ home: f.home, env: {}, modelId: 'go/one', expectedVersion: 0 }), { code: 'MODEL_SELECTION_INVALID' });
     assert.equal(fs.readFileSync(file, 'utf8'), '{broken');
   } finally { f.clean(); }
+});
+
+test('Go usage exposes only verified windows, never infers billing entitlement or retains account data', async () => {
+  const provider = { baseUrl: 'https://opencode.ai/inference/go/v1', apiKey: 'private-test-key' };
+  const window = { status: 'ok', percent: 12.5, resetsAt: '2026-10-24T00:00:00Z', accountId: 'private-account' };
+  const payload = { usage: { rolling: window, weekly: window, monthly: window }, apiKey: 'private-test-key' };
+  let requested;
+  const value = await fetchGoUsage(provider, { fetchImpl: async (url, options) => { requested = { url, options }; return new Response(JSON.stringify(payload)); } });
+  assert.equal(requested.url, 'https://opencode.ai/inference/go/v1/usage');
+  assert.equal(requested.options.redirect, 'error');
+  assert.equal(value.windows.monthly.percent, 12.5);
+  assert.equal(value.extraUsageEnabled, null);
+  assert.equal(value.accountEntitlementVerified, false);
+  assert.ok(!JSON.stringify(value).includes('private-'));
+  payload.usage.weekly = { ...window, percent: -1 };
+  assert.equal(await fetchGoUsage(provider, { fetchImpl: async () => new Response(JSON.stringify(payload)) }), null);
+  assert.equal(await fetchGoUsage({ ...provider, baseUrl: 'https://opencode.ai/zen/v1' }, { fetchImpl: () => { throw new Error('must not call Zen'); } }), null);
 });

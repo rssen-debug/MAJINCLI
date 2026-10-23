@@ -2,7 +2,7 @@
  * Each upload is a complete container: individual MediaRecorder chunks are
  * not standalone MP4 files. Never restart permission requests in a loop.
  */
-import { t } from './strings.js?v=10';
+import { t } from './strings.js?v=11';
 
 export function recordingType(Recorder) {
   return ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']

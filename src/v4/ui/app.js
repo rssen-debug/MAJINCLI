@@ -5,11 +5,11 @@
  * never claims a task succeeded on its own. iOS voice uses foreground capture
  * and host-local STT; other browsers retain Web Speech with recording fallback.
  */
-import { createSpirit } from '/spirit.js?v=10';
-import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage, playNarratorStream } from '/voice.js?v=10';
-import { t } from '/strings.js?v=10';
-import { INITIAL, applyEvent, createSseParser } from '/session.js?v=10';
-import { VoiceCapture } from '/recorder.js?v=10';
+import { createSpirit } from '/spirit.js?v=11';
+import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage, playNarratorStream } from '/voice.js?v=11';
+import { t } from '/strings.js?v=11';
+import { INITIAL, applyEvent, createSseParser } from '/session.js?v=11';
+import { VoiceCapture } from '/recorder.js?v=11';
 
 const $ = (sel) => document.querySelector(sel);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1591,6 +1591,11 @@ function renderModels(data) {
     els.modelLabel.textContent = selected.model;
     els.sheetModel.textContent = selected.label;
     els.sheetModelNote.textContent = selected.billing?.label || 'Cost unknown — verify with provider';
+    const usage = data.providers?.find((p) => p.name === selected.provider)?.usage;
+    if (usage?.windows) {
+      const windows = usage.windows;
+      els.sheetModelNote.textContent += ` · Go usage: 5h ${windows.rolling.percent}%, week ${windows.weekly.percent}%, month ${windows.monthly.percent}% · ${usage.at}${usage.stale ? ' · stale usage' : ''}`;
+    }
   }
   const models = (data.models || []).filter((m) => m.configured && (!query || `${m.label} ${m.displayName || ''}`.toLowerCase().includes(query)) && (!els.modelIncluded?.checked || m.billing?.subscriptionIncluded === true));
   if (!models.length) {

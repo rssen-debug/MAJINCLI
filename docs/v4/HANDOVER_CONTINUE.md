@@ -1,6 +1,6 @@
 # MAJIN V4 — continuation handover
 
-Status: **NOT READY**. Latest pushed product milestone before this commit: `fffa91847f1758af3123dd1285def44ce0564f3e`. Initial handover: `f62e6f6f9d27d16e63228125cb041e129324d437`. Use `git rev-parse HEAD` for this updated milestone identity.
+Status: **NOT READY**. Latest pushed product milestone before this follow-up: `8ab843422f1a74cbce6bd350e7a0131d7b3ac9f8`. Initial handover: `f62e6f6f9d27d16e63228125cb041e129324d437`. Use `git rev-parse HEAD` for this updated milestone identity.
 Branch `codex/v4-final-integration-20261023`, draft [PR 401](https://github.com/rssen-debug/MAJINCLI/pull/401), target `v4/main`; no merge or production publication.
 
 ## Mission and scope
@@ -37,8 +37,14 @@ installation files checked, Git bundle includes the prior stash. Latest check:
 23 original data/config/key/pairing files unchanged, six existing sessions.
 
 Keep the working Go provider, keys and subscription unchanged. Never print or
-commit config/auth values. Go is NOT Zen: current official documentation uses
-`/zen/go/v1` for Go and `/zen/v1` for metered Zen. Shared hostname/model names do
+commit config/auth values. Go is NOT Zen: current official documentation at https://opencode.ai/v2/docs/console/go/
+now uses protocol-specific `/inference/go/openai/v1`, `/anthropic/v1` and
+`/google/v1beta` bases beneath `/inference/go`. Ghost's preserved working route
+is `https://opencode.ai/inference/go/v1`, with live catalogue and read-only usage
+on `/models` and `/usage`. Older `/zen/go/v1` is also recognized. `/zen/v1` is
+separate Zen. The first identity implementation missed Ghost's compatibility
+path; production verification caught it before claiming PASS, and the follow-up
+adds all documented exact Go paths without changing the working configuration. Shared hostname/model names do
 not establish an entitlement. Verify current official documentation and actual
 metadata; unknown billing must say “Cost unknown — verify with provider”. No
 automatic paid fallback. The selector now uses one V4-owned durable `v4/model-selection.json` (no V1
@@ -72,7 +78,7 @@ Segmented WAV streaming now reuses the SAME Kokoro service and authenticated
 voice endpoint, with bounded text, abortable playback, sequential segment
 validation and URL/listener cleanup. Explicit activation: `MAJIN_V4_STREAM_TTS=1`
 and an existing local TTS command. Hosts without it keep the full-WAV route.
-PWA shell 10 also carries the canonical selector and prevents old client code remaining cached.
+PWA shell 11 also carries the canonical selector and prevents old client code remaining cached.
 
 Focused voice tests: 25 passed, 0 failed, 0 skipped. Synthetic loopback benchmark
 in `evidence/ghost-voice/stream-latency.json`: first audio 4270 ms, stream completion
@@ -85,8 +91,15 @@ two valid segments, shell 9 served, existing sessions preserved. Evidence:
 `evidence/ghost-voice/stream-https.json`. This is synthetic text, not phone timing.
 The temporary 18766 worker has been stopped by verified PID/command. Supervisor
 session 55449 keeps production running; host PID was 8784. Recheck current PIDs.
-Canonical-selector code in this milestone still needs fast-forward deployment
-and real Go inference/catalogue checks; do not imply deployed until verified.
+Canonical selector `8ab8434` was fast-forwarded and only the source host child
+was restarted by the existing supervisor. Live verification found the Go identity
+path omission; the follow-up identity fix and usage display still need deployment
+before rerunning `../ghost-model-selection-live.mjs`. No new model or cost was
+authorized by the failed check. Actual Go catalogue returns 37 models; usage
+endpoint HTTP 200 has rolling/weekly/monthly windows only, no entitlement or Extra
+Usage flag. New adapter exposes only validated window status/percent/reset time,
+source and timestamp, retaining stale data honestly. It never labels these as
+proof of subscription inclusion or disabled overage. Keep full P1 PARTIAL.
 
 Files: `scripts/majin-kokoro-voice.py`, `scripts/v4/benchmark-narrator.mjs`,
 `src/v4/voice.js`, `src/v4/server.js`, `src/v4/ui/voice.js`, `src/v4/ui/app.js`,
@@ -186,3 +199,14 @@ READY requires all original and Genesis gates, actual model-selection billing
 proof, real-model scenarios A–G, installed Windows/mobile acceptance, physical
 voice and locked-iPhone push, login/restart/update/rollback/data preservation and
 approved production trust. Until then keep PR draft/open and report NOT READY.
+
+
+### Follow-up focused verification
+
+Go compatibility/canonical endpoint identity and strict usage parser: focused
+model/selection/voice-stream set 29 passed, 0 failed, 0 skipped. Previous selector
+browser tests 2/0/0 and combined model/client DOM tests 40/0/0 remain distinct
+runs; do not add overlapping counts. The working Go config remains unchanged.
+Do not infer Extra Usage disabled: official Go docs explain that enabled Console
+Extra Usage can bill the existing Go route after allowance exhaustion. Account
+verification remains required before claiming no extra charges.
