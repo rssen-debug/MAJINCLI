@@ -19,6 +19,18 @@ const EVENT_SCHEMAS = {
   'verification':  ['goalId', 'acceptanceId', 'kind', 'verified', 'durationMs', 'at'],
 };
 
+export function telemetryRow(event,payload={}) {
+  const allowed=EVENT_SCHEMAS[event];
+  if(!allowed)throw new Error(`unknown telemetry event: ${event}`);
+  const row={event};
+  for(const key of allowed){
+    if(payload[key]===undefined)continue;
+    row[key]=typeof payload[key]==='string'?payload[key].slice(0,256):payload[key];
+  }
+  if(!row.at)row.at=new Date().toISOString();
+  return row;
+}
+
 export class TelemetryLedger {
   constructor(dir) {
     if (!dir) throw new Error('ledger requires a directory');
@@ -33,16 +45,7 @@ export class TelemetryLedger {
 
   /** append(event, payload) — only allowed fields survive */
   append(event, payload = {}) {
-    const allowed = EVENT_SCHEMAS[event];
-    if (!allowed) throw new Error(`unknown telemetry event: ${event}`);
-    const row = { event };
-    for (const k of allowed) {
-      if (payload[k] === undefined) continue;
-      row[k] = payload[k];
-      // hard guards against payload accidents
-      if (typeof row[k] === 'string' && row[k].length > 256) row[k] = row[k].slice(0, 256);
-    }
-    if (!row.at) row.at = new Date().toISOString();
+    const row=telemetryRow(event,payload);
     fs.appendFileSync(this.todayFile(), JSON.stringify(row) + '\n');
     return row;
   }

@@ -174,6 +174,9 @@ test('telemetry: a broken ledger cannot take a turn down', async () => {
     const events = await readSse(await postChat(s.base, cookie, { text: 'Skriv filen c.txt med innehåll: x', requestId: 'c1' }));
     const done = events.filter((e) => e.type === 'done').pop();
     assert.equal(done.data.status, 'completed', 'the turn still works without telemetry');
+    assert.equal(s.context.audit.status().ok,true,'mandatory audit remains healthy when optional analytics is unavailable');
+    const auditRows=fs.readFileSync(path.join(s.context.audit.dir,'chain.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+    assert.ok(auditRows.some(row=>row.kind==='telemetry'&&row.payload.event==='goal.finish'));
   } finally {
     await s.close();
   }

@@ -795,3 +795,16 @@ but cannot establish loaded-module/physical acceptance. Continue original parity
 (memory sync/self-config/reset/heartbeat/graph/team budgets), actual scenarios,
 billing safeguards and signed host/native release gates. Owner requested no more
 questions; preserve unverified external/physical gates instead of inventing PASS.
+
+### Audit/analytics compatibility repair — 24 October
+
+Exact e3d458f Linux V4 run40041014388/job120711842638 failed545pass/1fail/7skip
+of553. Failure: existing 'a broken ledger cannot take a turn down' contract.
+The first audit binding incorrectly made optional analytics-directory creation
+fatal. Repaired without relaxing that test: V2 now exports its SAME telemetry
+row serializer, reused by the ledger and the mandatory audit binding. Filtered
+rows are chained independently of optional analytics writes. Audit-integrity
+failures still stop execution; unavailable statistics alone do not. Existing
+fixture is extended to assert the actual audit chain still contains goal.finish.
+New-head focused results/CI must be observed separately. Runtime remains e45640a,
+prepared checkout e3d458f until this follow-up is pulled; activation remains unproven.

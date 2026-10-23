@@ -53,7 +53,7 @@ import { planV1Import, applyV1Import } from './import-history.js';
 import { discoverSkills, usableSkills, describeSkills } from './skills.js';
 import { parseMcpConfig, connectServers } from './mcp.js';
 import { registerMcpTools } from './mcp-tools.js';
-import { TelemetryLedger } from '../v2/telemetry/ledger.js';
+import { TelemetryLedger,telemetryRow } from '../v2/telemetry/ledger.js';
 import { createBackgroundTasks } from './background-tasks.js';
 import { createPushService } from './push.js';
 import { runTool } from '../v2/tools/runner.js';
@@ -180,12 +180,14 @@ export function createV4Server({ config }) {
   // Structured, privacy-preserving telemetry: V2's ledger keeps a fixed field
   // allowlist per event, so message text, paths and secrets cannot land in it.
   const telemetry = (() => {
-    try {
-      const ledger=new TelemetryLedger(path.join(paths.root, 'telemetry'));
-      return {append(event,payload){try{const row=ledger.append(event,payload);audit.recordTelemetry(row);return row;}catch(error){return audit.persistenceFailure(error);}}};
-    } catch(error) {
-      return audit.persistenceFailure(error);
-    }
+    let ledger=null;
+    try{ledger=new TelemetryLedger(path.join(paths.root,'telemetry'));}catch{/* optional analytics can be unavailable */}
+    return {append(event,payload){
+      const row=telemetryRow(event,payload);
+      audit.recordTelemetry(row); // Mandatory integrity storage uses same serializer.
+      try{ledger?.append(event,row);}catch{/* analytics failure cannot erase audit or break execution */}
+      return row;
+    }};
   })();
   // Skills are data on disk. What is *usable* depends on what the owner granted,
   // so the set is recomputed on every turn rather than cached at boot.
