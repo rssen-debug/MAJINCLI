@@ -132,10 +132,8 @@ import { synthesize, transcribe, voiceCapabilities, makeTtsProvider } from '../.
 
 const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../scripts/v4/voice-fixture.mjs');
 const ttsTemplate = () => `"${process.execPath}" "${FIXTURE}" tts {OUT} {TEXT}`;
-// NOTE: the V2 CommandSttProvider strips quotes from ARGUMENTS but uses the
-// executable token verbatim, so the binary path must be unquoted there. That is
-// a documented V2 limitation (SOURCE_AUDIT §5), not worked around silently.
-const sttTemplate = () => `${process.execPath} ${FIXTURE} stt {WAV}`;
+// STT uses the same shell-free, quoted argv parser as the TTS command lane.
+const sttTemplate = () => `"${process.execPath}" "${FIXTURE}" stt {WAV}`;
 
 test('voice/command: a real local binary is spawned without a shell and its audio is verified', async () => {
   const fs = await import('node:fs');
