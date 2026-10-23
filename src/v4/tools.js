@@ -204,10 +204,69 @@ export function createToolRegistry({ workspaceDir, memoryDir }) {
     }),
   });
 
-  return { registry, memory, root };
+  // The agent asks the tools object for the model-facing schema list, so adding a
+  // tool to the registry is enough for the model to see it.
+  const schemas = () => schemasFromRegistry(registry);
+
+  return { registry, memory, root, schemas };
 }
 
-/** Tool descriptions in the shape the OpenAI-compatible adapters expect. */
+/**
+ * Turn a registered tool's zod input schema into the JSON Schema shape an
+ * OpenAI-compatible model expects.
+ *
+ * A tool whose schema cannot be converted is skipped rather than breaking the
+ * whole turn: a missing tool is visible in the capability report, a crash is not.
+ */
+export function jsonSchemaFor(schema) {
+  if (!schema) return { type: 'object', properties: {} };
+  try {
+    const converted = z.toJSONSchema(schema, { io: 'input' });
+    // The model adapters do not want a $schema key pointing at a spec version.
+    const { $schema, ...rest } = converted || {};
+    void $schema;
+    return rest;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The tool list the MODEL sees, built from the live registry.
+ *
+ * This is the fix for the real V4 defect: `TOOL_SCHEMAS` was a hardcoded array of
+ * five workspace tools, so no matter what was registered — host files, PowerShell,
+ * Windows control — the model was only ever told about those five and could never
+ * call the rest.
+ *
+ * Everything registered is exposed, because the runner is what enforces
+ * permission, not the model's tool list. Hiding a tool from the list does not make
+ * it safe; it only makes it unusable.
+ */
+export function schemasFromRegistry(registry, { limit = 60 } = {}) {
+  const out = [];
+  for (const summary of registry.list()) {
+    if (out.length >= limit) break;
+    const def = registry.get(summary.name);
+    if (!def) continue;
+    const parameters = jsonSchemaFor(def.inputSchema);
+    if (!parameters) continue; // unconvertible schema: skip, do not guess
+    out.push({
+      name: def.name,
+      description: String(def.description || def.name).slice(0, 400),
+      parameters,
+    });
+  }
+  return out;
+}
+
+/**
+ * Static fallback list.
+ *
+ * Kept because it documents the workspace surface in one place and is used by
+ * tests that assert the built-ins exist. The agent no longer sends this: it sends
+ * `schemasFromRegistry()`, which includes these and anything else registered.
+ */
 export const TOOL_SCHEMAS = [
   {
     name: 'workspace_write',

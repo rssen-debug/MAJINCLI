@@ -23,15 +23,23 @@ import { runTool } from '../v2/tools/runner.js';
 import { nextRecoveryStep, recoveryPlan } from '../v2/recover/advisor.js';
 import { buildMessages } from './context.js';
 import { memoryForPrompt } from './memory.js';
-import { TOOL_SCHEMAS, safeFileName } from './tools.js';
+import { TOOL_SCHEMAS, safeFileName, schemasFromRegistry } from './tools.js';
 import { publicGoal, newId } from './store.js';
 import { explainModelError } from './model.js';
 import { t } from './ui/strings.js';
 
 const SYSTEM_PROMPT = `You are MAJIN, a private assistant running on the owner's own Windows machine.
 You speak in the language the user writes in (Swedish or English) and you are brief.
-You have tools: workspace_write (create a NEW text file), workspace_read, workspace_list,
-memory_save (durable preference) and memory_search. The workspace is a flat, create-only sandbox.
+You have tools. The exact list is in this request; use whatever is offered. Always the
+workspace tools: workspace_write (create a NEW text file), workspace_read, workspace_list,
+memory_save (durable preference) and memory_search. The workspace is a flat, create-only
+sandbox. When host tools are enabled you also get real filesystem, shell and Windows control
+tools; they run on the owner's machine and sensitive ones require the owner's approval.
+
+Choosing tools:
+- Prefer the narrowest tool that answers the question. workspace_read lists files; fs_read reads
+  a real path on the host; exec_start runs a command.
+- A tool call that returns failure is a failure. Never describe it as done.
 
 Rules:
 - Never say a file was created, saved or changed unless the tool result confirms it.
@@ -518,7 +526,10 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
         emit('state', { state: 'thinking', round: rounds });
         const response = await model.chat({
           messages: modelMessages,
-          tools: TOOL_SCHEMAS,
+          // Every registered tool, not a fixed list. This was the reported bug:
+          // the model was only ever told about five workspace tools, so host
+          // file/shell/Windows tools could not be called even when registered.
+          tools: tools.schemas ? tools.schemas() : schemasFromRegistry(tools.registry),
           signal,
           modelId: conversation.modelId || null,
           onEvent: (ev) => {

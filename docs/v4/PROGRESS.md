@@ -425,6 +425,63 @@ an unhandled rejection. It now prints `STOPPED (DIRTY_TREE)` with the affected f
 Proven with a **real bare git remote** rather than a mocked runner — five tests, one of which fails
 against the old code.
 
+## The reported bug: the model could only see five tools
+
+Reported from the phone: MAJIN worked over OpenCode Go but could only use the five
+workspace/memory tools. The diagnosis was exact.
+
+**The registry was not the problem. The prompt was.** `src/v4/agent.js` sent a
+hardcoded `TOOL_SCHEMAS` array of five entries to the model. Anything registered
+afterwards — host files, PowerShell, Windows control — was invisible to the model,
+so it could never call it. A tool the model is never told about does not exist.
+
+Two changes:
+
+1. **`schemasFromRegistry()`** (`src/v4/tools.js`) builds the model-facing tool list
+   from the live registry, converting each zod input schema with `z.toJSONSchema`.
+   The agent now calls `tools.schemas()`; adding a tool is enough for it to appear.
+2. **`src/v4/tools/host.js`** detects every V1 tool lane and adapts it into a V2
+   `ToolDefinition`, so host tools run through the same runner, approvals and
+   receipts as everything else.
+
+### What is now discovered (this Linux sandbox)
+
+| Lane | Tools | Status here |
+|---|---:|---|
+| files (`fs.*`) | 12 | available |
+| shell (`exec.*`) | 5 | available |
+| power | 3 | available |
+| web (`web.*`, includes `browser.*`) | 12 | available; browser tools withheld without a runtime |
+| research | 1 | available |
+| jobs (`jobs.*` — CV, search, match, prepare, send) | 9 | available |
+| agent (`agent.delegate`, plan, moa) | 4 | available |
+| flows | 6 | available |
+| github | 2 | available |
+| desktop / screen / computer | — | Windows-only, stated |
+| browser runtime | — | no binary → **browser tools withheld and named as skipped** |
+
+That is **45 host tools** + the 5 workspace tools = 50 in the registry, versus 5 before.
+
+### Two defects the probe found
+
+`npm run v4:tools --probe` calls one tool per lane through the real runner:
+
+1. **A structured V1 failure was misreported as a broken tool.** V1 returns
+   `{ok:false, error:{code,message,hint}}` — an object. The adapter's output schema
+   expected a string, so `web_search` failing because no engine answered became
+   `INVALID_TOOL_OUTPUT`. Now the object is accepted and mapped onto the kernel
+   vocabulary (`classifyV1Error`), so "no internet" reads as `NETWORK_FAILURE`.
+2. **`fs_stat` was probed against a directory**, which V1 treats as a different
+   operation. The probe now stats a real file. That was a bad probe, not a bad tool
+   — and the probe output made that obvious rather than hiding it.
+
+### What is still not proven
+
+Everything above is a **contract** on this machine. Whether `control.type` really
+types into Notepad, or `jobs.search` really returns Danish listings, is proven by
+`npm run v4:tools --probe` **on your Windows host**, not here. The acceptance test
+you wrote needs that host, a browser binary and a credential.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in

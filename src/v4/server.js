@@ -40,6 +40,7 @@ import { Kernel } from './kernel.js';
 import { t } from './ui/strings.js';
 import { synthesize, VOICE_MODES, voiceCapabilities } from './voice.js';
 import { TurnJournal } from './turns.js';
+import { hostCapabilities, describeCapabilities, registerHostTools } from './tools/host.js';
 import { TelemetryLedger } from '../v2/telemetry/ledger.js';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui');
@@ -152,6 +153,31 @@ export function createV4Server({ config }) {
   // Mobile connections drop. The journal lets a phone reattach to a turn that
   // kept running instead of losing the work.
   const journal = new TurnJournal();
+
+  // Host capability detection runs once at boot: what this machine can actually
+  // do, decided by asking, never by assuming. The report is served to the phone.
+  let hostCaps = null;
+  let hostTools = { registered: [], skipped: [] };
+  const hostReady = (async () => {
+    try {
+      hostCaps = await hostCapabilities();
+    } catch (err) {
+      hostCaps = { platform: process.platform, error: String(err?.message || err) };
+      return;
+    }
+    if (!config.platform?.hostTools) {
+      hostTools = { registered: [], skipped: [{ lane: 'all', reason: 'host tools are opt-in (MAJIN_V4_HOST_TOOLS=1)' }] };
+      return;
+    }
+    try {
+      hostTools = registerHostTools(tools.registry, hostCaps, {
+        allow: config.platform.hostToolAllow?.length ? config.platform.hostToolAllow : null,
+        workspaceDir: config.workspaceDir,
+      });
+    } catch (err) {
+      hostTools = { registered: [], skipped: [{ lane: 'all', reason: String(err?.message || err) }] };
+    }
+  })();
 
   const kernel = new Kernel({
     features: config.platform?.features || {},
@@ -464,6 +490,21 @@ export function createV4Server({ config }) {
           ...voiceCapabilities(),
           note: 'Buffer is a deterministic offline provider that proves the pipeline, not a voice.',
         },
+      });
+    },
+
+    'GET /api/capabilities': async (req, res) => {
+      requireSession(req);
+      await hostReady;
+      sendJson(res, 200, {
+        ok: true,
+        host: hostCaps ? describeCapabilities(hostCaps) : { platform: process.platform, lanes: {} },
+        tools: {
+          enabled: Boolean(config.platform?.hostTools),
+          registered: hostTools.registered,
+          skipped: hostTools.skipped,
+        },
+        note: 'A tool listed here still refuses at call time if the host changed under it.',
       });
     },
 

@@ -233,6 +233,10 @@ export function loadConfig({ env = process.env, argv = [], platform = process.pl
       features: parseFlags(env.MAJIN_V4_FLAGS),
       pluginsEnabled: bool(env.MAJIN_V4_PLUGINS, false),
       pluginAllowlist: splitList(env.MAJIN_V4_PLUGIN_ALLOW),
+      // Host tools (V1's Windows/files/shell lanes) are OFF by default. Turning
+      // them on is an owner decision, and the allowlist narrows it further.
+      hostTools: bool(env.MAJIN_V4_HOST_TOOLS, false),
+      hostToolAllow: splitList(env.MAJIN_V4_HOST_TOOL_ALLOW),
       pluginsDir: path.join(paths.root, 'plugins'),
       pluginQuarantineDir: path.join(paths.root, 'plugins-quarantine'),
       // Process isolation is the default; MAJIN_V4_PLUGIN_ISOLATE=0 keeps a
