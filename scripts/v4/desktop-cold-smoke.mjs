@@ -37,6 +37,9 @@ try {
   const page = await application.firstWindow();
   await page.waitForSelector('#gate-code', { timeout: 30_000 });
   assert.equal((await health())?.app, 'majin');
+  assert.equal((await health())?.version, config.version, 'bundled host version must match the tested candidate');
+  assert.equal(await application.evaluate(({ app }) => app.getVersion()), config.version,
+    'installed native shell version must match its shared host');
   await page.fill('#gate-code', code);
   await page.click('#gate-submit');
   await page.waitForSelector('#gate', { state: 'hidden' });
@@ -44,6 +47,10 @@ try {
   await page.click('#send-btn');
   await page.waitForSelector('.tool[data-state="verified"]', { timeout: 15_000 });
   assert.equal(fs.readFileSync(path.join(home, 'workspace/cold-start.txt'), 'utf8'), 'bundled runtime');
+  await page.waitForSelector('#stop-btn', { state: 'hidden', timeout: 15_000 });
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('.tool[data-state="verified"][data-historical="true"]', { timeout: 15_000 });
+  assert.match(await page.textContent('.tool[data-historical="true"] .tool-summary'), /cold-start.txt/);
   // Verify normal app exit explicitly. Some Electron/Playwright combinations
   // wait for background host descendants when closing the entire test context.
   const nativeProcess = application.process();
@@ -54,7 +61,8 @@ try {
   application = null;
   assert.equal((await health())?.ok, true, 'closing the client must leave the shared host running');
   verdict = { at: new Date().toISOString(), status: 'PASS', packagedHost: true,
-    bundledNode: true, firstConnection: true, pairing: true, verifiedOutput: true, survivesClientClose: true,
+    version: config.version, bundledNode: true, firstConnection: true, pairing: true,
+    verifiedOutput: true, historicalReceipts: true, survivesClientClose: true,
     inference: 'demo; no production credentials accessed' };
   fs.mkdirSync(path.join(root, 'docs/v4/evidence'), { recursive: true });
   fs.writeFileSync(path.join(root, 'docs/v4/evidence/desktop-cold-smoke.json'), JSON.stringify(verdict, null, 2));

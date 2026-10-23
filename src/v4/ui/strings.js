@@ -216,6 +216,7 @@ export const SV = {
   'history.deleteRunning': 'En uppgift körs fortfarande i samtalet. Stoppa den och radera?',
   'history.deletedElsewhere': 'Samtalet raderades på en annan enhet.',
   'history.previouslyVerified': 'Verifierades vid körningen',
+  'history.recorded': 'Historik',
   'history.receiptTime': 'Sparat resultat från den angivna tiden. Filen eller omvärlden kan ha ändrats sedan dess.',
   'history.renameFailed': 'Kunde inte byta namn.',
   'history.importChecking': 'Letar efter tidigare historik…',

@@ -729,6 +729,7 @@ test('history ui: a reload lands back in the conversation that was open', { skip
     assert.ok(receipt, 'reload lost the persisted tool receipt');
     assert.equal(receipt.dataset.state, 'verified');
     assert.equal(receipt.dataset.historical, 'true');
+    assert.match(receipt.querySelector('.tool-name').textContent, /Historik/);
     assert.match(receipt.querySelector('.tool-summary').textContent, /minne.txt/);
     assert.match(receipt.querySelector('.tool-detail').textContent, /Verifierades vid körningen/);
     assert.match(receipt.querySelector('.tool-detail').textContent, /kan ha ändrats/);

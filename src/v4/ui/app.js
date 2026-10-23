@@ -612,6 +612,7 @@ function renderConversationMessages(conversation) {
         card.node.dataset.state = ok ? (receipt.verified ? 'verified' : 'ok') : 'failed';
         card.node.dataset.historical = 'true';
         card.node.dataset.receiptId = receipt.id;
+        card.node.querySelector('.tool-name').textContent = `${toolLabel(name)} · ${t('history.recorded')}`;
         card.sum.textContent = receipt.target || name;
         const status = ok ? (receipt.verified ? t('history.previouslyVerified') : t('state.done')) : t('state.failed');
         card.detail.textContent = `${status} · ${t('state.receipt')} ${receipt.id}`
