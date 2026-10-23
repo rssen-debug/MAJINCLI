@@ -76,14 +76,18 @@ $nodePath = $node.Source
 rem MAJIN V4 host — startad av användaren, inte av systemet.
 set MAJIN_V4_PORT=$Port
 cd /d "$RepoRoot"
-"$nodePath" src\v4\main.js %*
+"$nodePath" scripts\v4\supervise.mjs %*
 "@ | Set-Content -Path $Launcher -Encoding ASCII
 Write-Step "Launcher: $Launcher"
 
 # --- 4b. Owner Mode seed ----------------------------------------------------
 # Written, not implied: the file records exactly what was granted, when, and why.
 $OwnerMode = Join-Path $env:LOCALAPPDATA 'MAJIN\v4\owner-mode.json'
-if ($GrantLanes.Count -gt 0) {
+if ((Test-Path -LiteralPath $OwnerMode) -and -not $PSBoundParameters.ContainsKey('GrantLanes') -and -not $PSBoundParameters.ContainsKey('GrantFolders')) {
+  Write-Step 'Existing Owner Mode permissions preserved.'
+} elseif (Test-Path -LiteralPath $OwnerMode) {
+  Fail 'Owner Mode already exists. Change grants through the authenticated Permissions panel; the installer will not replace them.'
+} elseif ($GrantLanes.Count -gt 0) {
   $dir = Split-Path -Parent $OwnerMode
   if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
   $seed = @{
@@ -116,7 +120,9 @@ if ($AutoStart) {
   #       Zero means NO limit. Omitted, the default is 72 hours and Windows
   #       kills the host after three days of uptime.
   # V4 adds -StartWhenAvailable and restart-on-failure, which V1 does not have.
-  $action = New-ScheduledTaskAction -Execute $Launcher -WorkingDirectory $RepoRoot
+  $escapedLauncher = $Launcher.Replace("'", "''")
+  $hiddenArguments = "-NoProfile -NonInteractive -WindowStyle Hidden -Command `"& '$escapedLauncher'; exit `$LASTEXITCODE`""
+  $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $hiddenArguments -WorkingDirectory $RepoRoot
   $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
   $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
@@ -124,7 +130,8 @@ if ($AutoStart) {
     -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -StartWhenAvailable `
     -RestartCount 3 `
-    -RestartInterval (New-TimeSpan -Minutes 1)
+    -RestartInterval (New-TimeSpan -Minutes 1) `
+    -MultipleInstances IgnoreNew
   Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Description 'Starts the MAJIN V4 host when the user logs in' -Force | Out-Null
   Write-Step "Scheduled task '$TaskName' registered for $env:USERNAME (logon only, no machine-wide change)."
   Write-Step 'Runs on battery, no 72-hour limit, restarts up to 3 times on failure.'

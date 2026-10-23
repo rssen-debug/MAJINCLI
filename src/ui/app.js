@@ -41,7 +41,8 @@ function md(t) {
   let s = String(t == null ? '' : t);
   const blocks = [];
   s = s.replace(/```(\w*)\n?([\s\S]*?)```/g, (_m, _lang, code) => {
-    blocks.push('<pre>' + esc(String(code).replace(/\n$/, '')) + '</pre>');
+    const isMindmap = String(_lang).toLowerCase() === 'mindmap' && window.MAJIN_MINDMAP;
+    blocks.push(isMindmap ? window.MAJIN_MINDMAP.render(code) : '<pre>' + esc(String(code).replace(/\n$/, '')) + '</pre>');
     return '\u0000' + (blocks.length - 1) + '\u0000';
   });
   s = esc(s);
@@ -71,7 +72,10 @@ function md(t) {
 /* ------------------------------- transcript ----------------------------- */
 function scroll(force = false) {
   const s = $('scroller');
-  if (force || !S.readingHistory) s.scrollTop = s.scrollHeight;
+  if (!force && S.readingHistory) return;
+  // V1: avoid redundant scroll writes during streamed responses.
+  const target = s.scrollHeight;
+  if (force || s.scrollTop + s.clientHeight < target - 1) s.scrollTop = target;
 }
 $('scroller').addEventListener('scroll', () => {
   const n = $('scroller'); S.readingHistory = n.scrollHeight - n.clientHeight - n.scrollTop > 100;
@@ -203,7 +207,14 @@ function workPulse(phase){
   if(!S.busy)return;
   if(phase)workPhase=String(phase).slice(0,130);
   workLastEvent=Date.now();
-  const bar=$('work-progress');if(bar)bar.hidden=false;
+  const bar=$('work-progress');
+  if(bar){
+    bar.hidden=false;
+    bar.dataset.phase=/verif|validat|check|kontroll/i.test(workPhase)?'verify':
+      /fail|error|failed|block|stuck/i.test(workPhase)?'problem':'active';
+    const glyph=$('work-progress-symbol');
+    if(glyph)glyph.textContent=bar.dataset.phase==='verify'?'◇':bar.dataset.phase==='problem'?'!':'✦';
+  }
 }
 setInterval(()=>{
   const bar=$('work-progress');if(!bar)return;
@@ -212,6 +223,10 @@ setInterval(()=>{
   const total=Math.floor((Date.now()-S.t0)/1000);
   const silent=Math.floor((Date.now()-(workLastEvent||S.t0))/1000);
   const stalled=silent>=18;
+  // The existing inline spirit ember changes colour only when event
+  // evidence has gone quiet; it does not claim the operation has failed.
+  if(stalled && bar.dataset.phase!=='problem')bar.dataset.phase='stalled';
+  if(stalled && $('work-progress-symbol'))$('work-progress-symbol').textContent='·';
   if($('work-progress-label'))$('work-progress-label').textContent=
     stalled ? workPhase+' · No update for '+silent+'s — still waiting for the current operation' : workPhase;
   if($('work-progress-timer'))$('work-progress-timer').textContent=total+'s';
@@ -223,7 +238,161 @@ function onEvent(ev) {
     if (ev.type === 'route') workPulse('Choosing the best model');
     else if (ev.type === 'step') workPulse('Step '+ev.step+'/'+ev.of+' · '+(ev.model||'model'));
     else if (ev.type === 'tool' || ev.type === 'tool_begin') workPulse('Using '+(ev.name||ev.tool||'a tool'));
-    else if (ev.type === 'tool_result') workPulse(ev.ok?'Tool finished · reviewing results':'Tool failed · adjusting approach');
+    else if (ev.type === 'tool_waiting') {
+      const elapsed=Math.round(Math.max(0,Number(ev.elapsedMs)||0)/1000);
+      workPulse('Still using '+String(ev.tool||'tool').slice(0,60)+' · '+elapsed+'s');
+      const bar=$('work-progress');
+      if(bar){
+        bar.dataset.phase='waiting';
+        bar.title='MAJIN has not received a result from '+String(ev.tool||'this tool')+' yet. This is a heartbeat, not a success confirmation.';
+      }
+      if($('work-progress-symbol'))$('work-progress-symbol').textContent='◌';
+    }
+    else if (ev.type === 'tool_result') {
+      if(ev.tool==='browser.click' && !ev.ok && ev.error?.reason==='occluded'){
+        const controls=Array.isArray(ev.error.recoveryControls)?ev.error.recoveryControls:[];
+        const hint=controls[0]?.label?' · '+String(controls[0].label).slice(0,35):'';
+        workPulse('Button covered by another element'+hint);
+        const bar=$('work-progress');
+        if(bar){
+          bar.dataset.phase='obstructed';
+          bar.title='MAJIN did not click the covered button. It is inspecting the visible blocker and choosing a different action.';
+        }
+        if($('work-progress-symbol'))$('work-progress-symbol').textContent='↳';
+      }
+      else if(ev.tool==='browser.read' && ev.ok && ev.meta?.stagnation?.stagnant===true){
+        const n=Math.min(20,Number(ev.meta.stagnation.unchangedActions)||0);
+        workPulse('Page unchanged after '+n+' actions · changing approach');
+        const bar=$('work-progress');
+        if(bar){bar.dataset.phase='stagnation';bar.title='Live page fingerprint has not changed after multiple actions. Re-observe and pick a new strategy; no automatic click is repeated.';}
+        const glyph=$('work-progress-symbol');if(glyph)glyph.textContent='↝';
+      }
+      else if(ev.tool==='browser.read' && ev.ok && ev.meta?.mode==='compact'){
+        const original=Math.max(0,Number(ev.meta.sourceChars)||0);
+        const delivered=Math.max(0,Number(ev.meta.visibleChars)||0);
+        workPulse('Page distilled · '+delivered+'/'+original+' chars');
+        const bar=$('work-progress');
+        if(bar){
+          bar.dataset.phase='compact';
+          bar.title='Condensed browser text from '+original+' to '+delivered+' characters; original page remains unchanged';
+        }
+        if($('work-progress-symbol'))$('work-progress-symbol').textContent='✧';
+      }
+      else if(ev.tool==='browser.click' && ev.ok){
+        // A successful click is not the same thing as a verified remote effect.
+        const receipt=ev.meta?.receipt;
+        if(receipt?.status==='browser_completed' && receipt.evidence==='action_only'){
+          workPulse('Click sent · awaiting proof of page change');
+          const bar=$('work-progress');if(bar){bar.dataset.phase='action';bar.title='Action executed locally; remote result has not been verified';}
+        }
+        const verified=ev.meta?.verified===true;
+        if(verified){
+          workPulse('Browser result verified');
+          const bar=$('work-progress');if(bar)bar.dataset.phase='verified';
+          if($('work-progress-symbol'))$('work-progress-symbol').textContent='✓';
+        } else if(!receipt || receipt.evidence!=='action_only'){
+          workPulse('Click sent · checking its effect');
+          const bar=$('work-progress');if(bar)bar.dataset.phase='action';
+        }
+      } else if(ev.tool==='browser.fill'){
+        const confirmed=ev.ok===true && ev.meta?.retained===true;
+        workPulse(confirmed?'Field retained · verified':'Form field not confirmed · reviewing target');
+        const bar=$('work-progress');
+        if(bar){
+          bar.dataset.phase=confirmed?'verified':'problem';
+          bar.title=confirmed?'Browser confirmed the field still contained the requested input after an app update. Input content is never shown.':'Browser did not verify the input; no form success is claimed.';
+        }
+        const glyph=$('work-progress-symbol');if(glyph)glyph.textContent=confirmed?'✓':'!';
+      } else if(ev.tool==='browser.shot' && ev.ok){
+        const unchanged=ev.meta?.unchanged===true;
+        workPulse(unchanged?'Screenshot unchanged · keeping previous view':'Screenshot captured · visual evidence ready');
+        const bar=$('work-progress');
+        if(bar){bar.dataset.phase=unchanged?'delta':'visual';bar.title=unchanged?
+          'The new screenshot matches the previous image exactly':'A new screenshot was saved for visual inspection';}
+        const glyph=$('work-progress-symbol');if(glyph)glyph.textContent=unchanged?'=':'◉';
+      } else if(ev.tool==='browser.verify' && !ev.ok){
+        const plan=ev.error?.recovery || ev.meta?.recovery || {};
+        const action=String(plan.action||'inspect_page').replace(/[^a-z_]/gi,'').slice(0,32);
+        const navigation=action==='inspect_navigation';
+        workPulse(navigation?'Destination not confirmed · checking page':'Verification failed · choosing a safer next step');
+        const bar=$('work-progress');if(bar){
+          bar.dataset.phase=navigation?'navigation':'recovery';
+          bar.title='Live verification failed. Recovery: '+action+'. No action has been repeated automatically.';
+        }
+        const glyph=$('work-progress-symbol');if(glyph)glyph.textContent=navigation?'↗':'↻';
+      } else if(ev.tool==='browser.verify' && ev.ok){
+        const shadow=ev.meta?.observed?.fromShadowRoot===true;
+        workPulse(shadow?'Shadow DOM control verified':'Browser result verified');
+        const bar=$('work-progress');
+        if(bar){
+          bar.dataset.phase=shadow?'shadow-verified':'verified';
+          bar.title=shadow?'Verified a unique accessible control inside an open shadow root':'Confirmed against the live page — not just a successful click';
+        }
+        const glyph=$('work-progress-symbol');if(glyph){glyph.textContent='✓';if(shadow)glyph.textContent='✧';}
+      } else if(ev.tool==='browser.read' && ev.ok && ev.meta?.mode==='structure'){
+        const count=Math.max(0,Number(ev.meta?.count)||0);
+        workPulse('Mapping page structure · '+count+' accessible elements');
+        const bar=$('work-progress');if(bar){bar.dataset.phase='structure';bar.title='Read-only page outline; no form values or passwords';}
+      } else if(ev.tool==='browser.elements' && ev.ok){
+        if(ev.meta?.deltaMode==='unchanged'){
+          workPulse('Page unchanged · existing controls still visible');
+          const bar=$('work-progress');if(bar)bar.dataset.phase='delta';
+        } else if(ev.meta?.deltaMode==='delta'){
+          const changed=Math.max(0,Number(ev.meta?.changed)||0);
+          const removed=Math.max(0,Number(ev.meta?.removed)||0);
+          workPulse(changed+' updated controls · '+removed+' removed');
+          const bar=$('work-progress');if(bar)bar.dataset.phase='delta';
+        } else {
+        const matched=Number(ev.meta?.matched);
+        const total=Number(ev.meta?.count);
+        const count=Number.isFinite(matched)&&matched>=0 ? matched :
+          Number.isFinite(total)&&total>=0 ? total : null;
+        workPulse(count===null?'Reading controls on the page':
+          count+' interactive controls found');
+        const bar=$('work-progress');if(bar)bar.dataset.phase='grounded';
+        }
+      } else if(ev.tool==='browser.click' && !ev.ok && ev.error?.code==='click_blocked') {
+        const reason=String(ev.error?.reason||'').slice(0,50);
+        const phrases={occluded:'Another element covers the button · checking the page',
+          disabled:'Button unavailable · checking required steps',
+          hidden:'Button hidden · finding visible controls',
+          outside_viewport:'Control off-screen · inspecting the page',
+          ref_identity_changed:'Page changed · finding the current button'};
+        workPulse(phrases[reason]||'Click blocked · finding a safe alternative');
+        const bar=$('work-progress');
+        if(bar){bar.dataset.phase='blocked';bar.dataset.blocker=reason;
+          bar.title='MAJIN will re-observe the page rather than repeatedly clicking a blocked control';}
+      } else workPulse(ev.ok?'Tool finished · checking result':'Tool failed · adjusting approach');
+    }
+    else if (ev.type === 'browser_recovery') {
+      const names={refresh_page:'Refreshing page controls',inspect_blocker:'Inspecting a blocked element',
+        verify_failed:'Checking why the result differs',reconnect:'Checking browser connection',
+        outcome_unknown:'Checking whether the action actually finished',stop_repeat:'Changing strategy'};
+      const stage=names[ev.phase]||'Recovering safely';
+      const tool=String(ev.next||'').replace(/[^a-zA-Z0-9._-]/g,'').slice(0,32);
+      workPulse(tool?stage+' · '+tool:stage);
+      const bar=$('work-progress');
+      if(bar){bar.dataset.phase='recover';bar.dataset.recovery=String(ev.phase||'').slice(0,35);
+        bar.title='MAJIN is inspecting the current page instead of blindly repeating the previous action';}
+    }
+    else if (ev.type === 'tool_diagnosis') {
+      const label=String(ev.labelText||'Checking tool failure').slice(0,90);
+      workPulse(label);
+      const bar=$('work-progress');
+      if(bar){
+        bar.dataset.phase='diagnose';
+        bar.dataset.diagnosis=String(ev.kind||'unknown').slice(0,40);
+        bar.title='Current tool: '+String(ev.tool||'unknown').slice(0,64)+' · Next: '+String(ev.action||'inspect_failure').replace(/_/g,' ').slice(0,75);
+      }
+      if($('work-progress-symbol'))$('work-progress-symbol').textContent='↻';
+    }
+    else if (ev.type === 'agent_recovery') {
+      const stage = ev.phase === 'blocked' ? 'Stopped a repeating action' : 'Switching strategy after a failed action';
+      const tool = String(ev.tool || '').replace(/[^a-zA-Z0-9._-]/g,'').slice(0,48);
+      workPulse(tool ? stage + ' · ' + tool : stage);
+      const bar=$('work-progress');if(bar)bar.dataset.phase=ev.phase==='blocked'?'problem':'recovery';
+    }
+    else if (ev.type === 'verify' || ev.type === 'verification') workPulse('Verifying the real result');
     else if (ev.type === 'thinking') workPulse('Thinking through the next step');
     else if (ev.type === 'delta') workPulse('Writing the response');
     else if (ev.type === 'escalate') workPulse('Switching models');
@@ -348,8 +517,15 @@ async function send(text, options = {}) {
   if (!input) return false;
   if (S.stopRequested) { toast('Waiting for stop confirmation.'); return false; }
   if (input[0] === '/') {
-    const ok = await command(input);
-    if (ok) return true;
+    // V1: command API failures must not become unhandled UI promise rejections.
+    // Leave the typed command untouched so the user can retry it.
+    try {
+      const ok = await command(input);
+      if (ok) return true;
+    } catch (e) {
+      err('Command failed: ' + (e?.message || String(e)));
+      return false;
+    }
   }
   /* AUTOPILOT: a task is already running on this chat — this new message is
      an independent task, it gets its own agent, card and stop button and
@@ -385,6 +561,10 @@ async function send(text, options = {}) {
   setStatus('working…');
   const ac = new AbortController();
   S.abort = ac;
+  // No endless Thinking on a stalled stream. A slow model gets a clear retryable error.
+  let streamTimedOut = false;
+  let streamWatchdog = setTimeout(() => { streamTimedOut = true; ac.abort(); }, 90000);
+  const resetStreamWatchdog = () => { clearTimeout(streamWatchdog); streamWatchdog = setTimeout(() => { streamTimedOut = true; ac.abort(); }, 90000); };
   try {
     const r = await fetch('/api/chat?t=' + encodeURIComponent(TOKEN), {
       method: 'POST',
@@ -399,6 +579,7 @@ async function send(text, options = {}) {
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
+      resetStreamWatchdog();
       buf += dec.decode(value, { stream: true });
       let i;
       while ((i = buf.indexOf('\n\n')) >= 0) {
@@ -431,13 +612,15 @@ async function send(text, options = {}) {
       } else closeAnswer({ text: S.curBody, meta: {} });
     }
   } catch (e) {
-    if (e.name !== 'AbortError') err('connection lost: ' + e.message);
+    if (streamTimedOut) err('The model stopped responding for 90 seconds. Try again or switch models.');
+    else if (e.name !== 'AbortError') err('connection lost: ' + e.message);
     else {
       S.cancelled = true;
       if (S.cur) closeAnswer({ text: S.curBody, meta: {} });
       if (window.MAJIN_IMAGINE) window.MAJIN_IMAGINE.onEvent({ type: 'cancelled' });
     }
   } finally {
+    clearTimeout(streamWatchdog);
     S.busy = false;
     S.abort = null;
     syncSendButton();
@@ -900,67 +1083,180 @@ function listen() {
 
 /* ------------------------- hands-free voice -------------------------- */
 let recog=null, speechActive=false, voiceArmed=false;
-function voiceState(mode,label) {
-  document.body.dataset.voiceMode=mode;
-  if ($('mic-state')) $('mic-state').textContent=label;
-  $('mic')?.setAttribute('aria-pressed',String(Boolean(S.handsFree)));
-  const stage=$('voice-stage');
-  if(stage)stage.hidden=!S.handsFree;
-  const names={idle:'Ready to talk',listening:'Listening',thinking:'Thinking',speaking:'MAJIN speaking',paused:'Paused',error:'Voice unavailable'};
-  if($('voice-stage-label'))$('voice-stage-label').textContent=names[mode]||label||'Talk';
-  if($('voice-caption'))$('voice-caption').textContent=label||'Speak naturally';
+let lastSpokenReply='';
+function isVoicePlaybackEcho(heard){
+ const words=text=>String(text||'').toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[];
+ const utterance=words(heard),reply=new Set(words(lastSpokenReply));
+ return utterance.length>0 && utterance.filter(word=>reply.has(word)).length/utterance.length>=0.8;
 }
-function stopMic() {
-  voiceArmed=false; S.listening=false;
+let voiceSilenceTimer=null, voiceSessionTimer=null, voiceTranscript='', voiceFinal='', voiceFinished=false;
+let voiceMeterStream=null, voiceMeterContext=null, voiceMeterFrame=null;
+let voiceGate=null, voiceGateReady=false;
+function clearVoiceTimers(){
+  clearTimeout(voiceSilenceTimer);clearTimeout(voiceSessionTimer);
+  voiceSilenceTimer=voiceSessionTimer=null;
+}
+async function startVoiceMeter(){
+  if(!navigator.mediaDevices?.getUserMedia || voiceMeterStream)return;
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:{
+      echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1
+    }});
+    if(!S.handsFree){stream.getTracks().forEach(t=>t.stop());return;}
+    voiceMeterStream=stream;
+    voiceGate=window.MAJINForegroundVoiceGate ? new window.MAJINForegroundVoiceGate() : null;
+    voiceGateReady=Boolean(voiceGate);
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    voiceMeterContext=ctx;
+    const analyser=ctx.createAnalyser();analyser.fftSize=512;
+    ctx.createMediaStreamSource(stream).connect(analyser);
+    const data=new Uint8Array(analyser.fftSize);
+    function draw(){
+      if(!voiceMeterStream)return;
+      analyser.getByteTimeDomainData(data);
+      let sum=0;
+      for(const n of data){const d=(n-128)/128;sum+=d*d;}
+      const rms=Math.sqrt(sum/data.length);
+      if(voiceGate)voiceGate.observe(rms);
+      const volume=Math.min(1,rms*9);
+      document.documentElement.style.setProperty('--voice-energy',volume.toFixed(3));
+      voiceMeterFrame=requestAnimationFrame(draw);
+    }
+    draw();
+  }catch(e){
+    // Recognition may still work even when audio metering is denied.
+    voiceState('listening','Microphone level unavailable');
+  }
+}
+function stopVoiceMeter(){
+  if(voiceMeterFrame)cancelAnimationFrame(voiceMeterFrame);
+  voiceMeterFrame=null;
+  voiceMeterStream?.getTracks().forEach(t=>t.stop());voiceMeterStream=null;
+  voiceMeterContext?.close().catch(()=>{});voiceMeterContext=null;
+  voiceGate=null;voiceGateReady=false;
+  document.documentElement.style.setProperty('--voice-energy','0');
+}
+function voiceState(mode,label){
+  document.body.dataset.voiceMode=mode;
+  if($('mic-state'))$('mic-state').textContent=label;
+  $('mic')?.setAttribute('aria-pressed',String(Boolean(S.handsFree)));
+  const stage=$('voice-stage');if(stage)stage.hidden=!S.handsFree;
+  const names={idle:'Ready',listening:'Listening',thinking:'Thinking',speaking:'Speaking',paused:'Paused',error:'Microphone error'};
+  if($('voice-stage-label'))$('voice-stage-label').textContent=names[mode]||'MAJIN';
+  if($('voice-caption'))$('voice-caption').textContent=label||'';
+}
+function stopMic(){
+  clearVoiceTimers();voiceArmed=false;S.listening=false;
   const r=recog;recog=null;
-  try {r?.abort();} catch{}
+  try{r?.abort();}catch{}
+  stopVoiceMeter();
   $('mic')?.classList.remove('on');
   voiceState('idle','Voice ready');
 }
-function startMic() {
+function dispatchVoiceTurn(r){
+  if(voiceFinished||recog!==r||!S.handsFree)return;
+  let command=(voiceFinal||voiceTranscript).trim();
+  const wake=String(S.st?.config?.ui?.voice?.wakeWord||'').trim();
+  // Manual tap-to-talk already authorizes the turn. Legacy wakeWord values
+  // must not silently discard speech; requireWakeWord is explicit opt-in.
+  if(wake && S.st?.config?.ui?.voice?.requireWakeWord === true){
+    if(!command.toLowerCase().startsWith(wake.toLowerCase())){
+      // A mismatched wake phrase must not strand the recognizer indefinitely.
+      voiceFinished=true;S.handsFree=false;stopMic();
+      voiceState('paused','Ignored — wake phrase not detected');
+      return;
+    }
+    command=command.slice(wake.length).trim();
+  }
+  if(!command)return;
+  // Noisy TV chatter can produce a valid browser transcript. Only permit the
+  // turn if near-mic activity was observed. This is NOT biometric speaker ID.
+  const gated = S.st?.config?.ui?.voice?.foregroundGate === true;
+  if(gated && voiceGateReady && voiceGate &&
+     (!voiceGate.lastSpeech || Date.now()-voiceGate.lastSpeech>4500)){
+    S.handsFree=false;
+    stopMic();
+    voiceState('paused','Background sound ignored — tap to speak closer to your microphone');
+    return;
+  }
+  voiceFinished=true;voiceArmed=false;S.listening=false;
+  clearVoiceTimers();recog=null;stopVoiceMeter();
+  try{r.abort();}catch{}
+  // Spoken text belongs in the chat transcript, but must not insert itself
+  // into the typed composer or start a second voice turn.
+  const intent=window.MAJIN_VOICE_INTENT?.classify(command,S.busy)||{kind:'send',text:command};
+  if(intent.kind==='cancel'||intent.kind==='replace'){
+    voiceState('thinking',intent.kind==='cancel'?'Stopping current task…':'Switching task…');
+    void (async()=>{
+      if(S.busy){try{await stopObservedTask(S.taskId,S.session);}
+        catch(e){voiceState('error','Could not confirm stop: '+e.message);return;}}
+      if(intent.kind==='replace'){await send(intent.text,{voiceTurn:true});}
+      else {S.handsFree=false;voiceState('paused','Stopped. Tap to speak again.');}
+    })();
+    return;
+  }
+  if(S.busy){voiceState('paused','Task running — say “stop” or “no, do something else”');S.handsFree=false;return;}
+  voiceState('thinking','Got it — working on your answer');
+  void send(command,{voiceTurn:true});
+}
+function startMic(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if (!SR) {voiceState('error','Speech recognition unavailable');return;}
-  if (speechActive||S.busy) return;
-  const r=new SR();recog=r;voiceArmed=true;S.listening=true;
+  if(!SR){S.handsFree=false;S.listening=false;voiceState('error','Speech recognition unavailable — use Chrome or Edge and allow microphone access');return;}
+  if(!S.handsFree||recog)return;
+  const r=new SR();recog=r;voiceArmed=true;voiceFinished=false;
+  voiceTranscript='';voiceFinal='';S.listening=true;
   r.lang=S.st?.config?.ui?.voice?.lang||'sv-SE';
   r.continuous=false;r.interimResults=true;
-  r.onstart=()=>voiceState('listening','Listening…');
+  r.onstart=()=>{
+    voiceState('listening','Listening — speak near your microphone');
+    clearVoiceTimers();
+    // Never listen indefinitely when TV or other background speech continues.
+    voiceSessionTimer=setTimeout(()=>{
+      if(recog!==r)return;
+      if(voiceFinal.trim())dispatchVoiceTurn(r);
+      else {recog=null;S.listening=false;clearVoiceTimers();stopVoiceMeter();if(S.handsFree)startMic();}
+    },12000);
+  };
   r.onresult=e=>{
+    if(recog!==r||voiceFinished)return;
     let words='',complete='';
     for(let i=0;i<e.results.length;i++){
       const chunk=e.results[i][0]?.transcript||'';
       words+=chunk;
       if(e.results[i].isFinal)complete+=chunk;
     }
-    voiceState('listening',words.trim()||'Listening…');
-    if(!complete.trim()) return;
-    const wake=String(S.st?.config?.ui?.voice?.wakeWord||'').trim();
-    let command=complete.trim();
-    if(wake){
-      if(!command.toLowerCase().startsWith(wake.toLowerCase()))return;
-      command=command.slice(wake.length).trim();
+    if(!words.trim())return;
+    if(speechActive && isVoicePlaybackEcho(words))return;
+    voiceTranscript=words.trim();voiceFinal=complete.trim();
+    if(speechActive){
+      speechActive=false;
+      try{window.speechSynthesis?.cancel();}catch{}
+      try{voiceRequest?.abort();currentVoiceAudio?.pause();}catch{}
     }
-    if(!command)return;
-    voiceArmed=false;S.listening=false;recog=null;
-    try{r.stop();}catch{}
-    $('input').value=command;autoGrow();
-    voiceState('thinking','Working…');
-    send(command, { voiceTurn: true });
+    voiceState('listening',voiceTranscript);
+    clearTimeout(voiceSilenceTimer);
+    // Web Speech sometimes never sets isFinal in a noisy room. Commit the
+    // latest stable transcript after an endpoint pause instead of hanging.
+    voiceSilenceTimer=setTimeout(()=>dispatchVoiceTurn(r),voiceFinal?400:1100);
   };
   r.onerror=e=>{
+    if(recog!==r)return;
     if(e.error==='not-allowed'||e.error==='service-not-allowed'){
-      stopMic();voiceState('error','Allow microphone access');
+      S.handsFree=false;stopMic();voiceState('error','Allow microphone access');
     }else if(e.error!=='no-speech'&&e.error!=='aborted'){
-      stopMic();voiceState('error','Voice: '+e.error);
+      S.handsFree=false;stopMic();voiceState('error','Voice: '+e.error);
     }
   };
   r.onend=()=>{
     if(recog!==r)return;
-    S.listening=false;
-    if(voiceArmed&&!S.busy&&!speechActive){recog=null;startMic();}
+    if(voiceTranscript.trim()){dispatchVoiceTurn(r);return;}
+    recog=null;S.listening=false;clearVoiceTimers();
+    // No speech: stop gracefully. A TV should not create an infinite restart loop.
+    stopVoiceMeter();if(S.handsFree)startMic();else voiceState('paused','Tap to talk again');
   };
-  try{r.start();$('mic').classList.add('on');}
-  catch(e){stopMic();voiceState('error',e.message);}
+  void startVoiceMeter();
+  try{r.start();$('mic')?.classList.add('on');}
+  catch(e){S.handsFree=false;stopMic();voiceState('error',e.message);}
 }
 function micToggle(){
   if(S.handsFree && !speechActive){
@@ -975,8 +1271,7 @@ function micToggle(){
     speechActive=false;
     S.handsFree=true;S.voice=true;S.voiceTurn=false;
     $('b-voice')?.classList.add('on');
-    if (S.busy) voiceState('thinking','Finishing the current answer…');
-    else { voiceState('listening','Speak now'); startMic(); }
+    voiceState('listening','Speak now'); startMic();
   }
 }
 let currentVoiceAudio=null, voiceRequest=null;
@@ -1037,7 +1332,8 @@ async function speak(t){
   if(!S.voice)return;
   const clean=String(t).replace(/\`[^\`]+\`/g,' ').replace(/https?:\/\/\S+/g,' link ').replace(/[*_#]/g,'').slice(0,1200).trim();
   if(!clean)return;
-  stopMic();
+  // Keep the conversation armed; recognizer remains available for user barge-in.
+  lastSpokenReply=clean;
   speechActive=true;voiceState('speaking','MAJIN speaking…');
   try {
     // A locally configured Kokoro narrator is optional; never silently

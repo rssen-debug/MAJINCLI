@@ -1060,12 +1060,13 @@ export function createAgent({
     task,
     tools: wanted = null,
     maxRounds = 3,
+    maxCalls = 6,
     turn,
     instructions = '',
     digest = '',
     countsAgainstCap = true,
   }) {
-    const allowed = Array.isArray(wanted) && wanted.length
+    const allowed = Array.isArray(wanted)
       ? new Set(wanted.map((n) => {
         const raw = String(n);
         return raw.includes('.') ? raw.toLowerCase().replace(/[^a-z0-9_]/g, '_') : raw;
@@ -1126,7 +1127,7 @@ export function createAgent({
       if (!res.toolCalls?.length) break;
       const toolMessages = [];
       for (const call of res.toolCalls) {
-        if (calls >= 6) {
+        if (calls >= Math.max(1, Math.min(6, Number(maxCalls) || 6))) {
           failure = 'subagent tool budget exhausted';
           break;
         }

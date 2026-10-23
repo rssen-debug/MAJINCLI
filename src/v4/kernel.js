@@ -94,8 +94,9 @@ export class Kernel {
 
   /** Ordered shutdown: tell each worker to exit, then hard-kill stragglers. */
   shutdownWorkers() {
-    for (const [, worker] of this.workers) worker.stop();
+    const stopped = [...this.workers.values()].map((worker) => worker.stop());
     this.workers.clear();
+    return Promise.all(stopped);
   }
 
   flag(name) {

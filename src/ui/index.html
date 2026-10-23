@@ -307,6 +307,440 @@ body[data-voice-mode="paused"] .voice-orb span{animation-play-state:paused;heigh
 body[data-voice-mode="listening"] #composer .composer-talk{color:var(--cy)}
 body[data-voice-mode="speaking"] #composer .composer-talk{color:var(--ok)}
 .crow #mic-state:empty{display:none}
+/* Single MAJIN spirit in composer: one surface, never a floating card. */
+#composer{direction:ltr;text-align:left;grid-template-columns:38px minmax(0,1fr) 44px}
+#composer #input{direction:ltr;text-align:left;unicode-bidi:plaintext;justify-self:stretch;width:100%;margin:0;padding:10px 4px;align-self:center}
+#composer #input::placeholder{direction:ltr;text-align:left}
+#composer #voice-stage{grid-column:1/-1;display:flex;flex-direction:column;justify-content:center;gap:5px;align-items:center;min-height:96px;border-top:0;margin:0;padding:0 10px 8px;overflow:visible}
+#composer .voice-orb{position:relative;isolation:isolate;width:58px;height:58px;flex-shrink:0;border:0;background:transparent;overflow:visible;filter:drop-shadow(0 0 12px rgba(232,90,228,.25));transition:transform .28s ease,filter .28s ease}
+#composer .voice-orb .orb-core{position:absolute;inset:11px;border:0;width:auto;height:auto;border-radius:50%;background:radial-gradient(circle at 43% 36%,#fff3ff 0 7%,#ffb4f0 11%,#ee56d0 27%,#823de0 54%,#180d2b 76%);box-shadow:0 0 19px #ea58d97a,0 0 35px #7043d75a;animation:orb-breathe 2.2s ease-in-out infinite}
+#composer .voice-orb .orb-halo{position:absolute;inset:4px;border-radius:50%;border:2px solid rgba(251,107,218,.68);box-shadow:0 0 11px #e054d9a1,inset 0 0 9px #7548eb66;transform:rotate(30deg) skew(15deg,-9deg);animation:orb-drift 3.5s linear infinite}
+#composer .voice-orb .orb-halo-b{inset:0;border-color:#9d88ff8a;transform:rotate(-50deg) skew(-14deg,11deg);animation-duration:4.7s;animation-direction:reverse}
+#composer .voice-orb .orb-spark{position:absolute;left:46%;top:41%;width:8px;height:8px;transform:rotate(45deg);background:#fff;box-shadow:0 0 10px white,0 0 22px #f79af3;clip-path:polygon(50% 0,65% 38%,100% 50%,65% 62%,50% 100%,35% 62%,0 50%,35% 38%);animation:orb-breathe 1.8s ease-in-out infinite}
+#composer .voice-orb span:not(.orb-core):not(.orb-halo):not(.orb-spark){display:none}
+#composer .voice-stage-copy{text-align:center;align-items:center;width:100%}
+#composer .voice-stage-copy strong{font-size:11px;font-weight:560}
+#composer .voice-stage-copy small{font-size:10px;max-width:min(95%,350px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#composer #voice-stage-stop{position:absolute;right:12px;bottom:14px;color:var(--dim)}
+body[data-voice-mode="listening"] #composer .voice-orb{transform:scale(calc(1 + var(--voice-energy,0)*.16));filter:drop-shadow(0 0 17px #e05aff9e)}
+body[data-voice-mode="speaking"] #composer .voice-orb{transform:scale(1.1);filter:drop-shadow(0 0 19px #ffc2f088)}
+body[data-voice-mode="thinking"] #composer .orb-halo{animation-duration:1.45s}
+#composer #input{transition:opacity .2s ease}
+body[data-voice-mode="listening"] #composer #input,body[data-voice-mode="thinking"] #composer #input,body[data-voice-mode="speaking"] #composer #input{opacity:.22}
+@keyframes orb-breathe{50%{transform:scale(1.14);opacity:.75}}
+@keyframes orb-drift{50%{border-radius:43% 57% 54% 46%}}
+@media(prefers-reduced-motion:reduce){#composer .voice-orb *{animation:none!important}}
+
+/* Verification pulse: one tiny inline status in composer, not another panel. */
+#composer #work-progress{position:relative;overflow:hidden;transition:color .2s ease,border-color .2s ease}
+#composer #work-progress[data-phase="verify"]{color:#d6b5ff;border-top-color:rgba(212,138,255,.27)}
+#composer #work-progress[data-phase="verify"] .pulse{background:#d8a6ff;box-shadow:0 0 10px #a855f795}
+#composer #work-progress[data-phase="problem"]{color:#ffa9b4;border-top-color:rgba(255,126,153,.25)}
+#composer #work-progress[data-phase="problem"] .pulse{background:#ff9cae;animation:majin-pulse-hold 1.5s ease-in-out infinite}
+#composer #work-progress[data-phase="active"] .pulse{background:#f39be3}
+@keyframes majin-pulse-hold{50%{opacity:.45;box-shadow:0 0 0 6px rgba(255,126,153,0)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress .pulse{animation:none}}
+/* One calm pulse of progress INSIDE the existing composer, never another panel. */
+#composer #work-progress{isolation:isolate;min-height:29px;padding:7px 12px 8px;letter-spacing:.005em}
+#composer #work-progress::after{content:"";position:absolute;bottom:0;left:0;width:32%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(248,166,232,.85),transparent);
+  opacity:.7;animation:majin-progress-glide 2.6s cubic-bezier(.4,0,.2,1) infinite}
+#composer #work-progress[data-phase="verify"]::after{background:linear-gradient(90deg,transparent,rgba(211,175,255,.95),transparent)}
+#composer #work-progress[data-phase="problem"]::after{animation-play-state:paused;opacity:.35}
+#composer #work-progress-timer{font-variant-numeric:tabular-nums;min-width:3ch;text-align:right;opacity:.65}
+@keyframes majin-progress-glide{from{transform:translateX(-110%)}to{transform:translateX(420%)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress::after{animation:none;left:auto;right:0;opacity:.4}}
+/* This round: a single responsive activity ember INSIDE the chat composer.
+   Browser outcome verification is violet; recovery is coral; regular work pink. */
+#composer #work-progress{--ember:#ff86ce;--halo:rgba(255,134,206,.22);transition:color .25s ease,border-color .25s ease;overflow:hidden}
+#composer #work-progress .pulse{flex:none;width:9px;height:9px;position:relative;border:0;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,var(--ember) 55%,transparent 88%);box-shadow:0 0 9px var(--ember),0 0 18px var(--halo);animation:majin-ember 1.6s ease-in-out infinite}
+#composer #work-progress .pulse::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:1px solid var(--ember);opacity:.4;animation:majin-ember-ring 2.2s ease-out infinite}
+#composer #work-progress[data-phase="verify"]{--ember:#c5a2ff;--halo:rgba(197,162,255,.25)}
+#composer #work-progress[data-phase="problem"]{--ember:#ff968d;--halo:rgba(255,150,141,.24)}
+#composer #work-progress[data-phase="problem"] .pulse{animation-duration:2.8s}
+#composer #work-progress-label{letter-spacing:.01em}
+@keyframes majin-ember{0%,100%{transform:scale(.88);opacity:.66}50%{transform:scale(1.16);opacity:1}}
+@keyframes majin-ember-ring{0%{transform:scale(.7);opacity:.5}100%{transform:scale(1.5);opacity:0}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress .pulse,#composer #work-progress .pulse::after{animation:none!important}}
+/* Inline spirit ember: amber means waiting for a tool, not failure. */
+#composer #work-progress[data-phase="stalled"]{--ember:#ffd197;--halo:rgba(255,209,151,.22)}
+#composer #work-progress[data-phase="stalled"] .pulse{animation-duration:2.5s}
+#composer #work-progress[data-phase="stalled"]::after{opacity:.25;animation-duration:4s}
+/* Small UX refinement: the whole composer responds to keyboard focus.
+   No extra panels, overlays or competing voice surfaces. */
+#composer{transition:border-color .24s ease,box-shadow .24s ease,background-color .24s ease}
+#composer:focus-within{border-color:rgba(255,130,213,.56)!important;box-shadow:0 0 0 1px rgba(255,130,213,.13),0 10px 34px rgba(215,65,167,.1)!important}
+#composer #input:focus{box-shadow:none!important;outline:none!important}
+#composer #send{transition:transform .18s ease,filter .18s ease}
+#composer #send:not(:disabled):hover{transform:translateY(-1px);filter:brightness(1.1)}
+@media(prefers-reduced-motion:reduce){#composer,#composer #send{transition:none!important}}
+/* One understated evidence-glow INSIDE the existing chat composer. */
+#composer #work-progress[data-phase="verified"]{color:#baf5d6;border-top-color:rgba(113,232,185,.22)}
+#composer #work-progress[data-phase="verified"] .pulse{background:#9be5c5;box-shadow:0 0 0 3px rgba(118,225,182,.12);animation:none}
+#composer #work-progress[data-phase="verified"]::after{background:linear-gradient(90deg,transparent,rgba(143,237,199,.85),transparent);animation-duration:1.6s}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verified"]::after{animation:none}}
+
+/* V1 clarity pass: a thin living thread below the existing composer status.
+   No new panels, fabricated percentages or distracting overlays. */
+#composer #work-progress{position:relative;isolation:isolate;padding-bottom:10px}
+#composer #work-progress::after{content:"";position:absolute;left:8px;right:8px;bottom:2px;height:2px;border-radius:3px;background:linear-gradient(90deg,transparent 0%,rgba(242,103,213,.16) 28%,rgba(255,173,230,.9) 50%,rgba(144,92,244,.22) 72%,transparent 100%);background-size:200% 100%;animation:majin-activity-thread 2.5s linear infinite;pointer-events:none}
+#composer #work-progress[data-phase="stalled"]::after,#composer #work-progress[data-phase="problem"]::after{animation-duration:6s;opacity:.4}
+#composer #work-progress[data-phase="verified"]::after{animation:none;background:linear-gradient(90deg,transparent,#a2e5bd,transparent)}
+@keyframes majin-activity-thread{from{background-position:200% 0}to{background-position:0 0}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress::after{animation:none;background-position:50% 0}}
+
+
+/* MAJIN proof pulse: the existing tiny work indicator becomes a check after
+   an observed browser assertion; no new dashboard, card or floating panel. */
+#composer #work-progress .pulse{position:relative;transition:background .32s ease,box-shadow .32s ease,transform .32s ease}
+#composer #work-progress[data-phase="verified"] .pulse{
+  width:15px;height:15px;border-radius:50%;background:rgba(108,241,184,.2);
+  border:1px solid rgba(144,255,202,.55);box-shadow:0 0 15px rgba(111,255,186,.23);
+  transform:scale(1.08)
+}
+#composer #work-progress[data-phase="verified"] .pulse::before{
+  content:"";position:absolute;left:4px;top:3px;width:5px;height:7px;
+  border-right:2px solid #aafad1;border-bottom:2px solid #aafad1;
+  transform:rotate(42deg);animation:majin-proof-appear .28s ease-out both
+}
+#composer #work-progress[data-phase="problem"] .pulse::before{
+  content:"";position:absolute;inset:-5px;border:1px solid rgba(255,176,132,.28);
+  border-radius:50%;animation:majin-proof-warning 2.5s ease-in-out infinite
+}
+@keyframes majin-proof-appear{from{opacity:0;transform:scale(.55) rotate(42deg)}to{opacity:1;transform:scale(1) rotate(42deg)}}
+@keyframes majin-proof-warning{50%{opacity:.22;transform:scale(1.5)}}
+@media(prefers-reduced-motion:reduce){
+  #composer #work-progress[data-phase="verified"] .pulse::before,
+  #composer #work-progress[data-phase="problem"] .pulse::before{animation:none}
+}
+/* A quiet, unmistakable signal when MAJIN is revising its approach.
+   Lives in the existing composer; no new panel or overlay. */
+#composer #work-progress[data-phase="recover"]{color:#ecc2ff;border-top-color:rgba(214,139,245,.38)}
+#composer #work-progress[data-phase="recover"] .pulse{background:#d5a5ff;box-shadow:0 0 0 4px rgba(177,114,246,.12);animation:majin-rethink 1.6s ease-in-out infinite}
+#composer #work-progress[data-phase="recover"]::after{background:linear-gradient(90deg,transparent,#b87cff,transparent);animation-duration:1.4s}
+@keyframes majin-rethink{50%{opacity:.5;transform:scale(.72);box-shadow:0 0 0 7px rgba(177,114,246,0)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recover"] .pulse{animation:none}}
+/* Browsing insight — one quiet lilac pulse in the EXISTING composer,
+   never a new card or overlay. */
+#composer #work-progress[data-phase="grounded"]{color:#d8c5fa;border-top-color:rgba(173,144,232,.22)}
+#composer #work-progress[data-phase="grounded"] .pulse{background:#bd9afa;box-shadow:0 0 0 3px rgba(187,151,244,.13);animation:majin-grounded 1.8s ease-in-out infinite}
+@keyframes majin-grounded{50%{opacity:.56;transform:scale(.77)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="grounded"] .pulse{animation:none}}
+/* Subtle amber recovery ember: state remains inside the composer, never a new panel. */
+#composer #work-progress[data-phase="blocked"]{--ember:#ffc68a;--halo:rgba(255,198,138,.22);border-top-color:rgba(255,198,138,.23)}
+#composer #work-progress[data-phase="blocked"] #work-progress-label{color:#f7d6ad;transition:color .22s ease}
+#composer #work-progress[data-phase="blocked"] .pulse{animation-duration:2.1s}
+#composer #work-progress[data-phase="blocked"]::after{background:linear-gradient(90deg,transparent,rgba(255,198,138,.8),transparent);animation-duration:3.3s}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="blocked"] .pulse{animation:none!important}}
+
+/* MAJIN inline micro-progress: single subtle light trace, never another card. */
+#composer #work-progress{--trace:linear-gradient(90deg,transparent,#ff8edd 30%,#cdb1ff 70%,transparent)}
+#composer #work-progress:not([hidden])::after{content:"";position:absolute;inset:auto 0 0;width:34%;height:1px;background:var(--trace);opacity:.75;animation:majin-trace-sweep 2.3s ease-in-out infinite;pointer-events:none}
+#composer #work-progress[data-phase="verify"]::after{height:2px;opacity:.95}
+#composer #work-progress[data-phase="stalled"]::after{animation-duration:5s;opacity:.33}
+/* V2 micro-feedback: a single tiny spirit glyph conveys verified vs stalled.
+   No extra panel, toast, or status card. */
+#composer #work-progress[data-phase="verified"] .pulse{width:16px;height:16px;display:grid;place-items:center;flex-shrink:0;border:1px solid rgba(140,207,176,.62);background:rgba(140,207,176,.12);box-shadow:0 0 14px rgba(140,207,176,.25);animation:none}
+#composer #work-progress[data-phase="verified"] .pulse::before{content:"✓";color:var(--ok);font:700 11px/1 system-ui}
+#composer #work-progress[data-phase="verified"] #work-progress-label{color:var(--ok)}
+#composer #work-progress[data-phase="verified"]::after{background:linear-gradient(90deg,transparent,var(--ok),transparent);animation-duration:1.3s}
+#composer #work-progress[data-phase="stalled"] .pulse{width:10px;height:10px;background:#f0b67d;box-shadow:0 0 0 3px rgba(240,182,125,.08);animation-duration:2.6s}
+#composer #work-progress[data-phase="stalled"] #work-progress-label{color:#e1ba95}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verified"]::after,#composer #work-progress[data-phase="stalled"] .pulse{animation:none!important}}
+@keyframes majin-trace-sweep{from{transform:translateX(-100%)}to{transform:translateX(295%)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress::after{animation:none!important;width:100%;opacity:.3}}
+/* Single-surface evidence ember: pink arrow = action sent, green tick = proven.
+   Avoid additional cards or panels in the chat viewport. */
+#composer #work-progress[data-phase="action"] .pulse{
+  width:16px;height:16px;display:grid;place-items:center;flex-shrink:0;
+  background:rgba(242,114,205,.11);border:1px solid rgba(242,114,205,.46);
+  box-shadow:0 0 13px rgba(242,114,205,.19);animation:none;
+}
+#composer #work-progress[data-phase="action"] .pulse::before{
+  content:"↗";font:700 12px/1 system-ui;color:#f8a0dc;
+}
+#composer #work-progress[data-phase="action"] #work-progress-label{color:#e6badb}
+#composer #work-progress[data-phase="action"]::after{
+  background:linear-gradient(90deg,transparent,#f29bdd,transparent);
+  opacity:.56;animation-duration:2.2s
+}
+@media(prefers-reduced-motion:reduce){
+  #composer #work-progress[data-phase="action"]::after{animation:none!important}
+}
+/* Structure discovery: one subtle visual cue inside the EXISTING composer. */
+#composer #work-progress[data-phase="structure"]{--trace:linear-gradient(90deg,transparent,#ba92ff 35%,#ff8bcf 70%,transparent);border-top-color:rgba(189,143,255,.18)}
+#composer #work-progress[data-phase="structure"] .pulse{background:#bc95ff;box-shadow:0 0 0 3px rgba(188,149,255,.09),0 0 15px rgba(188,149,255,.32);animation-duration:1.9s}
+#composer #work-progress[data-phase="structure"] #work-progress-label{color:#e1c9f6}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="structure"] .pulse{animation:none!important}}
+/* Round 2026-10-22: a single, subtle recovery shimmer within the existing
+   composer, never a modal, card or a second activity panel. */
+#composer #work-progress[data-phase="recover"]{
+  border-top-color:rgba(195,132,245,.27);
+  background:linear-gradient(90deg,rgba(176,90,224,.035),transparent 70%);
+  transition:border-color .25s ease,background .25s ease;
+}
+#composer #work-progress[data-phase="recover"] .pulse{
+  width:13px;height:13px;flex-shrink:0;background:radial-gradient(circle at 35% 30%,#fff2fc,#cb85f8 44%,#7c45bd 80%);
+  border:1px solid rgba(215,152,245,.43);
+  box-shadow:0 0 0 3px rgba(207,132,243,.07),0 0 17px rgba(195,112,241,.22);
+  animation:majin-recovery-breath 1.75s ease-in-out infinite;
+}
+#composer #work-progress[data-phase="recover"] #work-progress-label{
+  color:#e7d1f6;letter-spacing:.005em;
+}
+@keyframes majin-recovery-breath{
+  0%,100%{transform:scale(.8);opacity:.76}
+  50%{transform:scale(1.07);opacity:1}
+}
+@media(prefers-reduced-motion:reduce){
+  #composer #work-progress[data-phase="recover"] .pulse{animation:none!important;transform:none!important}
+}
+/* Round two: a tiny mint pulse when MAJIN sees changed page controls.
+   Stays in the existing composer; no popup, card or new floating widget. */
+#composer #work-progress[data-phase="delta"]{border-top-color:rgba(116,219,189,.19)}
+#composer #work-progress[data-phase="delta"] .pulse{
+  width:8px;height:8px;flex-shrink:0;background:#94e8d4;
+  box-shadow:0 0 0 3px rgba(141,235,205,.08),0 0 13px rgba(141,235,205,.22);
+  animation:majin-delta-glow 1.65s ease-in-out infinite;
+}
+#composer #work-progress[data-phase="delta"] #work-progress-label{color:#caeadd}
+@keyframes majin-delta-glow{50%{opacity:.45;transform:scale(.74)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="delta"] .pulse{animation:none!important}}
+/* Round 1 visual: quiet amber 'action sent, not verified' ember in the single composer. */
+#composer #work-progress[data-phase="action"]{color:#e9cdac;border-top-color:rgba(255,188,114,.17)}
+#composer #work-progress[data-phase="action"] .pulse{background:#ffbd83;box-shadow:0 0 0 3px rgba(255,189,131,.08),0 0 12px rgba(255,189,131,.2);animation:majin-action-pulse 1.9s ease-in-out infinite}
+@keyframes majin-action-pulse{50%{transform:scale(.74);opacity:.5}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="action"] .pulse{animation:none}}
+
+/* Small phase glyph, not another status panel. */
+#composer #work-progress-symbol{font-size:12px;line-height:1;color:#e7aad9;opacity:.85;display:inline-block;width:14px;text-align:center;transition:transform .25s ease,color .25s ease}
+#composer #work-progress[data-phase="verify"] #work-progress-symbol{color:#d6adff;transform:rotate(-12deg)}
+#composer #work-progress[data-phase="verified"] #work-progress-symbol{color:#9ff3cb;transform:scale(1.05)}
+#composer #work-progress[data-phase="stalled"] #work-progress-symbol,
+#composer #work-progress[data-phase="problem"] #work-progress-symbol{color:#ffabb4}
+@media(prefers-reduced-motion:reduce){#composer #work-progress-symbol{transition:none}}
+/* Evidence shimmer: tiny, integrated in composer (no extra panel). */
+#composer #work-progress[data-phase="visual"] #work-progress-symbol{color:#f8b5ee;text-shadow:0 0 9px rgba(255,133,224,.66);animation:majin-evidence-bloom .7s ease-out 1}
+#composer #work-progress[data-phase="visual"]::after{background:linear-gradient(90deg,transparent,#ee81de,#b69cff,transparent);height:2px}
+#composer #work-progress[data-phase="delta"] #work-progress-symbol{color:var(--dim);opacity:.7}
+@keyframes majin-evidence-bloom{from{transform:scale(.7);opacity:.35}60%{transform:scale(1.18);opacity:1}to{transform:scale(1);opacity:1}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="visual"] #work-progress-symbol{animation:none}}
+
+/* Round 2 visual: the existing inline spirit-thread shows graceful recovery,
+   without adding another box or interrupting text entry. */
+#composer #work-progress[data-phase="recovery"]{
+  color:#e9c4f4;
+  border-top-color:rgba(210,136,255,.22);
+}
+#composer #work-progress[data-phase="recovery"] .pulse{
+  background:#dc9fff;
+  box-shadow:0 0 0 3px rgba(220,159,255,.09),0 0 13px rgba(210,110,255,.35);
+  animation:majin-recovery-breathe 1.25s ease-in-out infinite;
+}
+#composer #work-progress[data-phase="recovery"] #work-progress-symbol{
+  color:#e2b3ff;
+  animation:majin-recovery-tilt 1.7s ease-in-out infinite;
+}
+@keyframes majin-recovery-breathe{50%{transform:scale(.72);opacity:.48}}
+@keyframes majin-recovery-tilt{50%{transform:rotate(-24deg) scale(.88);opacity:.65}}
+@media(prefers-reduced-motion:reduce){
+  #composer #work-progress[data-phase="recovery"] .pulse,
+  #composer #work-progress[data-phase="recovery"] #work-progress-symbol{animation:none!important}
+}
+
+/* Round 3 visual: one quiet proof state inside the existing composer, no new panels. */
+#composer #work-progress[data-phase="verified"]{
+  color:#dcefe3;
+  border-top-color:rgba(142,233,182,.2);
+}
+#composer #work-progress[data-phase="verified"] .pulse{
+  background:#8de5b1;
+  box-shadow:0 0 0 3px rgba(141,229,177,.09),0 0 13px rgba(141,229,177,.32);
+  animation:majin-proof-breathe 1.6s ease-in-out infinite;
+}
+#composer #work-progress[data-phase="verified"] #work-progress-symbol{
+  color:#a6f2c4;
+  animation:majin-proof-arrive .46s cubic-bezier(.22,.8,.22,1) both;
+}
+@keyframes majin-proof-arrive{
+  from{opacity:0;transform:translateY(3px) scale(.75)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@keyframes majin-proof-breathe{50%{opacity:.6;transform:scale(.82)}}
+@media(prefers-reduced-motion:reduce){
+  #composer #work-progress[data-phase="verified"] .pulse,
+  #composer #work-progress[data-phase="verified"] #work-progress-symbol{animation:none!important}
+}
+
+/* Round 4: navigation proof stays inside the existing single composer thread. */
+#composer #work-progress[data-phase="navigation"]{color:#e9c6f1;border-top-color:rgba(240,145,218,.16)}
+#composer #work-progress[data-phase="navigation"] #work-progress-symbol{color:#f6aedc;animation:majin-navigation-seek 1.5s ease-in-out infinite}
+#composer #work-progress[data-phase="navigation"] .pulse{background:#f4a6de;box-shadow:0 0 9px rgba(244,166,222,.33)}
+@keyframes majin-navigation-seek{50%{transform:translate(2px,-2px);opacity:.6}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="navigation"] #work-progress-symbol{animation:none}}
+
+/* Quiet heartbeat rail: a single hairline inside the EXISTING chat composer.
+   Inspired by local-first agent trace timelines; no dashboard or extra panel. */
+#composer{position:relative;isolation:isolate}
+#composer:has(#work-progress:not([hidden]))::after{
+  content:'';position:absolute;pointer-events:none;left:18px;right:18px;bottom:0;
+  height:2px;border-radius:10px;opacity:.75;
+  background:linear-gradient(90deg,transparent 0%,#c36eff 26%,#ff98cb 50%,#c36eff 74%,transparent 100%);
+  background-size:220% 100%;animation:majin-trace-flow 2.5s linear infinite;
+}
+#composer:has(#work-progress[data-phase="waiting"]:not([hidden]))::after{
+  background:linear-gradient(90deg,transparent,#efb0d2,#f8d6ed,#efb0d2,transparent);
+  background-size:220% 100%;animation-duration:4.4s;opacity:.55;
+}
+#composer:has(#work-progress[data-phase="stalled"]:not([hidden]))::after{
+  background:rgba(255,168,143,.8);animation:none;opacity:.65;
+}
+@keyframes majin-trace-flow{from{background-position:100% 0}to{background-position:-120% 0}}
+@media(prefers-reduced-motion:reduce){
+  #composer:has(#work-progress:not([hidden]))::after{animation:none}
+}
+
+/* Page distilled: a single subtle violet ember, no additional panel. */
+#composer #work-progress[data-phase="compact"]{--ember:#cba6ff;--halo:rgba(203,166,255,.19);color:#d9c2ff;border-top-color:rgba(203,166,255,.15)}
+#composer #work-progress[data-phase="compact"] .pulse{animation-duration:2.8s;box-shadow:0 0 9px rgba(203,166,255,.25)}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="compact"] .pulse{animation:none}}
+/* Round: restrained focus glow, one chat surface; no additional panels. */
+#composer{transition:border-color .22s ease,box-shadow .22s ease}
+#composer:focus-within{
+  border-color:rgba(244,129,222,.42);
+  box-shadow:0 0 0 1px rgba(255,158,227,.10),0 0 23px rgba(226,98,200,.08);
+}
+@media(prefers-reduced-motion:reduce){#composer{transition:none}}
+/* Round 2: a single micro-shimmer while clicking, never another activity panel. */
+#composer #work-progress[data-phase="action"]::before{
+  content:"";position:absolute;left:0;bottom:0;height:1px;width:32%;
+  border-radius:2px;background:linear-gradient(90deg,transparent,#ffa8e8,#ab91ff,transparent);
+  opacity:.85;pointer-events:none;animation:majin-action-trace 2.1s ease-in-out infinite alternate;
+}
+@keyframes majin-action-trace{from{transform:translateX(-40%);opacity:.2}to{transform:translateX(255%);opacity:.9}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="action"]::before{animation:none;opacity:.3}}
+
+/* One quiet, moving trace UNDER the existing inline task status.
+   No extra UI card or verbose activity text. */
+#composer #work-progress[data-phase="active"]::after,
+#composer #work-progress[data-phase="verify"]::after{
+  content:"";position:absolute;pointer-events:none;left:0;bottom:0;height:1px;width:35%;
+  background:linear-gradient(90deg,transparent,rgba(242,137,223,.85),transparent);
+  animation:majin-trace 2.6s ease-in-out infinite;
+}
+#composer #work-progress[data-phase="verify"]::after{
+  background:linear-gradient(90deg,transparent,rgba(195,155,255,.95),transparent);
+}
+@keyframes majin-trace{from{transform:translateX(-115%);opacity:.2}50%{opacity:1}to{transform:translateX(300%);opacity:.2}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress::after{animation:none;display:none}}
+/* Recovery micro-indicator: one animated ember inside the existing chat row.
+   No modal, extra card or false success state. */
+#composer #work-progress[data-phase="diagnose"] .pulse{
+  background:rgba(245,168,221,.17);border:1px solid rgba(245,168,221,.65);
+  width:15px;height:15px;box-shadow:0 0 14px rgba(238,97,193,.25);
+  animation:majin-diagnose-breathe 1.8s ease-in-out infinite;
+}
+#composer #work-progress[data-phase="diagnose"] #work-progress-symbol{
+  display:inline-block;color:#efa3d9;animation:majin-diagnose-turn 1.3s linear infinite;
+}
+#composer #work-progress[data-phase="diagnose"] #work-progress-label{color:#e7c6e0}
+#composer #work-progress[data-phase="diagnose"]::after{background:linear-gradient(90deg,transparent,#ec88d7,transparent)}
+@keyframes majin-diagnose-breathe{50%{transform:scale(.7);opacity:.55}}
+@keyframes majin-diagnose-turn{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="diagnose"] .pulse,#composer #work-progress[data-phase="diagnose"] #work-progress-symbol{animation:none!important}}
+/* A single quiet mauve proof shimmer in the EXISTING composer line.
+   Open shadow-root verification is distinct from ordinary page clicks. */
+#composer #work-progress[data-phase="shadow-verified"]{color:#d8c4ff;border-top-color:rgba(172,135,242,.3)}
+#composer #work-progress[data-phase="shadow-verified"] .pulse{background:#b9a1ff;box-shadow:0 0 10px rgba(176,126,253,.55);animation:none}
+#composer #work-progress[data-phase="shadow-verified"] #work-progress-symbol{color:#e3cfff;filter:drop-shadow(0 0 5px rgba(185,133,255,.7))}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="shadow-verified"] *{animation:none!important}}
+/* Subtle stagnation awareness: one amber whisper in the EXISTING chat status. */
+#composer #work-progress[data-phase="stagnation"]{color:#f3c89b;border-top-color:rgba(229,162,104,.23)}
+#composer #work-progress[data-phase="stagnation"] .pulse{background:#f4bb7b;box-shadow:0 0 9px rgba(239,179,91,.35);animation:none}
+#composer #work-progress[data-phase="stagnation"] #work-progress-symbol{color:#ffcd92;filter:drop-shadow(0 0 3px rgba(255,173,94,.35))}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] *{animation:none!important}}
+/* V1 micro-polish: the same chat composer, more legible typing and focus.
+   No new panel; respects keyboard navigation and reduced-motion. */
+#composer:focus-within{border-color:rgba(247,120,209,.58)!important;box-shadow:0 0 0 1px rgba(244,123,212,.12),0 0 23px rgba(223,72,180,.12)!important;transition:border-color .24s ease,box-shadow .24s ease}
+#composer #input{direction:ltr;text-align:left;caret-color:#ff91d2;letter-spacing:.005em}
+#composer .composer-talk:focus-visible,#composer #send:focus-visible{outline:2px solid #f3a0e1;outline-offset:3px}
+#composer .composer-talk[aria-pressed="true"]{box-shadow:inset 0 0 0 1px rgba(253,157,226,.38),0 0 18px rgba(238,91,213,.21)}
+@media(prefers-reduced-motion:reduce){#composer:focus-within{transition:none!important}}
+/* Quiet obstruction state: one existing composer status line, no popup or panel. */
+#composer #work-progress[data-phase="obstructed"]{color:#edb6dd;border-top-color:rgba(234,115,198,.26)}
+#composer #work-progress[data-phase="obstructed"] .pulse{background:#ed94d8;box-shadow:0 0 9px rgba(229,111,199,.25);animation:none}
+#composer #work-progress[data-phase="obstructed"] #work-progress-symbol{color:#f3b7e8;filter:drop-shadow(0 0 4px rgba(222,118,210,.25))}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="obstructed"] *{animation:none!important}}
+
+/* Round: one expressive voice cue inside the EXISTING composer, no new panels. */
+#composer .composer-talk{position:relative;isolation:isolate}
+body[data-voice-mode="listening"] #composer .composer-talk::after,
+body[data-voice-mode="speaking"] #composer .composer-talk::after{
+  content:"";position:absolute;inset:2px;border-radius:13px;pointer-events:none;
+  border:1px solid rgba(255,150,224,.64);opacity:.8;
+  box-shadow:0 0 13px rgba(255,111,216,.2);
+  animation:majin-mic-breathe 1.8s ease-in-out infinite;
+}
+body[data-voice-mode="speaking"] #composer .composer-talk::after{
+  border-color:rgba(199,158,255,.75);animation-duration:1.1s;
+}
+@keyframes majin-mic-breathe{
+  0%,100%{transform:scale(.96);opacity:.34}
+  50%{transform:scale(1.07);opacity:.95}
+}
+@media(prefers-reduced-motion:reduce){
+  body[data-voice-mode="listening"] #composer .composer-talk::after,
+  body[data-voice-mode="speaking"] #composer .composer-talk::after{animation:none}
+}
+
+/* Round 2026-10-22: one subtle "verification" shimmer in EXISTING chat status.
+   No additional cards, popups or visual clutter. */
+#composer #work-progress[data-phase="verify"]{
+  position:relative;isolation:isolate;overflow:hidden;
+  color:#e9cbed;border-top-color:rgba(251,128,209,.28);
+}
+#composer #work-progress[data-phase="verify"]::before{
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:-1;
+  background:linear-gradient(92deg,transparent 15%,rgba(234,99,205,.11) 47%,rgba(169,125,255,.1) 54%,transparent 85%);
+  background-size:240% 100%;animation:majin-verify-sweep 2.6s linear infinite;
+}
+#composer #work-progress[data-phase="verify"] #work-progress-symbol{
+  color:#ff93dc;text-shadow:0 0 10px rgba(255,127,216,.55);
+}
+/* Subtle grounded-proof pulse, respecting reduced motion. */
+#composer #work-progress[data-phase="verify"] #work-progress-symbol{animation:majin-proof-breathe 1.8s ease-in-out infinite}
+@keyframes majin-proof-breathe{50%{opacity:.66;text-shadow:0 0 16px rgba(255,127,216,.78)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verify"] #work-progress-symbol{animation:none}}
+@keyframes majin-verify-sweep{from{background-position:110% 0}to{background-position:-110% 0}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verify"]::before{animation:none}}
+/* Recovery stays in the existing one-line composer instead of opening a panel. */
+#composer #work-progress[data-phase="recovery"]{color:#e9cbff;border-top-color:rgba(217,155,255,.32)}
+#composer #work-progress[data-phase="recovery"] .pulse{background:#dca9ff;box-shadow:0 0 0 3px rgba(220,169,255,.12),0 0 12px rgba(220,169,255,.5)}
+#composer #work-progress[data-phase="recovery"]::after{background:linear-gradient(90deg,transparent,#dca9ff,transparent);animation-duration:1.65s}
+#composer #work-progress[data-phase="recovery"] #work-progress-symbol{display:inline-block;animation:majin-recovery-rotate 1.7s ease-in-out infinite}
+@keyframes majin-recovery-rotate{50%{transform:rotate(160deg)}100%{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recovery"] #work-progress-symbol{animation:none}}
+/* One visual refinement per round: a quiet evidence glow in the existing composer. */
+#composer #work-progress[data-phase="compact"] .pulse{animation:majin-compact-evidence-glow 2.1s ease-in-out infinite;box-shadow:0 0 9px rgba(223,148,248,.23)}
+@keyframes majin-compact-evidence-glow{50%{opacity:.62;transform:scale(.85)}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="compact"] .pulse{animation:none!important;transform:none!important}}
+/* One calm visual improvement: a restrained amber glow on existing stagnation status. */
+#composer #work-progress[data-phase="stagnation"] #work-progress-symbol{animation:majin-stagnation-orbit 2.6s ease-in-out infinite}
+@keyframes majin-stagnation-orbit{50%{opacity:.7;filter:drop-shadow(0 0 5px rgba(255,172,90,.3))}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] #work-progress-symbol{animation:none!important}}
+/* Evidence and recovery feedback stays in MAJIN's existing composer. */
+#composer #work-progress[data-phase="recover"] #work-progress-symbol,
+#composer #work-progress[data-phase="compact"] #work-progress-symbol{animation:majin-evidence-breathe 2.7s ease-in-out infinite}
+@keyframes majin-evidence-breathe{50%{opacity:.68;filter:drop-shadow(0 0 6px rgba(213,143,247,.3))}}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recover"] #work-progress-symbol,#composer #work-progress[data-phase="compact"] #work-progress-symbol{animation:none!important}}
+/* One visual enhancement: verification and progress within the existing chat composer. */
+#composer #work-progress[data-phase="verify"],#composer #work-progress[data-phase="stagnation"]{transition:border-top-color .18s ease}
+#composer #work-progress[data-phase="verify"]{border-top-color:rgba(226,151,250,.3)}
+#composer #work-progress[data-phase="stagnation"]{border-top-color:rgba(250,180,99,.3)}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="verify"],#composer #work-progress[data-phase="stagnation"]{transition:none!important}}
+/* Rebased progress visibility: gentle amber edge, no extra panel. */
+#composer #work-progress[data-phase="stagnation"]{border-top-color:rgba(255,187,113,.36)}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] *{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
@@ -362,11 +796,11 @@ body[data-voice-mode="speaking"] #composer .composer-talk{color:var(--ok)}
     <textarea id="input" placeholder="Message MAJIN" rows="1" aria-label="Message MAJIN"></textarea>
     <button id="send" type="button" aria-label="Send message" title="Send message" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path class="send-arrow" d="M12 19V5m-6 6 6-6 6 6"/><rect class="send-stop" x="6" y="6" width="12" height="12" rx="2"/></svg></button>
     <div id="voice-stage" role="region" aria-label="MAJIN voice conversation" hidden>
-      <div class="voice-orb" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="voice-orb" aria-hidden="true"><span class="orb-core"></span><span class="orb-halo orb-halo-a"></span><span class="orb-halo orb-halo-b"></span><span class="orb-spark"></span></div>
       <div class="voice-stage-copy"><strong id="voice-stage-label">Listening</strong><small id="voice-caption">Speak naturally</small></div>
       <button id="voice-stage-stop" type="button" aria-label="End voice conversation" title="End voice call">×</button>
     </div>
-    <div id="work-progress" role="status" aria-live="polite" hidden><span class="pulse" aria-hidden="true"></span><span id="work-progress-label">Starting…</span><span id="work-progress-timer">0s</span></div>
+    <div id="work-progress" role="status" aria-live="polite" hidden><span class="pulse" aria-hidden="true"></span><span id="work-progress-symbol" aria-hidden="true">✦</span><span id="work-progress-label">Starting…</span><span id="work-progress-timer">0s</span></div>
   </div>
   <div class="crow"><span id="mic-state" aria-live="polite"></span><span class="grow" id="status" role="status" aria-live="polite">Ready</span><span id="drop" class="drop">drop a file → RE analysis</span></div>
 </footer></div>
@@ -402,6 +836,9 @@ body[data-voice-mode="speaking"] #composer .composer-talk{color:var(--ok)}
 <script src="/imagine.js"></script>
 <script src="/onboard.js"></script>
 <script src="/chats.js"></script>
+<script src="/voice-foreground.js"></script>
+<script src="/mindmap.js"></script>
+<script src="/voice-intent.js"></script>
 <script src="/app.js"></script>
 <script src="/panels.js"></script>
 <script src="/marketing.js"></script>

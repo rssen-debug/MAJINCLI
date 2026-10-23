@@ -1,6 +1,7 @@
+import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, VERSION } from '../src/core/browser-ground.js';
+import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, findGroundedControls, VERSION } from '../src/core/browser-ground.js';
 
 test('W6 GROUND_JS is a self-contained page script (marks + refs + DOM anchoring)', () => {
   assert.match(GROUND_JS, /data-majin-ref/);
@@ -53,4 +54,110 @@ test('W6 stub-eval-shaped contract: GROUND_JS shape matches what the bridge retu
   assert.ok(recallRef('contract', 'e1'));
   clearRefs('contract');
   assert.ok(VERSION.startsWith('majin-ground/'));
+});
+
+test('browser grounding uses accessible labels and does not read typed form values',()=>{
+  assert.doesNotMatch(GROUND_JS,/el\.value/,'typed form values could contain passwords, tokens or private text');
+  assert.match(GROUND_JS,/el\.labels\?\.\[0\]/);
+  assert.match(GROUND_JS,/aria-labelledby/);
+  assert.match(GROUND_JS,/\[sensitive field\]/);
+});
+
+test('focused browser observations find relevant accessible controls without hidden values',()=>{
+  const list=[
+    {ref:'e1',tag:'button',role:'button',text:'Save changes',name:null,id:'save'},
+    {ref:'e2',tag:'input',role:'checkbox',text:'Accept terms',name:'consent',id:null},
+    {ref:'e3',tag:'a',role:'link',text:'Privacy policy',name:null,id:null},
+    {ref:'e4',tag:'button',role:'button',text:'Cancel',name:null,id:null},
+  ];
+  assert.deepEqual(findGroundedControls(list,'save').map(x=>x.ref),['e1']);
+  assert.deepEqual(findGroundedControls(list,'checkbox terms').map(x=>x.ref),['e2']);
+  assert.equal(findGroundedControls(list,'totally absent').length,0);
+  assert.equal(findGroundedControls(list,'').length,0);
+  assert.ok(findGroundedControls(list,'button',{cap:1}).length<=1);
+});
+test('browser.elements accepts a focused query and preserves complete reference cache',async()=>{
+  const {readFileSync}=await import('node:fs');
+  const src=readFileSync('src/core/tools/web.js','utf8');
+  assert.match(src,/browser\.elements\(\{query:/);
+  assert.match(src,/findGroundedControls\(payload\.elements/);
+  assert.match(src,/rememberRefs\(session, payload\.elements \|\| \[\]\)/);
+});
+
+test('each round keeps working feedback in a single accessible composer row',()=>{
+  const fs=requireFixture();
+  assert.match(fs,/id="work-progress" role="status"/);
+  assert.match(fs,/@keyframes majin-progress-glide/);
+  assert.match(fs,/prefers-reduced-motion:reduce/);
+});
+function requireFixture(){ return fs.readFileSync('src/ui/index.html','utf8'); }
+
+test('grounding never leaves stale refs or advertises controls outside viewport',()=>{
+  assert.match(CLEAR_JS,/removeAttribute\('data-majin-ref'\)/);
+  assert.match(GROUND_JS,/window\.__majinRefSequence/, 'same-DOM refs stay stable');
+  assert.match(GROUND_JS,/out\.length >= 200/);
+  assert.match(GROUND_JS,/rect\.top >= innerHeight/);
+  assert.match(GROUND_JS,/rect\.left >= innerWidth/);
+  assert.match(GROUND_JS,/\[inert\]/);
+  assert.match(GROUND_JS,/aria-disabled/);
+  assert.doesNotMatch(GROUND_JS,/rect\.left \+ window\.scrollX/, 'fixed markers use viewport coordinates');
+});
+test('existing MAJIN composer visualizes browser grounding without another panel',()=>{
+  const app=fs.readFileSync('src/ui/app.js','utf8');
+  const html=fs.readFileSync('src/ui/index.html','utf8');
+  assert.match(app,/ev\.tool==='browser\.elements'/);
+  assert.match(app,/interactive controls found/);
+  assert.match(html,/#composer #work-progress\[data-phase="grounded"\]/);
+  assert.match(html,/prefers-reduced-motion/);
+});
+
+
+test('agent-browser style refs survive re-snapshot and never recycle removed DOM identities', async () => {
+  const vm = await import('node:vm');
+  const attrs = new Map();
+  const makeNode = (name) => ({
+    tagName: 'BUTTON',
+    type: 'button',
+    disabled: false,
+    name,
+    id: name,
+    href: '',
+    innerText: name,
+    getAttribute(k) { return k === 'data-majin-ref' ? attrs.get(this) || null : null; },
+    setAttribute(k,v) { if (k === 'data-majin-ref') attrs.set(this,v); },
+    removeAttribute(k) { if (k === 'data-majin-ref') attrs.delete(this); },
+    getBoundingClientRect() { return {width:80,height:30,left:1,right:81,top:1,bottom:31}; },
+    closest() { return null; },
+    matches() { return false; },
+  });
+  const one = makeNode('Save'), two = makeNode('Cancel');
+  let nodes = [one,two];
+  const document = {
+    title:'UI',
+    body:{appendChild(){}},
+    querySelectorAll(selector) {
+      if (selector === '.majin-mark') return [];
+      if (selector === '[data-majin-ref]') return [...attrs.keys()].filter(n=>nodes.includes(n));
+      return nodes;
+    },
+    createElement() { return {className:'',textContent:'',style:{cssText:''}}; }
+  };
+  const window = {scrollX:0,scrollY:0};
+  const context = vm.createContext({document,window,location:{href:'https://example.test'},
+    innerHeight:600,innerWidth:800,getComputedStyle:()=>({visibility:'visible',display:'block',opacity:'1'})});
+  const first=vm.runInContext(GROUND_JS,context);
+  assert.deepEqual(Array.from(first.elements,x=>String(x.ref)),['e1','e2']);
+  const repeated=vm.runInContext(GROUND_JS,context);
+  assert.deepEqual(Array.from(repeated.elements,x=>String(x.ref)),['e1','e2']);
+  const replacement=makeNode('Publish');
+  nodes=[replacement,two];
+  const after=vm.runInContext(GROUND_JS,context);
+  assert.deepEqual(Array.from(after.elements,x=>String(x.ref)),['e3','e2'],
+    'new DOM nodes must never silently inherit a stale removed button ref');
+});
+test('visual polish stays inside the single composer and honours reduced motion',()=>{
+  const html=fs.readFileSync('src/ui/index.html','utf8');
+  assert.match(html,/majin-mic-breathe/);
+  assert.match(html,/body\[data-voice-mode="listening"\] #composer \.composer-talk::after/);
+  assert.match(html,/prefers-reduced-motion:reduce/);
 });

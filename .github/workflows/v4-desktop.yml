@@ -1,0 +1,56 @@
+name: MAJIN V4 Windows desktop
+
+on:
+  pull_request:
+    branches: [v4/main]
+  push:
+    branches: [v4/main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v4-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install chromium
+      - name: Windows V4 contracts and browser acceptance
+        run: node --test --test-concurrency=1 --test-timeout=180000 test/v4/*.test.js
+      - name: Install desktop build dependencies
+        working-directory: desktop
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Download pinned Electron runtime
+        working-directory: desktop
+        run: node node_modules/electron/install.js
+      - name: Build per-user Windows installer
+        working-directory: desktop
+        run: npm run build
+      - name: Exercise packaged native window against isolated test host
+        run: node scripts/v4/desktop-smoke.mjs
+        env:
+          MAJIN_V4_DESKTOP_EXE: ${{ github.workspace }}\desktop\dist\win-unpacked\MAJIN V4.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: majin-v4-windows-test-package
+          path: |
+            desktop/dist/*Setup.exe
+            desktop/dist/*.blockmap
+            docs/v4/evidence/
+          if-no-files-found: error
+          retention-days: 14

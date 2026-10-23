@@ -13,6 +13,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../../src/v4/config.js';
 import { Supervisor } from '../../src/v4/supervisor.js';
@@ -29,6 +30,25 @@ const value = (name) => {
 const config = loadConfig({ argv: args });
 const port = value('--port') || String(config.port);
 const host = value('--host') || config.host;
+// Windows named pipes are released by the OS on exit, including a crash. The
+// desktop launcher and Scheduled Task must never supervise the same port twice.
+let instanceLock;
+if (process.platform === 'win32') {
+  instanceLock = net.createServer((socket) => socket.destroy());
+  try {
+    await new Promise((resolve, reject) => {
+      instanceLock.once('error', reject);
+      instanceLock.listen(`\\\\.\\pipe\\majin-v4-host-${port}`, resolve);
+    });
+    instanceLock.unref();
+  } catch (err) {
+    if (err.code === 'EADDRINUSE') {
+      process.stderr.write('A MAJIN V4 supervisor already owns this port.\n');
+      process.exit(1);
+    }
+    throw err;
+  }
+}
 const day = new Date().toISOString().slice(0, 10);
 
 fs.mkdirSync(config.paths.logs, { recursive: true, mode: 0o700 });

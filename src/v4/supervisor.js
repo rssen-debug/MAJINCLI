@@ -72,6 +72,7 @@ export class Supervisor {
     this.restarts = []; // timestamps of restarts inside the window
     this.stopping = false;
     this.healthTimer = null;
+    this.restartTimer = null;
     this.startedAt = null;
     this.state = 'idle'; // idle | starting | healthy | restarting | stopped | failed
     this.lastError = null;
@@ -122,11 +123,18 @@ export class Supervisor {
     this.child.stdout?.on('data', (d) => this.log('stdout', { bytes: d.length }));
     this.child.stderr?.on('data', (d) => this.log('stderr', { text: String(d).slice(0, 400) }));
 
+    const startedChild = this.child;
     this.child.on('exit', (code, signal) => this.#onExit(code, signal));
+    this.child.on('error', (err) => {
+      this.log('spawn_error', { message: err.message });
+      if (this.child === startedChild) this.#onExit(null, 'spawn_error');
+    });
 
     const deadline = this.now() + this.options.startupGraceMs;
     while (this.now() < deadline) {
-      if (await this.probe()) {
+      const healthy = await this.probe();
+      if (this.child !== startedChild || this.stopping || this.state === 'restarting') return this;
+      if (healthy) {
         this.state = 'healthy';
         this.log('healthy', { pid: this.child?.pid ?? null, ms: this.now() - this.startedAt });
         this.#scheduleHealth();
@@ -159,12 +167,13 @@ export class Supervisor {
       } else {
         this.stats.healthFailures = 0;
       }
-      this.#scheduleHealth();
+      if (this.state === 'healthy') this.#scheduleHealth();
     }, this.options.healthIntervalMs);
   }
 
   #onExit(code, signal) {
     const wasStopping = this.stopping;
+    const wasRestarting = this.state === 'restarting';
     const pid = this.child?.pid ?? null;
     this.child = null;
     if (this.healthTimer) {
@@ -176,6 +185,10 @@ export class Supervisor {
       this.log('stopped', { pid, code, signal });
       return;
     }
+    if (wasRestarting) {
+      this.log('replaced', { pid, code, signal });
+      return;
+    }
     this.stats.crashes += 1;
     this.log('crashed', { pid, code, signal });
     this.lastError = `exit ${code ?? signal}`;
@@ -185,6 +198,7 @@ export class Supervisor {
   /** Restart with backoff, bounded by maxRestarts inside the window. */
   restart(reason) {
     if (this.stopping) return false;
+    if (this.restartTimer) return true;
     const now = this.now();
     this.restarts = this.restarts.filter((t) => now - t < this.options.windowMs);
     if (this.restarts.length >= this.options.maxRestarts) {
@@ -198,9 +212,28 @@ export class Supervisor {
     const delay = Math.min(this.options.maxBackoffMs, this.options.backoffMs * 2 ** (this.restarts.length - 1));
     this.state = 'restarting';
     this.log('restart_scheduled', { reason, delayMs: delay, attempt: this.restarts.length });
-    this.setTimeout(() => {
+    if (this.healthTimer) this.clearTimeout(this.healthTimer);
+    this.restartTimer = this.setTimeout(async () => {
       if (this.stopping) return;
-      this.start();
+      // Retire the unhealthy process before start(), which deliberately refuses
+      // to create a second process while a child is still alive.
+      const oldChild = this.child;
+      if (oldChild) {
+        try { oldChild.kill('SIGTERM'); } catch { /* already exited */ }
+        const deadline = this.now() + this.options.stopGraceMs;
+        while (this.child === oldChild && this.now() < deadline) {
+          await new Promise((r) => this.setTimeout(r, 50));
+        }
+        if (this.child === oldChild) {
+          try { oldChild.kill('SIGKILL'); } catch { /* already exited */ }
+          this.restartTimer = null;
+          this.state = 'failed';
+          this.lastError = 'old host did not exit; refusing to start a duplicate';
+          return;
+        }
+      }
+      this.restartTimer = null;
+      if (!this.stopping) await this.start();
     }, delay);
     return true;
   }
@@ -210,6 +243,8 @@ export class Supervisor {
     this.stopping = true;
     this.state = 'stopped';
     if (this.healthTimer) this.clearTimeout(this.healthTimer);
+    if (this.restartTimer) this.clearTimeout(this.restartTimer);
+    this.restartTimer = null;
     const child = this.child;
     if (!child) return this;
     try {

@@ -766,6 +766,9 @@ input[type="checkbox"] { accent-color: var(--pink); width: 18px; height: 18px; }
 }
 @media (min-width: 720px) { .preview-frame { height: 420px; } }
 
+/* Author display rules must never make a closed modal intercept the UI. */
+[hidden] { display: none !important; }
+
 /* ---------------------------------------------------------------- lightbox -- */
 
 .lightbox {

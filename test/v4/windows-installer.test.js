@@ -134,7 +134,7 @@ test('installer: here-strings are balanced (the one syntax error that breaks the
 
   // A line-continuation backtick must be the last character on its line.
   // Backticks inside strings (`n, `t) are legal and are not continuations.
-  installer.split('\n').forEach((line, i) => {
+  installer.split(/\r?\n/).forEach((line, i) => {
     if (line.trim().startsWith('#')) return;
     if (!line.trimEnd().endsWith('`')) return;
     assert.equal(line, line.trimEnd(), `line ${i + 1}: whitespace after a continuation backtick`);

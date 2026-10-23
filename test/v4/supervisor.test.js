@@ -173,3 +173,24 @@ test('supervisor: the restart window expires, so a host that stabilises is not p
   sup.restarts = [sup.now() - 5000, sup.now() - 4000];
   assert.equal(sup.restart('old failures'), true, 'old entries fall out of the window');
 });
+
+test('supervisor: health failure replaces the live process, rather than scheduling a no-op', async () => {
+  const dir = tempHome();
+  const sup = makeSup(dir, { port: freePort(), healthIntervalMs: 30, backoffMs: 10 });
+  try {
+    await sup.start();
+    const oldPid = sup.child.pid;
+    // Fail three probes, then let the replacement use the actual HTTP probe.
+    const realProbe = sup.probe.bind(sup);
+    let failures = 3;
+    sup.probe = () => failures-- > 0 ? Promise.resolve(false) : realProbe();
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline && (sup.child?.pid === oldPid || sup.state !== 'healthy')) {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+    assert.equal(sup.state, 'healthy');
+    assert.notEqual(sup.child?.pid, oldPid);
+    assert.equal(sup.stats.spawns, 2);
+    assert.throws(() => process.kill(oldPid, 0), 'old process must have exited');
+  } finally { await sup.stop(); fs.rmSync(dir, { recursive: true, force: true }); }
+});

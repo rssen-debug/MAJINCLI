@@ -150,8 +150,10 @@ export class PluginWorker {
    */
   stop() {
     const child = this.child;
-    if (!child || this.dead) return;
+    if (this.stopped) return this.stopped;
+    if (!child || this.dead) return Promise.resolve();
     this.dead = true;
+    this.stopped = new Promise((resolve) => child.once('exit', resolve));
     try {
       child.send({ type: 'shutdown' });
     } catch { /* already gone */ }
@@ -167,5 +169,6 @@ export class PluginWorker {
       } catch { /* already dead */ }
     }, 500);
     timer.unref();
+    return this.stopped;
   }
 }

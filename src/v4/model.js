@@ -59,7 +59,7 @@ function pickFileName(text) {
 }
 
 function parseWriteIntent(text) {
-  const m = text.match(/(?:skriv|skapa|spara|write|create|save)[\s\S]*?(?:fil(?:en)?|file)\s*[:\-]?\s*["'“]?([^"'”\n]+?\.[A-Za-z0-9]{1,8})["'”]?[\s\S]*?(?:innehåll(?:et)?|content|text(?:en)?|med|with)\s*[:\-]?\s*([\s\S]+)/i);
+  const m = text.match(/(?:skriv|skapa|spara|write|create|save)[\s\S]*?(?:file|fil(?:en)?)\b\s*[:\-]?\s*["'“]?([^"'”\n]+?\.[A-Za-z0-9]{1,8})["'”]?[\s\S]*?(?:innehåll(?:et)?|content|text(?:en)?|med|with)\s*[:\-]?\s*([\s\S]+)/i);
   if (!m) return null;
   const fileName = m[1].trim().replace(/^(en|ett|a|the)\s+/i, '');
   const content = m[2]

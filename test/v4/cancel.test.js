@@ -181,7 +181,7 @@ test('cancel: cancelling a turn stops the plugin worker it was waiting on', asyn
     const worker = [...kernel.workers.values()][0];
     assert.equal(worker?.dead ?? true, true, 'the worker was stopped');
   } finally {
-    kernel.shutdownWorkers();
+    await kernel.shutdownWorkers();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

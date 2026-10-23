@@ -243,9 +243,9 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
       const size = fsSync.statSync(out.abs).size;
       if (then === 'describe') {
         const d = await analyzeImage({ cfg: ctx.cfg, imagePath: out.abs, question: 'What is on screen? Describe windows, text, errors and what may need fixing.' });
-        return { result: `${out.abs} (${size} byte)\n\n${d}`, meta: { path: out.abs, validatedPng: true, bytes: size }, summary: 'screenshot + description' };
+        return { ok: true, result: `${out.abs} (${size} byte)\n\n${d}`, meta: { path: out.abs, validatedPng: true, bytes: size }, summary: 'screenshot + description' };
       }
-      return { result: `${out.abs} (${size} byte)`, meta: { path: out.abs, validatedPng: true, bytes: size }, summary: `screenshot ${(size / 1024) | 0} kB` };
+      return { ok: true, result: `${out.abs} (${size} byte)`, meta: { path: out.abs, validatedPng: true, bytes: size }, summary: `screenshot ${(size / 1024) | 0} kB` };
     },
   }),
 

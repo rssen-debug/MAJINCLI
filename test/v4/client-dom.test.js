@@ -162,7 +162,10 @@ async function bootApp({ server: reuse = null, prepare = null, session = '' } = 
       Object.defineProperty(window, name, { value, configurable: true, writable: true });
     } catch { /* frozen in this jsdom: the app can live without it */ }
   };
-  fill('AbortController', globalThis.AbortController);
+  // fetch runs in Node, so its signal must come from the same realm. jsdom's
+  // AbortSignal cannot be passed to undici on Windows (or recent Node builds).
+  Object.defineProperty(window, 'AbortController', { value: globalThis.AbortController, configurable: true });
+  Object.defineProperty(window, 'AbortSignal', { value: globalThis.AbortSignal, configurable: true });
   fill('TextDecoder', globalThis.TextDecoder);
   fill('Headers', globalThis.Headers);
   fill('Request', globalThis.Request);

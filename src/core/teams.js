@@ -197,6 +197,7 @@ export async function runTeam({
   cfg, registry, store, team, cap = 4, goals,
   resumeId = null, runId = null, emit = null, memory = null, job = 'tasks',
   teamStepCap = TEAM_DEFAULTS.teamStepCap,
+  signal = null,
   makeWorker = null, // injicerbart för tester: (...) => workerFn; default subagentWorker
 } = {}) {
   if (!store || !(store instanceof TeamStore)) throw new TeamInputError('runTeam: store (TeamStore) is required');
@@ -253,7 +254,7 @@ export async function runTeam({
         /* EN enda save, INNAN runSwarm får veta att noden är klar:
            crash efter save = resume-skip (exactly-once); crash före save =
            omkörning (at-least-once) — det är hela garantin. */
-        priorDone.set(node.id, value);
+        if (value?.ok !== false && !signal?.aborted) priorDone.set(node.id, value);
         store.saveCheckpoint(team, rid, {
           status: 'running', runId: rid, goals: goals.map((x) => x.id), cap: capN, spent,
           done: Object.fromEntries(priorDone),
@@ -263,7 +264,7 @@ export async function runTeam({
     };
   });
 
-  const out = await runSwarm({ nodes, cap, timeoutMs: 0, signal: null, onEvent: (e) => emit?.({ team, runId: rid, ...e }) });
+  const out = await runSwarm({ nodes, cap, timeoutMs: 0, signal, onEvent: (e) => emit?.({ team, runId: rid, ...e }) });
 
   const st = out.blockedCount === 0 && out.failCount === 0 ? 'complete' : 'partial';
   store.saveCheckpoint(team, rid, {
