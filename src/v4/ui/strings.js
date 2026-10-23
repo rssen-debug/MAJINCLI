@@ -215,6 +215,8 @@ export const SV = {
   'history.deleteFailed': 'Kunde inte radera samtalet.',
   'history.deleteRunning': 'En uppgift körs fortfarande i samtalet. Stoppa den och radera?',
   'history.deletedElsewhere': 'Samtalet raderades på en annan enhet.',
+  'history.previouslyVerified': 'Verifierades vid körningen',
+  'history.receiptTime': 'Sparat resultat från den angivna tiden. Filen eller omvärlden kan ha ändrats sedan dess.',
   'history.renameFailed': 'Kunde inte byta namn.',
   'history.importChecking': 'Letar efter tidigare historik…',
   'history.importAsk': '{creates} samtal att importera, {merges} att fylla på.',

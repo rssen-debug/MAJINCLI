@@ -1106,6 +1106,12 @@ export function createV4Server({ config }) {
         id: g.id,
         state: g.state,
         objective: g.objective,
+          // Reuse durable goal receipts for every client. Do not expose raw
+          // tool output or inputs just to rebuild the conversation transcript.
+          receipts: g.receipts.filter((r) => typeof r.action === 'string' && r.action.startsWith('tool:')).map((r) => ({
+            id: r.id, action: r.action, target: r.target, result: r.result,
+            verified: r.verified === true, errorClass: r.errorClass || null, at: r.at,
+          })),
         ...(g.revisionOf ? { revisionOf: g.revisionOf, revision: g.revision } : {}),
       }));
   }

@@ -146,6 +146,19 @@ test('e2e: real browser acceptance on phone viewports', { skip: launched.skip ||
         return msgs.length > 0 && msgs[msgs.length - 1].textContent.trim().length > 10;
       }, { timeout: 15_000 });
 
+      // Reload the actual browser context, not just the message list. Durable
+      // receipts must be available in the same way on another PWA client.
+      await page.waitForSelector('#stop-btn', { state: 'hidden', timeout: 15_000 });
+      await page.reload({ waitUntil: 'load' });
+      try {
+        await page.waitForSelector('.tool[data-state="verified"][data-historical="true"]', { timeout: 15_000 });
+      } catch (error) {
+        t.diagnostic(JSON.stringify({ viewport: vp.name, consoleErrors,
+          thread: await page.textContent('#thread'), bookmark: await page.evaluate(() => localStorage.getItem('majin.conversationId')) }));
+        throw error;
+      }
+      assert.match(await page.textContent('.tool[data-historical="true"] .tool-summary'), new RegExp(`e2e-${vp.name}\\.txt`));
+
       const overflowAfter = await page.evaluate(() => ({
         scrollW: document.scrollingElement.scrollWidth,
         clientW: document.scrollingElement.clientWidth,
@@ -158,7 +171,7 @@ test('e2e: real browser acceptance on phone viewports', { skip: launched.skip ||
       const realErrors = consoleErrors.filter((e) => !/favicon|manifest/i.test(e));
       assert.deepEqual(realErrors, [], `${vp.name}: console errors`);
 
-      results.push({ viewport: vp.name, w: vp.width, h: vp.height, verifiedTool: true });
+      results.push({ viewport: vp.name, w: vp.width, h: vp.height, verifiedTool: true, historicalReceipts: true });
       await context.close();
     }
 

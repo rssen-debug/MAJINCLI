@@ -24,6 +24,38 @@ async function chat(s, cookie, text, extra = {}) {
   return { events, done: events.find((e) => e.type === 'done')?.data };
 }
 
+test('history: two sessions and a restarted host recover the same safe durable tool receipts', async () => {
+  const home = tempHome();
+  let server = await startTestServer({ home });
+  try {
+    const first = await server.pair();
+    const second = await server.pair();
+    assert.notEqual(first.cookie, second.cookie);
+    const { events, done } = await chat(server, first.cookie, 'Write file receipt-history.txt with content: persisted');
+    const live = events.find((event) => event.type === 'tool_result' && event.data.verified)?.data;
+    assert.ok(live?.receiptId);
+    const read = async () => apiJson(server, second.cookie, `/api/conversation?id=${done.conversationId}`);
+    const before = await read();
+    const receipts = before.body.conversation.goals.flatMap((goal) => goal.receipts);
+    const receipt = receipts.find((entry) => entry.id === live.receiptId);
+    assert.equal(receipt.action, 'tool:workspace_write');
+    assert.equal(receipt.result, 'success');
+    assert.equal(receipt.verified, true);
+    assert.equal(receipt.target, 'receipt-history.txt');
+    assert.ok(receipt.at);
+    assert.equal(Object.hasOwn(receipt, 'evidence'), false, 'raw tool output must not enter the transcript payload');
+    assert.equal(Object.hasOwn(receipt, 'input'), false);
+    await server.close({ keep: true });
+    server = await startTestServer({ home });
+    const after = await read();
+    assert.equal(after.status, 200, 'the second session must survive host restart');
+    assert.deepEqual(after.body.conversation.goals.flatMap((goal) => goal.receipts), receipts);
+    assert.equal(fs.readFileSync(path.join(home, 'workspace', 'receipt-history.txt'), 'utf8'), 'persisted');
+  } finally {
+    await server.close();
+  }
+});
+
 async function apiJson(s, cookie, path, init = {}) {
   const res = await fetch(`${s.base}${path}`, {
     ...init,

@@ -1,6 +1,6 @@
 {
   "name": "majin",
-  "version": "4.0.0-alpha.2",
+  "version": "4.0.0-alpha.3",
   "description": "MAJIN — private, mobile-first AI assistant that executes on your own Windows machine.",
   "type": "module",
   "license": "MIT",

@@ -1,5 +1,7 @@
 # MAJIN V4 release verification — 23 October 2026
 
+Follow-up: alpha.3 implements durable inline tool history using the existing server receipts. See [HISTORY_RECEIPTS_ALPHA3.md](HISTORY_RECEIPTS_ALPHA3.md) for the change and targeted acceptance. The alpha.2 build identity and original failures below remain historical evidence, not claims about a newer package. Alpha.3 packaging/full regression evidence is tracked separately.
+
 ## Verdict: NOT READY for the requested production release
 
 The repository is accessible through the owner's GitHub connection. The work is on `codex/v4-final-integration-20261023`, with draft [PR #401](https://github.com/rssen-debug/MAJINCLI/pull/401) targeting `v4/main`. The Windows candidate is **4.0.0-alpha.2**. No production release was published, no PR was merged, and no production signing identity or update channel was invented.
@@ -36,7 +38,7 @@ The machine-readable [test report](FINAL_TEST_RESULTS.json) separates overlappin
 4. Signed host updates do not replace the running Electron shell. Native-shell automatic update activation and rollback remain unimplemented.
 5. Functional gaps remain for outbound channels, proactive event digests, separate-store memory synchronization, some typed self-configuration/reset behavior, V2 cryptographic audit anchoring, durable graph pause/replanning and whole-team token/currency accounting. See the parity table. Scanned-PDF OCR is unsupported.
 6. The 44 legacy test failures remain unresolved. Latest CI must be evaluated for the actual PR head, not an earlier commit.
-7. Rehydrating the conversation history currently renders messages without their transient tool cards. Receipts remain on the server, but their inline history presentation needs completion. The browser test's atomic read does not fix or conceal that UI limitation.
+7. The alpha.2 inline-history receipt gap is fixed in alpha.3 source: both opening and refreshing a conversation render its durable server receipts. Historical verifications are labelled with their original time and do not assert current file existence. See the follow-up acceptance report; target/device verification remains separate.
 
 ## Build identity
 

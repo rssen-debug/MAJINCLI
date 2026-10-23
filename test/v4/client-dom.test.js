@@ -700,10 +700,17 @@ test('history ui: delete needs the confirmation dialog, and archive is a differe
 test('history ui: a reload lands back in the conversation that was open', { skip }, async () => {
   const app = await bootPaired();
   let id = null;
+  let receiptId = null;
   try {
     await sendMessage(app, 'Skriv filen minne.txt med innehåll: kom ihåg mig');
     const listed = await (await app.window.fetch('/api/conversations')).json();
     id = listed.conversations[0].id;
+    const stored = await (await app.window.fetch(`/api/conversation?id=${id}`)).json();
+    receiptId = stored.conversation.goals.flatMap((goal) => goal.receipts)
+      .find((receipt) => receipt.action === 'tool:workspace_write' && receipt.verified)?.id;
+    assert.ok(receiptId, 'the result must come from a durable server receipt');
+    // Historical verification must not turn into a fresh claim of file existence.
+    fs.unlinkSync(path.join(app.server.home, 'workspace', 'minne.txt'));
     assert.equal(app.window.localStorage.getItem('majin.conversationId'), id,
       'the client did not bookmark the conversation it is showing');
   } finally {
@@ -718,6 +725,14 @@ test('history ui: a reload lands back in the conversation that was open', { skip
   try {
     await until(() => again.document.querySelectorAll('#thread .msg').length >= 2, { label: 'the transcript to come back after reload' });
     assert.match(again.document.querySelector('#thread').textContent, /kom ihåg mig/);
+    const receipt = again.document.querySelector(`.tool[data-receipt-id="${receiptId}"]`);
+    assert.ok(receipt, 'reload lost the persisted tool receipt');
+    assert.equal(receipt.dataset.state, 'verified');
+    assert.equal(receipt.dataset.historical, 'true');
+    assert.match(receipt.querySelector('.tool-summary').textContent, /minne.txt/);
+    assert.match(receipt.querySelector('.tool-detail').textContent, /Verifierades vid körningen/);
+    assert.match(receipt.querySelector('.tool-detail').textContent, /kan ha ändrats/);
+    assert.equal(fs.existsSync(path.join(app.server.home, 'workspace', 'minne.txt')), false);
     // Let the boot chain finish before tearing the window down, so no fetch is
     // left in flight when the server closes.
     await until(() => again.document.querySelector('#model-label').textContent !== 'ansluter…', { label: 'boot to settle' });
@@ -725,5 +740,46 @@ test('history ui: a reload lands back in the conversation that was open', { skip
     again.window.dispatchEvent(new again.window.Event('pagehide'));
     await again.close();
     await app.server.close();
+  }
+});
+
+test('history ui: another session sees failed and unverified receipts without fabricated success or HTML', { skip }, async () => {
+  const { Goal } = await import('../../src/v2/runtime/goal.js');
+  const { STATES } = await import('../../src/v2/runtime/states.js');
+  const server = await startTestServer();
+  let app;
+  try {
+    // Controlled durable fixtures exercise states a demo write does not produce.
+    const goal = new Goal({ objective: 'Historical status fixtures' });
+    for (const state of [STATES.PLANNING, STATES.READY, STATES.RUNNING]) goal.transition(state);
+    const failed = goal.addReceipt({ action: 'tool:fixture_failed', target: '<img src=x onerror=alert(1)>',
+      result: 'failure', errorClass: 'PERMISSION_DENIED', evidence: { privateOutput: 'MUST_NOT_LEAK' } });
+    const unverified = goal.addReceipt({ action: 'tool:fixture_unverified', target: 'not-independently-checked', result: 'success' });
+    goal.transition(STATES.FAILED);
+    server.context.goals.save(goal);
+    const conversation = server.context.conversations.create();
+    server.context.conversations.appendMessage(conversation.id, { role: 'user', content: 'Inspect recorded results' });
+    server.context.conversations.appendMessage(conversation.id, { role: 'assistant', content: 'Recorded attempt failed.', meta: { goalId: goal.id } });
+    const session = await server.pair();
+    app = await bootApp({ server, session: session.cookie,
+      prepare: (window) => window.localStorage.setItem('majin.conversationId', conversation.id) });
+    const card = (id) => app.document.querySelector(`.tool[data-receipt-id="${id}"]`);
+    await until(() => card(failed.id), { label: 'historical failure on the second session' });
+    assert.equal(card(failed.id).dataset.state, 'failed');
+    assert.equal(card(unverified.id).dataset.state, 'ok');
+    assert.equal(app.document.querySelectorAll('.tool[data-state="verified"]').length, 0);
+    assert.match(card(failed.id).textContent, /PERMISSION_DENIED/);
+    assert.equal(card(failed.id).querySelector('.tool-summary').textContent, '<img src=x onerror=alert(1)>');
+    assert.equal(card(failed.id).querySelector('img'), null);
+    assert.doesNotMatch(app.document.querySelector('#thread').textContent, /MUST_NOT_LEAK/);
+    server.context.conversations.appendMessage(conversation.id, { role: 'assistant', content: 'Another device updated this chat.' });
+    app.document.dispatchEvent(new app.window.Event('visibilitychange'));
+    await until(() => app.document.querySelector('#thread').textContent.includes('Another device updated'), { label: 'cross-device refresh' });
+    assert.equal(card(failed.id).dataset.state, 'failed');
+    assert.equal(card(unverified.id).dataset.state, 'ok');
+    assert.equal(app.document.querySelectorAll('.tool').length, 2, 'refresh must not duplicate receipts');
+  } finally {
+    if (app) await app.close();
+    else await server.close();
   }
 });

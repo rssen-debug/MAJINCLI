@@ -592,6 +592,40 @@ function addToolCard(name, input) {
 
 const activeTools = new Map();
 
+/** Rebuild the transcript from server messages and their durable tool receipts. */
+function renderConversationMessages(conversation) {
+  activeTools.clear();
+  const goals = new Map((conversation.goals || []).map((goal) => [goal.id, goal]));
+  const rendered = new Set();
+  for (const message of conversation.messages) {
+    const goal = goals.get(message.meta?.goalId);
+    if (message.role === 'assistant' && goal) {
+      for (const receipt of goal.receipts || []) {
+        if (rendered.has(receipt.id) || !receipt.action?.startsWith('tool:')) continue;
+        // A resumed goal can have several answers. Put each receipt before the
+        // answer that followed it, rather than moving future work into the past.
+        if (receipt.at && message.at && receipt.at > message.at) continue;
+        rendered.add(receipt.id);
+        const name = receipt.action.slice(5);
+        const card = addToolCard(name, {});
+        const ok = receipt.result === 'success';
+        card.node.dataset.state = ok ? (receipt.verified ? 'verified' : 'ok') : 'failed';
+        card.node.dataset.historical = 'true';
+        card.node.dataset.receiptId = receipt.id;
+        card.sum.textContent = receipt.target || name;
+        const status = ok ? (receipt.verified ? t('history.previouslyVerified') : t('state.done')) : t('state.failed');
+        card.detail.textContent = `${status} · ${t('state.receipt')} ${receipt.id}`
+          + (receipt.at ? ` · ${receipt.at}` : '')
+          + (receipt.errorClass ? ` · ${receipt.errorClass}` : '')
+          + `\n${t('history.receiptTime')}`;
+      }
+    }
+    addMessage(message.role === 'user' ? 'user' : 'assistant', message.content, {
+      error: message.meta?.error === true, meta: timeLabel(message.at),
+    });
+  }
+}
+
 /* ------------------------------------------------------------------ auth -- */
 
 function showGate(message = '') {
@@ -963,10 +997,7 @@ async function openConversation(id) {
   els.thread.textContent = '';
   state.bubble = null;
   state.bubbleText = '';
-  for (const m of data.conversation.messages) {
-    if (m.role === 'user') addMessage('user', m.content, { meta: timeLabel() });
-    else addMessage('assistant', m.content, { error: m.meta?.error === true, meta: timeLabel() });
-  }
+  renderConversationMessages(data.conversation);
   if (data.conversation.pendingApproval) {
     showApproval({ tool: data.conversation.pendingApproval.tool, reason: '' });
   } else {
@@ -1554,14 +1585,13 @@ async function reloadOpenConversation(version = null) {
       return;
     }
     const data = await res.json();
+    // A poll can finish after the owner switched chats or started a new turn.
+    if (state.conversationId !== id || state.streaming) return;
     const atBottom = els.stage.scrollHeight - els.stage.scrollTop - els.stage.clientHeight < 80;
     els.thread.textContent = '';
     state.bubble = null;
     state.bubbleText = '';
-    for (const m of data.conversation.messages) {
-      if (m.role === 'user') addMessage('user', m.content, { meta: timeLabel(m.at), at: m.at });
-      else addMessage('assistant', m.content, { error: m.meta?.error === true, meta: timeLabel(m.at), at: m.at });
-    }
+    renderConversationMessages(data.conversation);
     state.conversationVersion = data.conversation.version;
     if (data.conversation.pendingApproval) {
       showApproval({ tool: data.conversation.pendingApproval.tool, reason: '' });
