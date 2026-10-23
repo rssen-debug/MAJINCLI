@@ -492,3 +492,55 @@ test('client: an HTML file the agent wrote gets a sandboxed inline preview', { s
     await app.close();
   }
 });
+
+test('client: the owner can grant a lane from the phone and the sheet reflects it', { skip }, async () => {
+  const app = await bootApp();
+  try {
+    await paired(app);
+    await app.window.eval(`loadOwnerMode()`);
+    await until(() => app.document.querySelectorAll('.lane-item').length > 0, { label: 'the lane list' });
+
+    assert.match(app.document.querySelector('#owner-state').textContent, /Avstängt/);
+
+    // "Filer" alone is inert on purpose: a filesystem grant without a folder
+    // cannot reach anything, so the state must NOT flip.
+    const filesLane = [...app.document.querySelectorAll('.lane-item')]
+      .find((el) => el.textContent.startsWith('Filer'));
+    assert.ok(filesLane, 'the files lane is offered');
+    filesLane.dispatchEvent(new app.window.Event('click', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+    assert.match(app.document.querySelector('#owner-state').textContent, /Avstängt/, 'no folder, no access');
+
+    // the web lane needs nothing else, so tapping it does flip the state
+    const webLane = [...app.document.querySelectorAll('.lane-item')]
+      .find((el) => el.textContent.startsWith('Webb'));
+    assert.ok(webLane, 'the web lane is offered');
+    webLane.dispatchEvent(new app.window.Event('click', { bubbles: true }));
+
+    await until(() => app.document.querySelector('#owner-state').textContent.includes('aktiva'), {
+      label: 'the grant to register',
+      dom: () => app.document.querySelector('#owner-state').textContent,
+    });
+
+    const state = await (await app.window.fetch('/api/owner-mode')).json();
+    assert.ok(state.ownerMode.lanes.includes('web'));
+    assert.ok(!state.ownerMode.lanes.includes('files'), 'the inert files grant was not activated');
+  } finally {
+    await app.close();
+  }
+});
+
+test('client: the skills list shows what is ready and what is blocked', { skip }, async () => {
+  const app = await bootApp();
+  try {
+    await paired(app);
+    await app.window.eval(`loadSkills()`);
+    await until(() => app.document.querySelectorAll('.skill-item').length > 0, { label: 'the skill list' });
+    const items = [...app.document.querySelectorAll('.skill-item')];
+    assert.ok(items.length >= 2, 'the shipped skills are listed');
+    assert.ok(items.every((el) => el.dataset.ready === 'false'), 'nothing is ready without grants');
+    assert.match(items[0].textContent, /kräver/);
+  } finally {
+    await app.close();
+  }
+});

@@ -49,6 +49,14 @@ const els = {
   sheetFiles: $('#file-list'),
   sheetConvs: $('#conv-list'),
   sheetGoals: $('#goal-list'),
+  ownerState: $('#owner-state'),
+  ownerNote: $('#owner-note'),
+  laneList: $('#lane-list'),
+  folderInput: $('#folder-input'),
+  folderAdd: $('#folder-add'),
+  folderList: $('#folder-list'),
+  ownerRevoke: $('#owner-revoke'),
+  skillList: $('#skill-list'),
   ttsToggle: $('#tts-toggle'),
   autosendToggle: $('#autosend-toggle'),
   voiceNote: $('#voice-note'),
@@ -82,6 +90,7 @@ const state = {
   bubble: null,
   bubbleText: '',
   version: null,
+  capabilities: null,
   requestSeq: 0,
   previewOn: true,
   session: { ...INITIAL },
@@ -156,6 +165,151 @@ function resizeInput() {
   els.input.style.height = 'auto';
   els.input.style.height = `${Math.min(els.input.scrollHeight, 132)}px`;
   els.send.disabled = !els.input.value.trim() || state.streaming;
+}
+
+/* -------------------------------------------------------- owner mode -- */
+
+const laneLabel = (lane) => t(`owner.lane.${lane}`);
+
+/** Load and render what the owner has currently granted. */
+async function loadOwnerMode() {
+  try {
+    const res = await api('/api/owner-mode');
+    if (!res.ok) return;
+    const data = await res.json();
+    renderOwnerMode(data.ownerMode);
+  } catch { /* the sheet is not critical path */ }
+}
+
+function renderOwnerMode(view) {
+  if (!view) return;
+  const active = new Set(view.lanes || []);
+  els.ownerState.textContent = active.size ? t('owner.on', { n: active.size }) : t('owner.off');
+  els.ownerNote.textContent = view.note || t('owner.note');
+
+  els.laneList.textContent = '';
+  for (const lane of view.grantable || []) {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'lane-item';
+    btn.dataset.on = active.has(lane) ? 'true' : 'false';
+    const name = document.createElement('span');
+    name.textContent = laneLabel(lane);
+    const state = document.createElement('span');
+    state.className = 'lane-state';
+    state.textContent = active.has(lane) ? t('owner.granted') : t('owner.grant');
+    btn.append(name, state);
+    btn.addEventListener('click', () => toggleLane(lane, !active.has(lane)));
+    li.append(btn);
+    els.laneList.append(li);
+  }
+
+  els.folderList.textContent = '';
+  const folders = view.folders || [];
+  if (!folders.length) {
+    const li = document.createElement('li');
+    li.className = 'folder-empty';
+    li.textContent = t('owner.noFolders');
+    els.folderList.append(li);
+  }
+  for (const folder of folders) {
+    const li = document.createElement('li');
+    li.className = 'folder-item';
+    const label = document.createElement('span');
+    label.textContent = folder;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'folder-x';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', t('owner.removeFolder', { folder }));
+    remove.addEventListener('click', () => postOwner({ action: 'revoke', folders: [folder] }));
+    li.append(label, remove);
+    els.folderList.append(li);
+  }
+
+  els.ownerRevoke.hidden = active.size === 0;
+}
+
+async function postOwner(body) {
+  try {
+    const res = await api('/api/owner-mode', { method: 'POST', body });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);
+    renderOwnerMode(data.ownerMode);
+    await loadSkills();
+    await loadCapabilities();
+    return data;
+  } catch (err) {
+    toast(err.message || t('msg.genericError'));
+    return null;
+  }
+}
+
+async function toggleLane(lane, on) {
+  if (on) {
+    const data = await postOwner({ action: 'grant', lanes: [lane] });
+    if (data) toast(`${laneLabel(lane)}: ${t('owner.granted')}`);
+  } else {
+    await postOwner({ action: 'revoke', lanes: [lane] });
+  }
+}
+
+async function addFolder() {
+  const raw = els.folderInput.value.trim();
+  if (!raw) return;
+  const data = await postOwner({ action: 'grant', folders: [raw] });
+  if (data) {
+    els.folderInput.value = '';
+    toast(t('owner.folderAdded'));
+  }
+}
+
+/** What MAJIN can do right now, per lane. Shown so a missing tool is visible. */
+async function loadCapabilities() {
+  try {
+    const res = await api('/api/capabilities');
+    if (!res.ok) return;
+    const data = await res.json();
+    state.capabilities = data;
+  } catch { /* informative only */ }
+}
+
+async function loadSkills() {
+  try {
+    const res = await api('/api/skills');
+    if (!res.ok) return;
+    const data = await res.json();
+    els.skillList.textContent = '';
+    const list = data.installed || [];
+    if (!list.length) {
+      const li = document.createElement('li');
+      li.className = 'skill-empty';
+      li.textContent = t('skill.none');
+      els.skillList.append(li);
+      return;
+    }
+    for (const skill of list) {
+      const li = document.createElement('li');
+      li.className = 'skill-item';
+      li.dataset.ready = skill.ready ? 'true' : 'false';
+      const title = document.createElement('span');
+      title.className = 'skill-title';
+      title.textContent = skill.title;
+      const meta = document.createElement('span');
+      meta.className = 'skill-meta';
+      if (skill.ready) meta.textContent = skill.degraded?.length ? t('skill.degraded', { what: skill.degraded.join(', ') }) : t('skill.ready');
+      else meta.textContent = t('skill.blocked', { what: skill.blockedBy || (skill.requires || []).join(', ') });
+      li.append(title, meta);
+      if (skill.summary) {
+        const p = document.createElement('p');
+        p.className = 'skill-summary';
+        p.textContent = skill.summary;
+        li.append(p);
+      }
+      els.skillList.append(li);
+    }
+  } catch { /* informative only */ }
 }
 
 /* --------------------------------------------------------- attachments -- */
@@ -477,6 +631,8 @@ async function loadState() {
     : t('model.providerNote', { provider: data.model.provider });
   els.versionNote.textContent = `MAJIN ${data.version} · policy: ${data.policy}`;
   renderFiles(data.workspace?.files || []);
+  loadOwnerMode();
+  loadSkills();
   renderGoals(data.goals || []);
   renderConversations(data.conversations || []);
   loadModels();
@@ -1204,6 +1360,17 @@ function bindEvents() {
     setHero(true);
     hideApproval();
     closeSheet();
+  });
+  els.folderAdd.addEventListener('click', addFolder);
+  els.folderInput.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      addFolder();
+    }
+  });
+  els.ownerRevoke.addEventListener('click', async () => {
+    const data = await postOwner({ action: 'revoke' });
+    if (data) toast(t('owner.revoked'));
   });
   els.logout.addEventListener('click', async () => {
     await api('/api/auth/logout', { method: 'POST' }).catch(() => {});

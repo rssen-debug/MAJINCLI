@@ -127,6 +127,27 @@
     </div>
 
     <div class="sheet-section">
+      <h3>Behörigheter</h3>
+      <p class="sheet-value" id="owner-state">…</p>
+      <p class="sheet-note" id="owner-note"></p>
+      <ul class="lane-list" id="lane-list"></ul>
+      <label class="row">
+        <span>Mapp att ge åtkomst till</span>
+      </label>
+      <div class="folder-row">
+        <input id="folder-input" type="text" placeholder="T.ex. C:\Users\du\Documents" autocomplete="off" spellcheck="false" />
+        <button type="button" class="btn ghost small" id="folder-add">Lägg till</button>
+      </div>
+      <ul class="folder-list" id="folder-list"></ul>
+      <button type="button" class="btn ghost wide danger" id="owner-revoke" hidden>Återkalla allt</button>
+    </div>
+
+    <div class="sheet-section">
+      <h3>Förmågor</h3>
+      <ul class="skill-list" id="skill-list"></ul>
+    </div>
+
+    <div class="sheet-section">
       <h3>Uppgifter</h3>
       <ul class="goal-list" id="goal-list"></ul>
     </div>

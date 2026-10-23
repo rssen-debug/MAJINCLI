@@ -23,6 +23,7 @@ import { runTool } from '../v2/tools/runner.js';
 import { nextRecoveryStep, recoveryPlan } from '../v2/recover/advisor.js';
 import { buildMessages } from './context.js';
 import { memoryForPrompt } from './memory.js';
+import { renderSkills } from './skills.js';
 import { TOOL_SCHEMAS, safeFileName, schemasFromRegistry } from './tools.js';
 import { publicGoal, newId } from './store.js';
 import { explainModelError } from './model.js';
@@ -108,7 +109,7 @@ function safeJson(value) {
  * field outside a fixed allowlist — message contents, paths and secrets cannot
  * reach the log even by accident.
  */
-export function createAgent({ config, conversations, goals, tools, model, telemetry = null }) {
+export function createAgent({ config, conversations, goals, tools, model, telemetry = null, skills = null }) {
   const record = (event, payload) => {
     if (!telemetry) return;
     try {
@@ -151,7 +152,16 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     } catch {
       memorySection = '';
     }
-    const system = memorySection ? `${SYSTEM_PROMPT}\n\n${memorySection}` : SYSTEM_PROMPT;
+    // Procedures the owner installed, only the ones whose tools are actually
+    // available right now. A skill the agent cannot execute is not mentioned.
+    let skillSection = '';
+    try {
+      if (skills?.usable) skillSection = renderSkills(skills.usable());
+    } catch {
+      skillSection = '';
+    }
+
+    const system = [SYSTEM_PROMPT, memorySection, skillSection].filter(Boolean).join('\n\n');
 
     return buildMessages({
       system,

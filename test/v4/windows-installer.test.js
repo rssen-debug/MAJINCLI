@@ -54,6 +54,26 @@ test('installer: it reuses the settings V1 already proved', () => {
   assert.match(installer, /ExecutionTimeLimit/);
 });
 
+test('installer: a fresh install grants only the read-only network lanes', () => {
+  // The default must not hand over the machine. Files, shell and desktop are the
+  // owner's decision, made on the phone where the consequence is visible.
+  assert.ok(installer.includes("$GrantLanes = @('web', 'research', 'jobs')"), 'the default grant set is the read-only network lanes');
+  assert.ok(!/GrantLanes = @\('[^']*files/.test(installer), 'files must not be granted by default');
+  assert.ok(!/GrantLanes = @\('[^']*shell/.test(installer), 'a shell must not be granted by default');
+  assert.ok(!/GrantLanes = @\('[^']*desktop/.test(installer), 'desktop must not be granted by default');
+});
+
+test('installer: the grant is written as a schema-tagged file, not implied', () => {
+  assert.match(installer, /majin\.v4\.owner-mode\/v1/);
+  assert.match(installer, /owner-mode\.json/);
+  assert.match(installer, /reason = 'installer'/);
+});
+
+test('installer: uninstall revokes the permissions it granted', () => {
+  assert.match(installer, /Remove-Item \$OwnerMode -Force/);
+  assert.match(installer, /Återkallade alla behörigheter|revoked/i);
+});
+
 test('installer: nothing is changed machine-wide', () => {
   const forbidden = [
     /Register-Service/i,

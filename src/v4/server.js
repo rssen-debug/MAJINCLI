@@ -42,6 +42,8 @@ import { synthesize, VOICE_MODES, voiceCapabilities } from './voice.js';
 import { TurnJournal } from './turns.js';
 import { hostCapabilities, describeCapabilities, registerHostTools } from './tools/host.js';
 import { UploadStore, UploadError, serveHeadersFor, typeForName, MAX_UPLOAD_BYTES } from './uploads.js';
+import { OwnerMode, OwnerModeError } from './owner-mode.js';
+import { discoverSkills, usableSkills, describeSkills } from './skills.js';
 import { TelemetryLedger } from '../v2/telemetry/ledger.js';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui');
@@ -154,35 +156,89 @@ export function createV4Server({ config }) {
       return null; // an unwritable data dir is reported by the doctor, not fatal here
     }
   })();
-  const agent = createAgent({ config, conversations, goals, tools, model, telemetry });
+  // Skills are data on disk. What is *usable* depends on what the owner granted,
+  // so the set is recomputed on every turn rather than cached at boot.
+  const skillsDir = config.platform?.skillsDir || path.join(paths.root, 'skills');
+  const shippedSkillsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'skills');
+  function skillsNow() {
+    const shipped = discoverSkills(shippedSkillsDir);
+    const custom = discoverSkills(skillsDir);
+    const all = [...shipped.skills, ...custom.skills];
+    const errors = [...shipped.errors, ...custom.errors];
+    const grantedLanes = ownerMode.activeLanes();
+    const availableTools = tools.registry.list().map((t) => t.name);
+    const picked = usableSkills({ skills: all, grantedLanes, availableTools });
+    return { all, errors, grantedLanes, availableTools, ...picked };
+  }
+  const skillsBridge = { usable: () => skillsNow().usable };
+
+  const agent = createAgent({ config, conversations, goals, tools, model, telemetry, skills: skillsBridge });
   // Mobile connections drop. The journal lets a phone reattach to a turn that
   // kept running instead of losing the work.
   const journal = new TurnJournal();
 
-  // Host capability detection runs once at boot: what this machine can actually
-  // do, decided by asking, never by assuming. The report is served to the phone.
+  // Host capability detection runs at boot: what this machine can actually do,
+  // decided by asking, never by assuming. Which lanes are ACTIVE is the owner's
+  // decision, persisted in owner-mode.json and changeable from the phone.
   let hostCaps = null;
   let hostTools = { registered: [], skipped: [] };
-  const hostReady = (async () => {
-    try {
-      hostCaps = await hostCapabilities();
-    } catch (err) {
-      hostCaps = { platform: process.platform, error: String(err?.message || err) };
-      return;
+  const forcedLanes = config.platform?.hostTools ? ['*'] : [];
+  const ownerMode = new OwnerMode({
+    file: path.join(paths.root, 'owner-mode.json'),
+    forceLanes: forcedLanes.includes('*')
+      ? ['files', 'shell', 'power', 'web', 'research', 'jobs', 'agent', 'flows', 'github', 'desktop', 'screen', 'computer', 'browser']
+      : [],
+  });
+
+  /**
+   * Register exactly the lanes the owner currently allows. Called at boot and
+   * again after every grant or revoke, so a revocation from the phone takes
+   * effect without a restart.
+   */
+  async function refreshHostTools() {
+    if (!hostCaps) {
+      try {
+        hostCaps = await hostCapabilities();
+      } catch (err) {
+        hostCaps = { platform: process.platform, error: String(err?.message || err), lanes: {} };
+        return;
+      }
     }
-    if (!config.platform?.hostTools) {
-      hostTools = { registered: [], skipped: [{ lane: 'all', reason: 'host tools are opt-in (MAJIN_V4_HOST_TOOLS=1)' }] };
-      return;
+    const active = ownerMode.activeLanes();
+    const registered = [];
+    const skipped = [];
+
+    // 1. remove host tools that are no longer allowed
+    for (const entry of hostTools.registered) {
+      if (!active.includes(entry.lane)) {
+        tools.registry.tools.delete(entry.name);
+        skipped.push({ lane: entry.lane, tool: entry.name, reason: 'lane is not granted' });
+      }
     }
-    try {
-      hostTools = registerHostTools(tools.registry, hostCaps, {
-        allow: config.platform.hostToolAllow?.length ? config.platform.hostToolAllow : null,
-        workspaceDir: config.workspaceDir,
-      });
-    } catch (err) {
-      hostTools = { registered: [], skipped: [{ lane: 'all', reason: String(err?.message || err) }] };
+    const stillThere = hostTools.registered.filter((e) => active.includes(e.lane));
+
+    // 2. register the lanes that are allowed and not already present
+    const allowed = {};
+    for (const [lane, cap] of Object.entries(hostCaps.lanes || {})) {
+      allowed[lane] = active.includes(lane) ? cap : { ...cap, available: false, reason: 'not granted by the owner' };
     }
-  })();
+    const partial = registerHostTools(tools.registry, { ...hostCaps, lanes: allowed }, {
+      allow: config.platform?.hostToolAllow?.length ? config.platform.hostToolAllow : null,
+      workspaceDir: config.workspaceDir,
+    });
+    for (const r of partial.registered) {
+      if (!stillThere.some((e) => e.name === r.name)) stillThere.push(r);
+    }
+    skipped.push(...partial.skipped.filter((s) => s.reason !== 'not granted by the owner'));
+    // anything not granted still gets a line, but one per lane rather than per tool
+    for (const [lane, cap] of Object.entries(hostCaps.lanes || {})) {
+      if (!active.includes(lane)) skipped.push({ lane, reason: 'not granted by the owner' });
+    }
+
+    hostTools = { registered: stillThere, skipped };
+  }
+
+  const hostReady = refreshHostTools();
 
   const kernel = new Kernel({
     features: config.platform?.features || {},
@@ -531,14 +587,71 @@ export function createV4Server({ config }) {
       sendJson(res, 200, { ok: true, removed: found.name });
     },
 
+    'GET /api/skills': async (req, res) => {
+      requireSession(req);
+      const view = skillsNow();
+      sendJson(res, 200, {
+        ok: true,
+        ...describeSkills({
+          skills: view.all,
+          errors: view.errors,
+          grantedLanes: view.grantedLanes,
+          availableTools: view.availableTools,
+        }),
+        usable: view.usable.map((s) => s.name),
+      });
+    },
+
+    'GET /api/owner-mode': async (req, res) => {
+      requireSession(req);
+      sendJson(res, 200, { ok: true, ownerMode: ownerMode.view() });
+    },
+
+    'POST /api/owner-mode': async (req, res) => {
+      requireSession(req);
+      assertCsrfHeader(req);
+      const body = await readJsonBody(req, 8192);
+      try {
+        let view;
+        if (body.action === 'grant') {
+          view = ownerMode.grant({
+            lanes: Array.isArray(body.lanes) ? body.lanes : [],
+            folders: Array.isArray(body.folders) ? body.folders : [],
+            reason: typeof body.reason === 'string' ? body.reason.slice(0, 200) : null,
+          });
+        } else if (body.action === 'revoke') {
+          view = ownerMode.revoke({
+            lanes: Array.isArray(body.lanes) ? body.lanes : null,
+            folders: Array.isArray(body.folders) ? body.folders : null,
+            reason: typeof body.reason === 'string' ? body.reason.slice(0, 200) : null,
+          });
+        } else {
+          throw new HttpError(400, 'UNKNOWN_ACTION', 'action must be "grant" or "revoke"');
+        }
+        // A permission change must take effect on the next call, not the next boot.
+        await refreshHostTools();
+        const active = ownerMode.activeLanes();
+        sendJson(res, 200, {
+          ok: true,
+          ownerMode: view,
+          enabled: active.length > 0,
+          registered: hostTools.registered.length,
+        });
+      } catch (err) {
+        if (err instanceof OwnerModeError) throw new HttpError(err.status, err.code, err.message);
+        throw err;
+      }
+    },
+
     'GET /api/capabilities': async (req, res) => {
       requireSession(req);
       await hostReady;
       sendJson(res, 200, {
         ok: true,
         host: hostCaps ? describeCapabilities(hostCaps) : { platform: process.platform, lanes: {} },
+        ownerMode: ownerMode.view(),
         tools: {
-          enabled: Boolean(config.platform?.hostTools),
+          enabled: ownerMode.enabled(),
           registered: hostTools.registered,
           skipped: hostTools.skipped,
         },

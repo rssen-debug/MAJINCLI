@@ -191,7 +191,7 @@ test('host: every discovered lane is a real module with a real export', async ()
 
 /* ------------------------------------------------- end to end through the host -- */
 
-test('host: capabilities endpoint is authenticated and reports the opt-in state', async () => {
+test('host: capabilities endpoint is authenticated and reports the owner-mode state', async () => {
   const { startTestServer } = await import('./helpers.mjs');
   const off = await startTestServer();
   try {
@@ -202,20 +202,29 @@ test('host: capabilities endpoint is authenticated and reports the opt-in state'
     const res = await fetch(`${off.base}/api/capabilities`, { headers: { cookie } });
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.equal(body.tools.enabled, false, 'host tools are off by default');
+    assert.equal(body.tools.enabled, false, 'nothing is granted by default');
     assert.deepEqual(body.tools.registered, []);
-    assert.ok(body.tools.skipped.some((s) => /opt-in/i.test(s.reason)));
+    assert.equal(body.ownerMode.enabled, false);
+    assert.ok(['files', 'shell', 'web'].every((l) => body.ownerMode.grantable.includes(l)));
     assert.equal(typeof body.host.lanes.desktop.available, 'boolean');
   } finally {
     await off.close();
   }
 });
 
-test('host: enabling host tools registers the files lane and keeps destructive ones held', async () => {
+test('host: a grant registers the files lane and keeps destructive tools held', async () => {
   const { startTestServer } = await import('./helpers.mjs');
-  const on = await startTestServer({ env: { MAJIN_V4_HOST_TOOLS: '1' } });
+  const home = tempHome();
+  const on = await startTestServer({ home });
   try {
     const { cookie } = await on.pair();
+    const grant = await fetch(`${on.base}/api/owner-mode`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json', 'x-majin-csrf': '1', origin: on.base },
+      body: JSON.stringify({ action: 'grant', lanes: ['files'], folders: [home] }),
+    });
+    assert.equal(grant.status, 200);
+
     const res = await fetch(`${on.base}/api/capabilities`, { headers: { cookie } });
     const body = await res.json();
     assert.equal(body.tools.enabled, true);
@@ -225,19 +234,27 @@ test('host: enabling host tools registers the files lane and keeps destructive o
     assert.equal(del.tier, 'process', 'a delete stays a held operation');
   } finally {
     await on.close();
+    fs.rmSync(home, { recursive: true, force: true });
   }
 });
 
-test('host: the allowlist limits what enabling host tools exposes', async () => {
+test('host: the install-time allowlist limits what a grant can expose', async () => {
   const { startTestServer } = await import('./helpers.mjs');
-  const s = await startTestServer({ env: { MAJIN_V4_HOST_TOOLS: '1', MAJIN_V4_HOST_TOOL_ALLOW: 'fs.read' } });
+  const home = tempHome();
+  const s = await startTestServer({ home, env: { MAJIN_V4_HOST_TOOL_ALLOW: 'fs.read' } });
   try {
     const { cookie } = await s.pair();
+    await fetch(`${s.base}/api/owner-mode`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json', 'x-majin-csrf': '1', origin: s.base },
+      body: JSON.stringify({ action: 'grant', lanes: ['files', 'shell'], folders: [home] }),
+    });
     const body = await (await fetch(`${s.base}/api/capabilities`, { headers: { cookie } })).json();
     assert.deepEqual(body.tools.registered.map((t) => t.name), ['fs_read']);
     assert.ok(!body.tools.registered.some((t) => t.name.startsWith('exec')));
   } finally {
     await s.close();
+    fs.rmSync(home, { recursive: true, force: true });
   }
 });
 

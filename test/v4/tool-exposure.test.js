@@ -178,12 +178,18 @@ test('exposure: a registered host tool is actually CALLABLE through the agent', 
 
 /* -------------------------------------------- the reported bug, end to end -- */
 
-test('exposure: with host tools enabled, a real turn offers far more than five tools', async () => {
+test('exposure: with an owner grant, a real turn offers far more than five tools', async () => {
   const { startTestServer, postChat, readSse } = await import('./helpers.mjs');
   const home = tempHome();
-  const s = await startTestServer({ home, env: { MAJIN_V4_HOST_TOOLS: '1' } });
+  const s = await startTestServer({ home });
   try {
     const { cookie } = await s.pair();
+    const grant = await fetch(`${s.base}/api/owner-mode`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json', 'x-majin-csrf': '1', origin: s.base },
+      body: JSON.stringify({ action: 'grant', lanes: ['web', 'jobs'], folders: [home] }),
+    });
+    assert.equal(grant.status, 200, await grant.clone().text());
 
     const seen = [];
     const realChat = s.context.model.chat.bind(s.context.model);
@@ -203,9 +209,12 @@ test('exposure: with host tools enabled, a real turn offers far more than five t
     // and real host tools must be there
     assert.ok(names.includes('fs_read'), `no fs_read among: ${names.join(', ')}`);
     assert.ok(names.includes('fs_search'), 'a file search is exposed (needed to find a CV)');
-    assert.ok(names.includes('exec_start'), 'a shell is exposed (held, needs approval)');
     assert.ok(names.some((n) => n.startsWith('jobs_')), 'the job-search lane is exposed');
     assert.ok(names.some((n) => n.startsWith('web_')), 'the web lane is exposed');
+    // the grant was web+jobs (+files, implied by the folder): a lane the owner did
+    // NOT grant must not appear, or the grant would mean nothing.
+    assert.ok(!names.includes('exec_start'), 'a shell was not granted and must not be offered');
+    assert.ok(!names.some((n) => n.startsWith('desktop')), 'desktop was not granted');
 
     // every schema sent to the model is a usable object schema
     for (const t of seen[0]) {

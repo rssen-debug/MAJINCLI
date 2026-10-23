@@ -515,6 +515,41 @@ and asserts the frame's sandbox attributes and the response header.
 image input. The upload is attached and described; whether the model reads the picture is a
 provider capability, not a claim this release makes.
 
+## Owner Mode: permission is a decision the owner makes on their phone
+
+Host tools were behind `MAJIN_V4_HOST_TOOLS=1` — an environment variable that required a
+terminal, a restart and a good memory. That is not how a phone user grants access to their own
+computer.
+
+**Owner Mode** replaces it. `src/v4/owner-mode.js` writes `<data>/v4/owner-mode.json` (0600):
+
+- per-lane grants, so "web yes, desktop no" is expressible
+- the filesystem lane **stays inert without a folder**, and a drive root can never be granted
+- a revoke is effective on the **next call**, not the next boot: `refreshHostTools()` removes
+  the tools from the registry and they vanish from the model's schema list too
+- every grant and revoke is appended to an audit history with a timestamp
+- a corrupt or unknown-schema file degrades to *nothing granted*, never to a permission
+
+The installer seeds the safe set (`web`, `research`, `jobs`) and writes down why. Files, shell and
+desktop are left for the owner to grant from **Behörigheter** in the app, where the consequence is
+visible on screen.
+
+## Skills: procedures, not buttons
+
+Job search is no longer app code. `src/v4/skills/<name>/` holds `skill.json` + `SKILL.md`, and
+`src/v4/skills.js` decides what the model is told:
+
+| Rule | Consequence |
+|---|---|
+| required lanes not granted | the skill is **hidden** from the model |
+| required tool not registered | hidden — a procedure naming tools it cannot call is a trap |
+| a `prefers` tool is missing | **degraded**, not hidden: the prompt says what is unavailable and tells the model to say so plainly |
+| malformed manifest | skipped and named on `/api/skills`, never half-loaded |
+| huge SKILL.md | capped, so a hostile skill file cannot flood the context |
+
+Shipped: `job-search` (CV → read → search → verify → compare → prepare, never submit without
+approval) and `fix-code` (read → reproduce → minimal patch → retest → show diff).
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in

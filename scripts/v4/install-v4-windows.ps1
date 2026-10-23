@@ -18,7 +18,12 @@
 param(
   [switch]$AutoStart,
   [switch]$Uninstall,
-  [int]$Port = 7373
+  [int]$Port = 7373,
+  # Lanes granted at install time. Defaults to the lanes that only READ from the
+  # network; anything that touches the machine (files, shell, desktop) is left
+  # for the owner to grant from the phone, where the consequence is visible.
+  [string[]]$GrantLanes = @('web', 'research', 'jobs'),
+  [string[]]$GrantFolders = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -35,6 +40,8 @@ if ($Uninstall) {
     Write-Step "Tog bort den schemalagda uppgiften '$TaskName'."
   }
   if (Test-Path $Launcher) { Remove-Item $Launcher -Force; Write-Step "Tog bort $Launcher." }
+  $OwnerMode = Join-Path $env:LOCALAPPDATA 'MAJIN\v4\owner-mode.json'
+  if (Test-Path $OwnerMode) { Remove-Item $OwnerMode -Force; Write-Step 'Återkallade alla behörigheter (owner-mode.json borttagen).' }
   Write-Step 'Avinstallerat. Data i %LOCALAPPDATA%\MAJIN\v4 ligger kvar.'
   exit 0
 }
@@ -65,6 +72,29 @@ cd /d "$RepoRoot"
 "$nodePath" src\v4\main.js %*
 "@ | Set-Content -Path $Launcher -Encoding ASCII
 Write-Step "Launcher: $Launcher"
+
+# --- 4b. Owner Mode seed ----------------------------------------------------
+# Written, not implied: the file records exactly what was granted, when, and why.
+$OwnerMode = Join-Path $env:LOCALAPPDATA 'MAJIN\v4\owner-mode.json'
+if ($GrantLanes.Count -gt 0) {
+  $dir = Split-Path -Parent $OwnerMode
+  if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+  $seed = @{
+    schema    = 'majin.v4.owner-mode/v1'
+    version   = 1
+    lanes     = @($GrantLanes)
+    folders   = @($GrantFolders)
+    grantedAt = (Get-Date).ToUniversalTime().ToString('o')
+    revokedAt = $null
+    history   = @(@{ at = (Get-Date).ToUniversalTime().ToString('o'); action = 'grant'; lanes = @($GrantLanes); folders = @($GrantFolders); reason = 'installer' })
+  }
+  $seed | ConvertTo-Json -Depth 6 | Set-Content -Path $OwnerMode -Encoding UTF8
+  Write-Step "Behörigheter vid installation: $($GrantLanes -join ', ')"
+  if ($GrantFolders.Count -gt 0) { Write-Step "Mappar: $($GrantFolders -join ', ')" }
+  Write-Step 'Filer, terminal och skrivbord slås på från telefonen under Behörigheter.'
+} else {
+  Write-Step 'Inga behörigheter gavs vid installation (använd -GrantLanes för att sätta dem).'
+}
 
 Write-Step 'Kör host-doctor...'
 Push-Location $RepoRoot
