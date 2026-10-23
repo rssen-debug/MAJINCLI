@@ -47,6 +47,23 @@ test('capture: a late permission grant after stopping releases every track', asy
   assert.equal(stopped, 1); assert.equal(capture.active, false); assert.equal(capture.timer, null);
 });
 
+test('capture: stale transcription completion cannot rearm or stop a newly started session', async () => {
+  let finish; let created = 0;
+  const scope = { Blob, clearInterval() {}, navigator: {}, MediaRecorder: class {
+    constructor() { created++; this.state = 'inactive'; }
+    start() { this.state = 'recording'; }
+    stop() { this.state = 'inactive'; this.stopped = this.onstop?.(); }
+  } };
+  const capture = new VoiceCapture({ scope, onSegment: () => new Promise((resolve) => { finish = resolve; }) });
+  capture.active = true; capture.activity = new VoiceActivity(); capture.record();
+  const first = capture.recorder;
+  capture.activity.speaking = true; first.ondataavailable({ data: new Blob(['audio']) }); first.stop();
+  capture.stop(); capture.active = true; capture.record(); const second = capture.recorder;
+  finish(); await first.stopped;
+  assert.equal(created, 2); assert.equal(capture.recorder, second); assert.equal(capture.active, true);
+  capture.stop();
+});
+
 test('STT HTTP: authenticated/CSRF protected, bounded, no configured engine fails honestly, audio is removed', async () => {
   const previous = process.env.MAJIN_V4_STT_COMMAND;
   delete process.env.MAJIN_V4_STT_COMMAND;

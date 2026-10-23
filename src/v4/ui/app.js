@@ -5,11 +5,11 @@
  * never claims a task succeeded on its own. iOS voice uses foreground capture
  * and host-local STT; other browsers retain Web Speech with recording fallback.
  */
-import { createSpirit } from '/spirit.js?v=6';
-import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage } from '/voice.js?v=6';
-import { t } from '/strings.js?v=6';
-import { INITIAL, applyEvent, createSseParser } from '/session.js?v=6';
-import { VoiceCapture } from '/recorder.js?v=6';
+import { createSpirit } from '/spirit.js?v=7';
+import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage } from '/voice.js?v=7';
+import { t } from '/strings.js?v=7';
+import { INITIAL, applyEvent, createSseParser } from '/session.js?v=7';
+import { VoiceCapture } from '/recorder.js?v=7';
 
 const $ = (sel) => document.querySelector(sel);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1329,6 +1329,10 @@ const canRecord = Boolean(window.isSecureContext && navigator.mediaDevices?.getU
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 let preferRecording = isIOS || !SpeechRecognition;
 let voiceRequest = null;
+let narratorAudio = null;
+let narratorRequest = null;
+let narratorUrl = null;
+let detectedVoiceLanguage = null;
 const capture = new VoiceCapture({
   onState(mode) {
     state.listening = capture.active;
@@ -1341,7 +1345,7 @@ const capture = new VoiceCapture({
       ? t('voice.capture.blocked')
       : err.name === 'NotFoundError' ? t('voice.capture.missing') : err.message;
   },
-  onSpeech() { if (window.speechSynthesis?.speaking || state.streaming) void interruptVoiceTurn(); },
+  onSpeech() { if (window.speechSynthesis?.speaking || (narratorAudio && !narratorAudio.paused) || narratorRequest || state.streaming) void interruptVoiceTurn(); },
   async onSegment(blob) {
     voiceRequest = new AbortController();
     const request = voiceRequest;
@@ -1356,6 +1360,7 @@ const capture = new VoiceCapture({
       if (!response.ok) throw new Error(result.error?.code === 'STT_NOT_CONFIGURED' ? t('voice.capture.unconfigured') : t('voice.capture.failed'));
       if (!capture.active || request.signal.aborted) return;
       const text = String(result.transcript || '').trim();
+      detectedVoiceLanguage = result.language || null;
       if (!text) return;
       els.input.value = text; resizeInput();
       if (shouldAutoSend({ finalTranscript: text, autosend: state.autosend, streaming: state.streaming })) send(text);
@@ -1455,6 +1460,11 @@ function toggleListening() {
       window.speechSynthesis.speak(unlock);
       state.tts = true; els.ttsToggle.checked = true;
     }
+    // Reuse this exact element for delayed server audio on iOS. Prime only in
+    // the owner's tap; a rejected playback remains visible on the real reply.
+    narratorAudio ||= new Audio();
+    narratorAudio.src = 'data:audio/wav;base64,UklGRiUAAABXQVZFZm10IBAAAAABAAEARKwAAESsAAABAAgAZGF0YQEAAACA';
+    narratorAudio.play().catch(() => {});
     void capture.start();
     return;
   }
@@ -1472,25 +1482,48 @@ function toggleListening() {
   }
 }
 
-function pickVoice() {
+function pickVoice(language = null) {
   const voices = window.speechSynthesis?.getVoices?.() || [];
-  const lang = document.documentElement.lang || 'sv-SE';
+  const lang = language || document.documentElement.lang || 'sv-SE';
   return voices.find((v) => v.lang?.toLowerCase().startsWith(lang.slice(0, 2))) || voices[0] || null;
 }
 
-function speak(text) {
+async function speak(text) {
+  const clean = speechText(text, 600);
+  if (!clean) return;
+  cancelSpeech();
+  const controller = new AbortController();
+  narratorRequest = controller;
+  try {
+    const capabilities = await api('/api/voice', { signal: controller.signal }).then((r) => r.ok ? r.json() : null);
+    if (controller.signal.aborted) return;
+    if (capabilities?.serverSide?.tts?.some((lane) => lane.mode === 'command' && lane.available)) {
+      const response = await api('/api/voice/speak', { method: 'POST', body: { text: clean, mode: 'command' }, signal: controller.signal });
+      if (!response.ok) throw new Error(t('voice.narrator.failed'));
+      const audio = await response.blob();
+      if (controller.signal.aborted) return;
+      narratorAudio ||= new Audio();
+      narratorUrl = URL.createObjectURL(audio); narratorAudio.src = narratorUrl;
+      narratorAudio.onended = () => { if (narratorUrl) URL.revokeObjectURL(narratorUrl); narratorUrl = null; spirit.set(capture.active ? 'listening' : 'idle'); };
+      narratorAudio.onerror = () => { els.hint.textContent = t('voice.narrator.failed'); cancelSpeech(); };
+      await narratorAudio.play();
+      spirit.set('speaking');
+      return;
+    }
+  } catch (err) {
+    if (!controller.signal.aborted) els.hint.textContent = t('voice.narrator.failed');
+    return; // never silently substitute another voice for a configured narrator
+  } finally { if (narratorRequest === controller) narratorRequest = null; }
   if (!('speechSynthesis' in window)) {
     els.hint.textContent = t('voice.noTts');
     return;
   }
-  const clean = speechText(text);
-  if (!clean) return;
   window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(clean);
-  utter.lang = recognitionLang(navigator.language);
+  utter.lang = recognitionLang(detectedVoiceLanguage || navigator.language);
   utter.rate = 1.02;
   utter.pitch = 1.0;
-  const voice = pickVoice();
+  const voice = pickVoice(utter.lang);
   if (voice) utter.voice = voice;
   utter.onstart = () => spirit.set('speaking');
   utter.onboundary = () => spirit.level(0.45 + Math.random() * 0.3);
@@ -1502,6 +1535,10 @@ function speak(text) {
 }
 
 function cancelSpeech() {
+  narratorRequest?.abort(); narratorRequest = null;
+  narratorAudio?.pause();
+  if (narratorUrl) URL.revokeObjectURL(narratorUrl);
+  narratorUrl = null;
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 }
 

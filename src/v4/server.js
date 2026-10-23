@@ -616,7 +616,7 @@ export function createV4Server({ config }) {
         const result = await transcribe({ audioPath: file, command });
         // Never expose a local path/command, or call a fixture a real recognizer.
         sendJson(res, result.ok ? 200 : 422, {
-          ok: result.ok, transcript: result.transcript, provider: result.provider,
+          ok: result.ok, transcript: result.transcript, language: result.language, provider: result.provider,
           synthetic: result.synthetic === true, elapsedMs: result.elapsedMs,
           ...(!result.ok ? { error: { code: result.errorClass || 'NO_SPEECH', message: 'No speech could be transcribed. Try again.' } } : {}),
         });

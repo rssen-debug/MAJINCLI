@@ -1,13 +1,11 @@
 /**
  * MAJIN V4 — voice policy, kept out of the DOM so it can be unit tested.
  *
- * What this module does NOT do: pretend the product has continuous,
- * always-listening, server-side interruption. It is tap-to-talk via the
- * browser's SpeechRecognition plus SpeechSynthesis for replies, and every
- * limitation (no background mic on iOS, engine needs network) is surfaced in
- * the UI instead of hidden.
+ * Describes the Web Speech lane only. Foreground MediaRecorder/server STT
+ * lives in recorder.js and needs an explicit microphone session. Neither
+ * lane promises background listening or physical voice acceptance.
  */
-import { t } from './strings.js?v=6';
+import { t } from './strings.js?v=7';
 
 /** Recognition language follows the phone, defaulting to Swedish. */
 export function recognitionLang(navigatorLanguage = 'sv-SE') {

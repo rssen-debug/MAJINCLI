@@ -2,7 +2,7 @@
  * Each upload is a complete container: individual MediaRecorder chunks are
  * not standalone MP4 files. Never restart permission requests in a loop.
  */
-import { t } from './strings.js?v=6';
+import { t } from './strings.js?v=7';
 
 export function recordingType(Recorder) {
   return ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']
@@ -58,6 +58,7 @@ export class VoiceCapture {
   }
   record() {
     if (!this.active) return;
+    const generation = this.generation;
     const s = this.scope; const parts = []; let bytes = 0;
     const type = recordingType(s.MediaRecorder);
     const recorder = new s.MediaRecorder(this.stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 64000 });
@@ -77,8 +78,8 @@ export class VoiceCapture {
           this.onState('transcribing');
           await this.onSegment(new s.Blob(parts, { type: recorder.mimeType || type }));
         }
-        if (this.active) { this.record(); this.onState('listening'); }
-      } catch (err) { this.stop(); this.onError(err); }
+        if (this.active && generation === this.generation) { this.record(); this.onState('listening'); }
+      } catch (err) { if (this.active && generation === this.generation) { this.stop(); this.onError(err); } }
     };
     recorder.start(250);
   }

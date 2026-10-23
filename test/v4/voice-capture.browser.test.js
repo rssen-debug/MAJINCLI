@@ -81,13 +81,25 @@ test('iOS client: uses capture instead of Siri, sends transcript, interrupts syn
   await context.addCookies([{ name: cookie.slice(0, eq), value: cookie.slice(eq + 1), url: server.base }]);
   const page = await context.newPage();
   let uploads = 0;
+  let narratorCalls = 0;
+  await page.route('**/api/voice', (route) => route.fulfill({ json: { serverSide: { tts: [{ mode: 'command', available: true }] } } }));
+  await page.route('**/api/voice/speak', (route) => {
+    narratorCalls++;
+    assert.equal(route.request().postDataJSON().mode, 'command');
+    return route.fulfill({ body: Buffer.alloc(64), contentType: 'audio/wav' });
+  });
   await page.route('**/api/voice/transcribe', async (route) => {
     uploads++; const body = route.request().postDataJSON();
     assert.match(body.type, /^audio\//); assert.ok(Buffer.from(body.data, 'base64').length > 200);
     await route.fulfill({ json: { ok: true, transcript: 'Skriv filen ios-voice.txt med innehåll: voice capture works', synthetic: true } });
   });
   await page.addInitScript(() => {
-    window.__cancelledSpeech = 0; window.__captureCalls = 0;
+    window.__cancelledSpeech = 0; window.__captureCalls = 0; window.__narratorStarts = 0;
+    window.Audio = class {
+      constructor() { this.paused = true; window.__narrator = this; }
+      play() { this.paused = false; if (this.src?.startsWith('blob:')) window.__narratorStarts++; return Promise.resolve(); }
+      pause() { this.paused = true; }
+    };
     Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
       speaking: false, cancel() { this.speaking = false; window.__cancelledSpeech++; },
       speak(utterance) { if (utterance.text) this.speaking = true; }, getVoices() { return []; },
@@ -113,6 +125,11 @@ test('iOS client: uses capture instead of Siri, sends transcript, interrupts syn
   await page.waitForFunction(() => document.querySelector('.tool[data-state="verified"]'));
   assert.equal(fs.readFileSync(path.join(server.home, 'workspace/ios-voice.txt'), 'utf8'), 'voice capture works');
   assert.equal(uploads, 1);
+  await page.waitForFunction(() => window.__narratorStarts === 1);
+  assert.equal(narratorCalls, 1, 'configured host voice is requested instead of the browser default');
+  await page.evaluate(() => { window.__micSource.gain.gain.value = 0.2; });
+  await page.waitForFunction(() => window.__narrator.paused, { timeout: 10000 });
+  await page.evaluate(() => { window.__micSource.gain.gain.value = 0; });
   await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); });
   await page.waitForFunction(() => window.__micSource.destination.stream.getTracks().every((track) => track.readyState === 'ended'));
   assert.equal(await page.locator('#mic-btn').getAttribute('aria-pressed'), 'false');

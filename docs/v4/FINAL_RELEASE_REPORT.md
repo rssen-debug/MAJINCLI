@@ -5,8 +5,10 @@ and [machine-readable evidence](evidence/ghost-acceptance.json). Backup/restore,
 real inference, crash recovery, shared authenticated history and mobile input
 repair are verified. Ghost legacy regression is now 1284 passed, 0 failed,
 23 skipped (43 failures reproduced and repaired). The owner confirms mobile
-chat works but reports the Safari microphone still fails; iOS recording/server
-STT follow-up is under test, with physical voice acceptance pending. Native
+chat works but rejects the first voice fallback's latency, Swedish language lock
+and missing prior narrator. The follow-up restores existing Kokoro/am_adam, warm
+local STT and language detection; physical voice acceptance is still failed/pending.
+The new DOM module-list regression was corrected (18/18 targeted pass). Native
 installation, login startup, production signing/updates and parity remain open.
 The alpha.2/alpha.3 krist records below are historical, not current Ghost claims.
 

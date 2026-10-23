@@ -65,12 +65,12 @@ const PRELUDE = `
 /**
  * Boot the real app against a real host.
  *
- * The five browser modules are concatenated in dependency order with their
+ * The browser modules are concatenated in dependency order with their
  * `import`/`export` keywords stripped, then evaluated in the jsdom window. That
  * is the same source that ships to the phone — no copy, no rewrite — while
  * avoiding a bundler and a build step in the test.
  */
-const MODULE_ORDER = ['session.js', 'strings.js', 'voice.js', 'spirit.js', 'app.js'];
+const MODULE_ORDER = ['session.js', 'strings.js', 'voice.js', 'recorder.js', 'spirit.js', 'app.js'];
 
 function clientBundle() {
   const parts = [];
@@ -175,7 +175,8 @@ async function bootApp({ server: reuse = null, prepare = null, session = '' } = 
   window.addEventListener('error', (e) => errors.push(String(e.message || e.error)));
   window.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason?.message || e.reason)));
 
-  window.eval(clientBundle());
+  try { window.eval(clientBundle()); }
+  catch (err) { window.close(); if (!reuse) await server.close(); throw err; }
 
   return {
     dom,

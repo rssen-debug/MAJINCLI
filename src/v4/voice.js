@@ -124,10 +124,22 @@ export async function transcribe({ audioPath, command = null }) {
   const started = Date.now();
   try {
     const result = await listen(audioPath, { provider });
+    // Warm local recognizers may also return a detected language. Generic V2
+    // command providers still accept plain text; parse only this explicit shape.
+    let transcript = result.transcript || '';
+    let language = null;
+    try {
+      const structured = JSON.parse(transcript);
+      if (typeof structured.transcript === 'string' && /^[a-z]{2,3}$/.test(structured.language)) {
+        transcript = structured.transcript;
+        language = structured.language;
+      }
+    } catch { /* plain transcript */ }
     return {
-      ok: Boolean(result.ok),
-      verdict: result.verdict || 'inconclusive',
-      transcript: result.transcript || '',
+      ok: Boolean(result.ok) && Boolean(transcript.trim()),
+      verdict: transcript.trim() ? (result.verdict || 'capture') : 'inconclusive',
+      transcript,
+      language,
       provider: provider.name,
       elapsedMs: Date.now() - started,
       synthetic: provider.name === 'buffer',

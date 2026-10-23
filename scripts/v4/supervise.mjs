@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../../src/v4/config.js';
 import { Supervisor } from '../../src/v4/supervisor.js';
 import { recoverInterruptedUpdate } from '../../src/v4/updater.js';
+import { scrubEnv } from '../../src/v2/spawn/safe-exec.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '../..');
@@ -64,6 +65,16 @@ const supervisor = new Supervisor({
   healthUrl,
   logFile,
 });
+// Explicit owner configuration only. Reuse the existing supervised lifecycle;
+// never download models or propagate provider credentials to the audio worker.
+let voiceSupervisor = null;
+if (process.env.MAJIN_V4_VOICE_SERVICE_ARGV) {
+  const command = JSON.parse(process.env.MAJIN_V4_VOICE_SERVICE_ARGV);
+  if (!Array.isArray(command) || command.length < 2 || command.some((arg) => typeof arg !== 'string')) throw new Error('Invalid voice service argv');
+  voiceSupervisor = new Supervisor({ command, cwd: repoRoot, env: scrubEnv(),
+    healthUrl: 'http://127.0.0.1:18765/health', startupGraceMs: 60000,
+    logFile: path.join(config.paths.logs, `voice-supervisor-${day}.jsonl`) });
+}
 supervisor.log('launcher_started', { pid: process.pid });
 
 function line(text) {
@@ -93,6 +104,7 @@ const statusTimer = setInterval(() => {
 async function shutdown(signal) {
   line(`\n  ${signal} — stopping the host (no restart).`);
   clearInterval(statusTimer);
+  await voiceSupervisor?.stop();
   await supervisor.stop();
   const s = supervisor.status();
   line(`  final: ${s.state}, ${s.spawns} spawn(s), ${s.crashes} crash(es), ${s.restarts} restart(s)`);
@@ -114,4 +126,9 @@ if (initial.state === 'failed') {
   line(`  host is ${initial.state} on pid ${initial.pid}`);
   line('  the supervisor keeps it running; Ctrl+C stops both');
   line('');
+  if (voiceSupervisor) {
+    await voiceSupervisor.start();
+    const voice = voiceSupervisor.status();
+    line(`  local voice worker: ${voice.state}${voice.lastError ? ` (${voice.lastError})` : ''}`);
+  }
 }

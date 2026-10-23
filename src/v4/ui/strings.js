@@ -7,6 +7,7 @@
  * declared localization resource and is exempt for that reason only.
  */
 export const SV = {
+  'voice.narrator.failed': 'Kunde inte spela värdens berättarröst. Kontrollera ljudbehörighet och försök med mikrofonknappen igen.',
   'voice.capture.requesting': 'Tillåt mikrofonen i Safari…',
   'voice.capture.listening': 'Lyssnar – tryck på mikrofonen för att avsluta.',
   'voice.capture.transcribing': 'Tolkar tal på värden…',

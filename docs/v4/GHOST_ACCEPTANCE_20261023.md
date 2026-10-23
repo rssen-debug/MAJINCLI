@@ -44,6 +44,47 @@ reported that Safari's microphone does not work; voice remains a blocking defect
 
 ## iOS voice follow-up
 
+Owner feedback after the first deployment: recognition/playback was slow, English
+speech produced Swedish replies and the old SunnyV2-style narrator was missing.
+This is a **failed physical voice acceptance**, not a pass. The historical source
+identifies that narrator as opt-in Kokoro ONNX **am_adam** (`docs/VOICE-NARRATOR.md`);
+no separate SunnyV2 DLL was found. The new follow-up restores that existing engine
+through V2's command TTS lane and the authenticated V4 audio endpoint. The browser
+plays the returned WAV and voice interruption cancels the fetch/playback. It does
+not silently replace a configured narrator with a browser voice.
+
+The first local-STT fallback forced `sv`; this was a real defect. Language is now
+auto-detected, returned through the command/HTTP adapters and used for browser
+voice selection when needed. The existing agent prompt already follows the user's
+language. A persistent local worker reuses loaded models, with bounded threads,
+no ONNX idle spinning, no per-request download, bounded audio decoding and explicit
+supervision when the owner configures `MAJIN_V4_VOICE_SERVICE_ARGV`. It reuses the
+existing Kokoro service and V4 Supervisor rather than adding another agent core.
+
+Warm multilingual Whisper tiny tests: synthetic English “Hello, Major. Please
+answer in English. How are you today?” detected `en` in 2016 ms (2306 ms client
+total); Swedish detected `sv` in 1984 ms (2205 ms client total). Proper-name
+recognition differs from the spoken MAJIN name. The base model took about 4.3 s
+warm and 5.2 s through the first HTTP fallback; the base model remains preserved.
+Kokoro `am_adam` produced actual WAV audio (117132 bytes for an English sentence,
+3140 ms warm). These are synthetic-input component timings, **not end-to-end phone
+latency**, voice-quality equivalence, or accepted natural barge-in.
+
+The subsequent full V4 run exposed a test harness omission: its concatenated
+module list lacked recorder.js, causing 18 DOM tests to fail and leave servers
+open. The module list and failure teardown were fixed; all 18 DOM tests passed.
+A targeted voice/UI/legacy-voice run passed 62 with 1 explicit Windows WebKit media
+skip; a further 22 voice/command/Kokoro contracts passed. A stale transcription
+completion is now prevented from rearming or stopping a new microphone session.
+Full latest-head CI and real iPhone acceptance still must be checked.
+
+Latest warm-worker evidence: [local recognition and narrator](evidence/ghost-voice/warm-worker.json).
+English and Swedish language detection passed; cross-origin requests returned
+403, invalid audio 422 and a valid 40-second WAV was rejected with 413 before
+inference. Configured narrator playback/voice cancellation, real browser encoding,
+the full DOM harness and supervisor tests passed **27/28, zero failures, one
+Windows WebKit media skip**. This overlaps the other targeted suites.
+
 The previous UI relied solely on Web Speech recognition. Safari recognition
 depends on Siri being enabled ([WebKit](https://webkit.org/blog/11648/new-webkit-features-in-safari-14-1/));
 API presence therefore did not prove a working microphone. An upstream
@@ -121,7 +162,11 @@ separately. Earlier parse check: 612/612 sources. Latest-head CI is mandatory.
 2. **Login startup:** registered scheduled task failed with `0x8007010B`, then
    result 1 without working directory; a minimal signed-Node probe succeeded.
    Failed task disabled; functioning manual supervisor restored. Normal .ps1
-   execution is policy-blocked. Actual Windows login startup remains unaccepted.
+   execution is policy-blocked. A per-user source-host Startup shortcut now points
+   to the signed Node runtime and existing supervisor with verified absolute
+   arguments/working directory. Automatic security review rejected its test launch
+   as “blocked by policy”; no successful shortcut launch is claimed. Actual
+   Windows login startup remains unaccepted.
 3. **Physical acceptance:** iPhone/Ghost microphone/speaker, natural voice
    interruption and echo behavior, explicit 5G handover/reconnect, cross-device
    upload/history walkthrough; Android and the full requested device coverage.

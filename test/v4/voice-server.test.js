@@ -192,6 +192,9 @@ test('voice/stt: the local command lane returns a transcript, and an empty one s
   assert.equal(heard.verdict, 'capture');
   assert.equal(heard.transcript, 'öppna rapporten');
   assert.equal(heard.synthetic, false);
+  const structured = await transcribe({ audioPath: wav, command: sttTemplate().replace(' stt ', ' stt-json ') });
+  assert.equal(structured.transcript, heard.transcript);
+  assert.equal(structured.language, 'en', 'recognized language reaches the client instead of forcing phone locale');
 
   const quiet = path.join(dir, 'quiet.wav');
   fs.writeFileSync(quiet, Buffer.alloc(64));
@@ -199,6 +202,9 @@ test('voice/stt: the local command lane returns a transcript, and an empty one s
   assert.equal(empty.ok, false, 'an empty transcript is not a success');
   assert.equal(empty.verdict, 'inconclusive');
   assert.equal(empty.transcript, '');
+  const structuredEmpty = await transcribe({ audioPath: quiet, command: sttTemplate().replace(' stt ', ' stt-json ') });
+  assert.equal(structuredEmpty.ok, false, 'JSON metadata with an empty transcript is not recognition');
+  assert.equal(structuredEmpty.verdict, 'inconclusive');
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

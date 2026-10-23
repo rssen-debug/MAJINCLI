@@ -4,10 +4,12 @@ Install dependencies and model separately. The server never uploads speech.
 It accepts only JSON /speak calls from loopback app origins and returns WAV.
 """
 import argparse
+import base64
 import io
 import json
 import os
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -28,8 +30,20 @@ def serve(args):
     # Lazy imports: --help and tests work without large inference packages.
     from kokoro_onnx import Kokoro
     import soundfile as sf
-    model = Kokoro(str(args.model.resolve()), str(args.voices.resolve()))
+    import onnxruntime as ort
+    options = ort.SessionOptions()
+    options.intra_op_num_threads = 2
+    options.inter_op_num_threads = 1
+    options.add_session_config_entry('session.intra_op.allow_spinning', '0')
+    options.add_session_config_entry('session.inter_op.allow_spinning', '0')
+    session = ort.InferenceSession(str(args.model.resolve()), sess_options=options, providers=['CPUExecutionProvider'])
+    model = Kokoro.from_session(session, str(args.voices.resolve()))
     lock = threading.Lock()
+    stt = None
+    stt_lock = threading.Lock()
+    if args.stt_model:
+        from faster_whisper import WhisperModel
+        stt = WhisperModel(str(args.stt_model.resolve()), device='cpu', compute_type='int8', cpu_threads=2, num_workers=1, local_files_only=True)
 
     class Handler(BaseHTTPRequestHandler):
         def send(self, code, body, mime="application/json"):
@@ -55,9 +69,11 @@ def serve(args):
         def do_GET(self):
             if self.path != "/health":
                 return self.send(404, b'{"error":"not_found"}')
-            return self.send(200, json.dumps({"ok": True, "engine": "kokoro-onnx", "voice": args.voice, "local": True}).encode())
+            return self.send(200, json.dumps({"ok": True, "engine": "kokoro-onnx", "voice": args.voice, "local": True, "stt": bool(stt)}).encode())
 
         def do_POST(self):
+            if self.path == '/transcribe':
+                return self.transcribe()
             if self.path != "/speak":
                 return self.send(404, b'{"error":"not_found"}')
             if not valid_origin(self.headers.get("Origin")):
@@ -81,6 +97,48 @@ def serve(args):
                 self.log_error("TTS generation failed: %s", type(e).__name__)
                 return self.send(500, b'{"error":"synthesis_failed"}')
 
+        def transcribe(self):
+            if not valid_origin(self.headers.get('Origin')):
+                return self.send(403, b'{"error":"origin_not_allowed"}')
+            if not stt:
+                return self.send(503, b'{"error":"stt_not_configured"}')
+            if not stt_lock.acquire(blocking=False):
+                return self.send(429, b'{"error":"stt_busy"}')
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 1 <= length <= 6 * 1024 * 1024:
+                    return self.send(413, b'{"error":"audio_too_large"}')
+                payload = json.loads(self.rfile.read(length))
+                audio = base64.b64decode(payload['data'], validate=True)
+                if not 1 <= len(audio) <= 4 * 1024 * 1024:
+                    return self.send(413, b'{"error":"audio_too_large"}')
+                # Decode in bounded frames BEFORE inference, including untrusted
+                # container durations. No microphone audio is retained on disk.
+                import av
+                import numpy as np
+                chunks, count = [], 0
+                resample = av.AudioResampler(format='s16', layout='mono', rate=16000)
+                with av.open(io.BytesIO(audio)) as container:
+                    for frame in container.decode(audio=0):
+                        for converted in resample.resample(frame):
+                            samples = converted.to_ndarray().flatten()
+                            count += samples.size
+                            if count > 35 * 16000:
+                                return self.send(413, b'{"error":"audio_too_long"}')
+                            chunks.append(samples)
+                if not chunks:
+                    return self.send(422, b'{"error":"no_audio"}')
+                samples = np.concatenate(chunks).astype(np.float32) / 32768.0
+                started = time.monotonic()
+                segments, info = stt.transcribe(samples, language=None, beam_size=1, vad_filter=True, condition_on_previous_text=False)
+                text = ' '.join(s.text.strip() for s in segments if s.no_speech_prob < 0.6).strip()
+                return self.send(200, json.dumps({'transcript': text, 'language': info.language, 'elapsedMs': round((time.monotonic() - started) * 1000)}, ensure_ascii=False).encode('utf-8'))
+            except Exception as err:
+                self.log_error('STT failed: %s', type(err).__name__)
+                return self.send(422, b'{"error":"recognition_failed"}')
+            finally:
+                stt_lock.release()
+
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print(f"MAJIN_KOKORO_READY http://127.0.0.1:{args.port} voice={args.voice}", flush=True)
     try:
@@ -99,6 +157,7 @@ def parser():
     p.add_argument("--voice", default="am_adam")
     p.add_argument("--speed", type=float, default=1.03)
     p.add_argument("--port", type=int, default=PORT)
+    p.add_argument("--stt-model", type=Path, default=None, help='Optional pre-provisioned local Whisper model; kept warm, language auto-detected')
     return p
 
 if __name__ == "__main__":
