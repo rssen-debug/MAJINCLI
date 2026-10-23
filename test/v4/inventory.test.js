@@ -24,7 +24,7 @@ test('inventory: every V1 tool module and every V2/V3 file has a recorded decisi
   assert.equal(inv.v1.modules.length, files.length, 'a tool module is missing from the inventory');
 
   for (const mod of inv.v1.modules) {
-    if (mod.decision.status === 'lane') continue;
+    if (mod.decision.status === 'lane' || mod.decision.status === 'reused-engine') continue;
     assert.ok(mod.decision.reason && mod.decision.reason.length > 40,
       `${mod.file} is excluded without a real reason`);
     assert.ok(['replaced', 'excluded'].includes(mod.decision.status), `${mod.file} has an unknown decision`);

@@ -67,9 +67,9 @@ export const V1_MODULE_DECISIONS = Object.freeze({
   },
   'teams.js': {
     status: 'replaced',
-    reason: 'team.run executes V1 swarm subagents through V1\'s loop and cannot call V4 tools. '
-      + 'V4\'s agent_delegate keeps the useful part — a bounded subagent with its own budget — '
-      + 'and runs it on the same model, registry and approval policy as the parent.',
+    reason: 'The V1 tool wrapper binds team.run to V1\'s loop and registry. Its ENGINE '
+      + '(src/core/teams.js: TeamStore, runTeam) and the scheduler behind it (src/core/swarm.js) '
+      + 'are reused verbatim by V4\'s team_run, with V4 subagents as the worker.',
   },
 });
 
@@ -199,7 +199,7 @@ function lanesFor(moduleFile) {
   return out;
 }
 
-export async function readV1Modules({ root }) {
+export async function readV1Modules({ root, reusedFiles = new Map() }) {
   const dir = path.join(root, 'src', 'core', 'tools');
   const files = fs.readdirSync(dir)
     .filter((f) => f.endsWith('.js') && !['index.js', 'registry.js'].includes(f))
@@ -219,9 +219,15 @@ export async function readV1Modules({ root }) {
       }
     }
     const lanes = lanesFor(file);
-    const decision = lanes.length
-      ? { status: 'lane', reason: `reused through ${lanes.map((l) => l.lane).join(', ')}` }
-      : (V1_MODULE_DECISIONS[file] || { status: 'undecided', reason: null });
+    // A module imported directly by V4 code is reused as an ENGINE, not as a
+    // lane. That is how teams.js (TeamStore + runTeam) is used now, and the
+    // inventory has to say so instead of calling it "replaced".
+    const importedBy = [...(reusedFiles.get(path.join(dir, file)) || [])];
+    const decision = importedBy.length
+      ? { status: 'reused-engine', reason: `imported by ${importedBy.slice(0, 3).join(', ')}` }
+      : lanes.length
+        ? { status: 'lane', reason: `reused through ${lanes.map((l) => l.lane).join(', ')}` }
+        : (V1_MODULE_DECISIONS[file] || { status: 'undecided', reason: null });
 
     const registered = new Set();
     for (const lane of lanes) {
@@ -355,15 +361,40 @@ function capabilityDomains(inv) {
       scheduler: 'Windows Task Scheduler (logon host + daily update)',
     },
     multiAgent: {
-      implemented: 'agent_delegate — 1 level, ≤5 rounds, ≤6 tool calls, ≤2 subagents per turn',
-      notUsed: 'V2 scheduler/orchestrator and V1 teams (reasons in SOURCE_AUDIT §5 and in this file)',
+      implemented: 'agent_delegate (1 level), agent_graph (V2 DAG), team_run (V1 standing teams, resumable)',
+      teams: 'V1 TeamStore + runTeam + runSwarm reused unchanged; members executed by V4 subagents',
+      graph: 'V2 TaskGraph + runGraph reused unchanged, executed by V4 subagents',
+      notUsed: 'V2 orchestrator/compiler/supervisor (they compile and plan for the V2 loop, which V4 does not run)',
     },
   };
 }
 
 export async function buildInventory({ root = process.cwd(), platform = process.platform } = {}) {
-  const v1Modules = await readV1Modules({ root });
   const graph = buildImportGraph({ root });
+  // Direct importer map for src/core (and src/v2) files -> V4 files that use them.
+  const directImporters = new Map();
+  for (const file of listFiles(path.join(root, 'src', 'v4'), '.js')) {
+    for (const spec of importSpecifiers(file)) {
+      if (!spec.startsWith('.')) continue;
+      const target = path.resolve(path.dirname(file), spec);
+      if (!fs.existsSync(target)) continue;
+      if (!directImporters.has(target)) directImporters.set(target, []);
+      directImporters.get(target).push(path.relative(root, file).split(path.sep).join('/'));
+    }
+  }
+
+  const v1Modules = await readV1Modules({ root, reusedFiles: directImporters });
+  // V1's engines (not its tool wrappers): src/core/*.js used directly by V4.
+  // The architect's report counted only tool lanes, which made the reuse of
+  // TeamStore/runTeam/runSwarm invisible.
+  const coreDir = path.join(root, 'src', 'core');
+  const v1Engines = fs.readdirSync(coreDir)
+    .filter((f) => f.endsWith('.js'))
+    .sort()
+    .map((f) => {
+      const importedBy = [...(directImporters.get(path.join(coreDir, f)) || [])];
+      return { path: `src/core/${f}`, status: importedBy.length ? 'reused' : 'not-used', importedBy };
+    });
   const v2 = readVersionComponents({ root, version: 'v2', reasons: V2_REASONS, graph });
   const v3 = readVersionComponents({ root, version: 'v3', reasons: V3_REASONS, graph });
   const v4 = await readV4Surface({ root, platform });
@@ -391,6 +422,7 @@ export async function buildInventory({ root = process.cwd(), platform = process.
         lanes: new Set(laneTools.flatMap((t) => t.lanes)).size,
       },
     },
+    v1Engines,
     v2: {
       components: v2,
       totals: {
@@ -476,6 +508,15 @@ export function renderInventoryMarkdown(inv) {
     `\`${t.name}\``, t.risk, t.status, t.lanes.join(', ') || '—', t.requires || '—',
   ]))));
   lines.push('');
+  if (Array.isArray(inv.v1Engines)) {
+    const reused = inv.v1Engines.filter((e) => e.status === 'reused');
+    lines.push('## V1 engines reused directly');
+    lines.push('');
+    lines.push(mdTable(['Engine', 'Status', 'Imported by'], reused.map((e) => [
+      `\`${e.path}\``, e.status, e.importedBy.join(', ') || '—',
+    ])));
+    lines.push('');
+  }
   lines.push('## V2 components');
   lines.push('');
   lines.push(mdTable(['Component', 'Status', 'Reason'], inv.v2.components.map((c) => [

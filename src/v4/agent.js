@@ -26,6 +26,8 @@ import { memoryForPrompt } from './memory.js';
 import { renderSkills } from './skills.js';
 import { TOOL_SCHEMAS, safeFileName, schemasFromRegistry } from './tools.js';
 import { createToolExposure } from './tool-exposure.js';
+import { createTeamTools } from './teams.js';
+import { createGraphTool } from './graph.js';
 import { runInTurn, turnState } from './turn-state.js';
 import { z } from 'zod';
 import { publicGoal, newId } from './store.js';
@@ -53,6 +55,12 @@ Choosing tools:
   hypotheses, gather facts for one section), call agent_delegate. It runs with its own step
   budget, sees only the tools you name, and returns a compressed factual answer. It cannot
   approve anything for you, and its tool calls are receipts on this same task.
+- When the work has real dependencies or genuinely parallel parts (analyse three inputs, then
+  combine), use agent_graph. Each step is a bounded subagent, steps without a dependency run in
+  parallel, and a later step receives the results of the steps it depends on.
+- When the owner has a standing team (roles that persist between sessions), use team_manage to
+  read or change the roster and blackboard and team_run to run a goal graph against it. A team
+  run is checkpointed, so it can be resumed by runId without repeating finished work.
 
 Rules:
 - Never say a file was created, saved or changed unless the tool result confirms it.
@@ -159,6 +167,10 @@ export function createAgent({
     // requires a human confirmation per call.
     approvals.grant('tool:workspace_write', { user: 'owner', mode: 'session', maxUses: 1_000_000 });
     approvals.grant('tool:memory_save', { user: 'owner', mode: 'session', maxUses: 1_000_000 });
+    // A team roster and blackboard live inside the same create-only workspace
+    // sandbox, so they follow the same rule. Anything a member writes through a
+    // host tool is still approved on its own.
+    approvals.grant('tool:team_manage', { user: 'owner', mode: 'session', maxUses: 1_000_000 });
   }
 
   const running = new Map(); // conversationId -> AbortController
@@ -423,8 +435,9 @@ export function createAgent({
 
     // A subagent's verified file writes are the parent task's evidence too.
     // Without this the turn could report success for work that was never
-    // verified on the goal the owner sees.
-    if (toolName === 'agent_delegate' && Array.isArray(data?.artifacts)) {
+    // verified on the goal the owner sees. Delegation, graphs and team runs all
+    // report artifacts the same way.
+    if (Array.isArray(data?.artifacts)) {
       for (const artifact of data.artifacts) {
         if (!goal.acceptance.some((a) => a.id === artifact.acceptanceId)) {
           goal.acceptance.push({
@@ -1043,7 +1056,15 @@ export function createAgent({
    * again, and a tool that needs the owner's consent stops it instead of
    * self-approving.
    */
-  async function runSubtask({ task, tools: wanted = null, maxRounds = 3, turn }) {
+  async function runSubtask({
+    task,
+    tools: wanted = null,
+    maxRounds = 3,
+    turn,
+    instructions = '',
+    digest = '',
+    countsAgainstCap = true,
+  }) {
     const allowed = Array.isArray(wanted) && wanted.length
       ? new Set(wanted.map((n) => {
         const raw = String(n);
@@ -1077,8 +1098,14 @@ export function createAgent({
     subGoal.transition(STATES.READY, 'subagent ready');
     subGoal.transition(STATES.RUNNING, 'subagent started');
     const subTurn = { ...turn, depth: (turn?.depth || 0) + 1, exposure: subExposure, goal: subGoal };
+    // A team member is not a generic subagent: it has a standing role and a
+    // shared blackboard. Both come from V1's TeamStore, injected here as prompt
+    // text so the worker stays the same bounded loop.
+    const sections = [SUBAGENT_PROMPT];
+    if (instructions) sections.push(`Your standing role:\n${String(instructions).slice(0, 2000)}`);
+    if (digest) sections.push(`Shared team blackboard (facts other members recorded):\n${String(digest).slice(0, 900)}`);
     const messages = [
-      { role: 'system', content: SUBAGENT_PROMPT },
+      { role: 'system', content: sections.join('\n\n') },
       { role: 'user', content: String(task).slice(0, 4000) },
     ];
     const used = [];
@@ -1139,6 +1166,25 @@ export function createAgent({
   }
 
   /**
+   * Standing teams and dependency graphs.
+   *
+   * Both are built ON the reused V1/V2 engines and executed by `runSubtask`, so
+   * they inherit the parent turn's approval policy, cancellation and receipts.
+   * They are registered only when the owner grants the `agent` lane (see the
+   * server's refreshHostTools), exactly like delegation.
+   */
+  const teamTools = createTeamTools({
+    workspaceDir: config.workspaceDir,
+    runSubtask,
+  });
+  const graphTool = createGraphTool({ runSubtask });
+  const orchestrationTools = [...teamTools, graphTool];
+  const ownsOrchestrationTool = (name) => orchestrationTools.some((t) => t.name === name);
+  for (const tool of orchestrationTools) {
+    if (!tools.registry.get(tool.name)) tools.registry.define(tool);
+  }
+
+  /**
    * The delegation tool. Registered by the server only when the owner has
    * granted the `agent` lane; the definition lives here because it needs this
    * agent's model, registry and turn context.
@@ -1173,12 +1219,13 @@ export function createAgent({
       if (!st) throw Object.assign(new Error('agent_delegate can only run inside a turn'), { cls: 'INVALID_TOOL_INPUT' });
       if ((st.depth || 0) >= 1) throw Object.assign(new Error('a subagent cannot delegate further'), { cls: 'PERMISSION_DENIED' });
       // Each delegate call is one parent tool call, so without this a model
-      // could fan out to dozens of subagents inside a six-call budget.
+      // could fan out to dozens of subagents inside a six-call budget. A graph
+      // or team run is ONE parent call and manages its own budget instead.
       st.subagents = (st.subagents || 0) + 1;
       if (st.subagents > 2) {
         throw Object.assign(new Error('at most two subagents per turn'), { cls: 'TOOL_BUDGET' });
       }
-      const out = await runSubtask({ task, tools: wanted, maxRounds, turn: st });
+      const out = await runSubtask({ task, tools: wanted, maxRounds, turn: st, countsAgainstCap: false });
       if (!out.answer && out.failure) {
         throw Object.assign(new Error(out.failure), { cls: 'TOOL_FAILURE' });
       }
@@ -1248,6 +1295,8 @@ export function createAgent({
     approvals,
     bus,
     delegationTool,
+    orchestrationTools,
+    ownsOrchestrationTool,
     setConversationModel,
     resumeGoal,
     runTurn,

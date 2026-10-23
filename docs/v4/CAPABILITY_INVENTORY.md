@@ -1,6 +1,6 @@
 # MAJIN capability inventory (generated)
 
-Generated 2026-10-23T15:34:06.666Z on linux. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
+Generated 2026-10-23T16:06:44.963Z on linux. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
 
 ## Totals
 
@@ -10,7 +10,7 @@ Generated 2026-10-23T15:34:06.666Z on linux. Every row is computed from the code
 | V1 | tools | 140 |
 | V1 | integrated into V4 lanes | 110 |
 | V1 | excluded with a recorded reason | 30 |
-| V2 | components reused | 18/51 |
+| V2 | components reused | 21/51 |
 | V3 | components reused | 0/4 |
 | V4 | built-in tools | 8 |
 | V4 | tools registered on this host | 108 |
@@ -29,7 +29,7 @@ Generated 2026-10-23T15:34:06.666Z on linux. Every row is computed from the code
 | memory | tools: ["memory_save","memory_search"]; store: src/v2/memory/store.js (used directly); promptInjection: src/v4/memory.js memoryForPrompt — retrieval, not just writes |
 | voice | server: src/v2/voice/{speak,listen,tts,stt}.js imported by src/v4/voice.js; client: browser-native speech + text fallback (src/v4/ui/voice.js); measured: false |
 | automation | flows: 6; supervisor: src/v4/supervisor.js — crash recovery and health checks; updater: signed release, overlay activation, journal recovery, daily Windows task; scheduler: Windows Task Scheduler (logon host + daily update) |
-| multiAgent | implemented: agent_delegate — 1 level, ≤5 rounds, ≤6 tool calls, ≤2 subagents per turn; notUsed: V2 scheduler/orchestrator and V1 teams (reasons in SOURCE_AUDIT §5 and in this file) |
+| multiAgent | implemented: agent_delegate (1 level), agent_graph (V2 DAG), team_run (V1 standing teams, resumable); teams: V1 TeamStore + runTeam + runSwarm reused unchanged; members executed by V4 subagents; graph: V2 TaskGraph + runGraph reused unchanged, executed by V4 subagents; notUsed: V2 orchestrator/compiler/supervisor (they compile and plan for the V2 loop, which V4 does not run) |
 
 ## V1 tool modules
 
@@ -57,7 +57,7 @@ Generated 2026-10-23T15:34:06.666Z on linux. Every row is computed from the code
 | `reset.js` | 2 | — | excluded | Deletes artifacts measured by V1 recovery inside a shared data dir. V4 reconciles its own goals and must never run destructive V1 recovery on paths it does not own. |
 | `shell.js` | 5 | shelltools | lane | reused through shelltools |
 | `sys.js` | 6 | sys | lane | reused through sys |
-| `teams.js` | 2 | — | replaced | team.run executes V1 swarm subagents through V1's loop and cannot call V4 tools. V4's agent_delegate keeps the useful part — a bounded subagent with its own budget — and runs it on the same model, registry and approval policy as the parent. |
+| `teams.js` | 2 | — | replaced | The V1 tool wrapper binds team.run to V1's loop and registry. Its ENGINE (src/core/teams.js: TeamStore, runTeam) and the scheduler behind it (src/core/swarm.js) are reused verbatim by V4's team_run, with V4 subagents as the worker. |
 | `trading.js` | 2 | trading | lane | reused through trading |
 | `web.js` | 12 | web | lane | reused through web |
 | `wincontrol.js` | 5 | desktop | lane | reused through desktop |
@@ -207,6 +207,12 @@ Generated 2026-10-23T15:34:06.666Z on linux. Every row is computed from the code
 | `control.read` | read | integrated | desktop | windows interactive session |
 | `control.click_button` | exec | integrated | desktop | windows interactive session |
 
+## V1 engines reused directly
+
+| Engine | Status | Imported by |
+| --- | --- | --- |
+| `src/core/teams.js` | reused | src/v4/server.js, src/v4/teams.js |
+
 ## V2 components
 
 | Component | Status | Reason |
@@ -235,14 +241,14 @@ Generated 2026-10-23T15:34:06.666Z on linux. Every row is computed from the code
 | `src/v2/ops/doctor.js` | not-used | All checks are V2-specific (V2 binary, OpenCode key, Studio port). |
 | `src/v2/recover/advisor.js` | reused | imported by src/v2/recover/outer-loop.js, src/v4/agent.js |
 | `src/v2/recover/outer-loop.js` | not-used | Drives V2's runObjective; V4 runs its own loop and reuses only recover/advisor.js. |
-| `src/v2/runtime/dag.js` | not-used | Task-graph model used by the V2 scheduler, which V4 does not run. |
-| `src/v2/runtime/errors.js` | not-used | Failure vocabulary is mirrored in V4's WorkspaceError mapping; the module is imported only by the V2 scheduler, which V4 does not run. |
+| `src/v2/runtime/dag.js` | reused | imported by src/v2/gauntlet/scenarios-objectives.js, src/v2/gauntlet/scenarios.js, src/v2/runtime/scheduler.js, src/v2/supervisor/plan-with-model.js, src/v2/supervisor/supervisor.js, src/v4/graph.js |
+| `src/v2/runtime/errors.js` | reused | imported by src/v2/runtime/scheduler.js |
 | `src/v2/runtime/events.js` | not-used | V2 studio event bus; V4 streams SSE from the agent. |
-| `src/v2/runtime/goal.js` | reused | imported by src/v2/gauntlet/gauntlet.js, src/v2/runtime/orchestrator.js, src/v3/runtime/file-deliverable.js, src/v4/agent.js, src/v4/store.js |
+| `src/v2/runtime/goal.js` | reused | imported by src/v2/gauntlet/gauntlet.js, src/v2/runtime/orchestrator.js, src/v3/runtime/file-deliverable.js, src/v4/agent.js, src/v4/graph.js, src/v4/store.js |
 | `src/v2/runtime/orchestrator.js` | not-used | Drives V2's compile→plan→schedule→verify pipeline. V4's agent loop owns planning and verification; running it would be a second orchestrator. |
 | `src/v2/runtime/receipts.js` | reused | imported by src/v2/runtime/goal.js |
-| `src/v2/runtime/scheduler.js` | not-used | V4 runs one durable goal per turn; the DAG scheduler is for V2 multi-task graphs that V4 does not compile. |
-| `src/v2/runtime/states.js` | reused | imported by src/v2/runtime/goal.js, src/v4/agent.js, src/v4/store.js |
+| `src/v2/runtime/scheduler.js` | reused | imported by src/v2/gauntlet/gauntlet.js, src/v2/runtime/orchestrator.js, src/v4/graph.js |
+| `src/v2/runtime/states.js` | reused | imported by src/v2/runtime/goal.js, src/v4/agent.js, src/v4/graph.js, src/v4/store.js |
 | `src/v2/runtime/verifiers.js` | reused | imported by src/v2/runtime/verify-bridge.js, src/v2/tools/builtins.js, src/v2/voice/speak.js, src/v3/runtime/file-deliverable.js, src/v4/agent.js |
 | `src/v2/runtime/verify-bridge.js` | not-used | Bridges V2 acceptance to V2 verifiers; V4 calls runVerifier directly. |
 | `src/v2/safety/approvals.js` | reused | imported by src/v4/agent.js |

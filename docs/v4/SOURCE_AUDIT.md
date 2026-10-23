@@ -279,3 +279,48 @@ Rejected in this pass, with reasons:
   V3 a single-file deliverable). The import endpoint says so instead of inventing conversations.
 - **A permanent sidebar.** It would take width from the transcript on a phone; the drawer overlays
   and is closed by default.
+
+
+## 7. Multi-agent equivalence — 2026-10-23 (after the architect's review)
+
+The review's finding was correct and specific: V4 had approximated V1's standing
+teams and V2's scheduler with a two-level delegation, and the inventory counted
+only *tool lanes*, which made engine reuse invisible. This pass closes both gaps
+by reusing the engines themselves rather than writing equivalents.
+
+| Need | Reused verbatim | V4 supplies |
+|---|---|---|
+| Standing team: roster, per-member identity, role, instructions, tool allowlist | `src/core/teams.js` — `TeamStore` (roster.json + memory.jsonl blackboard) | — |
+| Team run: DAG, critical-path width, retries, blocked propagation, budget | `src/core/swarm.js` — `runSwarm` | — |
+| Checkpoint / resume with exactly-once skips | `src/core/teams.js` — `runTeam` | — |
+| The actual work of a member | — | `runSubtask` (V4 model, registry, approvals) via `runTeam`'s existing `makeWorker` seam |
+| Multi-step dependency graph | `src/v2/runtime/dag.js` (`TaskGraph`), `src/v2/runtime/scheduler.js` (`runGraph`) | `agent_graph` tool + subagent leaf executor |
+| Per-task receipts on a goal | `src/v2/runtime/goal.js` (unchanged; `runGraph` already writes them) | child goal so the parent is not mutated mid-call |
+
+### Why `makeWorker` was the whole answer
+
+`runTeam` already accepted `makeWorker(member) => workerFn`. That seam means V4
+does not need its own team runtime at all: it passes a worker built on
+`runSubtask`, and the roster, blackboard, budget, checkpoint format and resume
+semantics stay exactly the code V1 tested. A team member is a bounded V4
+subagent wearing a persistent identity.
+
+### A real defect found in the reused budget logic
+
+`runTeam` checks `teamStepCap` at launch. Two nodes starting in the same tick
+both pass that check, so a parallel burst could spend more than the cap —
+measured: `teamStepCap: 1`, `spent: 2`, `status: complete`. V4's worker now
+reserves the worst case (`member.maxSteps`) before its first `await` and releases
+the difference afterwards, so the sum of in-flight reservations cannot exceed the
+cap. The V1 check stays as the outer guard; no V1 file was modified.
+
+### What is still not equivalent, and will not be faked
+
+- **V2's orchestrator / compiler / supervisor.** They exist to plan and verify
+  work for the V2 loop, which V4 does not run. `agent_graph` covers the part that
+  actually matters to a user (parallel steps, dependencies, blocked descendants,
+  receipts); importing a second planner would create two sources of truth about
+  what the current task is.
+- **Voice and Windows/mobile verification.** Code exists and is tested; real
+  device behaviour cannot be verified from this environment and is reported as
+  BLOCKED rather than assumed.

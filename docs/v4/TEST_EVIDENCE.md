@@ -281,3 +281,28 @@ Anything that requires Windows: the real filesystem paths (`C:\Users\…`), Wind
 desktop lanes, Task Scheduler, and the phone. The same code path is exercised on Linux with real
 files; the Windows check is one command on the host (`npm run v4:accept -- --url …`) and is listed
 under BLOCKED in `STATUS.md` until that output exists.
+
+## 7. Multi-agent orchestration — 2026-10-23
+
+The architect's review said V4 had approximated V1's teams and V2's scheduler
+instead of replacing them. This pass reuses both engines unchanged and executes
+their leaves with V4 subagents. `test/v4/orchestration.test.js` drives the real
+chain (scripted OpenAI-compatible provider → real V4 server → real registry):
+
+| Assertion | Evidence |
+|---|---|
+| Dependencies respected: three graph steps, `b` depends on `a` | all three child runs observed, `b` executed after `a` |
+| Results flow forward: `b` receives `a`'s answer | `b`'s task text contains `Results from earlier steps` and `[a]` |
+| Artifacts verified and lifted onto the parent goal | file on disk is byte-exact; parent goal carries a verified `subagent.verify` |
+| Roster/blackboard persist in V1's layout | `workspace/teams/demo/roster.json`, `memory.jsonl` |
+| Checkpoint and resume: no repeated work | second `team_run` with `runId` reports `skipped: [g1,g2]` and spawns no member |
+| Budget breach is loud, not a silent truncation | `ok:false`, `failCount >= 1`, and the model is told |
+
+### A defect found in the reused budget logic
+
+`runTeam` checks `teamStepCap` before launching a node. Two nodes starting in the
+same tick both pass. Measured on this code: `teamStepCap: 1`, `spent: 2`,
+`status: complete`. V4's worker now reserves `member.maxSteps` before its first
+`await` and releases the unused part afterwards, so the sum of in-flight
+reservations cannot exceed the cap. The V1 check remains as the outer guard; no
+V1 file was changed.

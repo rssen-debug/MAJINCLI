@@ -67,6 +67,41 @@ utanför arbetsytan: `files.folder_grant` (godkänn via HTTP-API:t), `files.fs_f
 (`PERMISSION_DENIED` för en mapp som inte är godkänd). Enda kvarvarande FAIL i den här miljön är
 `model.configured`, eftersom ingen provider-nyckel finns här.
 
+## 2026-10-23 — multiagent: V1:s team och V2:s scheduler är nu riktigt återanvända
+
+Arkitektens invändning var korrekt: V4 hade ersatt V1:s bestående team och V2:s DAG med en
+två-nivå-delegering, och inventeringen räknade bara **verktygs-lanes**, vilket gjorde återanvändning
+av motorer osynlig. Det är åtgärdat genom att återanvända motorerna, inte genom att skriva kopior.
+
+| Förmåga | Före | Nu |
+|---|---|---|
+| Bestående team (roll, instruktioner, verktygslista per medlem) | fanns bara i V1 | `team_manage` ovanpå V1:s `TeamStore` (roster.json + memory.jsonl) |
+| Teamkörning med DAG, kritisk väg, omförsök, blockerade efterföljare | fanns bara i V1 | `team_run` ovanpå V1:s `runTeam` + `runSwarm` — oförändrade |
+| Checkpoint och återupptagning utan omkörning | fanns bara i V1 | samma `runTeam`; bevisat att `resumeId` hoppar över klara noder |
+| Beroendegraf med parallella steg | fanns bara i V2 | `agent_graph` ovanpå V2:s `TaskGraph` + `runGraph` |
+| Kvitton per delsteg | — | V2:s `runGraph` skriver dem på ett eget mål; verifierade filer lyfts till föräldramålet |
+
+Hur det hänger ihop: `runTeam` hade redan en **`makeWorker`-krok**. V4 skickar in en worker byggd på
+`runSubtask`, så en teammedlem är en avgränsad V4-subagent med persistent identitet — V4:s modell,
+registry, godkännandepolicy och kvitton. Ingen andra agent-runtime, ingen V1-fil ändrad.
+
+**Bugg hittad i den återanvända budgetlogiken:** `teamStepCap` kontrollerades vid lansering, så två
+noder som startade i samma tick båda passerade kontrollen. Uppmätt: `cap: 1`, `spent: 2`,
+`status: complete`. V4:s worker reserverar nu värsta fallet före första `await`, så summan av
+pågående reservationer aldrig kan överstiga taket. V1:s kontroll finns kvar som yttre skydd.
+
+`agent_delegate` finns kvar för enstaka subuppgifter; `agent_graph` och `team_run` är för arbete med
+riktiga beroenden. Alla tre följer `agent`-lanen och försvinner direkt vid återkallning.
+
+### Vad som fortfarande inte är likvärdigt
+
+- **V2:s orchestrator, compiler och supervisor.** De planerar och verifierar åt V2:s egen loop, som
+  V4 inte kör. `agent_graph` täcker det som spelar roll för användaren (parallellt, beroenden,
+  blockerade efterföljare, kvitton). Att importera en andra planerare hade gett två sanningar om
+  vad uppgiften är.
+- **Röst och Windows/mobil-verifiering.** Koden finns och är testad; riktig enhetsverifiering kan
+  inte göras härifrån och står kvar som BLOCKERAT.
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är

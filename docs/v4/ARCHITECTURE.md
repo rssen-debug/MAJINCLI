@@ -193,6 +193,26 @@ runner and the same approvals, so it cannot approve anything. Verified artifacts
 (file writes) are lifted onto the parent goal as `subagent.verify` receipts with
 the same SHA-256, so “a subagent did it” is never an unverified claim.
 
+### Standing teams and dependency graphs
+
+```
+agent  ── tool ──►  team_run ──► src/core/teams.js runTeam ──► src/core/swarm.js runSwarm
+                        │                    │                        │
+                        │                    │                        └─ DAG, critical path, retries,
+                        │                    │                           blocked descendants
+                        │                    └─ roster.json · memory.jsonl · runs/<id>/checkpoint.json
+                        └─ makeWorker ──► V4 runSubtask (model, registry, approvals, receipts)
+
+agent  ── tool ──►  agent_graph ──► src/v2/runtime/dag.js TaskGraph
+                        │          └► src/v2/runtime/scheduler.js runGraph ──► receipts on a child goal
+                        └─ execute(step) ──► V4 runSubtask ──► answers flow to dependent steps
+```
+
+Both containers are tier `read`: they perform no side effect of their own, and
+every leaf call still goes through the runner and the owner's approval policy.
+Verified artifacts from any leaf are lifted onto the parent goal as
+`subagent.verify` receipts, so "a member did it" is never an unverified claim.
+
 ### AsyncLocalStorage, and why
 
 V2's tool contract is `execute(input)`. Discovery and delegation need the

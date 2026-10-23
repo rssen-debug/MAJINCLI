@@ -642,3 +642,22 @@ Suite after this pass: **479 tests, 478 pass, 1 skipped** (no browser binary). S
 
 The score is unchanged: no matrix criterion was added or reinterpreted. The host rows (H1–H6) and
 the device rows (M10, H3, H4) still need the owner's machine and phone.
+
+
+## Multi-agent equivalence — 2026-10-23
+
+The architect reviewed the inventory and found the real gap: V1's standing teams and V2's DAG were
+not replaced, only approximated, and the inventory counted tool lanes only. Both are fixed.
+
+| Item | Evidence |
+|---|---|
+| V1 `TeamStore` + `runTeam` + `runSwarm` reused unchanged, members = V4 subagents | `orchestration.test.js` "team: roster, blackboard, dependency order, checkpoint and resume" |
+| Resume by `runId` skips finished nodes (no repeated work) | same test: `skipped == ['g1','g2']`, child runs stay at 2 |
+| Blackboard, roster and checkpoint persisted in V1's own layout | same test reads `roster.json`, `memory.jsonl`, `runs/<id>/checkpoint.json` |
+| V2 `TaskGraph` + `runGraph` reused; dependencies respected; results flow forward | `orchestration.test.js` "graph: dependencies…": step b receives `[a]`, three steps done |
+| Verified artifacts lifted from a graph onto the parent goal | same test asserts a verified `subagent.verify` receipt |
+| Budget breach is loud, including a parallel burst | "a budget breach is loud"; the V1 launch-time check was found to allow `spent > cap` in parallel and is now guarded by a reservation in V4's worker |
+| Inventory shows engines, not only lanes | `npm run v4:inventory` → `v1Engines` section, V2 reuse 21/51 |
+
+Still not equivalent, and not claimed: V2's orchestrator/compiler/supervisor (they plan for a loop
+V4 does not run), and real-device verification of voice, Windows tools and mobile access.

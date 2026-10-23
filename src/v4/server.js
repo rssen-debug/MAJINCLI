@@ -268,12 +268,16 @@ export function createV4Server({ config }) {
       if (!active.includes(lane)) skipped.push({ lane, reason: 'not granted by the owner' });
     }
 
-    // Delegation is a V4 engine tool, not a V1 module: it follows the `agent`
-    // lane so revoking the lane revokes the capability immediately.
-    if (active.includes('agent')) {
-      if (!tools.registry.get('agent_delegate')) tools.registry.define(agent.delegationTool);
-    } else if (tools.registry.get('agent_delegate')) {
-      tools.registry.tools.delete('agent_delegate');
+    // Delegation, standing teams and dependency graphs are V4 engine tools, not
+    // V1 modules: they follow the `agent` lane so revoking the lane revokes the
+    // capability immediately.
+    const engineTools = [agent.delegationTool, ...(agent.orchestrationTools || [])];
+    for (const tool of engineTools) {
+      if (active.includes('agent')) {
+        if (!tools.registry.get(tool.name)) tools.registry.define(tool);
+      } else if (tools.registry.get(tool.name)) {
+        tools.registry.tools.delete(tool.name);
+      }
     }
 
     hostTools = { registered: stillThere, skipped };
@@ -684,6 +688,23 @@ export function createV4Server({ config }) {
     'GET /api/mcp': async (req, res) => {
       requireSession(req);
       sendJson(res, 200, { ok: true, mcp: mcpView() });
+    },
+
+    'GET /api/teams': async (req, res, url) => {
+      requireSession(req);
+      const name = url.searchParams.get('team');
+      try {
+        const { describeTeam } = await import('./teams.js');
+        const { TeamStore } = await import('../core/teams.js');
+        if (!name) {
+          const store = new TeamStore({ workspaceDir: config.workspaceDir });
+          sendJson(res, 200, { ok: true, teams: store.listTeams() });
+          return;
+        }
+        sendJson(res, 200, { ok: true, ...describeTeam({ workspaceDir: config.workspaceDir, team: name }) });
+      } catch (err) {
+        throw new HttpError(400, 'TEAM_ERROR', String(err?.message || err));
+      }
     },
 
     'GET /api/skills': async (req, res) => {
