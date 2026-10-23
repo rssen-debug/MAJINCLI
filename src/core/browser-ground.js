@@ -14,7 +14,7 @@
 export const VERSION = 'majin-ground/1';
 
 /* runs INSIDE the page — annotated pink marks match the MAJIN cursor brand */
-export const GROUND_JS = `(() => {
+export const GROUND_JS = String.raw`(() => {
   document.querySelectorAll('.majin-mark').forEach((n) => n.remove());
   // agent-browser-inspired stable refs: retain a ref while its DOM node
   // survives. A replaced node gets a NEW identity; never recycle a stale ref.

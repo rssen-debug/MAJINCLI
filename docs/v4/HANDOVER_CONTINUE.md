@@ -415,3 +415,17 @@ All three CI runs for exact 43003d3 verified successful: V4 40029142561,
 Windows desktop 40029142247, runner 40029142289. This is hosted CI, not trusted
 production signing or physical Ghost native-install acceptance. Overall NOT READY;
 all earlier Genesis, persistent scheduler/push and release blockers remain open.
+
+Attempt 3 on deployed 065711d926898268f9b2b3b3c366c3025431a907 is also FAIL:
+real Go filled controls and uploaded the file, but no POST/receipt. Preserved
+in genesis-form-attempt-3.json. It exposed an independent grounding defect:
+GROUND_JS was an ordinary JS template, turning its whitespace regexp into
+`/s+/g` at runtime. Anonymous button names containing s then failed the click
+identity check. String.raw preserves the intended regexp. Actual browser test
+now observes and clicks 'Register session', then changes the name and confirms
+the next click is rejected without another action. Identity checks stay intact.
+Checkbox expectations without expectSelector now bind to the actual clicked
+selector/ref; they still run the existing read-only verifier. Real DOM checkbox
+test passes. Browser/grounding/verification regression 49/0/0, plus updated
+physical-DOM regression 1/0/0. No physical iPhone or live Go PASS from these tests.
+No turn or tool budget was increased. Continue with a fresh live evidence path.

@@ -310,7 +310,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       expectSelector: 'string optional: unique selector that must be visible after the click',
       expectText: 'string optional: text that must appear inside expectSelector',
       expectUrl: 'string optional: URL fragment that must be present after the click',
-      expectChecked: 'string optional true|false: expected checkbox state of expectSelector',
+      expectChecked: 'string optional true|false: expected checkbox state of expectSelector, or of the clicked selector/ref when expectSelector is omitted',
       verifyWaitMs: 'string optional 0–4000: maximum time for post-click verification (default 2500)',
     },
     examples: ['browser.click({selector:"button[type=submit]",expectSelector:"#success",expectText:"Saved"})', 'browser.click({ref:"e3",expectUrl:"/dashboard"})'],
@@ -326,7 +326,9 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
 
       const requiresVerification=Boolean(expectSelector || expectText || expectUrl || expectChecked != null);
       const expected=requiresVerification?verificationCriteria({
-        selector:expectSelector,text:expectText,url:expectUrl,checked:expectChecked
+        selector:expectSelector || (expectChecked != null && !semantic ?
+          (ref ? `[data-majin-ref=${JSON.stringify(String(ref))}]` : selector) : undefined),
+        text:expectText,url:expectUrl,checked:expectChecked
       }):null;
       if(requiresVerification && !expected.ok) return {
         ok:false,error:{code:'bad_expectation',message:expected.reason}

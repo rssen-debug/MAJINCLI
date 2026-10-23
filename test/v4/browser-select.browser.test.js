@@ -11,7 +11,7 @@ const { findBrowser, openFor, closeFor } = await import('../../src/core/browser.
 const { webTools } = await import('../../src/core/tools/web.js');
 test('select fill resolves unique labels, rejects ambiguity/disabled choices and verifies retained internal value', {timeout:60000}, async t => {
   if (!findBrowser()) { t.skip('No browser binary; no real DOM verification.'); return; }
-  const server = http.createServer((req,res) => { res.setHeader('content-type','text/html'); res.end('<select id="country"><option value="dk">Denmark</option><option value="se">Sweden</option><option value="1">Duplicate</option><option value="2">Duplicate</option><option value="x" disabled>Disabled</option></select><input id="secret" value="private-initial">'); });
+  const server = http.createServer((req,res) => { res.setHeader('content-type','text/html'); res.end('<select id="country"><option value="dk">Denmark</option><option value="se">Sweden</option><option value="1">Duplicate</option><option value="2">Duplicate</option><option value="x" disabled>Disabled</option></select><input id="secret" value="private-initial"><button onclick="window.clicked=(window.clicked||0)+1">Register   session</button>'); });
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
   const session='select-regression', ctx={session,cfg:{get:()=>undefined}};
   const run=(name,args)=>webTools.find(t=>t.name===name).run(args,ctx);
@@ -31,6 +31,22 @@ test('select fill resolves unique labels, rejects ambiguity/disabled choices and
     assert.equal((await run('browser.fill',{selector:'#country',value:'dk'})).ok,true);
     const privateFill=await run('browser.fill',{selector:'#secret',value:'private-after'});
     assert.equal(privateFill.ok,true); assert.doesNotMatch(JSON.stringify(privateFill),/private-/);
+    await run('browser.elements',{});
+    const { GROUND_JS }=await import('../../src/core/browser-ground.js');
+    const snapshot=await b.eval(GROUND_JS);
+    const button=snapshot.elements.find(e=>e.tag==='button');
+    assert.equal(button.text,'Register session','whitespace is normalized; letter s is preserved');
+    assert.equal((await run('browser.click',{ref:button.ref})).ok,true);
+    assert.equal(await b.eval('window.clicked'),1);
+    await b.eval('document.querySelector("button").textContent="Different action"');
+    const stale=await run('browser.click',{ref:button.ref});
+    assert.equal(stale.error.code,'click_blocked');
+    assert.match(stale.error.message,/ref_identity_changed/);
+    assert.equal(await b.eval('window.clicked'),1,'changed anonymous control must never be clicked');
+    await b.eval('document.body.insertAdjacentHTML("beforeend", "<input id=consent type=checkbox>")');
+    const checked=await run('browser.click',{selector:'#consent',expectChecked:'true'});
+    assert.equal(checked.ok,true);
+    assert.equal(await b.eval('document.querySelector("#consent").checked'),true);
   } finally {
     await closeFor(session,{wait:true}); await new Promise(r=>server.close(r));
     const resolved=path.resolve(home);
