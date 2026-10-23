@@ -16,7 +16,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v6
@@ -25,7 +25,11 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: V4 test suite
-        run: npm run v4:test
+        # Serial on CI on purpose. The suite binds real ports and spawns real
+        # child processes; running files in parallel means several processes
+        # choose ports at once, and a collision is a flake, not a bug. Locally
+        # `npm run v4:test` stays parallel for speed.
+        run: node --test --test-concurrency=1 test/v4/*.test.js
       - name: Acceptance matrix integrity (weights = 100, evidence required)
         run: npm run v4:progress -- --check
       - name: Host doctor (must not report a blocking failure)

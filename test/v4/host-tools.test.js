@@ -19,12 +19,15 @@ import {
 } from '../../src/v4/tools/host.js';
 import { tempHome } from './helpers.mjs';
 
-test('host: capability detection reports this Linux host truthfully', async () => {
+test('host: capability detection is self-consistent on whatever host runs it', async () => {
   const caps = await hostCapabilities({ platform: 'linux' });
+  // Desktop is Windows-only, always, on Linux.
   assert.equal(caps.lanes.desktop.available, false);
   assert.match(caps.lanes.desktop.reason, /Windows-only/);
-  assert.equal(caps.browserRuntime.available, false);
-  assert.match(caps.browserRuntime.reason, /no browser binary|playwright/);
+  // The browser runtime depends on the machine: a CI image may ship a browser.
+  // The contract is not "false", it is "a boolean plus a reason when false".
+  assert.equal(typeof caps.browserRuntime.available, 'boolean');
+  if (!caps.browserRuntime.available) assert.ok(caps.browserRuntime.reason, 'an unavailable runtime must say why');
 });
 
 test('host: the capability report is serialisable and carries no module handles', async () => {
@@ -40,15 +43,29 @@ test('host: the capability report is serialisable and carries no module handles'
   assert.equal(typeof described.browserRuntime.available, 'boolean');
 });
 
-test('host: an unavailable lane registers no tools at all', async () => {
-  const caps = await hostCapabilities({ platform: 'linux' });
+test('host: a lane reported unavailable registers no tools at all', async () => {
+  // Synthetic caps: the real host may or may not have a browser, and the
+  // contract must hold either way.
+  const caps = {
+    platform: 'linux',
+    browserRuntime: { available: false, reason: 'synthetic: no browser' },
+    lanes: {
+      desktop: { available: false, reason: 'Windows-only (this host is linux)' },
+      files: { available: false, reason: 'not loaded in this test' },
+      web: { available: true, exportName: 'webTools', module: { webTools: [
+        { name: 'web.search', desc: 'search the web', risk: 'net', raw: {}, run: async () => ({ ok: true }) },
+        { name: 'browser.open', desc: 'open a page', risk: 'browser', raw: {}, run: async () => ({ ok: true }) },
+      ] } },
+    },
+  };
   const registry = new ToolRegistry();
   const { registered, skipped } = registerHostTools(registry, caps);
   const names = registered.map((r) => r.name);
-  assert.ok(!names.some((n) => n.startsWith('control')), 'no desktop tool on Linux');
-  assert.ok(!names.some((n) => n.startsWith('browser')), 'no browser tool without a binary');
+  assert.ok(!names.some((n) => n.startsWith('control')), 'no desktop tool when the lane is unavailable');
+  assert.ok(names.includes('web_search'), 'the available tool in the same lane is registered');
+  assert.ok(!names.some((n) => n.startsWith('browser')), 'a browser tool is withheld without a runtime');
   assert.ok(skipped.some((s) => s.lane === 'desktop'));
-  assert.ok(skipped.some((s) => s.lane === 'screen'));
+  assert.ok(skipped.some((s) => s.tool === 'browser.open' && /browser runtime/.test(s.reason)));
 });
 
 test('host: available lanes register with tiers that drive approval', async () => {
@@ -258,13 +275,26 @@ test('host: the install-time allowlist limits what a grant can expose', async ()
   }
 });
 
-test('host: browser tools are withheld when no browser runtime exists, and named as skipped', async () => {
-  const caps = await hostCapabilities({ platform: 'linux' });
+test('host: browser tools are withheld when no browser runtime exists, and named as skipped', () => {
+  const caps = {
+    platform: 'win32',
+    browserRuntime: { available: false, reason: 'synthetic: no browser' },
+    lanes: {
+      web: { available: true, exportName: 'webTools', module: { webTools: [
+        { name: 'browser.open', desc: 'open', risk: 'browser', raw: {}, run: async () => ({ ok: true }) },
+        { name: 'browser.click', desc: 'click', risk: 'browser', raw: {}, run: async () => ({ ok: true }) },
+        { name: 'browser.fill', desc: 'fill', risk: 'browser', raw: {}, run: async () => ({ ok: true }) },
+        { name: 'browser.read', desc: 'read', risk: 'browser', raw: {}, run: async () => ({ ok: true }) },
+        { name: 'web.search', desc: 'search', risk: 'net', raw: {}, run: async () => ({ ok: true }) },
+      ] } },
+    },
+  };
   const registry = new ToolRegistry();
   const { registered, skipped } = registerHostTools(registry, caps);
   assert.ok(!registered.some((r) => r.name.startsWith('browser')), 'no browser tool without a runtime');
+  assert.ok(registered.some((r) => r.name === 'web_search'), 'the rest of the lane still works');
   const why = skipped.filter((s) => s.tool && s.tool.startsWith('browser.'));
-  assert.ok(why.length >= 4, `expected the browser tools to be listed as skipped, got ${why.length}`);
+  assert.equal(why.length, 4, `expected four browser tools skipped, got ${why.length}`);
   assert.ok(why.every((s) => /browser runtime/.test(s.reason)));
 });
 
