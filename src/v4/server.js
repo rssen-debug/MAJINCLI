@@ -561,9 +561,20 @@ export function createV4Server({ config }) {
       const body = await readJsonBody(req, 4096);
       const goalId = String(body.goalId || '');
       if (!goalId) throw new HttpError(400, 'GOAL_ID_REQUIRED', 'goalId is required.');
+      // The goal does not carry its conversation (the V2 Goal schema is fixed),
+      // so resolve it the way the data already allows: the message that
+      // references it. Without this the resume left no trace in history.
+      const conversationId = body.conversationId
+        ? String(body.conversationId)
+        : conversations.findByGoal(goalId)?.id || null;
+
       const sse = startSse(res);
       try {
-        const result = await agent.resumeGoal({ goalId, emit: (type, data) => sse.send(type, data) });
+        const result = await agent.resumeGoal({
+          goalId,
+          conversationId,
+          emit: (type, data) => sse.send(type, data),
+        });
         sse.send('resume_result', { status: result.status, missing: result.missing || [], results: result.results });
       } catch (err) {
         sse.send('error', { message: err.message || 'resume failed', code: err.code || null });

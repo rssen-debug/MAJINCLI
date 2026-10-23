@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 244
-# pass 243
+# tests 249
+# pass 248
 # skipped 1
 # fail 0
 # skipped 0
@@ -47,6 +47,7 @@ $ npm run v4:test
 | `test/v4/upgrade.test.js` | 8 | clean upgrade, up-to-date, rollback on a failed gate, escalation when rollback fails, fetch/checkout classification |
 | `test/v4/leaks.test.js` | 7 | bounded rate limiter and conversation cache, cache eviction loses nothing, bounded listing, abort-key collision, truncated replay |
 | `test/v4/leaks2.test.js` | 3 | bounded goal cache, evicted goals reload from disk intact, in-flight goals are never evicted |
+| `test/v4/integration.test.js` | 5 | a resumed goal appears in the conversation the user reopens (success and failure); the reopened conversation shows the live goal state; a chosen model survives a reload; telemetry records one row per finish |
 | `test/v4/memory.test.js` | 8 | a saved preference reaches the model on the next turn; irrelevant memories are not injected; relevance beats noise; the section is framed as data not instructions; no empty section; a broken store cannot fail a turn; end to end across two conversations |
 | `test/v4/telemetry.test.js` | 7 | a real turn records goal.start/model.call/task.result/verification/goal.finish; message text, file names and absolute paths never reach the ledger; the serializer drops unknown fields; unknown event names are refused; aggregate reads V4 data; the CLI summarises and reports "no data"; a broken ledger cannot take a turn down |
 | `test/v4/context.test.js` | 8 | history is trimmed to the token budget, the newest message always survives, the system prompt is never trimmed, an oversized message is truncated with a visible marker, and the packer's own edge cases |
@@ -103,6 +104,7 @@ POST /api/chat  "Skriv filen valkomst.txt med innehåll: Hej från MAJIN"
 | Conversation history was a fixed `slice(-30)` with no token budget, so a long chat could exceed a small model's window and fail the turn | `context.test.js` | budget-aware packing with a visible marker; the newest message and the system prompt always survive |
 | The host had no telemetry at all — an always-on box with no logs cannot be debugged | `telemetry.test.js` | V2's ledger wired in: fixed field allowlist per event, so nothing the user typed can land in it |
 | Memory was write-only: saved preferences never reached a new conversation | `memory.test.js` | per-turn retrieval injected as a labelled prompt section, bounded and framed as data |
+| Resuming a blocked goal left no record in the conversation and no telemetry row | `integration.test.js` | the resume writes a message and a `goal.finish` row; the conversation is resolved from the message that references the goal |
 
 ## 3.2 Browser attempt, documented
 

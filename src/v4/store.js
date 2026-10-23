@@ -159,6 +159,27 @@ export class ConversationStore {
     return entry;
   }
 
+  /**
+   * Which conversation does this goal belong to?
+   *
+   * A goal is created inside a turn but does not carry the conversation id (the
+   * V2 Goal schema is not ours to change). The mapping lives where it already
+   * is: the assistant message's meta.goalId. Bounded by list() (100 most recent)
+   * and served from the LRU cache when possible, so this stays cheap.
+   */
+  findByGoal(goalId) {
+    if (!goalId) return null;
+    // cache first: the common case is the conversation the user is looking at
+    for (const conv of this.cache.values()) {
+      if (conv.messages?.some((m) => m.meta?.goalId === goalId)) return conv;
+    }
+    for (const summary of this.list()) {
+      const conv = this.get(summary.id);
+      if (conv?.messages?.some((m) => m.meta?.goalId === goalId)) return conv;
+    }
+    return null;
+  }
+
   /** Remember a completed turn for duplicate-request detection. */
   rememberRequest(id, requestId, outcome) {
     if (!requestId) return;

@@ -662,6 +662,18 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     }
   }
 
+  /** One telemetry row per finished goal, from any path that finishes one. */
+  function recordGoalFinish(goal, startedAt) {
+    record('goal.finish', {
+      goalId: goal.id,
+      finalState: goal.state,
+      durationMs: Math.max(0, Date.now() - (startedAt || Date.now())),
+      receipts: goal.receipts.length,
+      verifiedReceipts: goal.receipts.filter((r) => r.verified).length,
+      acceptanceCount: goal.acceptance.length,
+    });
+  }
+
   /**
    * Resume a goal that the host marked BLOCKED (crash, restart, or a failed
    * verification). The resume is evidence-driven: every acceptance item that
@@ -669,13 +681,14 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
    * goal completes. If not, it stays BLOCKED with the reason — a resume never
    * turns into a silent success.
    */
-  async function resumeGoal({ goalId, emit = () => {} }) {
+  async function resumeGoal({ goalId, conversationId = null, emit = () => {} }) {
     const goal = goals.get(goalId);
     if (!goal) throw Object.assign(new Error('goal not found'), { status: 404 });
     if (![STATES.BLOCKED, STATES.RECOVERING].includes(goal.state)) {
       throw Object.assign(new Error(`goal is ${goal.state}, only BLOCKED goals can be resumed`), { status: 409 });
     }
 
+    const startedAt = Date.now();
     goal.transition(STATES.RUNNING, 'owner requested resume');
     goals.save(goal);
     emit('goal', publicGoal(goal));
@@ -729,6 +742,24 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     }
     goals.save(goal);
 
+    /**
+     * A resume changes the world: the goal may complete. Leaving that only in a
+     * toast means the user reopens the conversation and sees the old state with
+     * no record of what happened. Write it down.
+     */
+    const writeMessage = (text, { error = false } = {}) => {
+      if (!conversationId) return null;
+      try {
+        return conversations.appendMessage(conversationId, {
+          role: 'assistant',
+          content: text,
+          meta: { goalId, resumed: true, ...(error ? { error: true } : {}) },
+        });
+      } catch {
+        return null;
+      }
+    };
+
     const missing = goal.uncoveredAcceptance();
     // Old receipts are history, not proof that the world still looks the same.
     // A resume only succeeds when EVERY acceptance item was re-verified in this
@@ -738,6 +769,8 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
       goal.transition(STATES.VERIFYING, 'all acceptance items re-verified after resume');
       goal.complete();
       goals.save(goal);
+      writeMessage(t('goal.resumed'));
+      recordGoalFinish(goal, startedAt);
       emit('goal', publicGoal(goal));
       return { status: 'completed', goal: publicGoal(goal), results };
     }
@@ -747,6 +780,8 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     const notVerified = [...new Set([...missing.map((m) => m.id), ...failed])];
     goal.transition(STATES.BLOCKED, `resume could not verify: ${notVerified.join(', ')}`.slice(0, 180));
     goals.save(goal);
+    writeMessage(t('goal.stillBlocked', { items: notVerified.join(', ') || '?' }), { error: true });
+    recordGoalFinish(goal, startedAt);
     emit('goal', publicGoal(goal));
     return { status: 'blocked', goal: publicGoal(goal), results, missing: notVerified };
   }

@@ -298,6 +298,24 @@ never reached a fresh conversation. "Living memory" that is only written is not 
 Proven end to end: a preference saved in one conversation is asserted to appear in the system
 prompt of a **different** conversation, and a broken memory store cannot take a turn down.
 
+## Integration seams: a resumed goal left no record
+
+Unit tests pass while the seams leak. `resumeGoal` changed a goal's state on disk and emitted an
+SSE event, but `appendMessage` was never called — so the user resumed a blocked task, saw a
+confirmation, reopened the conversation later, and there was **no trace of it**. The goal said
+COMPLETED; the history said nothing.
+
+The V2 `Goal` schema is not ours to change, so the conversation id is resolved where it already
+lives: the assistant message that references `meta.goalId`. `ConversationStore.findByGoal()` does
+that, cache-first, bounded by the 100-conversation listing.
+
+Also fixed in the same seam: resume wrote no `goal.finish` telemetry row, so the log claimed the
+goal finished once when it had finished twice. A test asserts **two** rows for two finishes, and
+that test fails on the old code (verified by stashing the fix).
+
+Two more seams checked and found already sound: a model chosen for a conversation survives a
+reload, and the goal state shown in a reopened conversation is the live one.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in
