@@ -53,6 +53,7 @@ import { discoverSkills, usableSkills, describeSkills } from './skills.js';
 import { parseMcpConfig, connectServers } from './mcp.js';
 import { registerMcpTools } from './mcp-tools.js';
 import { TelemetryLedger } from '../v2/telemetry/ledger.js';
+import { createBackgroundTasks } from './background-tasks.js';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui');
 
@@ -518,6 +519,12 @@ export function createV4Server({ config }) {
       throw new HttpError(413, 'MESSAGE_TOO_LONG', 'Message is too long.');
     }
 
+    const {turn,finished}=startJournalTurn({conversationId,text,requestId,voiceTurn:body.voiceTurn===true,owner:session.id});
+    pipeTurn(res,turn,{from:0});
+    await finished;
+  }
+
+  function startJournalTurn({conversationId=null,text,requestId=null,voiceTurn=false,owner=null}){
     // The turn becomes a journal entry before the response is written, so the
     // client learns its id (in the `open` event) and can reattach to the very
     // same turn if the connection drops.
@@ -526,7 +533,7 @@ export function createV4Server({ config }) {
     // literal 'new' meant a second device's first message cancelled the first
     // device's turn. A known conversation still supersedes its own old turn.
     const turnKey = conversationId ? `conv:${conversationId}` : `turn:${turn.id}`;
-    const controller = agent.beginTurn(turnKey, { owner: session.id });
+    const controller = agent.beginTurn(turnKey, { owner });
     journal.append(turn, 'open', {
       at: new Date().toISOString(),
       model: agent.modelInfo,
@@ -538,7 +545,7 @@ export function createV4Server({ config }) {
     const finished = agent.runTurn({
       conversationId,
       text,
-      voiceTurn: body.voiceTurn === true,
+      voiceTurn,
       requestId,
       signal: controller.signal,
       emit: (type, data) => journal.append(turn, type, data),
@@ -553,15 +560,21 @@ export function createV4Server({ config }) {
       agent.endTurn(turnKey, controller);
     });
 
-    // Replay what already happened (normally just `open`), then follow live.
-    // A dropped socket deliberately does NOT abort the turn: the phone can
-    // reattach with GET /api/chat/stream?turnId=…&from=<lastSeq>.
-    pipeTurn(res, turn, { from: 0 });
-    await finished;
-    void session;
+    return {turn,finished,cancel:()=>controller.abort()};
   }
 
+  const backgroundTasks=createBackgroundTasks({root:paths.root,conversations,startTurn:startJournalTurn,ready:Promise.all([hostReady,kernelReady])});
+  for(const tool of backgroundTasks.tools)tools.registry.define(tool);
+
   const routes = {
+    'GET /api/tasks': async(req,res)=>{
+      requireSession(req);sendJson(res,200,{ok:true,tasks:backgroundTasks.list()});
+    },
+    'POST /api/tasks': async(req,res)=>{
+      requireSession(req);assertCsrfHeader(req);limiter.take('general',clientKey(req,config));
+      const body=await readJsonBody(req,config.limits.maxBodyBytes);
+      try{sendJson(res,200,{ok:true,task:await backgroundTasks.manage(body)});}catch(error){throw new HttpError(400,'TASK_ACTION',error.message);}
+    },
     'GET /api/health': async (req, res) => {
       sendJson(res, 200, {
         ok: true,
@@ -1236,15 +1249,17 @@ export function createV4Server({ config }) {
   // Workers are killed when the listener closes, so a stopped host leaves no
   // orphaned plugin processes behind.
   server.on('close', () => {
+    backgroundTasks.stop();
     kernel.shutdownWorkers();
     // MCP children are processes too: closing the host must not leave them.
     for (const entry of mcpState.connected) entry.server.stop();
     mcpState.connected = [];
   });
+  server.once('listening',()=>{void Promise.all([hostReady,kernelReady]).then(()=>backgroundTasks.start()).catch(()=>backgroundTasks.stop());});
 
   return {
     server,
-    context: { config, sessions, conversations, goals, tools, model, agent, kernel, kernelReady, reconciled, pairingFresh },
+    context: { config, sessions, conversations, goals, tools, model, agent, kernel, kernelReady, reconciled, pairingFresh, backgroundTasks },
   };
 }
 

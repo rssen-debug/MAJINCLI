@@ -636,3 +636,38 @@ No new real-model acceptance is implied by these controlled network tests.
 Remaining priority: genuine unfamiliar Go task success, canonical model billing
 verification, V4 Scheduler binding, conditions/dedup/budgets and locked-iPhone
 push. Original parity, physical voice, signed native release/update gates remain.
+
+### V4 background task binding — 24 October, PARTIAL
+
+HTTP safety changes pushed as daf04bf905ed1ecda8944a5f54ca4cf7ff5c1d56.
+V4 now binds SAME core Scheduler to the same startJournalTurn helper used by
+foreground chat, agent, conversation/goal stores and approval continuation.
+Authenticated GET/POST /api/tasks and discoverable task_list/task_manage support
+create/edit/pause/resume/cancel/run. Model creation/modification is external-tier
+approval gated. Default20 and maximum1000 total runs, minimum30second interval,
+maximum100 tasks. Run counts checkpoint BEFORE dispatch; exhausted tasks pause.
+Failures and approval holds pause future execution rather than replay effects.
+Cancellation retains task/history. Host close stops scheduler and active turns.
+Idle schedules load after restart; interrupted mutating work remains paused by
+the existing recovery policy. Journal reconnect buffers remain in-memory;
+conversation and goal records are durable. No second agent loop/store added.
+Focused background/core scheduler/turn journal/V1 readonly suite31/0/0. Includes
+real HTTP dispatch then actual file bytes/history, auth/CSRF refusal, restart
+reload, edit/pause/cancel, run exhaustion, creation approval and held-run pause.
+These tests use labelled demo/fake callbacks; not live-Go/physical acceptance.
+
+Conditional source evaluation, durable alert dedup/outbox, bounded failure retry,
+per-task token/currency accounting, heartbeat delivery integration and Web Push
+are still incomplete. No locked iPhone receipt and no always-on PASS claimed.
+
+Real Go software evaluation: two creations and one repair remain FAIL, immutable
+receipts genesis-software-attempt-1/-2 and genesis-software-repair-1. Attempt1
+CLI cases6/6 but model tests3 failures; harness denied exec_start (equivalent
+local tool was not initially allowed). Attempt2 model tests9/9, but independent
+prototype-key category case failed; harness exec_wait metadata validation also
+incorrectly expected an unstored cwd. Scope now accepts only exact authorized
+commands/local backend/current-run metadata; no broad process approval. Repair
+used genuine Go and actual patch/process/log tools but regressed CLI shape and
+exhausted recovery with invalid arguments; independent checks still fail.
+Do not hide either model defects or harness defects, or label scenarioB complete.
+Five older form FAIL receipts remain intact; no further form attempt was run.

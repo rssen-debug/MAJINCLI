@@ -139,7 +139,8 @@ export class Scheduler {
     return this.jobs.map((j) => ({ ...j, nextRunHuman: j.nextRun ? new Date(j.nextRun).toLocaleString('sv-SE') : null }));
   }
 
-  add({ name, when, task, deliver = 'silent', model = null, readOnly = null }) {
+  add({ name, when, task, deliver = 'silent', model = null, readOnly = null, metadata = null, maxRuns = null }) {
+    if(maxRuns!==null && (!Number.isSafeInteger(maxRuns)||maxRuns<1||maxRuns>10000))throw new Error('maxRuns must be between 1 and 10000');
     const spec = parseWhen(when);
     const job = {
       id: `j-${crypto.randomUUID()}`,
@@ -150,6 +151,9 @@ export class Scheduler {
       deliver,
       readOnly: readOnly == null ? Boolean(this.cfg.get('schedule.readOnlyDefault')) : Boolean(readOnly),
       model,
+      metadata,
+      maxRuns,
+      runCount: 0,
       createdAt: new Date().toISOString(),
       lastRun: null,
       lastStatus: null,
@@ -170,6 +174,20 @@ export class Scheduler {
     try { this.save(); } catch(error) { this.jobs=previous; throw error; }
     this.arm();
     return this.jobs.length < before;
+  }
+
+  update(id, changes) {
+    const j=this.jobs.find(x=>x.id===id);
+    if(!j)throw new Error('unknown job');
+    if(this.running.has(id))throw new Error('pause/cancel the running task before editing');
+    const previous=structuredClone(j);
+    try{
+      if(changes.when!==undefined){j.spec=parseWhen(changes.when);j.when=j.spec.display;j.nextRun=nextRun(j.spec,this.now());}
+      for(const key of ['name','task','metadata'])if(changes[key]!==undefined)j[key]=structuredClone(changes[key]);
+      if(changes.maxRuns!==undefined){if(!Number.isSafeInteger(changes.maxRuns)||changes.maxRuns<1||changes.maxRuns>10000)throw new Error('invalid run budget');j.maxRuns=changes.maxRuns;}
+      this.save();
+    }catch(error){Object.keys(j).forEach(k=>delete j[k]);Object.assign(j,previous);throw error;}
+    this.arm();return structuredClone(j);
   }
 
   setPaused(id, paused) {
@@ -225,9 +243,11 @@ export class Scheduler {
 
   async fire(j, { manual = false } = {}) {
     if(this.running.has(j.id))return {error:'job already running',code:'already_running'};
+    if(j.maxRuns!=null && (j.runCount||0)>=j.maxRuns)return {error:'run budget exhausted',code:'run_budget'};
     this.running.add(j.id);
-    const previous={lastRun:j.lastRun,running:j.running,runId:j.runId};
+    const previous={lastRun:j.lastRun,running:j.running,runId:j.runId,runCount:j.runCount};
     j.lastRun = new Date(this.now()).toISOString();j.running=true;j.runId=crypto.randomUUID();
+    j.runCount=(j.runCount||0)+1;
     // A failed start checkpoint must never dispatch an unrecorded action.
     try{this.save();}catch(error){Object.assign(j,previous);this.running.delete(j.id);throw error;}
     try {
@@ -243,6 +263,7 @@ export class Scheduler {
       return { error: err.message };
     } finally {
       this.running.delete(j.id);j.running=false;
+      if(j.maxRuns!=null && j.runCount>=j.maxRuns)j.paused=true;
       j.history=[...(Array.isArray(j.history)?j.history:[]),{runId:j.runId,at:new Date(this.now()).toISOString(),status:j.lastStatus,summary:j.lastSummary||null}].slice(-50);
       j.nextRun = manual ? j.nextRun : nextRun(j.spec,this.now());
       this.save();
