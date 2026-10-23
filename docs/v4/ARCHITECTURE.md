@@ -136,6 +136,12 @@ lost the conversation id, so the app started a new thread on every message while
 all server tests stayed green. Behaviour that only lives in the view is behaviour
 nobody tests.
 
+It is tested two ways: as a pure reducer (`client.test.js`) and by executing the
+real `app.js` in jsdom against a real host (`client-dom.test.js`). The second one
+drives the actual DOM — typing into `#input`, submitting `#composer`, waiting for
+`.tool[data-state="verified"]` — so a wiring mistake cannot hide behind a green
+unit test.
+
 ## 6. Platform kernel
 
 `kernel.js` defines `KERNEL_API_VERSION = 1` and a frozen capability contract

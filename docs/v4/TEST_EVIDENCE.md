@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 186
-# pass 185
+# tests 191
+# pass 190
 # skipped 1
 # fail 0
 # skipped 0
@@ -47,6 +47,7 @@ $ npm run v4:test
 | `test/v4/upgrade.test.js` | 8 | clean upgrade, up-to-date, rollback on a failed gate, escalation when rollback fails, fetch/checkout classification |
 | `test/v4/leaks.test.js` | 7 | bounded rate limiter and conversation cache, cache eviction loses nothing, bounded listing, abort-key collision, truncated replay |
 | `test/v4/leaks2.test.js` | 3 | bounded goal cache, evicted goals reload from disk intact, in-flight goals are never evicted |
+| `test/v4/client-dom.test.js` | 5 | **the real `app.js` executed in a real DOM (jsdom)** against a real host: boots and shows the gate, pairs, sends a message, renders a verified tool card, keeps one conversation across two messages, restores the composer |
 
 ## 2. Repository gates
 
@@ -140,7 +141,8 @@ That `FAIL` is the honest state of the model lane here, and it is why `A7` keeps
 |---|---|---|
 | Real model inference | no provider key/endpoint | matrix `A7` (BLOCKED) |
 | iPhone/Android device run | no device | matrix `M10`, `H4` |
-| Real-browser viewport/visual regression | no browser binary can be obtained here (CDN, Google storage and objects.githubusercontent are blocked; npm Chromium needs NSS ≥ 3.30) | matrix `M11`, `npm run v4:e2e` on the host |
+| Real-browser viewport/visual regression (layout, paint, touch) | no browser binary can be obtained here (CDN, Google storage and objects.githubusercontent are blocked; npm Chromium needs NSS ≥ 3.30) | matrix `M11`, `npm run v4:e2e` on the host |
+| The client's *behaviour* (boot, pairing, send, render, conversation continuity) | — **now tested** — `test/v4/client-dom.test.js` runs the shipped `app.js` in jsdom against a real host; what it cannot prove is layout and paint | — |
 | Windows logon task + restart persistence | no Windows host | matrix `H1`, `H2`, `H5` |
 | Tunnel HTTPS URL | owner action required | matrix `H3` |
 | Voice latency / barge-in | no device, browser-only voice | matrix `V6` |

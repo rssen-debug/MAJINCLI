@@ -95,6 +95,18 @@ Proven by `test/v4/turns.test.js` and `test/v4/client.test.js`: the file is writ
 client hangs up mid-stream, and the reattached client receives the verified tool result and
 the terminal status without duplicates.
 
+## The client is now executed, not just inspected
+
+Every earlier UI test read files. `test/v4/client-dom.test.js` loads the shipped `index.html`
+into jsdom, points `fetch` at a real MAJIN host, evaluates the same `app.js` that goes to the
+phone, and drives it: boot → gate → pairing → type → send → verified tool card → answer, and
+two messages that must stay in **one** conversation.
+
+That test would have caught the dropped-conversation-id bug the day it was written. Canvas,
+speech and service workers are stubbed (jsdom has none); the application code is not.
+
+jsdom is a devDependency, so this runs in CI instead of being a local curiosity.
+
 ## What a real browser would add (and why it is still unearned)
 
 `npm run v4:e2e` contains the acceptance run: five viewports (iPhone 13/SE, Pixel 7, iPad,
