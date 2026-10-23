@@ -407,6 +407,24 @@ the boot banner**, not swallowed. Orphaned approvals are cleared with the same c
 
 Proven by stashing the fix: five of the eight tests fail against the old code.
 
+## Upgrade could carry or lose uncommitted work
+
+`upgrade()` ran `git checkout --detach <sha>` without ever looking at `git status`. With modified
+tracked files, git either refuses mid-run or carries the edits across — and MAJIN would discover
+which only after it had started moving the checkout. In this project's own history the working tree
+has contained local modifications more than once.
+
+Now the upgrade **stops before anything moves** if there is uncommitted work in a tracked file, and
+says what to do (`git stash push -u`). Untracked files are explicitly allowed: they are not part of
+any commit and survive a checkout untouched, so blocking on them would be annoying without being
+safer.
+
+The CLI also gained the error handling it was missing entirely: an `UpgradeError` used to surface as
+an unhandled rejection. It now prints `STOPPED (DIRTY_TREE)` with the affected files and exits 1.
+
+Proven with a **real bare git remote** rather than a mocked runner — five tests, one of which fails
+against the old code.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in

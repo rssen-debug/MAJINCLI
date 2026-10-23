@@ -44,6 +44,25 @@ export async function upgrade({ repo, target = 'origin/v4/main', run, log = () =
   const git = (args) => run(['git', ...args], { cwd: repo });
   const events = [];
 
+  /**
+   * Refuse to move a tree that has uncommitted work in it.
+   *
+   * `git checkout --detach` with modified tracked files either refuses halfway
+   * or carries the edits across, and both outcomes are discovered mid-upgrade.
+   * Untracked files are fine: they are not part of any commit and survive a
+   * checkout untouched, so they must not block an upgrade.
+   */
+  const dirty = git(['status', '--porcelain', '--untracked-files=no']);
+  if (dirty.code !== 0) throw new UpgradeError('STATUS_FAILED', dirty.stderr || 'git status failed');
+  const changed = dirty.stdout.trim();
+  if (changed) {
+    throw new UpgradeError(
+      'DIRTY_TREE',
+      `uncommitted changes would be carried across or lost:\n${changed}\n`
+      + 'Commit them, or run: git stash push -u -m "before upgrade"',
+    );
+  }
+
   const fetch = git(['fetch', '--tags', 'origin']);
   if (fetch.code !== 0) throw new UpgradeError('FETCH_FAILED', fetch.stderr || 'git fetch failed');
 

@@ -12,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { upgrade, GATES } from '../../src/v4/upgrade.js';
+import { upgrade, GATES, UpgradeError } from '../../src/v4/upgrade.js';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dry = process.argv.includes('--dry');
@@ -54,12 +54,28 @@ line('  MAJIN V4 upgrade');
 line(`  repo ${repo}`);
 line('');
 
-const result = await upgrade({
-  repo,
-  target: 'origin/v4/main',
-  run: runner,
-  log: (event, detail) => line(`  [${event}] ${JSON.stringify(detail)}`),
-});
+let result;
+try {
+  result = await upgrade({
+    repo,
+    target: 'origin/v4/main',
+    run: runner,
+    log: (event, detail) => line(`  [${event}] ${JSON.stringify(detail)}`),
+  });
+} catch (err) {
+  line('');
+  if (err instanceof UpgradeError) {
+    line(`  STOPPED (${err.code})`);
+    for (const detail of String(err.message).split('\n')) line(`  ${detail}`);
+    line('');
+    line('  Nothing was changed by this run.');
+    line('');
+    process.exitCode = 1;
+  } else {
+    throw err;
+  }
+  process.exit(process.exitCode ?? 1);
+}
 
 line('');
 switch (result.status) {

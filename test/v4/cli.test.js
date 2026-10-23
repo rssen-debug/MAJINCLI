@@ -163,3 +163,20 @@ test('cli: an unknown command prints usage instead of crashing', () => {
     assert.match(`${out.stdout}${out.stderr}`, expect);
   }
 });
+
+test('cli: upgrade on a dirty tree stops with a readable reason and exit 1', () => {
+  const home = tempHome();
+  // Make the checkout dirty by touching a tracked file, run the CLI, then undo.
+  const target = path.join(ROOT, 'package.json');
+  const original = fs.readFileSync(target, 'utf8');
+  fs.writeFileSync(target, `${original}\n`);
+  try {
+    const out = cli('upgrade.mjs', [], { home, timeout: 120_000 });
+    assert.equal(out.status, 1, `expected exit 1, got ${out.status}`);
+    assert.match(out.stdout, /STOPPED \(DIRTY_TREE\)/);
+    assert.match(out.stdout, /Nothing was changed/);
+    assert.match(out.stdout, /git stash/);
+  } finally {
+    fs.writeFileSync(target, original);
+  }
+});
