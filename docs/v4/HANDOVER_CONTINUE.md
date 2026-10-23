@@ -1,5 +1,36 @@
 # MAJIN V4 — continuation handover
 
+## Latest verified checkpoint — 24 October, NOT READY
+
+Current installed/runtime source: e45640a5a5e0de2688e4321c713908a62d231d0d.
+Use git rev-parse HEAD for the later evidence/handover commit. Older head notes
+below are historical. New code: durable V4 Scheduler binding, actual JSON source
+conditions/dedup/run limits, explicit-device encrypted Web Push and PWA shell13.
+Real Go created a monitoring task from ordinary chat; actual timer checked public
+Node.js GitHub metadata THREE times, exactly one alert, paused at3/3. Receipts:
+genesis-monitor-attempt-3.json and genesis-monitor-timer-budget.json. Push state:
+ZERO subscribed devices, alert no_subscribed_devices; physical receipt FALSE.
+Planned child-restart test was REJECTED by automatic review: blocked by policy.
+It did not run; no alternate restart route attempted. No new host-restart PASS.
+
+Real Go software repair3 completed with actual process-tool execution, independent
+CLI6/6 and generated tests11/11. Model-created source/test bytes are preserved in
+evidence/software-generated with SHA256 manifest; no manual app correction.
+Two failed creations and two failed repairs remain recorded. This is scoped
+scenarioB CLI success after recovery, not universal-task or form PASS. Five old
+form attempts remain FAIL; no new form run. Evaluation-client/demo guard plus
+preserved generated-app suite17/0/0. Exact e456 V4 CI and runner SUCCESS observed;
+Windows desktop remained in progress, not declared PASS.
+
+Owner says no more questions. Continue independent engineering; do not invent
+physical acceptance, billable-model authorization or production trust. Latest
+usage observation61% used/39% remaining; account-wide, not a completion estimate.
+No further cleanup: owner reports~50GB freed. Scrapers/profiles/backups untouched.
+Next: preserve this evidence; integrate V2 audit and other original parity gaps,
+then continue real scenarios A/C/D/E/F/G, billing/eligible-model verification,
+physical notification/voice and signed native release gates as access permits.
+Do not mark complete or merge while those gates are unverified/incomplete.
+
 Status: **NOT READY**. Latest pushed/deployed product before the approval-continuation milestone: `909d758e5c10ce8d58d62cca67cd78a5a8da4bdd`. Initial handover: `f62e6f6f9d27d16e63228125cb041e129324d437`. Use `git rev-parse HEAD` for this updated milestone identity.
 Branch `codex/v4-final-integration-20261023`, draft [PR 401](https://github.com/rssen-debug/MAJINCLI/pull/401), target `v4/main`; no merge or production publication.
 

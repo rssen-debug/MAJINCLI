@@ -1,5 +1,13 @@
 # Final feature parity audit — MAJIN V4
 
+**Latest real-Go evidence, 24 October:** scenarioB CLI build/repair now succeeds
+within the recorded scope: actual model tool execution, independent CLI6/6 and
+generated app tests11/11; source/test hashes preserved. Real Go also created a
+durable monitor from natural language; Ghost's actual timer performed three
+public GitHub JSON checks, one deduplicated alert and automatic pause at3/3.
+ZERO push subscriptions means physical notification receipt is still unverified.
+New child-restart test was policy-blocked, so no restart acceptance is inferred.
+
 **Latest 24 October implementation — NOT READY:** V4 now binds the existing
 Scheduler to the same journal turn/agent/conversation store. Typed approved task
 creation, authenticated management, total-run budgets, edit/pause/cancel/restart
@@ -152,9 +160,9 @@ considered complete merely because unit tests pass.
 | Model search / included filter / cost warning | PARTIAL | Two real local browser engines pass; included filter intentionally empty for unknown entitlement; physical app acceptance open |
 | Sentence-streamed narrator | PARTIAL | Same Kokoro/am_adam deployed at fffa918; loopback first segment 4270 ms vs full WAV 11563 ms; authenticated HTTPS first segment 4301 ms. Synthetic, not physical timing |
 | Physical mobile voice/interruption/reconnect | PARTIAL | Owner approved voice and English audio; natural interruption and explicit 5G reconnect remain unconfirmed |
-| Real-model scenarios A–G | PARTIAL | Existing real Go write/read and orchestration evidence; unfamiliar dynamic form/upload, build/repair, research, desktop planning, restart/resume, physical mobile execution and two-model acceptance remain |
+| Real-model scenarios A–G | PARTIAL | Real Go CLI build/repair passes scoped scenarioB (CLI6/6, app tests11/11, preserved model artifacts); durable monitor creation/three actual public-source timer runs also verified. ScenarioA forms still5 FAIL; research, desktop planning, restart/resume, physical mobile execution and two-model acceptance remain |
 | Persistent natural-language monitoring / schedules | PARTIAL | Existing Scheduler now bound to V4 with durable tasks, JSON-source conditions, threshold deduplication, total-run limits, three bounded source failures, edit/pause/cancel/reload and Web Push outbox. Controlled tests pass; live Go creation/source discovery, physical locked-iPhone receipt, token/currency budgets and heartbeat digest integration remain required |
-| Locked-iPhone Web Push chain | FAIL | Subscription, secure delivery/history/deep link, controlled threshold, real source and actual locked physical iPhone receipt remain unimplemented/unverified |
+| Locked-iPhone Web Push chain | FAIL | Subscription/encrypted delivery/history/deep links implemented and controlled tests pass. Real Go monitoring and actual public source verified. ZERO subscribed devices; actual locked physical iPhone receipt/opening remain unverified. New process-restart test was policy-blocked |
 | Original Windows release / parity gates | BLOCKED | Production signer/channel absent; native activation/rollback and login acceptance outstanding; retain all original gaps above |
 
 

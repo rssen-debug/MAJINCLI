@@ -2,6 +2,16 @@
 
 ## Latest implementation checkpoint — 24 October 2026, NOT READY
 
+Later real-Go milestone: software repair3 succeeded (CLI6/6 independently,
+generated tests11/11, actual model process execution and readback). Model source
+and tests preserved with hashes; failed attempts remain. Ordinary chat also
+created a durable monitor, then actual Ghost timer ran THREE public GitHub JSON
+checks, one alert and3/3 budget pause. No subscribed push devices; no physical
+notification receipt. The new planned child-restart test was rejected by
+automatic review as blocked by policy; no restart or alternate route was used.
+Runtime/source e45640a5a5e0de2688e4321c713908a62d231d0d V4 CI and runner passed;
+Windows desktop remained in progress at observation. All release gates remain.
+
 HTTP safety commit daf04bf905ed1ecda8944a5f54ca4cf7ff5c1d56 passed all three CI
 flows. Background binding commit dabcda6e17f5e4ccbdc5017aa51061f61f254641
 failed Linux534/3/7 and Windows540/3/1: two exact old base-tool lists and a

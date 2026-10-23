@@ -7,6 +7,8 @@ import { startTestServer } from './helpers.mjs';
 import { evaluationClient } from '../../scripts/v4/evals/live-client.mjs';
 import { runBrowserFormEvaluation } from '../../scripts/v4/evals/browser-form.mjs';
 import { existingLocalOwnerCookie } from '../../scripts/v4/evals/local-owner.mjs';
+import { runSoftwareEvaluation } from '../../scripts/v4/evals/software.mjs';
+import { runMonitorEvaluation } from '../../scripts/v4/evals/monitor.mjs';
 
 test('evaluation client uses real host approval continuation and reads a verified artifact', async () => {
   const server = await startTestServer({ env: { MAJIN_V4_WRITE_POLICY: 'strict' } });
@@ -42,6 +44,16 @@ test('live Go form acceptance refuses to substitute demo or change providers', a
 
 test('evaluation client refuses credential-bearing host URLs and non-local HTTP', () => {
   for (const base of ['http://example.com', 'https://user:pass@example.com', 'https://example.com/path', 'https://example.com/?secret=value']) assert.throws(() => evaluationClient({ base, cookie: 'paired=test' }), /Evaluation host/);
+});
+
+test('software and monitoring acceptance reject demo before creating any task or artifact',async()=>{
+  const s=await startTestServer();
+  try{
+    const options={base:s.base,cookie:s.existingSession(),workspace:s.config.workspaceDir,output:path.join(s.home,'must-not-exist.json'),sourceDirectory:process.cwd()};
+    await assert.rejects(runSoftwareEvaluation(options),/real Go/);
+    await assert.rejects(runMonitorEvaluation(options),/real Go/);
+    assert.equal(fs.existsSync(options.output),false);assert.deepEqual(fs.readdirSync(s.config.workspaceDir),[]);assert.deepEqual(s.context.backgroundTasks.list(),[]);
+  }finally{await s.close();}
 });
 
 test('explicit local-owner mode reuses a valid paired session without modifying files or forwarding it remotely', async () => {
