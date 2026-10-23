@@ -214,20 +214,45 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
 
   /**
    * A per-call view of the tool registry that hands the execute function an
-   * AbortSignal.
+   * AbortSignal, and a deadline.
    *
    * V2's runner calls `def.execute(input)` with one argument and V2 is not ours
    * to change. Rather than mutating the shared definition (unsafe with two
    * turns running), this facade returns a wrapped definition for THIS call only.
+   *
+   * The signal fires for two reasons, and both mean "stop now":
+   *   - the owner pressed stop (turn abort)
+   *   - the call passed its deadline (the runner's Promise.race already rejects,
+   *     so without this the tool would keep working after the goal was failed)
+   *
    * A tool that ignores the signal keeps working exactly as before; one that
-   * honours it can stop when the owner presses stop.
+   * honours it stops while there is still nobody to receive a late effect.
    */
-  function registryForCall(signal) {
+  function registryForCall(signal, timeoutMs) {
     return {
       get(name) {
         const def = tools.registry.get(name);
         if (!def) return null;
-        return { ...def, execute: (input) => def.execute(input, { signal }) };
+        return {
+          ...def,
+          execute: async (input) => {
+            // One controller per call covers both stop and deadline. The timer
+            // is cleared in finally so a fast tool leaves no pending handle.
+            const callCtl = new AbortController();
+            const onTurnAbort = () => callCtl.abort(new Error('cancelled'));
+            if (signal?.aborted) callCtl.abort(new Error('cancelled'));
+            else signal?.addEventListener?.('abort', onTurnAbort, { once: true });
+            const deadline = Number.isFinite(timeoutMs) && timeoutMs > 0
+              ? setTimeout(() => callCtl.abort(new Error('deadline exceeded')), timeoutMs)
+              : null;
+            try {
+              return await def.execute(input, { signal: callCtl.signal });
+            } finally {
+              if (deadline) clearTimeout(deadline);
+              signal?.removeEventListener?.('abort', onTurnAbort);
+            }
+          },
+        };
       },
       list() {
         return tools.registry.list();
@@ -259,7 +284,7 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
       result = await runTool(
         { tool: toolName, input: args, callId: call.id },
         {
-          registry: registryForCall(signal),
+          registry: registryForCall(signal, config.limits.toolTimeoutMs),
           approvals,
           mode: 'balanced',
           timeoutMs: config.limits.toolTimeoutMs,

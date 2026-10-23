@@ -341,6 +341,25 @@ for still landed. `beginTurn` now records which session owns a turn, and logout 
 `cancelOwnedBy(sessionId)` so a revoked phone's pending work stops too. A test proves one device's
 turns stop while the other's keep running.
 
+## A deadline is not a stop
+
+V2's runner races a tool against a timer. When the timer wins the promise rejects — but
+`def.execute()` keeps running, with no signal. A tool that wrote after its deadline landed a side
+effect after the goal had already been recorded as FAILED, and no receipt covered it.
+
+V4's per-call registry facade now builds one `AbortController` per tool call, fired by **either**
+the owner pressing stop **or** the call's own deadline. A cooperative tool stops before its effect
+lands; a plugin tool stops its worker, because ending the child is the only way to stop code inside
+it.
+
+**The honest limit:** a tool that ignores the signal keeps running. No process can un-run code it
+cannot interrupt, so the test asserts the weaker but true property for that case — an overrun never
+earns a success receipt, and is recorded as `TIMEOUT`. Saying that out loud is worth more than
+pretending the deadline prevents everything.
+
+Proven the usual way: the cooperative-tool test fails on the old code (checked by stashing the fix)
+and passes on the new one.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in

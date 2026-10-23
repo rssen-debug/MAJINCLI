@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 255
-# pass 254
+# tests 258
+# pass 257
 # skipped 1
 # fail 0
 # skipped 0
@@ -47,6 +47,7 @@ $ npm run v4:test
 | `test/v4/upgrade.test.js` | 8 | clean upgrade, up-to-date, rollback on a failed gate, escalation when rollback fails, fetch/checkout classification |
 | `test/v4/leaks.test.js` | 7 | bounded rate limiter and conversation cache, cache eviction loses nothing, bounded listing, abort-key collision, truncated replay |
 | `test/v4/leaks2.test.js` | 3 | bounded goal cache, evicted goals reload from disk intact, in-flight goals are never evicted |
+| `test/v4/timeout.test.js` | 3 | a cooperative tool is told about its deadline and stops before the effect lands; a tool that ignores the signal never earns a success receipt and is recorded as TIMEOUT; a plugin worker is stopped at its call deadline |
 | `test/v4/cancel.test.js` | 6 | a long tool receives a signal and stops; a template-ignoring tool still finishes as before; a cancelled turn records CANCELLED with no success receipt; a plugin worker is stopped on abort; logout stops the revoked session's turns and leaves another device running; a revoked session cannot reattach |
 | `test/v4/integration.test.js` | 5 | a resumed goal appears in the conversation the user reopens (success and failure); the reopened conversation shows the live goal state; a chosen model survives a reload; telemetry records one row per finish |
 | `test/v4/memory.test.js` | 8 | a saved preference reaches the model on the next turn; irrelevant memories are not injected; relevance beats noise; the section is framed as data not instructions; no empty section; a broken store cannot fail a turn; end to end across two conversations |
@@ -107,6 +108,7 @@ POST /api/chat  "Skriv filen valkomst.txt med innehåll: Hej från MAJIN"
 | Memory was write-only: saved preferences never reached a new conversation | `memory.test.js` | per-turn retrieval injected as a labelled prompt section, bounded and framed as data |
 | Resuming a blocked goal left no record in the conversation and no telemetry row | `integration.test.js` | the resume writes a message and a `goal.finish` row; the conversation is resolved from the message that references the goal |
 | Cancelling a turn left the running tool working, and its effect landed with no receipt | `cancel.test.js` | the tool receives an AbortSignal through a per-call registry facade; plugin calls stop their worker on abort |
+| A tool that overran its deadline kept running and its effect landed after the goal was failed | `timeout.test.js` | the same facade fires on the deadline too; overruns are recorded as TIMEOUT and never as success |
 | Logging out left the turn running to completion | `cancel.test.js` | turns record their owning session; logout aborts that session's turns |
 
 ## 3.2 Browser attempt, documented
