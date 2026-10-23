@@ -127,6 +127,30 @@ Acceptance points are still written by hand, from that output.
 spinning, and one JSON line per lifecycle event in
 `v4/logs/supervisor-<date>.jsonl`. Tested with real child processes that are killed.
 
+## Keeping the data when the disk dies
+
+`npm run v4:backup -- backup` writes a plain directory bundle with a `MANIFEST.json` and a
+SHA-256 per file — the same discipline as V2's audit bundle, and memory is exported through
+`MemoryStore.exportAll()`, not a second serializer.
+
+Refusals are the point:
+
+- keys, pairing records and session records are **never** copied; a backup that carried the
+  HMAC key would let anyone holding it forge sessions, so a restore means pairing again;
+- `verify` re-proves manifest ≡ files and rejects tampering, missing files and unlisted extras;
+- `restore` refuses an unknown `schema` instead of guessing — that is the migration check;
+- `restore` refuses to overwrite live data without `--force`, and `--dry-run` validates without
+  writing a byte.
+
+## Upgrading a release without breaking the running one
+
+`npm run v4:upgrade` fetches, checks out `origin/v4/main`, then runs install → doctor → tests →
+matrix. If any gate fails it returns the checkout to the previous commit and reinstalls. A failed
+rollback is reported as `ESCALATE`, not swallowed. `-- --dry` shows the plan and touches nothing.
+
+The decision logic is tested with an injected runner, including the rollback path and the
+escalation path, so the dangerous branch is exercised before it is ever needed.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in

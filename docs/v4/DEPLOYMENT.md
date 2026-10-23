@@ -137,24 +137,25 @@ The matrix points H3/H4 stay unearned until that evidence exists.
 ## 6. Backup, update, rollback
 
 ```powershell
-# backup (data only; never copies the tunnel credentials)
-Copy-Item -Recurse "$env:LOCALAPPDATA\MAJIN\v4" "$env:USERPROFILE\majin-v4-backup"
+# backup: a verified bundle (conversations, goals, memory — never keys or sessions)
+npm run v4:backup -- backup
+npm run v4:backup -- verify "$env:LOCALAPPDATA\MAJIN\v4-backups\<stamp>"
 
-# update
-cd C:\MAJINCLI
-git fetch origin
-git checkout v4/main
-git pull --ff-only
-npm ci --ignore-scripts
-# restart the scheduled task
+# restore onto this or another machine (pair the phone again afterwards)
+npm run v4:backup -- restore "<bundle dir>" --dry-run
+npm run v4:backup -- restore "<bundle dir>" --force
 
-# rollback
-git checkout <previous-sha>
-npm ci --ignore-scripts
+# update: gates on install -> doctor -> tests -> matrix, rolls back on failure
+npm run v4:upgrade -- --dry     # see the plan
+npm run v4:upgrade
+
+# manual rollback if you ever need it
+cd C:\MAJINCLI; git checkout <previous-sha>; npm ci --ignore-scripts
 ```
 
 Data format is JSON with a `schema` field per file (`majin.v4.conversation/v1`,
-`majin.v2.goal/v1`). A future migration must read the schema, not guess.
+`majin.v2.goal/v1`). `restore` refuses an unknown schema on purpose: a future format needs
+a migration, not a guess.
 
 ## 7. Shutdown and offline behaviour
 

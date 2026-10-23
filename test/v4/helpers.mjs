@@ -77,9 +77,10 @@ export async function startTestServer(overrides = {}) {
       const { token } = context.sessions.create({ ip: 'test', userAgent: 'test-device' });
       return `${config.auth.cookieName}=${encodeURIComponent(token)}`;
     },
-    async close() {
+    /** `keep: true` leaves the data dir on disk (backup/restore tests need it). */
+    async close({ keep = false } = {}) {
       await new Promise((resolve) => server.close(resolve));
-      fs.rmSync(home, { recursive: true, force: true });
+      if (!keep) fs.rmSync(home, { recursive: true, force: true });
     },
   };
 }

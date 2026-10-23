@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 154
-# pass 153
+# tests 173
+# pass 172
 # skipped 1
 # fail 0
 # skipped 0
@@ -43,15 +43,17 @@ $ npm run v4:test
 | `test/v4/e2e.browser.test.js` | 0 run | real-browser acceptance on 5 viewports — **skips** here, no browser binary (see below) |
 | `test/v4/supervisor.test.js` | 6 | real child process: healthy start, crash → restart, crash loop gives up loudly, never-healthy host, health-failure restart, window expiry |
 | `test/v4/accept.test.js` | 4 | the acceptance runner reports every real gate, refuses to claim a model without one, and its exit code follows the failures |
+| `test/v4/backup.test.js` | 11 | round trip of a real data dir, tampering, missing/unlisted files, key leakage, unknown schema refused, dry run, overwrite refusal, version guard |
+| `test/v4/upgrade.test.js` | 8 | clean upgrade, up-to-date, rollback on a failed gate, escalation when rollback fails, fetch/checkout classification |
 
 ## 2. Repository gates
 
 ```
 $ npm run check
-496/496 files parse cleanly.
+505/505 files parse cleanly.
 
 $ npm run i18n
-0 Swedish string literal(s) in 266 files
+0 Swedish string literal(s) in 270 files
 
 $ npm run v4:progress --check
 67.5/100 verified points, matrix valid (exit 0)
