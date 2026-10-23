@@ -1,7 +1,7 @@
 {
   "name": "majin",
-  "version": "2.0.0-alpha",
-  "description": "MAJIN â€” a tiny always-on agent for Windows. All tools on. MOA on. Your keys, your models. Reverse engineering included.",
+  "version": "4.0.0-alpha",
+  "description": "MAJIN — private, mobile-first AI assistant that executes on your own Windows machine.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -59,7 +59,10 @@
     "v4:backup": "node ./scripts/v4/backup.mjs",
     "v4:upgrade": "node ./scripts/v4/upgrade.mjs",
     "v4:logs": "node ./scripts/v4/logs.mjs",
-    "v4:tools": "node ./scripts/v4/tools.mjs"
+    "v4:tools": "node ./scripts/v4/tools.mjs",
+    "v4:setup": "node ./scripts/v4/setup.mjs",
+    "v4:update": "node ./scripts/v4/update.mjs",
+    "v4:release": "node ./scripts/v4/release.mjs"
   },
   "optionalDependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",

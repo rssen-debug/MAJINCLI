@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 386
-# pass 385
+# tests 441
+# pass 440
 # skipped 1
 # fail 0
 # skipped 0
@@ -47,6 +47,9 @@ $ npm run v4:test
 | `test/v4/upgrade.test.js` | 8 | clean upgrade, up-to-date, rollback on a failed gate, escalation when rollback fails, fetch/checkout classification |
 | `test/v4/leaks.test.js` | 7 | bounded rate limiter and conversation cache, cache eviction loses nothing, bounded listing, abort-key collision, truncated replay |
 | `test/v4/leaks2.test.js` | 3 | bounded goal cache, evicted goals reload from disk intact, in-flight goals are never evicted |
+| `test/v4/mcp.test.js` | 27 | handshake, tool listing, calls, server-side errors, a server that dies, a hung server cut off by timeout, noisy stdout tolerated, stop() leaves nothing, env scrubbing, config validation, one bad server does not stop the others, MCP tools through the V2 runner, held tier needs consent, real schema passthrough, and the host: lane off by default, grant connects, revoke disconnects, broken server contained, shell string refused |
+| `test/v4/updater.test.js` | 21 | signature verification, wrong key, tampered manifest, changed version, unsigned refused when a key is pinned, canonical form stability, downgrade refused, no-op, numeric version compare, hash mismatch never written, missing file aborts, atomic swap and rollback, hashTree manifest, successful run, unhealthy rollback, throwing restart treated as unhealthy, key pinning round trip |
+| `test/v4/release-flow.test.js` | 7 | `v4:release` builds and self-verifies a signed manifest with no tests or node_modules, refuses without a key; `v4:setup --check` changes nothing; a real setup issues one pairing code, seeds Owner Mode, is idempotent, pins a release key; `v4:update` refuses without a channel |
 | `test/v4/extract.test.js` | 18 | real ZIP parsing, DOCX text with paragraphs/tabs/entities, XLSX shared strings, PDF Flate and uncompressed streams, TJ arrays and escapes, encrypted PDF refused, scan reported as NO_TEXT_LAYER, dispatcher by extension or magic bytes, and the CV scenario end to end through an upload + `document_read` |
 | `test/v4/owner-mode.test.js` | 21 | nothing granted by default, grants persist, 0600 file, folder implies files, files inert without a folder, drive roots refused (portable across platforms), inside-only path check, immediate revoke, per-lane revoke, unknown lanes refused, audit history, corrupt file degrades to nothing, live grant/revoke through the API without a restart, grant survives restart |
 | `test/v4/skills.test.js` | 15 | shipped skills well formed, withheld without required lanes, withheld without required tools, degraded (not hidden) when a preferred tool is missing, bounded prompt section, malformed skill skipped, directory/name mismatch, oversized body capped, experimental hidden, phone view explains every block, `prefers` never widens access |
@@ -74,7 +77,7 @@ $ npm run check
 506/506 files parse cleanly.
 
 $ npm run i18n
-0 Swedish string literal(s) in 278 files
+0 Swedish string literal(s) in 286 files
 
 $ npm run v4:progress --check
 67.5/100 verified points, matrix valid (exit 0)

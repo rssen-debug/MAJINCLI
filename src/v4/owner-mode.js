@@ -30,11 +30,11 @@ export const OWNER_MODE_SCHEMA = 'majin.v4.owner-mode/v1';
 /** Lanes the owner can grant. `browser` is the runtime, not a V1 module name. */
 export const GRANTABLE_LANES = Object.freeze([
   'files', 'shell', 'power', 'web', 'research', 'jobs', 'agent', 'flows', 'github',
-  'desktop', 'screen', 'computer', 'browser',
+  'desktop', 'screen', 'computer', 'browser', 'mcp',
 ]);
 
 /** Lanes whose risk justifies a confirmation that names the consequence. */
-export const SENSITIVE_LANES = Object.freeze(['shell', 'power', 'desktop', 'screen', 'computer', 'agent']);
+export const SENSITIVE_LANES = Object.freeze(['shell', 'power', 'desktop', 'screen', 'computer', 'agent', 'mcp']);
 
 export class OwnerModeError extends Error {
   constructor(code, message, status = 400) {

@@ -14,6 +14,7 @@ import { ToolRegistry } from '../v2/tools/registry.js';
 import { runTool } from '../v2/tools/runner.js';
 import { MemoryStore } from '../v2/memory/store.js';
 import { extractText, ExtractError } from './extract.js';
+import { modelSchemaOf } from './mcp-tools.js';
 
 export const MAX_FILE_BYTES = 1_000_000;
 export const MAX_READ_BYTES = 200_000;
@@ -306,7 +307,13 @@ export function schemasFromRegistry(registry, { limit = 60 } = {}) {
     if (out.length >= limit) break;
     const def = registry.get(summary.name);
     if (!def) continue;
-    const parameters = jsonSchemaFor(def.inputSchema);
+    // A tool that carries its own JSON Schema (MCP servers do) is used verbatim:
+    // converting it through zod would be a second source of truth that drifts
+    // from the server's real arguments.
+    const carried = modelSchemaOf(def);
+    const parameters = carried
+      ? (carried.type === 'object' ? carried : { type: 'object', properties: {} })
+      : jsonSchemaFor(def.inputSchema);
     if (!parameters) continue; // unconvertible schema: skip, do not guess
     out.push({
       name: def.name,

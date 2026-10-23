@@ -44,6 +44,8 @@ import { hostCapabilities, describeCapabilities, registerHostTools } from './too
 import { UploadStore, UploadError, serveHeadersFor, typeForName, MAX_UPLOAD_BYTES } from './uploads.js';
 import { OwnerMode, OwnerModeError } from './owner-mode.js';
 import { discoverSkills, usableSkills, describeSkills } from './skills.js';
+import { parseMcpConfig, connectServers } from './mcp.js';
+import { registerMcpTools } from './mcp-tools.js';
 import { TelemetryLedger } from '../v2/telemetry/ledger.js';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui');
@@ -236,9 +238,62 @@ export function createV4Server({ config }) {
     }
 
     hostTools = { registered: stillThere, skipped };
+    await refreshMcp();
   }
 
   const hostReady = refreshHostTools();
+
+  /**
+   * MCP servers, loaded from `<data>/v4/mcp.json` when the owner grants the `mcp`
+   * lane. Config comes from a file the owner wrote; a model can never name a
+   * command to launch.
+   */
+  const mcpState = { connected: [], failed: [], configErrors: [] };
+  async function refreshMcp() {
+    for (const entry of mcpState.connected) entry.server.stop();
+    for (const entry of tools.registry.list()) {
+      if (entry.name.startsWith('mcp_')) tools.registry.tools.delete(entry.name);
+    }
+    mcpState.connected = [];
+    mcpState.failed = [];
+    mcpState.configErrors = [];
+
+    if (!ownerMode.activeLanes().includes('mcp')) {
+      mcpState.configErrors.push({ name: '-', error: 'the mcp lane is not granted' });
+      return;
+    }
+    let raw = null;
+    try {
+      raw = JSON.parse(fs.readFileSync(path.join(paths.root, 'mcp.json'), 'utf8'));
+    } catch {
+      mcpState.configErrors.push({ name: '-', error: `no readable mcp.json in ${paths.root}` });
+      return;
+    }
+    const parsed = parseMcpConfig(raw);
+    mcpState.configErrors.push(...parsed.errors);
+    const { connected, failed } = await connectServers(parsed.servers);
+    mcpState.failed.push(...failed);
+    for (const entry of connected) {
+      const { registered, skipped } = registerMcpTools(tools.registry, entry.server.name, entry.tools, { server: entry.server });
+      entry.registered = registered;
+      entry.skipped = skipped;
+      mcpState.connected.push(entry);
+    }
+  }
+
+  function mcpView() {
+    return {
+      connected: mcpState.connected.map((e) => ({
+        name: e.server.name,
+        tools: e.registered?.map((r) => r.name) || [],
+        skipped: e.skipped || [],
+        serverInfo: e.server.serverInfo,
+      })),
+      failed: mcpState.failed,
+      configErrors: mcpState.configErrors,
+      configPath: path.join(paths.root, 'mcp.json'),
+    };
+  }
 
   const kernel = new Kernel({
     features: config.platform?.features || {},
@@ -587,6 +642,11 @@ export function createV4Server({ config }) {
       sendJson(res, 200, { ok: true, removed: found.name });
     },
 
+    'GET /api/mcp': async (req, res) => {
+      requireSession(req);
+      sendJson(res, 200, { ok: true, mcp: mcpView() });
+    },
+
     'GET /api/skills': async (req, res) => {
       requireSession(req);
       const view = skillsNow();
@@ -650,6 +710,7 @@ export function createV4Server({ config }) {
         ok: true,
         host: hostCaps ? describeCapabilities(hostCaps) : { platform: process.platform, lanes: {} },
         ownerMode: ownerMode.view(),
+        mcp: mcpView(),
         tools: {
           enabled: ownerMode.enabled(),
           registered: hostTools.registered,
@@ -929,7 +990,12 @@ export function createV4Server({ config }) {
 
   // Workers are killed when the listener closes, so a stopped host leaves no
   // orphaned plugin processes behind.
-  server.on('close', () => kernel.shutdownWorkers());
+  server.on('close', () => {
+    kernel.shutdownWorkers();
+    // MCP children are processes too: closing the host must not leave them.
+    for (const entry of mcpState.connected) entry.server.stop();
+    mcpState.connected = [];
+  });
 
   return {
     server,

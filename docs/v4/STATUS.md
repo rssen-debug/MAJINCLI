@@ -34,20 +34,18 @@ tills du har kört kommandot som bevisar det.
 | Edge/webbläsare styr sidor | kräver webbläsare + Playwright | `npm run v4:e2e` |
 | Riktig inferens via OpenCode Go | ingen nyckel i den här miljön | `npm run v4:accept` |
 | iPhone/Android över Tailscale | ingen telefon, ingen tunnel | `npm run v4:accept -- --url https://…` |
-| Automatisk uppdatering utan PowerShell | **inte byggd** — se nedan | — |
+| Automatisk uppdatering utan PowerShell | **byggd och testad** (signerad release, hash-kontroll, atomisk swap, automatisk rollback); schemalagd tillämpning är medvetet inte påslagen | `npm run v4:update check` |
 | PDF/DOCX-textutvinning | **byggd och testad** — se `extract.test.js`; det som återstår är din riktiga CV-fil | `npm run v4:tools -- --probe` |
 
 ## Inte byggt alls (och varför)
 
-1. **Automatisk uppdatering** (din punkt 6). Att bygga en uppdaterare som hämtar och kör kod
-   kräver en signerad release-kanal och en nyckel. Utan signaturverifiering är en auto-updater
-   ett fjärrexekveringshål — värre än att köra `git pull`. Det måste designas med dig, inte
-   gissas. `npm run v4:upgrade` finns som manuell, testad väg med automatisk rollback.
-2. **PDF/DOCX-utvinning** (din punkt 4). Uppladdningen tar emot och validerar filerna, men
-   MAJIN kan inte läsa texten i dem. DOCX är genomförbart med `node:zlib`; PDF kräver ett
-   bibliotek. Det är nästa naturliga steg.
-3. **MCP/CUA.** Jag hittade ingen `cua-driver` eller MCP-klient i repot. `computer.use` finns
-   men är en Reasoner-loop över `control.*`, inte en MCP-server. Att påstå MCP-stöd vore fel.
+1. **Schemalagd tillämpning av uppdateringar.** Alla bitar finns och är testade, men att låta en
+   obevakad Windows-maskin installera på natten är ett beslut som är ditt, inte mitt. `check` kan
+   schemaläggas; `apply` väntar på ett mänskligt ord. Se `docs/v4/UPDATE.md`.
+2. **CUA som medföljande server.** MCP-klienten finns; en CUA-server är tredjepartsprogram som du
+   installerar och pekar ut i `v4/mcp.json`. MAJIN kan inte skicka med en sådan utan att själv
+   vara en desktop-agent.
+3. **OCR.** En skannad PDF ger `NO_TEXT_LAYER` — MAJIN säger det i stället för att gissa.
 
 ## Så verifierar du kedjan själv
 
