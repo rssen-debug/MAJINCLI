@@ -41,14 +41,17 @@ test('journal: a slow subscriber cannot break the turn', () => {
   assert.equal(t.seq, 1);
 });
 
-test('journal: old turns are pruned and the buffer is bounded', () => {
+test('journal: finished turns are pruned and the buffer is bounded', () => {
   let now = 1_000_000;
   const j = new TurnJournal({ maxTurns: 3, ttlMs: 1000, now: () => now });
   for (let i = 0; i < 5; i += 1) {
     const t = j.create();
     j.append(t, 'delta', { text: String(i) });
+    j.finish(t, 'completed');
     now += 10;
   }
+  // Finished turns are what the cap applies to; live ones are protected
+  // (see journal-live.test.js for that contract).
   assert.ok(j.order.length <= 3, `bounded, got ${j.order.length}`);
   now += 5000;
   j.prune();

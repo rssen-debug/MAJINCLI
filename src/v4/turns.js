@@ -19,6 +19,13 @@
 export const JOURNAL_MAX_TURNS = 50;
 export const JOURNAL_MAX_EVENTS = 2000;
 export const JOURNAL_TTL_MS = 10 * 60 * 1000;
+/**
+ * Hard ceiling on live (unfinished) turns. Normal use never approaches it; it
+ * exists so a flood cannot grow memory without limit.
+ */
+export const JOURNAL_LIVE_CEILING = 200;
+
+const LIVE_CEILING = JOURNAL_LIVE_CEILING;
 
 export class TurnJournal {
   constructor({ maxTurns = JOURNAL_MAX_TURNS, maxEvents = JOURNAL_MAX_EVENTS, ttlMs = JOURNAL_TTL_MS, now = () => Date.now() } = {}) {
@@ -30,20 +37,45 @@ export class TurnJournal {
     this.order = [];
   }
 
+  /**
+   * Drop turns that are finished and either expired or over the cap.
+   *
+   * A running turn is NEVER dropped, whatever its age or position: the whole
+   * point of the journal is that a phone can reattach to work in progress. A
+   * turn that takes 15 minutes on a slow model must still be findable at minute
+   * 15, and creating newer turns must not push it out.
+   *
+   * Live turns are bounded separately (LIVE_CEILING), so a pathological flood
+   * still cannot grow memory without limit — but that ceiling is far above
+   * normal use, and crossing it is a bug worth seeing rather than a silent drop.
+   */
   prune() {
     const cutoff = this.now() - this.ttlMs;
-    for (const id of [...this.order]) {
+    const keep = [];
+    for (const id of this.order) {
       const turn = this.turns.get(id);
-      if (!turn) {
-        this.order = this.order.filter((x) => x !== id);
+      if (!turn) continue;
+      const finished = turn.done;
+      const expired = turn.updatedAt < cutoff;
+      if (finished && expired) {
+        this.turns.delete(id);
         continue;
       }
-      if (turn.updatedAt < cutoff || (turn.done && this.turns.size > this.maxTurns)) {
-        this.turns.delete(id);
-        this.order = this.order.filter((x) => x !== id);
-      }
+      keep.push(id);
     }
-    while (this.order.length > this.maxTurns) {
+    this.order = keep;
+
+    // Finished turns over the cap go first, oldest first.
+    let finishedIds = this.order.filter((id) => this.turns.get(id)?.done);
+    while (finishedIds.length && this.order.length > this.maxTurns) {
+      const id = finishedIds.shift();
+      this.turns.delete(id);
+      this.order = this.order.filter((x) => x !== id);
+    }
+
+    // If live turns alone exceed the ceiling, drop the oldest live ones. This
+    // should not happen in normal use; it exists so memory is still bounded.
+    while (this.order.length > LIVE_CEILING) {
       const id = this.order.shift();
       this.turns.delete(id);
     }
@@ -64,12 +96,9 @@ export class TurnJournal {
     };
     this.turns.set(turn.id, turn);
     this.order.push(turn.id);
-    // Enforce the cap here too: pruning only on entry would let the list grow
-    // by one turn per call until the next create.
-    while (this.order.length > this.maxTurns) {
-      const dropped = this.order.shift();
-      this.turns.delete(dropped);
-    }
+    // Enforce the cap here too, but only against FINISHED turns: the newest
+    // arrival must never push out work that is still running.
+    this.prune();
     return turn;
   }
 

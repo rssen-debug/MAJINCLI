@@ -360,6 +360,28 @@ pretending the deadline prevents everything.
 Proven the usual way: the cooperative-tool test fails on the old code (checked by stashing the fix)
 and passes on the new one.
 
+## The journal could forget work in progress
+
+The reconnection buffer had two eviction paths and **neither consulted `done`**:
+
+- **age**: a turn older than the 10-minute TTL was dropped, even mid-flight;
+- **size**: creating a newer turn evicted the oldest by insertion order.
+
+So the one case the journal exists for — a phone reconnecting to a long turn — was exactly the case
+it failed. A 15-minute turn on a slow model became unfindable at minute 10, and the client got 404
+"turn no longer buffered" while the host was still working.
+
+Now only **finished** turns expire or are evicted. Live turns are protected up to a separate hard
+ceiling (`JOURNAL_LIVE_CEILING = 200`), so a flood is still bounded — but normal use never
+approaches it, and crossing it is a bug worth seeing rather than a silent drop.
+
+**An existing test encoded the old behaviour.** `turns.test.js` created five turns, never finished
+them, and asserted the buffer had dropped two. That assertion was the bug written down. It now
+finishes its turns before checking the cap, and points at `journal-live.test.js` for the live-turn
+contract.
+
+Proven by stashing the fix: four of the six new tests fail against the old `turns.js`.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in
