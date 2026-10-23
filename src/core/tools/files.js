@@ -10,6 +10,7 @@ import { def } from './registry.js';
 import { entropy, strings as extract } from '../binary/strings.js';
 import { dirs } from '../paths.js';
 import { fileLocks } from '../tasks.js';
+import { bus } from '../log.js';
 
 /* Two tasks, one file: whoever asks second QUEUES on that file alone (FIFO,
    30 s guard against a crashed owner) — the rest of the autopilot keeps
@@ -26,10 +27,16 @@ async function locked(abs, session, fn) {
   }
 }
 
-async function writeAtomic(abs, data) {
+export async function writeAtomic(abs, data, {signal = null} = {}) {
+  signal?.throwIfAborted();
   const tmp = `${abs}.tmp-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
-  await fsp.writeFile(tmp, data);
-  await fsp.rename(tmp, abs);
+  try {
+    await fsp.writeFile(tmp, data, signal ? {signal} : {});
+    signal?.throwIfAborted();
+    await fsp.rename(tmp, abs);
+  } finally {
+    try {await fsp.unlink(tmp);}catch(error){if(error.code!=='ENOENT')bus.warn('file.temp_cleanup_failed',{error:error.message});}
+  }
 }
 
 const IGNORE = new Set(['node_modules', '.git', 'dist', 'build', '.next', '__pycache__', '.venv', 'target', '.cache', 'Library', 'AppData', '$RECYCLE.BIN', 'System Volume Information', '.pnpm-store', 'venv']);

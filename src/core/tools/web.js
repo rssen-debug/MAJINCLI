@@ -7,7 +7,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { def } from './registry.js';
-import { resolveIn } from './files.js';
+import { resolveIn, writeAtomic } from './files.js';
 import { bus } from '../log.js';
 import { openFor, closeFor, isOpen, journal } from '../browser.js';
 import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText, diffGroundSnapshot, findGroundedControls, VERSION as GROUND_V } from '../browser-ground.js';
@@ -27,15 +27,27 @@ function screenshotDigest(bytes){ return createHash('sha256').update(bytes).dige
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36 MAJIN/1.0';
 
-async function httpGet(url, { headers = {}, timeoutSec = 25, maxBytes = 4_000_000, method = 'GET', body = null } = {}) {
+async function httpGet(url, { headers = {}, timeoutSec = 25, maxBytes = 4_000_000, method = 'GET', body = null, signal = null } = {}) {
+  signal?.throwIfAborted();
+  if(!Number.isSafeInteger(maxBytes) || maxBytes<1)throw new Error('maxBytes must be a positive safe integer');
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(new Error('timeout')), timeoutSec * 1000);
   t.unref?.();
   try {
-    const res = await fetch(url, { method, body, redirect: 'follow', headers: { 'user-agent': UA, accept: '*/*', ...headers }, signal: ctrl.signal });
-    const ab = await res.arrayBuffer();
-    const buf = Buffer.from(ab);
-    return { ok: res.ok, status: res.status, headers: Object.fromEntries(res.headers.entries()), body: buf.subarray(0, maxBytes), truncated: buf.length > maxBytes, url: res.url };
+    const res = await fetch(url, { method, body, redirect: 'follow', headers: { 'user-agent': UA, accept: '*/*', ...headers }, signal: signal ? AbortSignal.any([signal,ctrl.signal]) : ctrl.signal });
+    const chunks=[];let bytes=0,truncated=false;
+    if(res.body){
+      const reader=res.body.getReader();
+      try{
+        for(;;){
+          const next=await reader.read();if(next.done)break;
+          const available=maxBytes-bytes,keep=Math.min(available,next.value.byteLength);
+          if(keep){chunks.push(Buffer.from(next.value.subarray(0,keep)));bytes+=keep;}
+          if(next.value.byteLength>available){truncated=true;await reader.cancel();break;}
+        }
+      }finally{reader.releaseLock();}
+    }
+    return { ok: res.ok, status: res.status, headers: Object.fromEntries(res.headers.entries()), body: Buffer.concat(chunks,bytes), truncated, url: res.url };
   } finally {
     clearTimeout(t);
   }
@@ -155,24 +167,25 @@ export const webTools = [
     name: 'web.fetch',
     group: 'web',
     risk: 'read',
-    desc: 'Fetch a URL as clean text (or json/raw). Use for docs, APIs and pages. Follows redirects, size-capped.',
+    desc: 'Read a URL with GET/HEAD as clean text (or json/raw). For POST/PUT/DELETE or other external actions use approval-gated net.http. Follows redirects, size-capped.',
     params: {
       url: 'string: http(s) address',
       extract: 'string: text | html | json | raw. optional (default: text) [text|html|json|raw]',
       maxChars: 'number: max characters in the response (default: 24000)',
-      method: 'string: GET | POST | PUT | DELETE. optional (default: GET) [GET|POST|PUT|DELETE]',
+      method: 'string: GET | HEAD. optional (default: GET) [GET|HEAD]',
       headers: 'object: extra headers (optional)',
-      body: 'string: request body for POST/PUT (optional)',
     },
     examples: ['web.fetch({url:"https://api.deepseek.com/models"})'],
         required: ['url'],
 async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {}, body }, ctx) {
+      method=String(method).toUpperCase();
+      if(!['GET','HEAD'].includes(method) || body != null || Object.keys(headers||{}).some(name=>/^(x-http-method-override|x-method-override|x-http-method|method-override)$/i.test(name)))return {ok:false,error:{code:'external_action_requires_approval',message:'web.fetch is read-only. Use net.http with an explicit approval for request bodies, method overrides or mutating HTTP methods.'}};
       if (!/^https?:\/\//i.test(url)) throw new Error('url must start with http:// or https://');
       const t0 = Date.now();
-      const r = await httpGet(url, { timeoutSec: ctx.cfg.get('tools.web.timeoutSec') || 25, method, headers, body });
+      const r = await httpGet(url, { timeoutSec: ctx.cfg.get('tools.web.timeoutSec') || 25, method, headers, body, signal:ctx.signal });
       const type = r.headers['content-type'] || '';
       let text;
-      let note = '';
+      let note = r.truncated ? '(response byte limit reached; content is incomplete)' : '';
       if (extract === 'raw') text = r.body.subarray(0, 4000).toString('latin1');
       else if (extract === 'html' || (extract === 'text' && /json/i.test(type))) text = r.body.toString('utf8');
       else if (extract === 'text' && /html/i.test(type)) text = htmlToText(r.body.toString('utf8'));
@@ -181,7 +194,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         try {
           text = JSON.stringify(JSON.parse(r.body.toString('utf8')), null, 1);
         } catch {
-          note = '(kunde inte parsa som json)';
+          note += ' (JSON could not be parsed)';
         }
       }
       const clipped = text.length > maxChars ? `${text.slice(0, maxChars)}\n…[${text.length - maxChars} chars clipped]` : text;
@@ -190,7 +203,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       return {
         ok: true,
         result: `${r.status} ${r.url} · ${type.split(';')[0] || 'unknown type'} · ${r.body.length} byte${note ? ` ${note}` : ''}\n\n${clipped}`,
-        meta: { status: r.status, url: r.url, bytes: r.body.length, ms: Date.now() - t0, contentType: type },
+        meta: { status: r.status, url: r.url, bytes: r.body.length, ms: Date.now() - t0, contentType: type, truncated:r.truncated },
         summary: `${r.status} ${new URL(r.url).host} (${r.body.length} byte)`,
       };
     },
@@ -206,15 +219,17 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       if (!/^https?:\/\//i.test(url)) throw new Error('url must be http(s)');
       const name = p || path.join('downloads', path.basename(new URL(url).pathname) || 'file.bin');
       const { abs } = resolveIn(ctx, name);
-      const r = await httpGet(url, { timeoutSec: 120, maxBytes: ctx.cfg.get('tools.re.maxFileBytes') || 268435456 });
+      const r = await httpGet(url, { timeoutSec: 120, maxBytes: ctx.cfg.get('tools.re.maxFileBytes') || 268435456, signal:ctx.signal });
       if (!r.ok) return { ok: false, error: { code: `http_${r.status}`, message: `${r.status} for ${url}` } };
+      if(r.truncated)return {ok:false,error:{code:'response_too_large',message:'Download exceeded the configured byte limit; no file was written.'}};
       const crypto = await import('node:crypto');
       const digest = crypto.createHash('sha256').update(r.body).digest('hex');
       if (sha256 && digest !== sha256.toLowerCase()) {
         return { ok: false, error: { code: 'hash_mismatch', message: `sha256 ${digest} ≠ ${sha256}`, hint: 'the file changed or the link is wrong' } };
       }
+      ctx.signal?.throwIfAborted();
       await fs.mkdir(path.dirname(abs), { recursive: true });
-      await fs.writeFile(abs, r.body);
+      await writeAtomic(abs, r.body, {signal:ctx.signal});
       bus.info('download', { url, bytes: r.body.length, path: abs });
       return {
         result: `saved ${abs} (${r.body.length} bytes, sha256 ${digest})\nRun re.triage({path:"${abs}") to analyze it.`,

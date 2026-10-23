@@ -619,3 +619,20 @@ edit/pause/cancel. Reuse core Heartbeat for delivery/event digests. Web Push and
 physical locked-iPhone receipt remain unimplemented/unverified. Do not initialize
 legacy schedule.json or any unrelated production automation during tests.
 Run: node --test test/core-schedule.test.js test/readonly.test.js
+
+### HTTP safety milestone — 24 October
+
+Owner reports disk remediation completed (~50GB). No further cleanup planned.
+Exact cccf09fb3ccdc6e0f37681ad979bb392670a5d75 CI: V4 40035816313,
+Windows desktop40035816310 and runner40035816524 all SUCCESS.
+web.fetch now accepts GET/HEAD only and rejects bodies/method overrides before
+network contact. Raw net.http remains available at external approval tier;
+it previously exposed POST/DELETE as read-only. Streaming responses stop at the
+byte cap instead of allocating the full response first. Truncated downloads
+write nothing, use existing atomic file helper with cancellation, and enforce
+live V4 folder grants. Failed rename/cancel retains original bytes and cleans
+temporary output. Focused HTTP/read-only/file-access/host suite45/0/0.
+No new real-model acceptance is implied by these controlled network tests.
+Remaining priority: genuine unfamiliar Go task success, canonical model billing
+verification, V4 Scheduler binding, conditions/dedup/budgets and locked-iPhone
+push. Original parity, physical voice, signed native release/update gates remain.

@@ -117,6 +117,7 @@ export function checkPath(candidate, { workspace, folders = [] } = {}) {
 /** The path arguments each V1 file tool actually uses. */
 export const PATH_ARGUMENTS = Object.freeze({
   'browser.upload': ['path'],
+  'web.download': ['path'],
   'fs.list': ['path'],
   'fs.read': ['path'],
   'fs.write': ['path'],
