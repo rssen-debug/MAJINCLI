@@ -139,7 +139,7 @@ test('store: roundtrip + corrupt-file safety (a torn store is empty, never fatal
 
 test('jobs tools: registered, right risks, cv.set/show work end-to-end', async () => {
   const { toolCount, buildRegistry } = await import('../src/core/tools/index.js');
-  assert.equal(toolCount(), 139, '139 tools (134 core/majic + 5 control), none disabled');
+  assert.equal(toolCount(), 141, '141 tools (136 core/majic + 5 control), none disabled');
   const cfg = { get: () => 0, set: () => {} };
   const reg = buildRegistry({ cfg });
   const names = reg.list().map((t) => t.name);

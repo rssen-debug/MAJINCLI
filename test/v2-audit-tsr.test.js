@@ -16,7 +16,7 @@ import { requestTimestamp, verifyTimestamp, hasOpenSsl } from '../src/v2/audit/t
 import { verifyAnchor } from '../src/v2/audit/anchor.js';
 import { AuditChain } from '../src/v2/audit/chain.js';
 
-const REPO = path.dirname(fileURLToPath(import.meta.url)).replace(/\/test$/, '');
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIXTURE = path.join(REPO, 'test', 'fixtures', 'tsr-anchor');
 const LIVE = process.env.IT_TSA === '1';
 

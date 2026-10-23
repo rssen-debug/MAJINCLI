@@ -15,12 +15,43 @@ param(
   [switch]$NoPath,
   [switch]$NoTask,
   [switch]$Uninstall,
+  [switch]$Legacy,
   [string]$Home = "$env:LOCALAPPDATA\MAJIN"
 )
 
 $ErrorActionPreference = 'Stop'
 $Repo = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Bin = Join-Path $Home 'bin'
+
+# V4 packages must never install the old V1 server by accident.
+if (-not $Legacy) {
+  if ($WhatsApp -or $Dataset) { throw 'These V1 installer switches require -Legacy. V4 channel/dataset setup must use its own authenticated configuration.' }
+  $env:MAJIN_HOME = $Home
+  & (Join-Path $Repo 'scripts\v4\install-v4-windows.ps1') -AutoStart:(-not $NoTask) -Uninstall:$Uninstall
+  if (-not $?) { exit 1 }
+  if (-not $Uninstall) {
+    New-Item -ItemType Directory -Force -Path $Bin | Out-Null
+    $entry = Join-Path $Repo 'bin\majin.mjs'
+    foreach ($launcher in @(@{ Name = 'majin.cmd'; Command = '' }, @{ Name = 'majin-start.cmd'; Command = 'start' }, @{ Name = 'majin-serve.cmd'; Command = 'serve' })) {
+      $launcherPath = Join-Path $Bin $launcher.Name
+      if ((Test-Path -LiteralPath $launcherPath) -and -not (Test-Path -LiteralPath "$launcherPath.pre-v4")) {
+        Copy-Item -LiteralPath $launcherPath -Destination "$launcherPath.pre-v4"
+      }
+      $launchCommand = $launcher.Command
+      @"
+@echo off
+if "%MAJIN_HOME%"=="" set "MAJIN_HOME=$Home"
+node "$entry" $launchCommand %*
+"@ | Set-Content -LiteralPath $launcherPath -Encoding ASCII
+    }
+    if (-not $NoPath) {
+      $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+      if ($Bin -notin ($userPath -split ';')) { [Environment]::SetEnvironmentVariable('Path', "$Bin;$userPath", 'User') }
+    }
+    Write-Host 'V4 host installed. Install the V4 desktop package to use majin start/window; majin serve runs the shared host.'
+  }
+  exit 0
+}
 
 function Write-Step([string]$m) { Write-Host "  · $m" -ForegroundColor DarkGray }
 function Write-Ok([string]$m) { Write-Host "✔ $m" -ForegroundColor Green }

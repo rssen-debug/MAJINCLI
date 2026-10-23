@@ -4,6 +4,7 @@
  * inner walk alone cannot catch) must be caught by the anchor.
  */
 import test from 'node:test';
+import { privateFilePermissions } from '../src/v4/file-permissions.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { AuditChain } from '../src/v2/audit/chain.js';
 import { keygen, anchor, verifyAnchor, pubFingerprint, KEY_DIR, PUB_FILE, PRIV_FILE } from '../src/v2/audit/anchor.js';
 
-const REPO = path.dirname(fileURLToPath(import.meta.url)).replace(/\/test$/, '');
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(REPO, 'bin', 'majin-v2.mjs');
 function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), 'majin-anchor-')); }
 const run = (args, cwd = REPO) => new Promise((resolve) => {
@@ -25,7 +26,7 @@ test('1. keygen creates 0600 private key + public key; second run refuses silent
   const r1 = keygen(dir);
   assert.equal(r1.created, true);
   assert.match(r1.fingerprint, /^[0-9a-f]{16}$/);
-  assert.equal((fs.statSync(path.join(dir, KEY_DIR, PRIV_FILE)).mode & 0o777), 0o600);
+  assert.equal(privateFilePermissions(path.join(dir, KEY_DIR, PRIV_FILE)), true, 'signing key is private under POSIX modes or NTFS ACLs');
   const r2 = keygen(dir);
   assert.equal(r2.created, false, 'rotation is a decision, never a default');
 });

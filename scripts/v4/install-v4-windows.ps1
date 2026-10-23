@@ -33,6 +33,7 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $TaskName = 'MAJIN V4 Host'
 $UpdateTaskName = 'MAJIN V4 Update'
 $Launcher = Join-Path $RepoRoot 'start-majin-v4.cmd'
+$DataHome = if ($env:MAJIN_HOME) { $env:MAJIN_HOME } else { Join-Path $env:LOCALAPPDATA 'MAJIN' }
 
 function Write-Step($text) { Write-Host "  $text" }
 function Fail($text) { Write-Host "  FEL: $text" -ForegroundColor Red; exit 1 }
@@ -47,7 +48,7 @@ if ($Uninstall) {
     Write-Step "Tog bort den schemalagda uppgiften '$UpdateTaskName'."
   }
   if (Test-Path $Launcher) { Remove-Item $Launcher -Force; Write-Step "Tog bort $Launcher." }
-  $OwnerMode = Join-Path $env:LOCALAPPDATA 'MAJIN\v4\owner-mode.json'
+  $OwnerMode = Join-Path $DataHome 'v4\owner-mode.json'
   if (Test-Path $OwnerMode) { Remove-Item $OwnerMode -Force; Write-Step 'Återkallade alla behörigheter (owner-mode.json borttagen).' }
   Write-Step 'Avinstallerat. Data i %LOCALAPPDATA%\MAJIN\v4 ligger kvar.'
   exit 0
@@ -75,6 +76,7 @@ $nodePath = $node.Source
 @echo off
 rem MAJIN V4 host — startad av användaren, inte av systemet.
 set MAJIN_V4_PORT=$Port
+set "MAJIN_HOME=$DataHome"
 cd /d "$RepoRoot"
 "$nodePath" scripts\v4\supervise.mjs %*
 "@ | Set-Content -Path $Launcher -Encoding ASCII
@@ -82,7 +84,7 @@ Write-Step "Launcher: $Launcher"
 
 # --- 4b. Owner Mode seed ----------------------------------------------------
 # Written, not implied: the file records exactly what was granted, when, and why.
-$OwnerMode = Join-Path $env:LOCALAPPDATA 'MAJIN\v4\owner-mode.json'
+$OwnerMode = Join-Path $DataHome 'v4\owner-mode.json'
 if ((Test-Path -LiteralPath $OwnerMode) -and -not $PSBoundParameters.ContainsKey('GrantLanes') -and -not $PSBoundParameters.ContainsKey('GrantFolders')) {
   Write-Step 'Existing Owner Mode permissions preserved.'
 } elseif (Test-Path -LiteralPath $OwnerMode) {
@@ -143,17 +145,21 @@ if ($AutoUpdate) {
   # Automatic updates are only meaningful with a channel and a pinned key.
   # Both are written by `npm run v4:setup`, so this task is registered by the
   # same flow the owner already runs — never as a separate command.
-  $UpdateConfig = Join-Path $env:LOCALAPPDATA 'MAJIN\v4\update.json'
+  $UpdateConfig = Join-Path $DataHome 'v4\update.json'
   if (-not (Test-Path $UpdateConfig)) {
     Write-Step 'VARNING: ingen uppdateringskanal är konfigurerad (v4\update.json saknas).'
     Write-Step 'Kör: npm run v4:setup -- --release-url https://... --auto-update'
   }
-  if (-not (Test-Path (Join-Path $env:LOCALAPPDATA 'MAJIN\v4\release-key.json'))) {
+  if (-not (Test-Path (Join-Path $DataHome 'v4\release-key.json'))) {
     Write-Step 'VARNING: ingen release-nyckel är pinnad. Signerade uppdateringar kan inte verifieras.'
   }
   $nodeExe = (Get-Command node).Source
-  $updateAction = New-ScheduledTaskAction -Execute $nodeExe `
-    -ArgumentList @('scripts\v4\update.mjs', 'apply', '--quiet', '--log') `
+  $escapedHome = $DataHome.Replace("'", "''")
+  $escapedNode = $nodeExe.Replace("'", "''")
+  $escapedUpdateScript = (Join-Path $RepoRoot 'scripts\v4\update.mjs').Replace("'", "''")
+  $updateArguments = "-NoProfile -NonInteractive -WindowStyle Hidden -Command `"`$env:MAJIN_HOME = '$escapedHome'; & '$escapedNode' '$escapedUpdateScript' apply --quiet --log; exit `$LASTEXITCODE`""
+  $updateAction = New-ScheduledTaskAction -Execute 'powershell.exe' `
+    -Argument $updateArguments `
     -WorkingDirectory $RepoRoot
   $updateTrigger = New-ScheduledTaskTrigger -Daily -At $UpdateTime
   $updateSettings = New-ScheduledTaskSettingsSet `

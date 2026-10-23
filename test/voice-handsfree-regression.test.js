@@ -5,8 +5,10 @@ test('speech recognition arms, sends actual user transcript and suspends while a
   const src=fs.readFileSync('src/ui/app.js','utf8');
   assert.match(src,/window\.SpeechRecognition\s*\|\|\s*window\.webkitSpeechRecognition/);
   assert.match(src,/r\.interimResults=true/);
-  assert.match(src,/if\(!complete\.trim\(\)\) return/);
-  assert.match(src,/send\(command, \{ voiceTurn: true \}\)/);
+  assert.match(src,/if\(!words\.trim\(\)\)return/);
+  assert.match(src,/voiceFinal=complete\.trim\(\)/);
+  assert.match(src,/if\(!command\)return/);
+  assert.match(src,/send\(command,\s*\{\s*voiceTurn:\s*true\s*\}\)/);
   assert.match(src,/S\.handsFree=true/);
   assert.match(src,/if\(S\.handsFree&&!S\.busy\)startMic\(\)/);
   assert.match(src,/engine\.cancel\(\);engine\.resume\(\);engine\.speak\(u\)/);
@@ -25,11 +27,11 @@ test('UI indicates states, can stop listening and respects reduced motion',()=>{
 });
 test('release version is consistent across all packaging paths',()=>{
   for (const p of ['package.json','package-lock.json']) {
-    const v=JSON.parse(fs.readFileSync(p,'utf8'));assert.equal(v.version,'2.0.0-alpha');
+    const v=JSON.parse(fs.readFileSync(p,'utf8'));assert.equal(v.version,'4.0.0-alpha.3');
   }
-  assert.equal(JSON.parse(fs.readFileSync('package-lock.json','utf8')).packages[''].version,'2.0.0-alpha');
+  assert.equal(JSON.parse(fs.readFileSync('package-lock.json','utf8')).packages[''].version,'4.0.0-alpha.3');
   for(const p of ['src/core/version.js','installer/majin.iss','scripts/publish.ps1']){
-    const text=fs.readFileSync(p,'utf8');assert.match(text,/2\.0\.0-alpha/);
+    const text=fs.readFileSync(p,'utf8');assert.match(text,/4\.0\.0-alpha\.3/);
   }
 });
 
@@ -50,7 +52,7 @@ test('keyboard turns do not trigger Talk; spoken turns stay hands-free',()=>{
   assert.match(src,/if \(!options\.voiceTurn\) \{/);
   assert.match(src,/if \(S\.handsFree\) \{ S\.handsFree = false; stopMic\(\); \}/);
   assert.match(src,/S\.voiceTurn = Boolean\(options\.voiceTurn\)/);
-  assert.match(src,/send\(command, \{ voiceTurn: true \}\)/);
+  assert.match(src,/send\(command,\s*\{\s*voiceTurn:\s*true\s*\}\)/);
   assert.match(src,/S\.voice && S\.voiceTurn && !S\.cancelled/);
 });
 test('workspace preview is persistent between tasks and reloads after HTML writes',()=>{

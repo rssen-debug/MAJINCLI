@@ -101,6 +101,7 @@ const V2_REASONS = Object.freeze({
   'src/v2/audit/bind.js': 'Binds the V2 audit chain to an operator identity; V4 sessions are their own identity model.',
   'src/v2/audit/anchor.js': 'RFC 3161 anchoring for the V2 audit chain; no V4 caller.',
   'src/v2/audit/timestamp.js': 'Timestamp helpers for the V2 audit chain; no V4 caller.',
+  'src/v2/audit/permissions.js': 'Protects V2 audit keys and chain files with POSIX modes or NTFS ACLs. V4 cryptographic audit integration remains an explicit release blocker; this helper alone does not establish V4 audit parity.',
   'src/v2/compiler/goal-compiler.js': 'Compiles natural language into V2 task graphs; V4 plans inside the conversation turn.',
   'src/v2/config/config.js': 'Trust-gated V2 config loader. V4\'s configuration is explicit and env-overridable.',
   'src/v2/exec/approval-modes.js': 'Execution approval modes for the V2 executor. V4 uses V2\'s Approvals + runner directly.',

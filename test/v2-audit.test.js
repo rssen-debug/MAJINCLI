@@ -3,6 +3,7 @@
  * files and REAL child processes; no simulation (PINK CURSOR rule).
  */
 import test from 'node:test';
+import { privateFilePermissions } from '../src/v4/file-permissions.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,7 +18,7 @@ import { Approvals } from '../src/v2/safety/approvals.js';
 import { TelemetryLedger } from '../src/v2/telemetry/ledger.js';
 import { makeReceipt, verify as verifyReceipt } from '../src/v2/runtime/receipts.js';
 
-const REPO = path.dirname(fileURLToPath(import.meta.url)).replace(/\/test$/, '');
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(REPO, 'bin', 'majin-v2.mjs');
 
 function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), 'majin-audit-')); }
@@ -41,7 +42,7 @@ test('1. append/verify round-trip: chain intact, anchor equals computed head', (
   const anchor = JSON.parse(fs.readFileSync(path.join(dir, 'head.json'), 'utf8'));
   assert.equal(anchor.seq, 3);
   assert.equal(anchor.hash, e3.hash);
-  assert.equal((fs.statSync(chain.file).mode & 0o777), 0o600);
+  assert.equal(privateFilePermissions(chain.file), true, 'audit chain is private under POSIX modes or NTFS ACLs');
 });
 
 test('2. tamper detection: editing a middle line breaks at the NEXT line with classified reason', () => {

@@ -26,9 +26,10 @@
  */
 import { spawn as nodeSpawn } from 'node:child_process';
 import path from 'node:path';
+import { V4_VERSION } from './config.js';
 
 export const MCP_PROTOCOL_VERSION = '2025-06-18';
-export const MCP_CLIENT_INFO = Object.freeze({ name: 'majin-v4', version: '4.0.0' });
+export const MCP_CLIENT_INFO = Object.freeze({ name: 'majin-v4', version: V4_VERSION });
 
 /** Only these env keys reach an MCP server; provider keys must never leak. */
 const ENV_ALLOW = ['PATH', 'SystemRoot', 'windir', 'SystemDrive', 'HOME', 'USERPROFILE', 'TEMP', 'TMP', 'TMPDIR', 'LANG', 'LC_ALL', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)'];

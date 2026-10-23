@@ -1,6 +1,6 @@
 {
   "schema": "majin.v4.capability-inventory/v1",
-  "generatedAt": "2026-10-23T17:09:08.191Z",
+  "generatedAt": "2026-10-23T18:45:18.482Z",
   "platform": "win32",
   "v1": {
     "modules": [
@@ -2274,6 +2274,15 @@
         "reason": "V2 cryptographic audit chain (hash chain, anchors). V4's audit trail is goal receipts + the V2 telemetry ledger."
       },
       {
+        "path": "src/v2/audit/permissions.js",
+        "status": "not-used",
+        "importedBy": [
+          "src/v2/audit/anchor.js",
+          "src/v2/audit/chain.js"
+        ],
+        "reason": "Protects V2 audit keys and chain files with POSIX modes or NTFS ACLs. V4 cryptographic audit integration remains an explicit release blocker; this helper alone does not establish V4 audit parity."
+      },
+      {
         "path": "src/v2/audit/timestamp.js",
         "status": "not-used",
         "importedBy": [
@@ -2542,9 +2551,10 @@
         "path": "src/v2/spawn/safe-exec.js",
         "status": "reused",
         "importedBy": [
+          "src/v2/voice/stt.js",
           "src/v2/voice/tts.js"
         ],
-        "reason": "imported by src/v2/voice/tts.js"
+        "reason": "imported by src/v2/voice/stt.js, src/v2/voice/tts.js"
       },
       {
         "path": "src/v2/studio/page.js",
@@ -2664,9 +2674,9 @@
       }
     ],
     "totals": {
-      "components": 51,
+      "components": 52,
       "reused": 21,
-      "notUsed": 30
+      "notUsed": 31
     }
   },
   "v3": {

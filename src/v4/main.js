@@ -8,7 +8,7 @@
  * Prints the pairing code exactly once (on first boot or rotation) and never
  * logs secrets. V1, V2 and V3 entry points are untouched.
  */
-import { loadConfig, assertNodeSupported } from './config.js';
+import { loadConfig, assertNodeSupported, V4_VERSION } from './config.js';
 import { ensurePairing, loadSecret } from './auth.js';
 import { startV4Server } from './server.js';
 import { t } from './ui/strings.js';
@@ -82,6 +82,10 @@ async function serve() {
 async function main() {
   assertNodeSupported();
   const [cmd, ...rest] = process.argv.slice(2);
+  if (['version', '--version', '-v'].includes(cmd)) {
+    line(`majin ${V4_VERSION} · node ${process.versions.node}`);
+    return;
+  }
   if (cmd === 'pair') {
     await pairCommand({ rotate: rest.includes('--rotate') });
     return;
@@ -94,6 +98,7 @@ async function main() {
     line('         MAJIN_V4_API_KEY, MAJIN_V4_MODEL, MAJIN_V4_PUBLIC_ORIGIN');
     return;
   }
+  if (cmd && !['start', 'serve', '--host', '--port'].includes(cmd)) throw new Error(`Unknown host command: ${cmd}. Use --help.`);
   await serve();
 }
 

@@ -9,9 +9,12 @@ const original = loadConfig();
 const route = original.model;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const orchestration = process.argv.includes('--orchestration');
-const evidenceFile = path.join(root, 'docs/v4/evidence', orchestration ? 'live-orchestration.json' : 'live-model.json');
+const evidenceArg = process.argv.indexOf('--evidence');
+const evidenceFile = evidenceArg >= 0
+  ? path.resolve(process.argv[evidenceArg + 1])
+  : path.join(root, 'docs/v4/evidence', orchestration ? 'live-orchestration.json' : 'live-model.json');
 fs.mkdirSync(path.dirname(evidenceFile), { recursive: true });
-const evidence = { at: new Date().toISOString(), status: 'BLOCKED', live: false, credentialContentsRecorded: false };
+const evidence = { at: new Date().toISOString(), machine: os.hostname(), status: 'BLOCKED', live: false, credentialContentsRecorded: false };
 if (!route || route.kind === 'demo') {
   evidence.reason = 'No usable active provider route in the authorized existing configuration.';
   fs.writeFileSync(evidenceFile, JSON.stringify(evidence, null, 2));

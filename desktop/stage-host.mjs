@@ -37,7 +37,7 @@ if (process.platform === 'win32') {
   fs.copyFileSync(process.execPath, path.join(stage, 'runtime/node.exe'));
   fs.writeFileSync(path.join(stage, 'runtime/version.json'), JSON.stringify({ node: process.versions.node, arch: process.arch }));
 }
-for (const name of ['src', 'scripts', 'rules', 'skins', 'package.json', 'package-lock.json']) {
+for (const name of ['bin', 'src', 'scripts', 'rules', 'skins', 'package.json', 'package-lock.json']) {
   const source = path.join(root, name);
   if (fs.existsSync(source)) fs.cpSync(source, path.join(stage, name), { recursive: true });
 }

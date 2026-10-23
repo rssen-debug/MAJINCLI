@@ -26,6 +26,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { AuditChain, HEAD_FILE, canonicalize } from './chain.js';
+import { protectAuditFile } from './permissions.js';
 
 export const ANCHOR_FILE = 'anchors.jsonl';
 export const KEY_DIR = 'keys';
@@ -38,8 +39,10 @@ export function keygen(dir) {
   const priv = path.join(keyDir, PRIV_FILE);
   const pub = path.join(keyDir, PUB_FILE);
   if (fs.existsSync(priv)) return { created: false, pubPath: pub, note: 'key already exists — refusing to rotate silently (rotation is a decision, not a default)' };
+  protectAuditFile(keyDir);
   const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
   fs.writeFileSync(priv, privateKey.export({ type: 'pkcs8', format: 'pem' }), { mode: 0o600 });
+  protectAuditFile(priv);
   fs.writeFileSync(pub, publicKey.export({ type: 'spki', format: 'pem' }), { mode: 0o644 });
   return { created: true, pubPath: pub, fingerprint: pubFingerprint(pub) };
 }

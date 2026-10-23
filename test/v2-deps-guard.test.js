@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const REPO = path.dirname(fileURLToPath(import.meta.url)).replace(/\/test$/, '');
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8'));
 const journal = fs.readFileSync(path.join(REPO, 'docs', 'v2', 'DEPENDENCIES_AND_LICENSES.md'), 'utf8');
 const prodDeps = Object.entries(pkg.dependencies || {});

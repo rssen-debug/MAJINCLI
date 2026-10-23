@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { resolveProfile, PROVIDER_PROFILES } from '../src/v2/model/profiles.js';
 import { OpenAICompatibleProvider, ModelError } from '../src/v2/model/provider.js';
 
-const REPO = path.dirname(fileURLToPath(import.meta.url)).replace(/\/test$/, '');
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(REPO, 'bin', 'majin-v2.mjs');
 const FAKE_KEY = 'oc_sk_testkey_do_not_use_000000';
 

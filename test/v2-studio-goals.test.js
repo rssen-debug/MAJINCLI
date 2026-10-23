@@ -152,7 +152,7 @@ test('6. page reflects goals gate: enabled → live form; disabled → hidden + 
 
 test('7. CLI: --enable-goals without --goal-workspace refuses exit 2 before binding any port', async () => {
   const { spawn } = await import('node:child_process');
-  const bin = path.resolve(path.dirname(new URL(import.meta.url).pathname).replace(/\/test$/, ''), 'bin', 'majin-v2.mjs');
+  const bin = path.resolve(import.meta.dirname, '..', 'bin', 'majin-v2.mjs');
   const res = await new Promise((resolve) => {
     const child = spawn(process.execPath, [bin, '--studio', '--enable-goals'], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';

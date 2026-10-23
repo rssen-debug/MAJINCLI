@@ -1,6 +1,6 @@
 # MAJIN capability inventory (generated)
 
-Generated 2026-10-23T17:09:08.191Z on win32. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
+Generated 2026-10-23T18:45:18.482Z on win32. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
 
 ## Totals
 
@@ -10,7 +10,7 @@ Generated 2026-10-23T17:09:08.191Z on win32. Every row is computed from the code
 | V1 | tools | 141 |
 | V1 | integrated into V4 lanes | 111 |
 | V1 | excluded with a recorded reason | 30 |
-| V2 | components reused | 21/51 |
+| V2 | components reused | 21/52 |
 | V3 | components reused | 0/4 |
 | V4 | built-in tools | 8 |
 | V4 | tools registered on this host | 119 |
@@ -223,6 +223,7 @@ Generated 2026-10-23T17:09:08.191Z on win32. Every row is computed from the code
 | `src/v2/audit/chain.js` | not-used | V2 hash-chained audit log; only the V2 audit bundle uses it. |
 | `src/v2/audit/export.js` | not-used | V2 audit bundle format is reused as a format and documented in SOURCE_AUDIT, not imported; V4 backup has its own manifest + verify path. |
 | `src/v2/audit/index.js` | not-used | V2 cryptographic audit chain (hash chain, anchors). V4's audit trail is goal receipts + the V2 telemetry ledger. |
+| `src/v2/audit/permissions.js` | not-used | Protects V2 audit keys and chain files with POSIX modes or NTFS ACLs. V4 cryptographic audit integration remains an explicit release blocker; this helper alone does not establish V4 audit parity. |
 | `src/v2/audit/timestamp.js` | not-used | Timestamp helpers for the V2 audit chain; no V4 caller. |
 | `src/v2/compiler/goal-compiler.js` | not-used | Compiles natural language into V2 task graphs; V4 plans inside the conversation turn. |
 | `src/v2/compiler/router.js` | not-used | V2 intent compiler targets V2 tool vocabulary and orchestration. |
@@ -254,7 +255,7 @@ Generated 2026-10-23T17:09:08.191Z on win32. Every row is computed from the code
 | `src/v2/runtime/verify-bridge.js` | not-used | Bridges V2 acceptance to V2 verifiers; V4 calls runVerifier directly. |
 | `src/v2/safety/approvals.js` | reused | imported by src/v4/agent.js |
 | `src/v2/safety/command-preflight.js` | reused | imported by src/v2/exec/sandbox.js, src/v2/voice/stt.js, src/v2/voice/tts.js |
-| `src/v2/spawn/safe-exec.js` | reused | imported by src/v2/voice/tts.js |
+| `src/v2/spawn/safe-exec.js` | reused | imported by src/v2/voice/stt.js, src/v2/voice/tts.js |
 | `src/v2/studio/page.js` | not-used | UI for the V2 studio server, which V4 rejected for having no session model. |
 | `src/v2/studio/server.js` | not-used | Desktop operator surface without a session model (rejected in SOURCE_AUDIT). |
 | `src/v2/supervisor/plan-with-model.js` | not-used | Model-assisted V2 planning; V4 plans inside the conversation turn. |
