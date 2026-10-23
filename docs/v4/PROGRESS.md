@@ -258,6 +258,27 @@ The rules, each with a test that failed first:
 3. the system prompt is never trimmed;
 4. when anything was dropped the client shows a quiet note, not an error.
 
+## Observability: the host can now be debugged
+
+An always-on Windows box with no logs is undebuggable — when something is slow or fails at
+03:00 there is nothing to read. V4 had no telemetry at all.
+
+V2's `src/v2/telemetry/ledger.js` is now wired in unchanged. Its property is the reason it was
+reused: the serializer keeps a **fixed field allowlist per event** and silently drops everything
+else, so message text, file names, absolute paths and keys cannot reach the log even by mistake.
+Aggregation is V2's `aggregate()`; the presentation is V4's own (`npm run v4:logs`), because V2's
+renderer titles its report for V2.
+
+Events recorded: `goal.start`, `goal.finish` (state, duration, receipt counts), `task.result`
+per tool call, `model.call` (provider, model, tokens), `verification`.
+
+Proof, not a claim (`test/v4/telemetry.test.js`): a real turn is run with a recognisable secret in
+the message, then the raw ledger is read back and asserted **not** to contain the secret, the file
+name or the data directory — while a control asserts the file on disk really does contain it.
+
+Telemetry is optional by construction: a broken ledger cannot take a turn down, which is itself a
+test.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in

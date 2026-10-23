@@ -93,7 +93,21 @@ function safeJson(value) {
   }
 }
 
-export function createAgent({ config, conversations, goals, tools, model }) {
+/**
+ * Telemetry is optional by design: the agent works without it (tests, embedded
+ * use). When present it is V2's `TelemetryLedger`, whose serializer drops any
+ * field outside a fixed allowlist — message contents, paths and secrets cannot
+ * reach the log even by accident.
+ */
+export function createAgent({ config, conversations, goals, tools, model, telemetry = null }) {
+  const record = (event, payload) => {
+    if (!telemetry) return;
+    try {
+      telemetry.append(event, payload);
+    } catch {
+      /* telemetry must never break a turn */
+    }
+  };
   const bus = createBus();
   const approvals = new Approvals(bus);
   if (config.approvals.policy === 'sandbox-auto') {
@@ -186,7 +200,7 @@ export function createAgent({ config, conversations, goals, tools, model }) {
     }
   }
 
-  async function executeToolCall({ call, goal, conversationId, emit }) {
+  async function executeToolCall({ call, goal, conversationId, emit, attempt = 1 }) {
     const args = parseArgs(call.argsJson);
     if (args === null) {
       return { ok: false, error: 'tool arguments were not valid JSON', code: 'INVALID_JSON', name: call.name };
@@ -229,6 +243,7 @@ export function createAgent({ config, conversations, goals, tools, model }) {
         result: 'failure',
         errorClass: cls,
       });
+      record('task.result', { action: `tool:${toolName}`, result: 'failure', errorCls: cls, attempt: attempt || 1 });
       emit('tool_result', { id: call.id, name: toolName, ok: false, verified: false, summary: cls, error: String(err?.message || err) });
       return { ok: false, error: err?.message || String(err), code: cls, name: toolName };
     }
@@ -311,6 +326,8 @@ export function createAgent({ config, conversations, goals, tools, model }) {
       verified = false;
     }
 
+    record('task.result', { action: `tool:${toolName}`, result: 'success', attempt: attempt || 1 });
+    if (verified) record('verification', { goalId: goal.id, kind: 'file', verified: true });
     emit('tool_result', {
       id: call.id,
       name: toolName,
@@ -406,10 +423,12 @@ export function createAgent({ config, conversations, goals, tools, model }) {
     goal.revisionOf = lineage?.revisionOf || null;
     goal.revision = lineage?.revision || 0;
     lastGoal.set(conversation.id, goal.id);
+    record('goal.start', { goalId: goal.id, objectiveLen: message.length, risk: goal.risk });
     goal.transition(STATES.PLANNING, lineage ? `revision ${goal.revision} of ${lineage.revisionOf}` : 'turn accepted');
     goals.save(goal);
     emit('goal', publicGoal(goal));
 
+    const turnStartedAt = Date.now();
     const packed = historyFor(conversations.get(conversation.id));
     const modelMessages = packed.messages;
     if (packed.dropped > 0 || packed.truncated) {
@@ -449,6 +468,15 @@ export function createAgent({ config, conversations, goals, tools, model }) {
           },
         });
 
+        record('model.call', {
+          provider: response.provider || model.info.provider,
+          model: response.model || model.info.model,
+          elapsedMs: response.elapsedMs || 0,
+          usageInput: response.usage?.input || 0,
+          usageOutput: response.usage?.output || 0,
+          usageTotal: (response.usage?.input || 0) + (response.usage?.output || 0),
+          result: 'ok',
+        });
         if (response.text) finalText += response.text;
         if (response.refused) lastRefusal = response.refused;
 
@@ -569,6 +597,14 @@ export function createAgent({ config, conversations, goals, tools, model }) {
         if (recentRequests.size > 200) recentRequests.delete(recentRequests.keys().next().value);
       }
 
+      record('goal.finish', {
+        goalId: goal.id,
+        finalState: goal.state,
+        durationMs: Date.now() - turnStartedAt,
+        receipts: goal.receipts.length,
+        verifiedReceipts: goal.receipts.filter((r) => r.verified).length,
+        acceptanceCount: goal.acceptance.length,
+      });
       emit('goal', publicGoal(goal));
       emit('done', {
         status: 'completed',
@@ -598,6 +634,14 @@ export function createAgent({ config, conversations, goals, tools, model }) {
         role: 'assistant',
         content: note,
         meta: { error: true, goalId: goal.id },
+      });
+      record('goal.finish', {
+        goalId: goal.id,
+        finalState: goal.state,
+        durationMs: Date.now() - turnStartedAt,
+        receipts: goal.receipts.length,
+        verifiedReceipts: goal.receipts.filter((r) => r.verified).length,
+        acceptanceCount: goal.acceptance.length,
       });
       emit('goal', publicGoal(goal));
       emit(aborted ? 'cancelled' : 'error', { message: reason, messageId: stored.id, goalId: goal.id });

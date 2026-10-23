@@ -57,7 +57,8 @@
     "v4:accept": "node ./scripts/v4/accept.mjs",
     "v4:serve:supervised": "node ./scripts/v4/supervise.mjs",
     "v4:backup": "node ./scripts/v4/backup.mjs",
-    "v4:upgrade": "node ./scripts/v4/upgrade.mjs"
+    "v4:upgrade": "node ./scripts/v4/upgrade.mjs",
+    "v4:logs": "node ./scripts/v4/logs.mjs"
   },
   "optionalDependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",

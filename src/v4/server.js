@@ -40,6 +40,7 @@ import { Kernel } from './kernel.js';
 import { t } from './ui/strings.js';
 import { synthesize, VOICE_MODES, voiceCapabilities } from './voice.js';
 import { TurnJournal } from './turns.js';
+import { TelemetryLedger } from '../v2/telemetry/ledger.js';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui');
 
@@ -136,7 +137,16 @@ export function createV4Server({ config }) {
 
   const tools = createToolRegistry({ workspaceDir, memoryDir: paths.memory });
   const model = createModelClient(config, { workspaceDir });
-  const agent = createAgent({ config, conversations, goals, tools, model });
+  // Structured, privacy-preserving telemetry: V2's ledger keeps a fixed field
+  // allowlist per event, so message text, paths and secrets cannot land in it.
+  const telemetry = (() => {
+    try {
+      return new TelemetryLedger(path.join(paths.root, 'telemetry'));
+    } catch {
+      return null; // an unwritable data dir is reported by the doctor, not fatal here
+    }
+  })();
+  const agent = createAgent({ config, conversations, goals, tools, model, telemetry });
   // Mobile connections drop. The journal lets a phone reattach to a turn that
   // kept running instead of losing the work.
   const journal = new TurnJournal();

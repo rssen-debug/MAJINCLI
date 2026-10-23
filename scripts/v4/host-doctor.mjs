@@ -54,6 +54,13 @@ function main() {
   add('pairing', pairingExists(config.paths.pairing), 'pairing record present (its value is never printed here)', false,
     'Start the host once (npm run v4) to create a pairing code shown on the console.');
 
+  // Telemetry is how an always-on host gets debugged. It is optional (a broken
+  // ledger never takes a turn down) but its absence should be visible.
+  const telDir = path.join(config.paths.root, 'telemetry');
+  const telOk = readableDir(telDir);
+  add('telemetry', telOk, telOk ? telDir : 'telemetry directory is not writable', false,
+    'The host still runs without telemetry; npm run v4:logs will report "no data".');
+
   const catalogue = discoverModels({ home: config.paths.home, env: process.env });
   const configured = catalogue.models.filter((m) => m.configured);
   add('v1_config', catalogue.configReadable, `${catalogue.configPath} (${catalogue.source})`, false,
