@@ -9,11 +9,11 @@ const home = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-select-test-'));
 process.env.MAJIN_HOME = home;
 const { findBrowser, openFor, closeFor } = await import('../../src/core/browser.js');
 const { webTools } = await import('../../src/core/tools/web.js');
-test('select fill resolves unique labels, rejects ambiguity/disabled choices and verifies retained internal value', {timeout:60000}, async t => {
+test('browser form controls retain values and uploads while rejecting ambiguous or stale targets', {timeout:60000}, async t => {
   if (!findBrowser()) { t.skip('No browser binary; no real DOM verification.'); return; }
   const server = http.createServer((req,res) => { res.setHeader('content-type','text/html'); res.end('<select id="country"><option value="dk">Denmark</option><option value="se">Sweden</option><option value="1">Duplicate</option><option value="2">Duplicate</option><option value="x" disabled>Disabled</option></select><input id="secret" value="private-initial"><button onclick="window.clicked=(window.clicked||0)+1">Register   session</button>'); });
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
-  const session='select-regression', ctx={session,cfg:{get:()=>undefined}};
+  const session='select-regression', ctx={session,cfg:{get:k=>k==='workspace'?home:undefined}};
   const run=(name,args)=>webTools.find(t=>t.name===name).run(args,ctx);
   try {
     assert.equal((await run('browser.open',{url:`http://127.0.0.1:${server.address().port}`,headless:true})).ok,true);
@@ -47,6 +47,25 @@ test('select fill resolves unique labels, rejects ambiguity/disabled choices and
     const checked=await run('browser.click',{selector:'#consent',expectChecked:'true'});
     assert.equal(checked.ok,true);
     assert.equal(await b.eval('document.querySelector("#consent").checked'),true);
+    await b.eval('document.body.insertAdjacentHTML("beforeend", "<input id=proof type=file>")');
+    fs.writeFileSync(path.join(home,'synthetic.txt'),'Controlled upload bytes.');
+    await run('browser.elements',{});
+    const uploadSnapshot=await b.eval(GROUND_JS);
+    const fileRef=uploadSnapshot.elements.find(e=>e.type==='file').ref;
+    const malformed=await run('browser.upload',{selector:`[${fileRef}]`,path:'synthetic.txt'});
+    assert.equal(malformed.error.code,'bad_input');
+    assert.equal(await b.eval('document.querySelector("#proof").files.length'),0);
+    const attached=await run('browser.upload',{ref:fileRef,path:'synthetic.txt'});
+    assert.equal(attached.ok,true);
+    assert.equal(await b.eval('document.querySelector("#proof").files[0].text()'),'Controlled upload bytes.');
+    await b.eval('document.body.insertAdjacentHTML("beforeend", "<input id=other type=file>")');
+    const ambiguous=await run('browser.upload',{selector:'input[type=file]',path:'synthetic.txt'});
+    assert.equal(ambiguous.error.code,'ambiguous_target');
+    assert.equal(await b.eval('document.querySelector("#other").files.length'),0);
+    await b.eval('document.querySelector("#proof").type="text"');
+    const staleFile=await run('browser.upload',{ref:fileRef,path:'synthetic.txt'});
+    assert.equal(staleFile.error.code,'ref_stale');
+    assert.equal((await run('browser.upload',{ref:'e9999',path:'synthetic.txt'})).error.code,'ref_unknown');
   } finally {
     await closeFor(session,{wait:true}); await new Promise(r=>server.close(r));
     const resolved=path.resolve(home);

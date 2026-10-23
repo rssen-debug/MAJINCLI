@@ -439,12 +439,10 @@ export function adaptV1Tool(v1tool, { lane, ctx = null }) {
     execute: async (input = {}) => {
       // The grant is only real if it is enforced here: a path outside the
       // workspace and every granted folder never reaches V1's filesystem code.
-      if (v1tool.group === 'files') {
-        assertPathsAllowed(v1tool.name, input, {
-          workspace: ctx?.workspaceDir || null,
-          folders: typeof ctx?.folders === 'function' ? ctx.folders() : [],
-        });
-      }
+      assertPathsAllowed(v1tool.name, input, {
+        workspace: ctx?.workspaceDir || null,
+        folders: typeof ctx?.folders === 'function' ? ctx.folders() : [],
+      });
       let result;
       try {
         result = await v1tool.run(input, ctx);

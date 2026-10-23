@@ -649,29 +649,47 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     name: 'browser.upload',
     group: 'web',
     risk: 'exec',
-    desc: 'Attach a local file to a page file input (<input type=file>) — CV/portfolio uploads. The confirmation comes from the page itself.',
-    params: { selector: 'string: CSS selector of the file input', path: 'string: local file to upload (inside the workspace)' },
-    async run({ selector, path: p }, ctx) {
+    desc: 'Attach a local file to one page file input (<input type=file>). Supply either a live ref from browser.elements or an exact CSS selector, plus path. Never put a ref in CSS brackets. Confirmation comes from the page itself.',
+    params: { selector: 'string optional: exact CSS selector of the file input, exclusive with ref', ref: 'string optional: live numbered ref from browser.elements, exclusive with selector', path: 'string: local file to upload (inside the workspace)' },
+    async run({ selector, ref, path: p }, ctx) {
       const session = ctx.session || 'default';
       if (!isOpen(session)) return { ok: false, error: { code: 'browser_closed', message: 'no browser is open for this task — run browser.open first' } };
-      journal.guard(session, `browser.upload:${selector}`);
+      if (Boolean(selector) === Boolean(ref)) return {ok:false,error:{code:'bad_input',message:'Give exactly one live ref from browser.elements OR an exact CSS selector'}};
+      const grounded = ref ? recallRef(session, ref) : null;
+      if (ref && !grounded) return {ok:false,error:{code:'ref_unknown',message:'File input ref is not grounded in this session; rerun browser.elements'}};
+      if (selector && /^\[?e[1-9][0-9]*\]?$/.test(String(selector))) return {ok:false,error:{code:'bad_input',message:'A numbered element ref is not a CSS selector. Pass it as ref (without brackets), or obtain an exact CSS selector from the current page.'}};
+      const target = ref ? `[data-majin-ref=${JSON.stringify(String(ref))}]` : String(selector);
+      const identity = grounded ? {tag:String(grounded.tag||''),id:String(grounded.id||''),name:String(grounded.name||''),type:String(grounded.type||'')} : null;
+      journal.guard(session, `browser.upload:${ref || selector}`);
       const { resolveIn } = await import('./files.js');
       const { abs } = resolveIn(ctx, p);
       const st = await fs.stat(abs).catch(() => null);
       if (!st || !st.isFile()) return { ok: false, error: { code: 'no_file', message: `no such file: ${abs}` } };
       const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k) });
-      const sel = JSON.stringify(String(selector));
+      const sel = JSON.stringify(target);
+      const checked = await b.eval(`(() => {
+        let nodes; try { nodes=document.querySelectorAll(${sel}); } catch { return {ok:false,code:'invalid_selector'}; }
+        if(nodes.length!==1)return {ok:false,code:nodes.length?'ambiguous_target':'no_such_element'};
+        const el=nodes[0], expected=${JSON.stringify(identity)};
+        if(expected && (el.tagName.toLowerCase()!==expected.tag || String(el.id||'')!==expected.id ||
+          String(el.name||'')!==expected.name || String(el.type||'')!==expected.type))return {ok:false,code:'ref_stale'};
+        if(el.tagName!=='INPUT' || el.type!=='file')return {ok:false,code:'wrong_control_type'};
+        if(el.disabled || el.closest('[inert]'))return {ok:false,code:'disabled_or_inert'};
+        return {ok:true};
+      })()`);
+      if (!checked.ok) return {ok:false,error:{code:checked.code,message:'File upload target is '+checked.code+'; nothing uploaded. Re-observe browser.elements and choose one current file input.'}};
       await b.send('DOM.enable');
       const { root } = await b.send('DOM.getDocument');
-      const { nodeId } = await b.send('DOM.querySelector', { nodeId: root.nodeId, selector: String(selector) });
-      if (!nodeId) return { ok: false, error: { code: 'no_such_element', message: `no file input matches ${selector}`, hint: 'browser.read the page or browser.shot it; find the real input' } };
+      const { nodeId } = await b.send('DOM.querySelector', { nodeId: root.nodeId, selector: target });
+      if (!nodeId) return { ok: false, error: { code: 'no_such_element', message: 'File input changed before upload; re-observe browser.elements' } };
       await b.send('DOM.setFileInputFiles', { files: [abs], nodeId });
+      await new Promise(resolve => setTimeout(resolve, 120));
       const confirm = await b.eval(`(() => {
         const el = document.querySelector(${sel});
         const f = el && el.files && el.files[0];
         return f ? { ok: true, name: f.name, size: f.size } : { ok: false };
       })()`);
-      if (!confirm.ok) return { ok: false, error: { code: 'no_upload', message: 'the input did not accept the file', hint: 'screenshot the page and check for a custom uploader' } };
+      if (!confirm.ok || confirm.name !== path.basename(abs) || confirm.size !== st.size) return { ok: false, error: { code: 'no_upload', message: 'the input did not retain the requested file name and size', hint: 're-observe the current page and check validation or a custom uploader before retrying' } };
       return { ok: true, result: `uploaded — page now holds "${confirm.name}" (${confirm.size} bytes)`, meta: { name: confirm.name, size: confirm.size, path: abs }, summary: `uploaded ${confirm.name}` };
     },
   }),

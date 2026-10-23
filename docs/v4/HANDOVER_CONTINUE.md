@@ -492,3 +492,48 @@ Disk capacity is now an ADDITIONAL NOT READY operational blocker; no claim of
 stable sustained writes/monitoring under this low-space condition. A zero-byte
 failed output export is being replaced with a validated final status receipt in
 outputs. Do not count it as a valid report until JSON parsing succeeds.
+
+### Continued engineering — grounded uploads, 24 October
+
+Previous goal turn classified PROGRESS: deployed fixes, five preserved real-model
+failures and exact-code CI evidence changed the next action. Current goal remains
+active. Re-read the entire latest goal objective file before this continuation.
+The five-attempt form cap remains exhausted; no additional live form attempts.
+
+Existing browser.upload now accepts selector OR live ref, matching fill/click.
+Numbered refs are not silently treated as CSS. Before mutation it checks unique
+target, current grounded identity, file-input type and disabled/inert state. It
+checks the retained requested file name/size after the app update. Exact local
+file bytes are verified independently in a real local browser regression.
+Ambiguous controls, changed refs, unknown refs and bracketed ref-as-CSS input
+execute no upload. The V4 owner path/approval boundary is unchanged.
+Focused browser/grounding/host suite44/0/0; expanded actual-browser regression1/0/0.
+These are deterministic/local-browser tests, NOT a new Go form acceptance PASS.
+
+Disk read-only inventory: Ghost profile~30GB, Windows logical files~37.6GB,
+Program Files~2.1GB, x86~5.9GB, MAJIN test Temp files~78MB. Do not delete personal
+downloads/models/runtime caches. A guarded native PowerShell removal of ONLY
+C:/Users/Ghost/AppData/Local/pip/cache was REJECTED by automatic review as
+'blocked by policy'. No alternate API/CLI or retry was used to bypass this.
+Owner asked via async input to free at least5GB manually; reply pending. Last
+available space~128MB. Smaller independent engineering can continue, but avoid
+large downloads/full suites until actual disk headroom is available. Existing
+supervisor/source host still alive and health200; do not restart another host.
+Account usage read directly:51% used of weekly window, not near98% at observation.
+Next: safe common browser cancellation/resource lifecycle and existing scheduler
+integration; retain all original parity, signing and physical acceptance gates.
+
+Additional source inspection found browser.upload was in group web, bypassing
+the adapter's group-files-only folder check. It now uses the same PATH_ARGUMENTS
+mapping and checkPath real-location/grant enforcement as filesystem tools. The
+adapter always consults that existing map, independent of lane/group. A targeted
+runner regression checks workspace, traversal/outside denial, live grant and
+immediate revocation; no browser call executes for an unauthorized file. This is
+a closed permission gap, not an expansion of Ghost's grants.
+Combined actual-browser/file-access/host regression after this correction34/0/0.
+
+Exact ad1895b CI is now terminal: runner and Windows desktop SUCCESS, V4 Linux
+FAIL530/1/7. Sole failure was real-browser-lifecycle 'both distinct task browsers
+remain open during consent', after~39.5seconds. Preserve run40031941788/job
+120682045655. The assertion is retained; next work must diagnose real startup/
+deadline/cleanup rather than skip it or relax isolation. No full release PASS.

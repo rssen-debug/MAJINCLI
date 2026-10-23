@@ -42,6 +42,27 @@ test('host: concurrent goals get isolated V1 sessions and approvals retain the s
   assert.equal(runInTurn({ goal: { id: 'goal_A' } }, () => context.session), 'v4:goal_A', 'resumed checkpoint uses its original browser/job session');
 });
 
+test('host: browser uploads enforce live folder grants before reaching the browser', async () => {
+  const home=tempHome(), workspace=path.join(home,'workspace'), outside=path.join(home,'private');
+  fs.mkdirSync(workspace); fs.mkdirSync(outside);
+  let folders=[], executed=0;
+  const registry=new ToolRegistry();
+  registry.define(adaptV1Tool({name:'browser.upload',group:'web',risk:'exec',desc:'Controlled upload boundary',
+    raw:{path:'string: local file',ref:'string optional: observed control'},parameters:{required:['path']},
+    run:async()=>{executed++;return {ok:true,result:'controlled no-op',summary:'controlled no-op'};}},
+    {lane:'web',ctx:v1Context({workspaceDir:workspace,folders:()=>folders})}));
+  const upload=p=>runTool({tool:'browser_upload',input:{path:p,ref:'e1'}},{registry,approvals:{check:()=>({decision:'allow'})}});
+  try {
+    assert.equal((await upload('synthetic.txt')).ok,true);
+    await assert.rejects(upload(path.join(outside,'synthetic.txt')),e=>e.cls==='PERMISSION_DENIED');
+    await assert.rejects(upload('../private/synthetic.txt'),e=>e.cls==='PERMISSION_DENIED');
+    assert.equal(executed,1,'out-of-grant paths never reach the V1 browser tool');
+    folders=[outside]; assert.equal((await upload(path.join(outside,'synthetic.txt'))).ok,true);
+    folders=[]; await assert.rejects(upload(path.join(outside,'synthetic.txt')),e=>e.cls==='PERMISSION_DENIED');
+    assert.equal(executed,2,'revocation takes effect on the next upload');
+  } finally { fs.rmSync(home,{recursive:true,force:true}); }
+});
+
 test('host: capability detection is self-consistent on whatever host runs it', async () => {
   const caps = await hostCapabilities({ platform: 'linux' });
   // Desktop is Windows-only, always, on Linux.
