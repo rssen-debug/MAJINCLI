@@ -1,4 +1,4 @@
-<#
+﻿<#
   Publish MAJIN from this working copy: push, tag, wait for CI, and prove that
   the release actually carries the files. It is deliberately annoying to use
   wrong -- every step is verified and the script exits non-zero with a reason,

@@ -1,4 +1,4 @@
-<#
+﻿<#
   MAJIN 0.1.1 - Windows build + install + verify, one double click.
 
   You do not need git, GitHub, a token, or Visual Studio. What this script does:

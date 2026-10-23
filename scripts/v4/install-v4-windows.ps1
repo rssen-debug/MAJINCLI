@@ -1,4 +1,4 @@
-# MAJIN V4 — Windows host installer.
+﻿# MAJIN V4 — Windows host installer.
 #
 # What this does:
 #   1. verifies Node >= 22

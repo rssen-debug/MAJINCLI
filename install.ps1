@@ -1,4 +1,4 @@
-<#
+﻿<#
   MAJIN — installation on Windows.
   Needs no admin rights, no build toolchain, no npm churn for the core.
 
