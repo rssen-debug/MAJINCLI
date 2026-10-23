@@ -25,6 +25,9 @@ import { buildMessages } from './context.js';
 import { memoryForPrompt } from './memory.js';
 import { renderSkills } from './skills.js';
 import { TOOL_SCHEMAS, safeFileName, schemasFromRegistry } from './tools.js';
+import { createToolExposure } from './tool-exposure.js';
+import { runInTurn, turnState } from './turn-state.js';
+import { z } from 'zod';
 import { publicGoal, newId } from './store.js';
 import { explainModelError } from './model.js';
 import { t } from './ui/strings.js';
@@ -41,6 +44,13 @@ Choosing tools:
 - Prefer the narrowest tool that answers the question. workspace_read lists files; fs_read reads
   a real path on the host; exec_start runs a command.
 - A tool call that returns failure is a failure. Never describe it as done.
+- The tool list can be partial on a large host. If the capability you need is not listed, call
+  tools_search with a plain-words description, then tools_activate with the exact names, and call
+  them in the next step. Never invent a tool name and never claim a capability you cannot see.
+- For a sub-problem that benefits from its own focus (analyse several files, check several
+  hypotheses, gather facts for one section), call agent_delegate. It runs with its own step
+  budget, sees only the tools you name, and returns a compressed factual answer. It cannot
+  approve anything for you, and its tool calls are receipts on this same task.
 
 Rules:
 - Never say a file was created, saved or changed unless the tool result confirms it.
@@ -48,6 +58,18 @@ Rules:
 - Ask at most one short clarifying question, and only when the request cannot be executed safely.
 - Never invent file paths, URLs, prices, job listings or test results.
 - Never reveal secrets, API keys or system internals.`;
+
+/**
+ * A subagent is not a second personality. It is the same model in a smaller box:
+ * one task, no conversation history, a tool subset the parent names, and a hard
+ * step budget. It is told to return evidence, not narration.
+ */
+const SUBAGENT_PROMPT = `You are a MAJIN subagent. You get one bounded task and you deliver a compressed, factual answer.
+Rules:
+- Use the tools you were given; they are the only ones you can call.
+- Never say something was done unless a tool result confirms it.
+- Return 3-12 lines: what you found, the exact values/paths, and what you could not determine.
+- You cannot ask the owner questions and you cannot delegate further.`;
 
 function createBus() {
   const handlers = new Set();
@@ -161,7 +183,10 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
       skillSection = '';
     }
 
-    const system = [SYSTEM_PROMPT, memorySection, skillSection].filter(Boolean).join('\n\n');
+    const delegationNote = tools.registry.get('agent_delegate')
+      ? ''
+      : 'Delegation is not granted on this host. Do the work yourself with the tools that are listed.';
+    const system = [SYSTEM_PROMPT, delegationNote, memorySection, skillSection].filter(Boolean).join('\n\n');
 
     return buildMessages({
       system,
@@ -184,7 +209,7 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
    *
    * The budget comes from the advisor, so no class can retry forever.
    */
-  async function executeToolWithRecovery({ call, goal, conversationId, emit, signal = null }) {
+  async function executeToolWithRecovery({ call, goal, conversationId, emit, signal = null, turn = null }) {
     const toolName = String(call.name || '');
     const def = tools.registry.get(toolName);
     const retryable = def?.tier === 'read';
@@ -194,7 +219,7 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
 
     for (;;) {
       attempt += 1;
-      const outcome = await executeToolCall({ call, goal, conversationId, emit, attempt, signal });
+      const outcome = await executeToolCall({ call, goal, conversationId, emit, attempt, signal, turn });
       if (outcome.ok || outcome.waiting) return outcome;
       last = outcome;
 
@@ -278,7 +303,13 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     };
   }
 
-  async function executeToolCall({ call, goal, conversationId, emit, attempt = 1, signal = null }) {
+  async function executeToolCall({ call, goal, conversationId, emit, attempt = 1, signal = null, turn = null }) {
+    // A tool called by a SUBAGENT runs while the parent's delegate call is
+    // itself mid-flight (goal already WAITING_FOR_TOOL). Letting the child drive
+    // the parent state machine produced "illegal transition WAITING_FOR_TOOL ->
+    // WAITING_FOR_TOOL". Nested calls add receipts; only the parent call moves
+    // the goal.
+    const nested = (turn?.depth || 0) > 0;
     const args = parseArgs(call.argsJson);
     if (args === null) {
       return { ok: false, error: 'tool arguments were not valid JSON', code: 'INVALID_JSON', name: call.name };
@@ -296,10 +327,10 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     }
     emit('tool_start', { id: call.id, name: toolName, input: redactInput(toolName, args) });
 
-    goal.transition(STATES.WAITING_FOR_TOOL, `tool ${toolName}`);
+    if (!nested) goal.transition(STATES.WAITING_FOR_TOOL, `tool ${toolName}`);
     let result;
     try {
-      result = await runTool(
+      const runOnce = () => runTool(
         { tool: toolName, input: args, callId: call.id },
         {
           registry: registryForCall(signal, config.limits.toolTimeoutMs),
@@ -309,12 +340,15 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
           events: bus,
         },
       );
+      // The turn handle lets discovery/delegation tools act on THIS turn without
+      // changing the V2 `execute(input)` contract every other tool uses.
+      result = turn ? await runInTurn(turn, runOnce) : await runOnce();
     } catch (err) {
       // The runner throws classified ToolErrors (unknown tool, schema mismatch,
       // timeout, executor crash). The goal must leave WAITING_FOR_TOOL, record
       // the failure and keep the turn honest — never stay mid-flight.
       const cls = err?.cls || 'UNKNOWN';
-      goal.transition(STATES.RUNNING, `tool ${toolName} threw ${cls}`);
+      if (!nested) goal.transition(STATES.RUNNING, `tool ${toolName} threw ${cls}`);
       goal.addReceipt({
         action: `tool:${toolName}`,
         target: args.fileName || null,
@@ -329,12 +363,14 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     if (!result.ok && result.decision === 'waiting') {
       // WAITING_FOR_TOOL can only go back to RUNNING; the approval wait is
       // entered from RUNNING. Skipping the hop left the goal stuck.
-      goal.transition(STATES.RUNNING, 'tool requires consent');
-      goal.transition(STATES.WAITING_FOR_APPROVAL, `consent required for ${toolName}`);
+      if (!nested) {
+        goal.transition(STATES.RUNNING, 'tool requires consent');
+        goal.transition(STATES.WAITING_FOR_APPROVAL, `consent required for ${toolName}`);
+      }
       return { ok: false, waiting: true, scope: result.pendingScope, reason: result.reason, name: toolName, input: args, call };
     }
 
-    goal.transition(STATES.RUNNING, `tool ${toolName} finished`);
+    if (!nested) goal.transition(STATES.RUNNING, `tool ${toolName} finished`);
 
     if (!result.ok) {
       const cls = result.error?.cls || 'TOOL_FAILURE';
@@ -344,6 +380,30 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     }
 
     const data = result.data;
+
+    // A subagent's verified file writes are the parent task's evidence too.
+    // Without this the turn could report success for work that was never
+    // verified on the goal the owner sees.
+    if (toolName === 'agent_delegate' && Array.isArray(data?.artifacts)) {
+      for (const artifact of data.artifacts) {
+        if (!goal.acceptance.some((a) => a.id === artifact.acceptanceId)) {
+          goal.acceptance.push({
+            id: artifact.acceptanceId,
+            description: `Create and verify ${artifact.fileName}`,
+            coveredBy: [],
+          });
+        }
+        const lifted = goal.addReceipt({
+          action: 'subagent.verify',
+          target: artifact.fileName,
+          result: 'success',
+          evidence: { ...artifact.evidence, via: 'subagent' },
+          acceptanceId: artifact.acceptanceId,
+        });
+        goal.verifyReceipt(lifted.id, { ...artifact.evidence, via: 'subagent' });
+      }
+    }
+
     const evidence = data?.sha256
       ? { bytes: data.bytes, sha256: data.sha256, path: data.path }
       : { summary: summarize(data) };
@@ -507,6 +567,13 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     emit('goal', publicGoal(goal));
 
     const turnStartedAt = Date.now();
+    // Per-turn view of the registry: core + everything that fits + whatever this
+    // turn activates. Two devices cannot leak tool activation into each other.
+    const exposure = createToolExposure({
+      registry: tools.registry,
+      maxVisible: config.limits.maxVisibleTools || 64,
+    });
+    const turn = { exposure, depth: 0, goal, conversationId: conversation.id, emit, signal, model };
     const packed = historyFor(conversations.get(conversation.id), message);
     const modelMessages = packed.messages;
     if (packed.dropped > 0 || packed.truncated) {
@@ -539,7 +606,7 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
           // Every registered tool, not a fixed list. This was the reported bug:
           // the model was only ever told about five workspace tools, so host
           // file/shell/Windows tools could not be called even when registered.
-          tools: tools.schemas ? tools.schemas() : schemasFromRegistry(tools.registry),
+          tools: exposure.schemas(),
           signal,
           modelId: conversation.modelId || null,
           onEvent: (ev) => {
@@ -571,11 +638,18 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
         for (const call of response.toolCalls) {
           if (signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
           toolCallsUsed += 1;
-          const outcome = await executeToolWithRecovery({ call, goal, conversationId: conversation.id, emit, signal });
+          const outcome = await executeToolWithRecovery({ call, goal, conversationId: conversation.id, emit, signal, turn });
           goals.save(goal);
           emit('goal', publicGoal(goal));
 
           lastOutcome = outcome;
+          if (outcome.ok && (call.name === 'tools_activate' || call.name === 'tools_search' || call.name === 'agent_delegate')) {
+            emit('tool_note', {
+              tool: call.name,
+              ...(call.name === 'tools_activate' ? { activated: outcome.data?.activated || [] } : {}),
+              ...(call.name === 'agent_delegate' ? { subTools: outcome.data?.tools || [] } : {}),
+            });
+          }
           if (outcome.waiting) {
             conversation.pendingApproval = {
               turnId: newId('turn'),
@@ -893,6 +967,7 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
       goal,
       conversationId,
       emit,
+      turn: { exposure: createToolExposure({ registry: tools.registry }), depth: 0, goal, conversationId, emit, signal: null, model },
     });
 
     if (goal && goal.state === STATES.VERIFYING) {
@@ -916,6 +991,168 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     emit('done', { status: 'completed', conversationId, messageId: stored.id, goalId: pending.goalId });
     return { status: 'completed', conversationId, messageId: stored.id };
   }
+
+  /**
+   * Run one bounded sub-task with its own context and a filtered tool set.
+   *
+   * Everything it does goes through the SAME approval policy and the same
+   * runner, so delegation adds focus, never authority. Receipts live on the
+   * subagent's own goal: the parent goal is in WAITING_FOR_TOOL while this call
+   * runs, and V2 does not accept receipts there. Verified file artifacts are
+   * lifted onto the parent when the call returns. A subagent cannot delegate
+   * again, and a tool that needs the owner's consent stops it instead of
+   * self-approving.
+   */
+  async function runSubtask({ task, tools: wanted = null, maxRounds = 3, turn }) {
+    const allowed = Array.isArray(wanted) && wanted.length
+      ? new Set(wanted.map((n) => {
+        const raw = String(n);
+        return raw.includes('.') ? raw.toLowerCase().replace(/[^a-z0-9_]/g, '_') : raw;
+      }))
+      : null;
+    const subRegistry = {
+      get(name) {
+        if (name === 'agent_delegate') return null;
+        if (allowed && !allowed.has(name)) return null;
+        return tools.registry.get(name);
+      },
+      list() {
+        return tools.registry.list().filter((t) => t.name !== 'agent_delegate' && (!allowed || allowed.has(t.name)));
+      },
+    };
+    const subExposure = createToolExposure({ registry: subRegistry, maxVisible: 24 });
+    // The subagent gets its OWN goal object. Its receipts, acceptance items and
+    // file verifications are real, but they must not drive the parent's state
+    // machine while the parent is inside the delegate tool call (the goal is in
+    // WAITING_FOR_TOOL, where V2 does not allow actions). Verified artifacts are
+    // lifted back onto the parent after the call returns.
+    const subGoal = new Goal({
+      objective: `subagent: ${String(task).slice(0, 400)}`,
+      acceptance: [],
+      risk: 'low',
+      permissions: [],
+      budgets: {},
+    });
+    subGoal.transition(STATES.PLANNING, 'subagent accepted');
+    subGoal.transition(STATES.READY, 'subagent ready');
+    subGoal.transition(STATES.RUNNING, 'subagent started');
+    const subTurn = { ...turn, depth: (turn?.depth || 0) + 1, exposure: subExposure, goal: subGoal };
+    const messages = [
+      { role: 'system', content: SUBAGENT_PROMPT },
+      { role: 'user', content: String(task).slice(0, 4000) },
+    ];
+    const used = [];
+    let text = '';
+    let calls = 0;
+    let failure = null;
+    const rounds = Math.max(1, Math.min(5, Number(maxRounds) || 3));
+    for (let round = 1; round <= rounds; round += 1) {
+      if (turn?.signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
+      const res = await model.chat({
+        messages,
+        tools: subExposure.schemas(),
+        signal: turn?.signal,
+        modelId: null,
+        onEvent: () => {},
+      });
+      if (res.text) text += res.text;
+      if (!res.toolCalls?.length) break;
+      const toolMessages = [];
+      for (const call of res.toolCalls) {
+        if (calls >= 6) {
+          failure = 'subagent tool budget exhausted';
+          break;
+        }
+        calls += 1;
+        const outcome = await executeToolWithRecovery({
+          call,
+          goal: subGoal,
+          conversationId: turn.conversationId,
+          emit: turn.emit,
+          signal: turn.signal,
+          turn: subTurn,
+        });
+        used.push(call.name);
+        if (outcome.waiting) {
+          failure = `subagent tool ${call.name} needs the owner's approval`;
+          break;
+        }
+        toolMessages.push({
+          role: 'tool',
+          tool_call_id: call.id,
+          content: safeJson(outcome.ok ? { ok: true, data: outcome.data } : { ok: false, error: outcome.error }),
+        });
+        if (!outcome.ok) failure = String(outcome.error || 'subagent tool failed');
+      }
+      messages.push({ role: 'assistant', content: res.text || null, tool_calls: res.toolCalls });
+      messages.push(...toolMessages);
+      if (failure) break;
+    }
+    const artifacts = subGoal.receipts
+      .filter((r) => r.verified && r.acceptanceId && r.evidence)
+      .map((r) => ({
+        fileName: String(r.acceptanceId).replace(/^artifact:/, ''),
+        acceptanceId: r.acceptanceId,
+        evidence: r.evidence,
+      }));
+    return { answer: text.trim(), tools: [...new Set(used)], calls, rounds, failure, artifacts };
+  }
+
+  /**
+   * The delegation tool. Registered by the server only when the owner has
+   * granted the `agent` lane; the definition lives here because it needs this
+   * agent's model, registry and turn context.
+   */
+  const delegationTool = {
+    name: 'agent_delegate',
+    description:
+      'Send one bounded sub-task to a subagent with its own step budget and its own context. '
+      + 'It sees only the tools you name (empty = all except delegation) and returns a compressed '
+      + 'factual answer. Use it to analyse several files, check several hypotheses, or gather facts '
+      + 'for one section without filling this conversation. It cannot approve anything for you.',
+    tier: 'read',
+    inputSchema: z.object({
+      task: z.string().min(3).max(4000),
+      tools: z.array(z.string().min(1).max(80)).max(20).optional(),
+      maxRounds: z.number().int().min(1).max(5).optional(),
+    }),
+    outputSchema: z.object({
+      answer: z.string(),
+      tools: z.array(z.string()),
+      calls: z.number(),
+      rounds: z.number(),
+      warning: z.string().optional(),
+      artifacts: z.array(z.object({
+        fileName: z.string(),
+        acceptanceId: z.string(),
+        evidence: z.unknown(),
+      })).optional(),
+    }),
+    execute: async ({ task, tools: wanted = null, maxRounds = 3 }) => {
+      const st = turnState();
+      if (!st) throw Object.assign(new Error('agent_delegate can only run inside a turn'), { cls: 'INVALID_TOOL_INPUT' });
+      if ((st.depth || 0) >= 1) throw Object.assign(new Error('a subagent cannot delegate further'), { cls: 'PERMISSION_DENIED' });
+      // Each delegate call is one parent tool call, so without this a model
+      // could fan out to dozens of subagents inside a six-call budget.
+      st.subagents = (st.subagents || 0) + 1;
+      if (st.subagents > 2) {
+        throw Object.assign(new Error('at most two subagents per turn'), { cls: 'TOOL_BUDGET' });
+      }
+      const out = await runSubtask({ task, tools: wanted, maxRounds, turn: st });
+      if (!out.answer && out.failure) {
+        throw Object.assign(new Error(out.failure), { cls: 'TOOL_FAILURE' });
+      }
+      return {
+        answer: out.answer || t('common.done'),
+        tools: out.tools,
+        calls: out.calls,
+        rounds: out.rounds,
+        ...(out.failure ? { warning: out.failure } : {}),
+        ...(out.artifacts.length ? { artifacts: out.artifacts } : {}),
+      };
+    },
+  };
+  if (!tools.registry.get('agent_delegate')) tools.registry.define(delegationTool);
 
   function beginTurn(key, { owner = null } = {}) {
     const controller = new AbortController();
@@ -970,6 +1207,7 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
   return {
     approvals,
     bus,
+    delegationTool,
     setConversationModel,
     resumeGoal,
     runTurn,

@@ -27,7 +27,7 @@ needs a host/credential; **scaffold** = structure without runtime evidence.
 | Config + data dirs | `src/core/config.js`, `paths.js` | proven | path rules re-implemented narrowly; config file read as-is |
 | Persona / style | `src/core/config.js` `persona` | text only | replaced by a V4 system prompt (mobile product voice) |
 | Agent loop | `src/core/agent.js` (674 lines) | usable | **not reused**: it is CLI/desktop oriented and would drag the whole surface in |
-| Tools | `src/core/tools/*`, shell/fs/browser | usable | not reused; V4 exposes a minimal typed workspace surface |
+| Tools | `src/core/tools/*`, shell/fs/browser | usable | **reused through lanes** since 2026-10-23 — see §5. 109 of 139 tools are registered through 19 lanes; 30 are excluded with a recorded reason |
 | Memory | `src/core/memory.js` | usable | V2 store preferred (cleaner contract) |
 | Voice | V1 channels/voice are UI-bound | scaffold | not reused in the browser client |
 | Windows install / startup | `install.ps1`, `start-majin.cmd` | usable | **task settings reused** (see below); V4 keeps its own launcher and task name |
@@ -42,7 +42,7 @@ needs a host/credential; **scaffold** = structure without runtime evidence.
 | Approvals | `safety/approvals.js` | proven | **used directly** |
 | Memory store | `memory/store.js` | proven | **used directly** |
 | DAG / scheduler / orchestrator | `runtime/dag.js`, `scheduler.js`, `orchestrator.js` | usable | not used yet — single-turn execution first (stage 2) |
-| Supervisor / roles | `supervisor/*` | scaffold | not used; no multi-agent claims |
+| Supervisor / roles | `supervisor/*` | scaffold | not used; V4 delegates through its own bounded subagent (§5.4) |
 | Recovery advisor | `recover/advisor.js` | proven (pure, no deps) | **used directly** — maps a tool failure class to a bounded retry plan |
 | Context packing | `context/engine.js` | proven (pure) | `estimateTokens` **used directly**; `pack()` not used (it flattens roles, see §4) |
 | Telemetry ledger | `telemetry/ledger.js` | proven | **used directly** — fixed field allowlist per event |
@@ -146,3 +146,114 @@ its users expect.
    the browser, so voice is browser-native only for now.
 3. No Windows host is available in this environment: every Windows claim is
    therefore `NOT_STARTED` or `BLOCKED` in the matrix, never assumed.
+
+
+## 5. Universal-agent integration (2026-10-23)
+
+The owner corrected the goal: MAJIN is a universal agent, not a job-search app.
+The CV flow was an example. This section records every reuse decision made while
+turning the V4 tool surface from 12 lanes into the union of V1–V4, and the
+exclusions that remain.
+
+`npm run v4:inventory` regenerates `docs/v4/CAPABILITY_INVENTORY.{json,md}` from
+the code. A V1 module without a decision, or a V2/V3 file that is neither
+imported nor explicitly excluded, makes it exit 1. The numbers below come from
+that run, not from this text.
+
+### 5.1 V1 lanes: what is reused, and why
+
+| Lane | V1 module | Tools | Why it is a lane |
+|---|---|---|---|
+| files | `files.js` | 12 | The only way to read/write outside the workspace; folder-scoped by Owner Mode |
+| shell | `exec.js` | 5 | Managed long-running executors (`exec.start/wait/cancel/logs`) |
+| shelltools | `shell.js` | 5 | One-shot command, background job, job list/stop, env — complements exec.* |
+| sys | `sys.js` | 6 | Read-only machine truth (OS, processes, ports, disks, services) the agent needs before acting |
+| net | `net.js` (5 of 8) | 5 | DNS/TCP/HTTP/serve. Cross-platform, so it must not be gated as "screen" |
+| screen | `net.js` (3 of 8) | 3 | Screenshot, clipboard, toast — Windows interactive session only |
+| web | `web.js` | 12 | Search, fetch, download and the `browser.*` lane (registered only with a browser runtime) |
+| research | `research.js` | 1 | Full PLAN→SEARCH→FETCH→CROSS-CHECK→VERIFY pipeline over `registry.exec` |
+| jobs | `jobs.js` | 9 | Domain tools; kept because they work, not because the product is job search |
+| flows | `flows.js` | 6 | Saved trigger→action flows executed through the same runner |
+| github | `github.js` | 2 | Verify/research against a repository |
+| audit | `audit.js` | 1 | MAJIN interrogates its own source for unsupported claims |
+| learn | `learn.js` | 3 | Durable lessons: record a measured failure, verify it with proof |
+| marketing | `marketing.js` | 4 | Domain tools; they self-report "not configured" instead of pretending |
+| re | `re.js` | 23 | Binary analysis (strings, PE, YARA, entropy, unpack…) — real, local, no network |
+| trading | `trading.js` | 2 | Conservative allocation/research; never places an order |
+| power | `power.js` | 3 | Dry-run platform-transfer planning with an approval ledger |
+| desktop / computer | `wincontrol.js`, `computer.js` | 7 | Win32 window control and the OBSERVE→PLAN→ACT→VERIFY loop (Windows only) |
+
+Two groups are excluded on purpose, with the reason recorded in code
+(`src/v4/inventory.js`):
+
+- **replaced by a V4-native implementation**: `agent.js` (`agent.plan/delegate/
+  moa/approve` are bound to V1's loop, guard and registry; V4 has
+  `agent_delegate`), `meta.js` (`tools.search` needs V1's registry; V4 has
+  `tools_search`/`tools_activate` over the live registry), `teams.js` (runs V1
+  swarm subagents through V1's loop).
+- **excluded because they would be a lie in V4**: `majin.js` (writes V1's config
+  and restarts V1's agent), `channels.js` (no V4 channel configuration),
+  `heartbeat.js` (V1 scheduler vs. V4 supervisor), `memory-sync.js` (V1 memory
+  store), `reset.js` (destructive V1 recovery over a shared data dir).
+
+### 5.2 Bugs found in reused V1 code, and fixed at the source
+
+Reuse without running the code is how a capability becomes a claim. The probe
+(`npm run v4:tools -- --probe`) found two real defects that unit tests missed:
+
+1. `net.dns` used the callback API without a callback (`dns.resolve4(host)`),
+   which throws `ERR_INVALID_ARG_TYPE` on Node 22. **Every DNS lookup failed, in
+   V1 too.** Fixed in `src/core/tools/net.js` by using `node:dns/promises`.
+2. `net.http` let a failed `fetch` throw, which the adapter classified as
+   `UNKNOWN` and could not retry honestly. It now returns
+   `{ok:false,error:{code:'network_failure'}}`; `classifyV1Error` maps it to
+   `NETWORK_FAILURE`.
+
+A third gap was in the adapter, not V1: `zodFromV1Params` ignored the `required`
+list V1 already computes, so a missing argument reached the tool as a confusing
+`ENOENT`. Required parameters are now required in the schema the model sees.
+
+### 5.3 The tool surface: reachability instead of truncation
+
+V1 alone has 139 tools. Sending all of them plus MCP and plugins on every model
+request costs tens of thousands of tokens and degrades tool choice; the previous
+`schemasFromRegistry(..., {limit: 60})` silently dropped everything past 60.
+
+The new contract (`src/v4/tool-exposure.js`):
+
+- core tools + everything the turn activated + as many others as fit
+  (`MAJIN_V4_MAX_VISIBLE_TOOLS`, default 64) are sent;
+- `tools_search` is a deterministic, zero-model search over the live registry;
+- `tools_activate` puts exact names into the **next** model round's list;
+- activation is never permission — every call still goes through the runner and
+  the owner's approval policy.
+
+A test with a 4-tool budget proves that a tool outside the list can be found by
+its own name, activated, and called in the next round.
+
+### 5.4 Multi-agent: delegation without a second runtime
+
+`agent_delegate` is a V4 engine tool (not V1's `agent.delegate`):
+
+- own context (system prompt + task, no conversation history),
+- a tool subset the parent names (empty = all except delegation),
+- its own V2 `Goal` for receipts and file verification,
+- hard caps: 5 rounds, 6 tool calls, one level deep (a subagent cannot delegate),
+- verified artifacts are lifted onto the parent goal as `subagent.verify`
+  receipts, so a file written by a subagent is still verified against its hash.
+
+It follows the `agent` Owner Mode lane, so revoking "Delegering" removes it from
+the registry and from the model's tool list immediately.
+
+### 5.5 V2/V3 decisions
+
+18 of 51 V2 components are reachable from V4 by import (direct or transitive:
+goal/states/receipts, verifiers, registry/runner, approvals, memory store,
+recovery advisor, telemetry ledger+aggregate, context estimate, voice adapters,
+audit export as a format). The other 33 each carry a written reason in
+`src/v4/inventory.js` — mostly V2 orchestration (compiler, scheduler,
+supervisor, outer loop), the V2 studio, the V2 executor and the gauntlet.
+
+V3 is 0/4: its four files are a superseded vertical slice (single file
+deliverable, static page, loopback server, Node check). The *method* — machine
+validated acceptance — is what V4 kept.

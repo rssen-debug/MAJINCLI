@@ -1,6 +1,6 @@
 # MAJIN V4 — verified progress
 
-**As of:** 2026-10-22 (Europe/Stockholm)
+**As of:** 2026-10-23 (Europe/Stockholm) · see the universal-agent section at the end
 **Branch:** `v4/main` · **Base:** V3 `df678b2`
 **Release status:** **NOT READY** — private vertical slice works, no verified public URL.
 **Score source of truth:** `npm run v4:progress` (recomputed from `ACCEPTANCE_MATRIX.json`, never hand-written)
@@ -554,3 +554,64 @@ approval) and `fix-code` (read → reproduce → minimal patch → retest → sh
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in
 `NEXT_ACTIONS.md` #1 and move HOST points from NOT_STARTED to VERIFIED with captured evidence.
+
+
+## Universal-agent integration — 2026-10-23
+
+The owner corrected the product definition: MAJIN is a universal agent; the CV flow was an example.
+This pass made the tool surface the union of V1–V4 and proved composition end to end. **The score
+below is unchanged on purpose**: no criterion was added or reinterpreted after the fact. Points move
+only when the pre-registered matrix says so.
+
+### What was built and measured
+
+| Item | Measured |
+|---|---|
+| V1 tools inventoried | 139 across 26 modules |
+| V1 tools registered through lanes | 109 in 19 lanes (10 Windows/browser-gated at runtime) |
+| V1 tools excluded | 30, each with a written reason (`src/v4/inventory.js`) |
+| V2 components reachable from V4 | 18 of 51 (the rest have a recorded reason) |
+| V3 components | 0 of 4 — the slice is superseded |
+| Tools registered on this Linux host | 107 (8 built-ins + 99 host tools) |
+| Model-facing list per request | core + activated + rest up to `MAJIN_V4_MAX_VISIBLE_TOOLS` (64) |
+| Accessible beyond the budget | every registered tool via `tools_search` → `tools_activate` |
+| Delegation | 1 level, ≤5 rounds, ≤6 tool calls, own V2 goal, verified artifacts lifted |
+| Test suite | **455 tests: 454 pass, 1 skipped** (browser binary absent) |
+| Static checks | 554/554 files parse; 0 Swedish literals in 291 files |
+
+### Real end-to-end proof (not a unit stub)
+
+`test/v4/universal-agent.test.js` starts an OpenAI-compatible SSE provider on a real socket and the
+real V4 server, then:
+
+1. the scripted model calls `tools_search("system information cpu memory")`;
+2. it parses the result, calls `tools_activate(["sys_info"])`;
+3. `sys_info` is **not** in the first request's tool list and **is** in the third — discovery is what
+   made it callable;
+4. it writes `systemrapport.txt`, reads it back, and answers;
+5. the test asserts the file on disk, a verified `tool:workspace_write` receipt and a `COMPLETED` goal.
+
+A second test proves delegation: the child request has a subagent system prompt, does **not** get
+`agent_delegate`, uses only the named tool, and its answer reaches the parent turn.
+
+### Bugs this pass found (all fixed with a failing test or a real probe)
+
+1. `net.dns` used Node's callback DNS API without a callback → every lookup threw
+   `ERR_INVALID_ARG_TYPE`, in V1 too.
+2. `net.http` let a failed fetch escape as an unclassified crash → now `NETWORK_FAILURE`.
+3. The adapter ignored V1's `required` parameters → missing arguments surfaced as `ENOENT`.
+4. `agent.plan` wrote to a frozen context and `agent.delegate` reported `ok:true` while every
+   subagent had failed — both replaced by V4-native delegation.
+5. `tools_search` searched the registry it was defined on, not the turn's (subagent) view.
+6. MCP tools lost their server JSON Schema because the exposure layer looked for it on the
+   definition instead of the input schema.
+7. **Updater: activation swapped the whole live tree**, deleting `node_modules` and `.git`; a
+   successful update could never start. Replaced by a per-file overlay with a journal and rollback.
+8. **Updater: every file was fetched from `<base>/<path>`** while releases publish `files/<path>` —
+   the first end-to-end apply returned 404 on the first file.
+
+### Still blocked (unchanged by this pass)
+
+Windows execution, the interactive desktop, a real browser runtime, real model inference, the phone
+over a tunnel, Task Scheduler firing the update task, and OCR. Commands that would settle each are
+in `STATUS.md`.

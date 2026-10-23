@@ -152,6 +152,54 @@ drives the actual DOM — typing into `#input`, submitting `#composer`, waiting 
 `.tool[data-state="verified"]` — so a wiring mistake cannot hide behind a green
 unit test.
 
+## 5.5 The universal tool surface
+
+```
+registry (one object)
+ ├─ V4 built-ins        workspace_*, document_read, memory_*, tools_search, tools_activate
+ ├─ V1 lanes            files, shell, shelltools, sys, net, screen, web, research, jobs,
+ │                      flows, github, audit, learn, marketing, re, trading, power,
+ │                      desktop, computer         (19 lanes, 109 tools, owner-granted)
+ ├─ V4 delegation       agent_delegate            (the `agent` lane)
+ ├─ MCP servers         mcp_*                     (the `mcp` lane, child process)
+ └─ plugins             kernel tool capabilities
+```
+
+Every tool is a V2 `ToolDefinition` and every call goes through `runTool` with the
+same approval policy, timeout, receipts and error vocabulary. A lane that cannot
+run on this host is not registered and says why; a browser tool without a
+browser is not offered.
+
+The model is not sent the whole registry. `createToolExposure` builds a per-turn
+list: core tools, whatever this turn activated, then everything else up to
+`MAJIN_V4_MAX_VISIBLE_TOOLS` (64). `tools_search` is deterministic (no model, no
+network, stable ordering) and `tools_activate` adds exact names to the next
+round. Activation changes visibility, never permission.
+
+```
+model round N                    tool                          model round N+1
+─────────────                    ────                          ───────────────
+tools_search("disk space")  →  sys_fs_usage, …             →  same list
+tools_activate(["sys_fs_usage"]) → {activated:[sys_fs_usage]} →  list + sys_fs_usage
+sys_fs_usage {}             →  {ok:true, data:{…}}          →  evidence in context
+```
+
+### Delegation
+
+`agent_delegate` runs one bounded sub-task with its own system prompt, no
+conversation history, a tool subset named by the parent, and a fresh V2 `Goal`
+(rounds ≤ 5, tool calls ≤ 6, one level deep). It executes through the same
+runner and the same approvals, so it cannot approve anything. Verified artifacts
+(file writes) are lifted onto the parent goal as `subagent.verify` receipts with
+the same SHA-256, so “a subagent did it” is never an unverified claim.
+
+### AsyncLocalStorage, and why
+
+V2's tool contract is `execute(input)`. Discovery and delegation need the
+current turn (exposure handle, goal, signal, depth) without changing that
+contract or every adapted V1 tool. The agent wraps the one `runTool` call it
+already makes in `runInTurn(state, fn)`; only the tools that ask see the turn.
+
 ## 6. Platform kernel
 
 `kernel.js` defines `KERNEL_API_VERSION = 1` and a frozen capability contract

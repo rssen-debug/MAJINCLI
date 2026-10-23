@@ -35,7 +35,11 @@ const builtin = createToolRegistry({ workspaceDir: config.workspaceDir, memoryDi
 for (const t of builtin.registry.list()) registry.define(builtin.registry.get(t.name));
 
 const allow = config.platform.hostToolAllow?.length ? config.platform.hostToolAllow : null;
-const { registered, skipped } = registerHostTools(registry, caps, { allow, workspaceDir: config.workspaceDir });
+const { registered, skipped } = registerHostTools(registry, caps, {
+  allow,
+  workspaceDir: config.workspaceDir,
+  dataFile: path.join(config.paths.root, 'config.json'),
+});
 
 const described = describeCapabilities(caps);
 const summary = {
@@ -56,7 +60,8 @@ if (flag('--json')) {
 line('');
 line(`MAJIN V4 tools — ${summary.platform}`);
 line('='.repeat(66));
-line(`  host tools enabled: ${summary.hostToolsEnabled ? 'yes' : 'NO  (set MAJIN_V4_HOST_TOOLS=1)'}`);
+line(`  owner grants at boot: ${summary.hostToolsEnabled ? 'all lanes (MAJIN_V4_HOST_TOOLS=1)' : 'from owner-mode.json'}`);
+line('  this probe registers EVERY available lane, granted or not, to test it');
 line(`  registry: ${summary.registry.total} tool(s) total, ${summary.registry.host} from the host`);
 line('');
 line('  lanes');
@@ -111,19 +116,29 @@ async function probe(name, input, note = '') {
 const results = [];
 results.push(await probe('workspace_list', {}));
 results.push(await probe('memory_search', { query: 'probe' }));
+// A real file inside the workspace, used by every lane that needs a path.
+const probeFile = path.join(config.workspaceDir, 'majin-probe.txt');
+try {
+  fs.mkdirSync(config.workspaceDir, { recursive: true });
+  fs.writeFileSync(probeFile, 'probe');
+} catch { /* the filesystem lane will report it */ }
 if (registry.get('fs_stat')) {
   // stat a real FILE: statting a directory is a different operation in V1 and
   // would make the probe look broken for the wrong reason.
-  const probeFile = path.join(config.workspaceDir, 'majin-probe.txt');
-  try {
-    fs.mkdirSync(config.workspaceDir, { recursive: true });
-    fs.writeFileSync(probeFile, 'probe');
-  } catch { /* the filesystem lane will report it */ }
   results.push(await probe('fs_stat', { path: probeFile }, 'files'));
 }
 if (registry.get('exec_start')) {
-  results.push(await probe('exec_start', { command: process.platform === 'win32' ? 'cmd /c echo majin-probe' : 'echo majin-probe' }, 'shell'));
+  // exec.start requires an explicit backend; it never falls back silently.
+  results.push(await probe('exec_start', {
+    backend: 'local',
+    command: process.platform === 'win32' ? 'cmd /c echo majin-probe' : 'echo majin-probe',
+  }, 'shell'));
 }
+if (registry.get('sys_info')) results.push(await probe('sys_info', {}, 'sys'));
+if (registry.get('shell_env')) results.push(await probe('shell_env', {}, 'shelltools'));
+if (registry.get('net_dns')) results.push(await probe('net_dns', { host: 'example.com' }, 'net'));
+if (registry.get('ma_lessons')) results.push(await probe('ma_lessons', {}, 'learn'));
+if (registry.get('re_hash')) results.push(await probe('re_hash', { path: probeFile }, 're'));
 if (registry.get('control_list_windows')) results.push(await probe('control_list_windows', {}, 'desktop'));
 if (registry.get('web_search')) results.push(await probe('web_search', { query: 'majin probe' }, 'web'));
 if (registry.get('browser_open')) results.push(await probe('browser_open', { url: 'https://example.com' }, 'browser'));

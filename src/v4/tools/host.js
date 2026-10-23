@@ -22,6 +22,8 @@
  * `npm run v4:accept` on the host.
  */
 import { z } from 'zod';
+import { runTool } from '../../v2/tools/runner.js';
+import { searchRegistry } from '../tool-exposure.js';
 
 /**
  * The V1 tool modules and the arrays they export.
@@ -30,12 +32,24 @@ import { z } from 'zod';
  * lane the owner can enable; `hostCapabilities()` still decides per lane whether
  * it loads, so a module that disappears degrades to a stated reason.
  */
+const NET_TOOLS = Object.freeze(['net.dns', 'net.tcp', 'net.http', 'net.serve', 'net.serve_stop']);
+const SCREEN_TOOLS = Object.freeze(['screen.capture', 'screen.claim', 'sys.notify']);
+
 export const V1_LANES = Object.freeze({
-  desktop: { module: '../../core/tools/wincontrol.js', export: 'winControlTools', tierDefault: 'process' },
-  screen: { module: '../../core/tools/net.js', export: 'netTools', tierDefault: 'process' },
-  computer: { module: '../../core/tools/computer.js', export: 'computerTools', tierDefault: 'process' },
+  // Windows-only, because every tool drives the interactive desktop.
+  desktop: { module: '../../core/tools/wincontrol.js', export: 'winControlTools', tierDefault: 'process', windowsOnly: true },
+  computer: { module: '../../core/tools/computer.js', export: 'computerTools', tierDefault: 'process', windowsOnly: true },
+  screen: { module: '../../core/tools/net.js', export: 'netTools', tierDefault: 'process', only: SCREEN_TOOLS, windowsOnly: true },
+  // The same module also carries five cross-platform network tools. Gating the
+  // whole module as "screen" (as V4 did) hid net.dns/net.http on Linux and any
+  // Windows session without an interactive desktop.
+  net: { module: '../../core/tools/net.js', export: 'netTools', tierDefault: 'external', only: NET_TOOLS },
   files: { module: '../../core/tools/files.js', export: 'fileTools', tierDefault: 'write' },
+  // V1 has two shell surfaces: exec.* (managed long-running executors) and
+  // shell.* (command, background jobs, env). Both are real and complementary.
   shell: { module: '../../core/tools/exec.js', export: 'execTools', tierDefault: 'process' },
+  shelltools: { module: '../../core/tools/shell.js', export: 'shellTools', tierDefault: 'process' },
+  sys: { module: '../../core/tools/sys.js', export: 'sysTools', tierDefault: 'read' },
   power: { module: '../../core/tools/power.js', export: 'powerTools', tierDefault: 'process' },
   // NOTE: browser.* tools live inside web.js's webTools array, not in
   // core/browser.js (which is the launch/pool layer). They are therefore part of
@@ -43,9 +57,13 @@ export const V1_LANES = Object.freeze({
   web: { module: '../../core/tools/web.js', export: 'webTools', tierDefault: 'external' },
   research: { module: '../../core/tools/research.js', export: 'researchTools', tierDefault: 'external' },
   jobs: { module: '../../core/tools/jobs.js', export: 'jobTools', tierDefault: 'external' },
-  agent: { module: '../../core/tools/agent.js', export: 'agentTools', tierDefault: 'process' },
   flows: { module: '../../core/tools/flows.js', export: 'flowsTools', tierDefault: 'process' },
   github: { module: '../../core/tools/github.js', export: 'githubTools', tierDefault: 'external' },
+  audit: { module: '../../core/tools/audit.js', export: 'auditTools', tierDefault: 'read' },
+  learn: { module: '../../core/tools/learn.js', export: 'learnTools', tierDefault: 'write' },
+  marketing: { module: '../../core/tools/marketing.js', export: 'marketingTools', tierDefault: 'external' },
+  re: { module: '../../core/tools/re.js', export: 'reTools', tierDefault: 'read' },
+  trading: { module: '../../core/tools/trading.js', export: 'tradingTools', tierDefault: 'external' },
 });
 
 /** Kept for callers that only know the three original lanes. */
@@ -87,7 +105,7 @@ export async function hostCapabilities({
     const entry = { available: false, reason: null, tools: [], tierDefault: spec.tierDefault };
 
     // Windows-only lanes say so instead of loading and failing at call time.
-    const windowsOnly = ['desktop', 'screen', 'computer'].includes(lane);
+    const windowsOnly = spec.windowsOnly ?? ['desktop', 'screen', 'computer'].includes(lane);
     if (windowsOnly && platform !== 'win32') {
       entry.reason = `Windows-only (this host is ${platform})`;
       caps.lanes[lane] = entry;
@@ -99,13 +117,20 @@ export async function hostCapabilities({
       entry.reason = `implementation unavailable: ${mod.__error}`;
     } else if (!Array.isArray(mod[spec.export])) {
       entry.reason = `${spec.export} is not exported by ${spec.module}`;
-    } else if (mod[spec.export].length === 0) {
-      entry.reason = `${spec.export} is empty (not available in this build)`;
     } else {
-      entry.available = true;
-      entry.tools = mod[spec.export].map((t) => t.name);
-      entry.module = mod;
-      entry.exportName = spec.export;
+      // A lane may expose a subset of a module's tools (net.js carries both
+      // network and screen tools).
+      const all = mod[spec.export];
+      const list = Array.isArray(spec.only) ? all.filter((t) => spec.only.includes(t.name)) : all;
+      if (!list.length) {
+        entry.reason = `${spec.export} is empty (not available in this build)`;
+      } else {
+        entry.available = true;
+        entry.tools = list.map((t) => t.name);
+        entry.module = mod;
+        entry.exportName = spec.export;
+        entry.only = spec.only || null;
+      }
     }
     caps.lanes[lane] = entry;
   }
@@ -261,7 +286,7 @@ export function classifyV1Error(err) {
   if (/protected|permission|denied|eacces|eperm/.test(code + msg)) return 'PERMISSION_DENIED';
   if (/not_found|enoent|missing/.test(code + msg)) return 'DEPENDENCY_MISSING';
   if (/timeout|timed out|etimedout|deadline/.test(code + msg)) return 'TIMEOUT';
-  if (/network|fetch failed|econn|enotfound|no search engine|offline/.test(code + msg)) return 'NETWORK_FAILURE';
+  if (/network|fetch failed|econn|enotfound|dns_failed|no search engine|offline/.test(code + msg)) return 'NETWORK_FAILURE';
   if (/unsupported/.test(code + msg)) return 'DEPENDENCY_MISSING';
   return 'UNKNOWN';
 }
@@ -271,15 +296,21 @@ export function classifyV1Error(err) {
  * keeps a permissive schema for anything it cannot type rather than inventing a
  * constraint that would reject valid calls.
  */
-export function zodFromV1Params(params = {}) {
+export function zodFromV1Params(params = {}, required = []) {
   const shape = {};
+  const must = new Set(Array.isArray(required) ? required : []);
   for (const [key, spec] of Object.entries(params || {})) {
     const type = String(spec).split(':')[0].trim().toLowerCase();
-    if (type === 'number' || type === 'int' || type === 'integer') shape[key] = z.number().optional();
-    else if (type === 'boolean' || type === 'bool') shape[key] = z.boolean().optional();
-    else if (type === 'array') shape[key] = z.array(z.unknown()).optional();
-    else if (type === 'object') shape[key] = z.record(z.string(), z.unknown()).optional();
-    else shape[key] = z.string().optional();
+    let field;
+    if (type === 'number' || type === 'int' || type === 'integer') field = z.number();
+    else if (type === 'boolean' || type === 'bool') field = z.boolean();
+    else if (type === 'array') field = z.array(z.unknown());
+    else if (type === 'object') field = z.record(z.string(), z.unknown());
+    else field = z.string();
+    // V1's `def()` already derives required parameters from the run signature.
+    // Dropping that made a missing argument reach the tool as a confusing
+    // ENOENT instead of a schema error the model can correct.
+    shape[key] = must.has(key) ? field : field.optional();
   }
   return z.object(shape);
 }
@@ -293,8 +324,67 @@ export function zodFromV1Params(params = {}) {
  * the workspace V4 was given. `get` returns undefined for everything else, so a
  * V1 tool falls back to its own documented defaults.
  */
-export function v1Context({ workspaceDir = null, cfg = null } = {}) {
+export function v1Context({
+  workspaceDir = null,
+  cfg = null,
+  dataFile = null,
+  registry = null,
+  approvals = null,
+  session = 'v4',
+  emit = null,
+} = {}) {
   const values = { workspace: workspaceDir };
+  // Nested V1 tools (research.run -> web.search, flows.fire -> any tool) call
+  // `ctx.registry.exec`. The first V4 adapter had no registry, so those lanes
+  // registered but could never work. This facade executes through the SAME V2
+  // runner and approval policy, so a nested call is not a way around consent.
+  let depth = 0;
+  const facade = registry
+    ? Object.freeze({
+      list: () => registry.list().map((t) => ({
+        name: v1ToolName(t.name),
+        desc: t.description,
+        risk: TIER_TO_RISK[t.tier] || 'exec',
+      })),
+      search: (q, { limit = 6 } = {}) => searchRegistry(registry, q, { limit }).map((h) => ({
+        id: v1ToolName(h.name),
+        desc: h.description,
+        sideEffects: h.tier,
+        tags: [],
+        inputs: { properties: {} },
+      })),
+      exec: async (name, args = {}, opts = {}) => {
+        const wanted = String(name).includes('.') ? v2ToolName(name) : String(name);
+        const def = registry.get(wanted);
+        if (!def) return { ok: false, error: { code: 'unknown_tool', message: `tool ${name} is not available on this host` } };
+        if (depth >= 2) return { ok: false, error: { code: 'recursion', message: 'nested tool calls are limited to two levels' } };
+        depth += 1;
+        try {
+          const out = await runTool(
+            { tool: wanted, input: args || {} },
+            {
+              registry,
+              approvals: approvals || { check: () => ({ decision: 'allow' }) },
+              mode: 'balanced',
+              timeoutMs: Number(opts.timeoutMs) || 60_000,
+            },
+          );
+          const data = out.data || {};
+          return {
+            ok: true,
+            result: data.result ?? data,
+            meta: data.meta ?? null,
+            summary: data.summary ?? null,
+          };
+        } catch (err) {
+          return { ok: false, error: { code: err?.cls || 'tool_failure', message: String(err?.message || err) } };
+        } finally {
+          depth -= 1;
+        }
+      },
+    })
+    : undefined;
+
   return Object.freeze({
     cfg: Object.freeze({
       get: (key) => {
@@ -304,10 +394,20 @@ export function v1Context({ workspaceDir = null, cfg = null } = {}) {
         }
         return values[key];
       },
+      // V1's sys.info derives the data dir from the config file path.
+      file: dataFile,
     }),
     workspaceDir,
+    session,
+    ...(emit ? { emit } : {}),
+    ...(facade ? { registry: facade } : {}),
   });
 }
+
+/** V2 tier -> the V1 risk word a V1 tool expects to see. */
+const TIER_TO_RISK = Object.freeze({
+  read: 'read', write: 'write', process: 'exec', external: 'net', browser: 'browser',
+});
 
 export function adaptV1Tool(v1tool, { lane, ctx = null }) {
   return {
@@ -316,7 +416,7 @@ export function adaptV1Tool(v1tool, { lane, ctx = null }) {
     // V2 requires a description of at least four characters.
     description: `${v1tool.desc || v1tool.name}`.slice(0, 400),
     tier: RISK_TO_TIER[v1tool.risk] || 'process',
-    inputSchema: zodFromV1Params(v1tool.raw || {}).strip(),
+    inputSchema: zodFromV1Params(v1tool.raw || {}, v1tool.parameters?.required || []).strip(),
     outputSchema: OUTPUT,
     lane,
     execute: async (input = {}) => {
@@ -371,8 +471,16 @@ export function adaptV1Tool(v1tool, { lane, ctx = null }) {
  */
 export const BROWSER_DEPENDENT = /^browser\./;
 
-export function registerHostTools(registry, caps, { allow = null, workspaceDir = null, cfg = null } = {}) {
-  const ctx = v1Context({ workspaceDir, cfg });
+export function registerHostTools(registry, caps, {
+  allow = null,
+  workspaceDir = null,
+  cfg = null,
+  dataFile = null,
+  approvals = null,
+  session = 'v4',
+  emit = null,
+} = {}) {
+  const ctx = v1Context({ workspaceDir, cfg, dataFile, registry, approvals, session, emit });
   const browserReady = Boolean(caps.browserRuntime?.available);
   const registered = [];
   const skipped = [];
@@ -382,11 +490,14 @@ export function registerHostTools(registry, caps, { allow = null, workspaceDir =
       skipped.push({ lane, reason: cap?.reason || 'not available' });
       continue;
     }
-    const list = cap.module[cap.exportName || LANE_EXPORTS[lane]];
-    if (!Array.isArray(list)) {
+    const exported = cap.module[cap.exportName || LANE_EXPORTS[lane]];
+    if (!Array.isArray(exported)) {
       skipped.push({ lane, reason: 'no tool list exported' });
       continue;
     }
+    const list = Array.isArray(cap.tools) && cap.tools.length
+      ? exported.filter((t) => cap.tools.includes(t.name))
+      : exported;
     for (const v1tool of list) {
       if (!browserReady && BROWSER_DEPENDENT.test(v1tool.name)) {
         skipped.push({ lane, tool: v1tool.name, reason: `no browser runtime: ${caps.browserRuntime?.reason || 'unavailable'}` });

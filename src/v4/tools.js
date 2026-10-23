@@ -15,6 +15,9 @@ import { runTool } from '../v2/tools/runner.js';
 import { MemoryStore } from '../v2/memory/store.js';
 import { extractText, ExtractError } from './extract.js';
 import { modelSchemaOf } from './mcp-tools.js';
+import { jsonSchemaFor } from './schema.js';
+import { createToolExposure, searchRegistry } from './tool-exposure.js';
+import { turnState } from './turn-state.js';
 
 export const MAX_FILE_BYTES = 1_000_000;
 export const MAX_READ_BYTES = 200_000;
@@ -262,9 +265,89 @@ export function createToolRegistry({ workspaceDir, memoryDir }) {
     }),
   });
 
+  /**
+   * Tool discovery.
+   *
+   * With a universal registry (V1 lanes + MCP + plugins) the model cannot be
+   * sent every schema on every request. It gets the core plus as many as the
+   * budget allows, and these two tools make the rest reachable in one extra
+   * round: search returns exact registered names, activate puts them in the
+   * next round's list. Unknown names are reported, never silently dropped.
+   */
+  registry.define({
+    name: 'tools_search',
+    description:
+      'Find a capability by describing the task in plain words. Returns registered tool names with '
+      + 'their side-effect tier. Use it whenever the tool you need is not in the current list, then '
+      + 'call tools_activate with the exact name before calling the tool.',
+    tier: 'read',
+    inputSchema: z.object({
+      query: z.string().min(1).max(200),
+      limit: z.number().int().min(1).max(20).optional(),
+    }),
+    outputSchema: z.object({
+      matches: z.array(z.object({
+        name: z.string(),
+        description: z.string(),
+        tier: z.string().nullable(),
+        lane: z.string().nullable(),
+        score: z.number(),
+      })).max(20),
+      hidden: z.number().optional(),
+      note: z.string().optional(),
+    }),
+    execute: async ({ query, limit = 8 }) => {
+      const st = turnState();
+      // Inside a turn the exposure owns the real registry (and the subagent's
+      // filtered view). Outside one, the registry this tool was defined on.
+      const active = st?.exposure?.registry || registry;
+      const hits = searchRegistry(active, query, {
+        limit,
+        exclude: ['tools_search', 'tools_activate'],
+      });
+      return {
+        matches: hits,
+        hidden: typeof st?.exposure?.hidden === 'function' ? st.exposure.hidden().length : 0,
+        ...(hits.length
+          ? {}
+          : { note: `no registered tool matches "${String(query).slice(0, 60)}" — answer in plain words or rephrase with different nouns` }),
+      };
+    },
+  });
+
+  registry.define({
+    name: 'tools_activate',
+    description:
+      'Make tools from tools_search callable in the next step. Pass exact registered names '
+      + '(e.g. ["sys_info"]). Activating does not run anything and grants no permission: the '
+      + 'owner approval policy still applies to every call.',
+    tier: 'read',
+    inputSchema: z.object({
+      names: z.array(z.string().min(1).max(80)).min(1).max(12),
+    }),
+    outputSchema: z.object({
+      activated: z.array(z.string()),
+      already: z.array(z.string()),
+      unknown: z.array(z.string()),
+      total: z.number(),
+      note: z.string().optional(),
+    }),
+    execute: async ({ names }) => {
+      const st = turnState();
+      if (!st?.exposure) {
+        return { activated: [], already: [], unknown: [], total: registry.list().length, note: 'no active model turn' };
+      }
+      const out = st.exposure.activate(names);
+      return {
+        ...out,
+        ...(out.unknown.length ? { note: `unknown tool(s): ${out.unknown.join(', ')} — use tools_search to get exact names` } : {}),
+      };
+    },
+  });
+
   // The agent asks the tools object for the model-facing schema list, so adding a
   // tool to the registry is enough for the model to see it.
-  const schemas = () => schemasFromRegistry(registry);
+  const schemas = () => createToolExposure({ registry }).schemas();
 
   return { registry, memory, root, schemas };
 }
@@ -276,18 +359,10 @@ export function createToolRegistry({ workspaceDir, memoryDir }) {
  * A tool whose schema cannot be converted is skipped rather than breaking the
  * whole turn: a missing tool is visible in the capability report, a crash is not.
  */
-export function jsonSchemaFor(schema) {
-  if (!schema) return { type: 'object', properties: {} };
-  try {
-    const converted = z.toJSONSchema(schema, { io: 'input' });
-    // The model adapters do not want a $schema key pointing at a spec version.
-    const { $schema, ...rest } = converted || {};
-    void $schema;
-    return rest;
-  } catch {
-    return null;
-  }
-}
+// The conversion itself lives in schema.js so the exposure layer can use it
+// without importing the tool surface. Re-exported here because this is where
+// callers have always found it.
+export { jsonSchemaFor };
 
 /**
  * The tool list the MODEL sees, built from the live registry.

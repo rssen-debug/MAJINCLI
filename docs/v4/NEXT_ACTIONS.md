@@ -3,6 +3,38 @@
 Ordered by user value, not by elegance. Each item names the evidence that would
 earn its matrix points.
 
+## 0. Where the project stands now (2026-10-23)
+
+The universal-agent integration is done and verified in this environment
+(`PROGRESS.md` → "Universal-agent integration"; `TEST_EVIDENCE.md` §5). What
+remains is **not more code** — it is proof on your machine and phone.
+
+One command does the install and the acceptance run:
+
+```powershell
+cd C:\MAJINCLI
+git pull
+npm ci
+npm run v4:setup -- --autostart --accept --release-url https://<release-base> --auto-update
+```
+
+Then send back two outputs:
+
+```powershell
+npm run v4:tools -- --probe
+npm run v4:accept -- --url https://<your-address> --write
+```
+
+What each result would settle:
+
+| Result | Matrix movement |
+|---|---|
+| `--probe` executes `control_list_windows`, `exec_start`, `sys_info`, `shell_env`, `net_dns`, `re_hash` | Windows tool lanes move from "structural" to verified (H1/H2 support) |
+| `v4:e2e` passes on a host with Edge/Chromium | M11, G8 |
+| `v4:accept` with a public URL from the phone | H3, H4, M10 |
+| a real turn through your provider | A7 |
+| the update task's log line `[updated]` after a release | automatic updates (no matrix row; reported in STATUS) |
+
 ## 1. First real private release (blocking, owner action)
 
 - [ ] Run `scripts/v4/install-v4-windows.ps1 -AutoStart` on the Windows PC.

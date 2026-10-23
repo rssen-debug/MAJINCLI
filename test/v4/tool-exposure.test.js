@@ -227,7 +227,7 @@ test('exposure: with an owner grant, a real turn offers far more than five tools
   }
 });
 
-test('exposure: with host tools off, the model still gets the workspace set only', async () => {
+test('exposure: with host tools off, the model gets the workspace set plus discovery', async () => {
   const { startTestServer, postChat, readSse } = await import('./helpers.mjs');
   const home = tempHome();
   const s = await startTestServer({ home });
@@ -241,15 +241,21 @@ test('exposure: with host tools off, the model still gets the workspace set only
     };
     await readSse(await postChat(s.base, cookie, { text: 'Hej', requestId: 'x2' }));
     const names = seen[0].map((t) => t.name);
-    assert.deepEqual(names.sort(), ['document_read', 'memory_save', 'memory_search', 'workspace_list', 'workspace_read', 'workspace_write']);
+    // Discovery is core: without it the model could never reach a tool that
+    // does not fit in the per-request budget.
+    assert.deepEqual(names.sort(), [
+      'document_read', 'memory_save', 'memory_search', 'tools_activate', 'tools_search',
+      'workspace_list', 'workspace_read', 'workspace_write',
+    ]);
   } finally {
     await s.close();
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
 
-test('exposure: the capability report and the model list agree', async () => {
+test('exposure: every registered tool is offered or reachable through search + activate', async () => {
   const { startTestServer, postChat, readSse } = await import('./helpers.mjs');
+  const { searchRegistry, createToolExposure } = await import('../../src/v4/tool-exposure.js');
   const home = tempHome();
   const s = await startTestServer({ home, env: { MAJIN_V4_HOST_TOOLS: '1' } });
   try {
@@ -266,8 +272,22 @@ test('exposure: the capability report and the model list agree', async () => {
     await readSse(await postChat(s.base, cookie, { text: 'Hej', requestId: 'x3' }));
     const offered = new Set(seen[0].map((t) => t.name));
 
+    // The budget is real: the list is bounded, and the model is told.
+    assert.ok(offered.size <= s.config.limits.maxVisibleTools, `offered ${offered.size} > budget ${s.config.limits.maxVisibleTools}`);
+    assert.ok(offered.has('tools_search'), 'the model can always search');
+    assert.ok(offered.has('tools_activate'), 'the model can always activate');
+
+    // Reachability, not membership: a tool that is not in the first list must
+    // be findable by its own name and acceptable to activate().
+    const registry = s.context.tools.registry;
+    const exposure = createToolExposure({ registry, maxVisible: 4 });
     for (const name of reported) {
-      assert.ok(offered.has(name), `${name} is reported as registered but was not offered to the model`);
+      if (offered.has(name)) continue;
+      const hits = searchRegistry(registry, name, { limit: 8 }).map((h) => h.name);
+      assert.ok(hits.includes(name), `${name} is registered but neither offered nor findable by search`);
+      const out = exposure.activate([name]);
+      assert.ok(out.activated.includes(name), `${name} could not be activated`);
+      assert.ok(exposure.schemas().some((t) => t.name === name), `${name} did not reach the next round's list`);
     }
   } finally {
     await s.close();

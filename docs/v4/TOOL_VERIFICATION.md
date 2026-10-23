@@ -10,13 +10,15 @@ This page is how you prove it on the machine that matters.
 cd C:\MAJINCLI
 git pull
 npm ci
-$env:MAJIN_V4_HOST_TOOLS = "1"
 npm run v4:tools
 ```
 
-Expected on a normal Windows 11 box: `desktop`, `screen`, `computer`, `files`, `shell`,
-`power`, `web`, `research`, `jobs`, `agent`, `flows`, `github` listed as `ok`, and
-`browser` either `ok` (with a path to `msedge.exe`) or `n/a` with a reason.
+The probe registers **every available lane**, granted or not, because it is a
+diagnostic — it does not change Owner Mode. On a normal Windows 11 box expect
+these lanes `ok`: `desktop`, `computer`, `screen`, `net`, `files`, `shell`,
+`shelltools`, `sys`, `power`, `web`, `research`, `jobs`, `flows`, `github`,
+`audit`, `learn`, `marketing`, `re`, `trading`, plus `browser` either `ok` with
+the path to `msedge.exe` or `n/a` with a reason.
 
 If a lane says `n/a`, it prints **why**. None of them fail silently.
 
@@ -26,21 +28,22 @@ If a lane says `n/a`, it prints **why**. None of them fail silently.
 npm run v4:tools -- --probe
 ```
 
-This calls one tool per lane **through the same runner and approval layer the agent
-uses**, and prints the outcome. What "pass" means per line:
+This calls one tool per capability **through the same runner and approval layer
+the agent uses**, and prints the outcome:
 
 | Probe | Pass means |
 |---|---|
-| `workspace_list` | the workspace tool ran |
-| `memory_search` | the memory store answered |
-| `fs_stat` | a real path on your disk was stat'ed |
-| `exec_start` | a real child process started (a harmless `echo`) |
+| `workspace_list`, `memory_search` | the sandbox and the memory store answer |
+| `fs_stat` | a real file on your disk was stat'ed |
+| `exec_start` | a real child process started (harmless `echo`, explicit `local` backend) |
+| `sys_info` | real OS/CPU/memory values came from the machine |
+| `shell_env` | the environment was read through the shell lane |
+| `net_dns` | a real DNS lookup answered (or an honest `NETWORK_FAILURE`) |
+| `ma_lessons` | the durable-lessons store answered |
+| `re_hash` | a real file was hashed through the binary-analysis lane |
 | `control_list_windows` | **your desktop's real windows were enumerated** |
 | `web_search` | a real search answered, or an honest `NETWORK_FAILURE` |
 | `browser_open` | a real browser launched and loaded example.com |
-
-`TOOL` lines are classified failures from the tool itself (no internet, no consent).
-`FAIL` lines are broken adapters and make the command exit non-zero.
 
 ## 3. Prove the model sees them
 

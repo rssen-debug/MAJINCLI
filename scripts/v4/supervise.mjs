@@ -16,6 +16,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../../src/v4/config.js';
 import { Supervisor } from '../../src/v4/supervisor.js';
+import { recoverInterruptedUpdate } from '../../src/v4/updater.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '../..');
@@ -48,8 +49,16 @@ function line(text) {
   process.stdout.write(`${text}\n`);
 }
 
+// If the last update died between two files, put the previous release back
+// before the host is asked to boot from a mixed tree.
+const recovery = recoverInterruptedUpdate({
+  liveDir: repoRoot,
+  backupDir: path.join(config.paths.root, 'release-previous'),
+});
+
 line('');
 line('  MAJIN V4 — supervised host');
+if (recovery.recovered) line(`  update recovery: ${recovery.action}`);
 line(`  command    ${supervisor.command.join(' ')}`);
 line(`  health     ${healthUrl}`);
 line(`  log        ${logFile}`);

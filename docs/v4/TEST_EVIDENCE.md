@@ -188,3 +188,56 @@ npm run v4:progress
 npm run v4:doctor
 npm run v4
 ```
+
+## 5. Universal-agent and updater evidence — 2026-10-23
+
+The suite grew from 441 to 455 tests. The numbers below are from the run in this
+workspace, after the fixes listed in `PROGRESS.md` were applied.
+
+```
+$ node --test --test-concurrency=1 test/v4/*.test.js
+# tests 455
+# pass 454
+# fail 0
+# skipped 1        (e2e.browser.test.js — no browser binary in this sandbox)
+
+$ node scripts/parse-all.js
+554/554 files parse cleanly.
+
+$ node scripts/i18n-check.mjs
+0 Swedish string literal(s) in 291 files
+
+$ node scripts/v4/inventory.mjs
+V1  26 modules, 139 tools: 109 integrated, 30 excluded with a reason
+V2  18/51 components imported by V4
+V3  0/4 components imported by V4
+V4  8 built-ins, 107 tools registered on linux
+every V1 module and every V2/V3 component has a recorded decision
+```
+
+### What the new tests actually run
+
+| Test file | What is executed | What is asserted |
+|---|---|---|
+| `universal-agent.test.js` | real HTTP SSE provider + real V4 server + real registry, filesystem and verifier | `tools_search` → `tools_activate` → `sys_info` (absent from round 1, present from round 3) → file write → read-back; goal `COMPLETED`; `tool:workspace_write` verified with SHA-256 |
+| `universal-agent.test.js` | parent turn + delegated subagent | child prompt is a subagent prompt; `agent_delegate` is not offered to the child; the child's answer reaches the parent's persisted message |
+| `update-auto.test.js` | real `release.mjs` signing, real static HTTP release, real `setup.mjs` (key + channel), real `update.mjs apply` in a throwaway repo copy | install from `update.json` without env; `node_modules` survives; log line `[updated]`; unhealthy release → previous version restored; exit codes |
+| `updater.test.js` | overlay activation, rollback, journal recovery | replaced files restored byte-for-byte; added files removed; dependencies untouched; interrupted update rolled back on the next run |
+| `inventory.test.js` | the inventory generator itself | no undecided V1 module; totals add up; every excluded module has a real reason |
+| `host-tools.test.js` | capability detection and real adapter calls | unavailable lanes register nothing; browser tools withheld without a runtime; consent still required for held tools |
+| `mcp.test.js` | a real stdio MCP fixture server | handshake, tool list, call, server JSON Schema preserved in the model list, child killed on shutdown |
+
+### Bugs found by running, not by reading
+
+The same pass fixed: DNS lookups that always threw (`net.dns`), an unclassified
+network crash (`net.http`), ignored required parameters in the adapter, a frozen
+context in `agent.plan`, a lying `ok:true` from `agent.delegate`, MCP schemas lost
+in the exposure layer, and two updater defects that made a successful update
+unable to boot (directory swap deleting `node_modules`) or unable to download
+(`files/` path mismatch). Details in `PROGRESS.md`.
+
+### Still not executed here
+
+Windows desktop control, the browser lane, Task Scheduler firing the update task,
+`npm ci` on a real dependency change, a physical phone, and real model inference.
+Each has the exact command that would settle it in `STATUS.md`.

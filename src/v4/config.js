@@ -214,6 +214,9 @@ export function loadConfig({ env = process.env, argv = [], platform = process.pl
       // the oldest turns are dropped instead of failing the whole request.
       maxContextTokens: int(env.MAJIN_V4_MAX_CONTEXT_TOKENS, 8000),
       maxToolCallsPerTurn: int(env.MAJIN_V4_MAX_TOOL_CALLS, 6),
+      // Tools sent to the model per request. Everything beyond this is still
+      // reachable through tools_search + tools_activate; the model is told so.
+      maxVisibleTools: int(env.MAJIN_V4_MAX_VISIBLE_TOOLS, 64),
       toolTimeoutMs: int(env.MAJIN_V4_TOOL_TIMEOUT_MS, 20_000),
       modelTimeoutMs: int(env.MAJIN_V4_MODEL_TIMEOUT_MS, 120_000),
       rate: {

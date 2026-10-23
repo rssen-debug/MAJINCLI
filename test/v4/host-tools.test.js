@@ -94,7 +94,7 @@ test('host: a held shell tool cannot run without consent', async () => {
 
   const denier = { check: () => ({ decision: 'waiting', note: 'no consent on file' }) };
   const result = await runTool(
-    { tool: 'exec_start', input: { command: 'echo hej' } },
+    { tool: 'exec_start', input: { backend: 'local', command: 'echo hej' } },
     { registry, approvals: denier, timeoutMs: 5000 },
   );
   assert.equal(result.ok, false);

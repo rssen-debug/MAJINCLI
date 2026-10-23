@@ -13,7 +13,8 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   UPDATER_SCHEMA, UpdateError, activateRelease, canonicalManifest, compareVersions,
-  hashTree, pinKey, planUpdate, readPinnedKey, rollbackRelease, runUpdate, signManifest, stageRelease, verifyManifest,
+  hashTree, pinKey, planUpdate, readPinnedKey, recoverInterruptedUpdate, rollbackRelease, runUpdate,
+  signManifest, stageRelease, verifyManifest,
 } from '../../src/v4/updater.js';
 import { tempHome } from './helpers.mjs';
 
@@ -133,7 +134,7 @@ test('updater: a missing file aborts the whole release', () => {
   }
 });
 
-test('updater: activation is two renames, and rollback restores the old tree exactly', () => {
+test('updater: activation overlays the release and rollback restores the old tree exactly', () => {
   const home = tempHome();
   const live = path.join(home, 'live');
   const staging = path.join(home, 'staging');
@@ -150,6 +151,59 @@ test('updater: activation is two renames, and rollback restores the old tree exa
 
     rollbackRelease({ liveDir: live, backupDir: backup });
     assert.equal(fs.readFileSync(path.join(live, 'version.txt'), 'utf8'), 'old', 'the old tree is back');
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('updater: activation preserves runtime files the release does not ship', () => {
+  const home = tempHome();
+  const live = path.join(home, 'live');
+  const staging = path.join(home, 'staging');
+  const backup = path.join(home, 'backup');
+  try {
+    fs.mkdirSync(path.join(live, 'node_modules', 'zod'), { recursive: true });
+    fs.writeFileSync(path.join(live, 'node_modules', 'zod', 'index.js'), 'module.exports = {};');
+    fs.writeFileSync(path.join(live, 'src.js'), 'old');
+    fs.mkdirSync(staging, { recursive: true });
+    fs.writeFileSync(path.join(staging, 'src.js'), 'new');
+
+    const act = activateRelease({ liveDir: live, stagingDir: staging, backupDir: backup });
+    assert.deepEqual(act.added, []);
+    assert.deepEqual(act.replaced, ['src.js']);
+    assert.equal(fs.readFileSync(path.join(live, 'node_modules', 'zod', 'index.js'), 'utf8'), 'module.exports = {};');
+    assert.equal(fs.readFileSync(path.join(live, 'src.js'), 'utf8'), 'new');
+
+    // A failed health check must not take the dependencies with it.
+    rollbackRelease({ liveDir: live, backupDir: backup, preserved: act.preserved, journalFile: act.journalFile });
+    assert.equal(fs.readFileSync(path.join(live, 'src.js'), 'utf8'), 'old');
+    assert.equal(fs.readFileSync(path.join(live, 'node_modules', 'zod', 'index.js'), 'utf8'), 'module.exports = {};');
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('updater: an interrupted update is rolled back on the next run', () => {
+  const home = tempHome();
+  const live = path.join(home, 'live');
+  const staging = path.join(home, 'staging');
+  const backup = path.join(home, 'backup');
+  try {
+    fs.mkdirSync(path.join(live, 'node_modules'), { recursive: true });
+    fs.writeFileSync(path.join(live, 'node_modules', 'dep.js'), 'dep');
+    fs.writeFileSync(path.join(live, 'app.js'), 'old');
+    fs.mkdirSync(staging, { recursive: true });
+    fs.writeFileSync(path.join(staging, 'app.js'), 'new');
+    const act = activateRelease({ liveDir: live, stagingDir: staging, backupDir: backup });
+    assert.equal(fs.readFileSync(path.join(live, 'app.js'), 'utf8'), 'new');
+
+    // Simulate a crash between activation and the health check: the journal is
+    // still on disk. The next run must not treat the half-updated tree as current.
+    const out = recoverInterruptedUpdate({ liveDir: live, backupDir: backup });
+    assert.equal(out.recovered, true);
+    assert.equal(fs.readFileSync(path.join(live, 'app.js'), 'utf8'), 'old');
+    assert.ok(fs.existsSync(path.join(live, 'node_modules', 'dep.js')));
+    assert.ok(!fs.existsSync(act.journalFile), 'the journal was not cleared');
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }

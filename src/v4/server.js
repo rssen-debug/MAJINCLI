@@ -42,7 +42,7 @@ import { synthesize, VOICE_MODES, voiceCapabilities } from './voice.js';
 import { TurnJournal } from './turns.js';
 import { hostCapabilities, describeCapabilities, registerHostTools } from './tools/host.js';
 import { UploadStore, UploadError, serveHeadersFor, typeForName, MAX_UPLOAD_BYTES } from './uploads.js';
-import { OwnerMode, OwnerModeError } from './owner-mode.js';
+import { OwnerMode, OwnerModeError, GRANTABLE_LANES } from './owner-mode.js';
 import { discoverSkills, usableSkills, describeSkills } from './skills.js';
 import { parseMcpConfig, connectServers } from './mcp.js';
 import { registerMcpTools } from './mcp-tools.js';
@@ -188,7 +188,7 @@ export function createV4Server({ config }) {
   const ownerMode = new OwnerMode({
     file: path.join(paths.root, 'owner-mode.json'),
     forceLanes: forcedLanes.includes('*')
-      ? ['files', 'shell', 'power', 'web', 'research', 'jobs', 'agent', 'flows', 'github', 'desktop', 'screen', 'computer', 'browser']
+      ? [...GRANTABLE_LANES]
       : [],
   });
 
@@ -227,6 +227,13 @@ export function createV4Server({ config }) {
     const partial = registerHostTools(tools.registry, { ...hostCaps, lanes: allowed }, {
       allow: config.platform?.hostToolAllow?.length ? config.platform.hostToolAllow : null,
       workspaceDir: config.workspaceDir,
+      // V1 tools that need the data dir ask their config for the file path;
+      // give them V4's, never V1's, so the two never diverge.
+      dataFile: path.join(paths.root, 'config.json'),
+      // Nested V1 tool calls (research -> web.search, flows -> any tool) go
+      // through the same approval policy as a direct call.
+      approvals: agent.approvals,
+      session: 'v4',
     });
     for (const r of partial.registered) {
       if (!stillThere.some((e) => e.name === r.name)) stillThere.push(r);
@@ -235,6 +242,14 @@ export function createV4Server({ config }) {
     // anything not granted still gets a line, but one per lane rather than per tool
     for (const [lane, cap] of Object.entries(hostCaps.lanes || {})) {
       if (!active.includes(lane)) skipped.push({ lane, reason: 'not granted by the owner' });
+    }
+
+    // Delegation is a V4 engine tool, not a V1 module: it follows the `agent`
+    // lane so revoking the lane revokes the capability immediately.
+    if (active.includes('agent')) {
+      if (!tools.registry.get('agent_delegate')) tools.registry.define(agent.delegationTool);
+    } else if (tools.registry.get('agent_delegate')) {
+      tools.registry.tools.delete('agent_delegate');
     }
 
     hostTools = { registered: stillThere, skipped };

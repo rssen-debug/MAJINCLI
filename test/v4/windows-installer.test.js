@@ -107,6 +107,23 @@ test('installer: the V4 task does not collide with the V1 task name', () => {
   }
 });
 
+test('installer: the automatic update task exists, is daily, and verifies signatures', () => {
+  assert.match(installer, /\[switch\]\$AutoUpdate/);
+  assert.match(installer, /\$UpdateTaskName = 'MAJIN V4 Update'/);
+  assert.match(installer, /New-ScheduledTaskTrigger -Daily -At \$UpdateTime/);
+  assert.match(installer, /'scripts\\v4\\update\.mjs', 'apply', '--quiet', '--log'/);
+  assert.match(installer, /-RunOnlyIfNetworkAvailable/);
+  assert.match(installer, /-ExecutionTimeLimit \(New-TimeSpan -Minutes 20\)/);
+  // A failed update must not leave two updaters running against the same tree.
+  assert.match(installer, /-MultipleInstances IgnoreNew/);
+  // The task is registered by the same flow the owner already runs.
+  assert.match(installer, /release-key\.json/);
+});
+
+test('installer: uninstall removes the update task too', () => {
+  assert.match(installer, /Unregister-ScheduledTask -TaskName \$UpdateTaskName/);
+});
+
 test('installer: here-strings are balanced (the one syntax error that breaks the whole script)', () => {
   // In PowerShell the closing "@ must START a line, but code may follow it on
   // the same line ("@ | Set-Content ...), which is how the launcher is written.

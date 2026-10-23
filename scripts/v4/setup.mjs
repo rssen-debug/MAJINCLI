@@ -31,11 +31,21 @@ import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../../src/v4/config.js';
 import { ensurePairing, loadSecret, pairingExists } from '../../src/v4/auth.js';
 import { OwnerMode } from '../../src/v4/owner-mode.js';
-import { pinKey, readPinnedKey, UPDATER_SCHEMA } from '../../src/v4/updater.js';
+import {
+  pinKey, readPinnedKey, readUpdateConfig, writeUpdateConfig, UPDATER_SCHEMA,
+} from '../../src/v4/updater.js';
 
 const args = process.argv.slice(2);
 const check = args.includes('--check');
 const autostart = args.includes('--autostart');
+const accept = args.includes('--accept');
+const autoUpdate = args.includes('--auto-update');
+const value = (name, fallback = null) => {
+  const i = args.indexOf(name);
+  return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : fallback;
+};
+const releaseUrl = value('--release-url');
+const updateTime = value('--update-time', '04:00');
 const config = loadConfig({ argv: args });
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -106,25 +116,66 @@ if (!check && fs.existsSync(keySource) && !readPinnedKey(keyFile)) {
   record('release-key', false, 'no release key pinned; automatic updates stay off', 'Put the release public key at release-public-key.pem and run setup again, or set MAJIN_V4_RELEASE_KEY_PUB.');
 }
 
-/* 6. autostart ----------------------------------------------------------- */
-if (process.platform === 'win32' && autostart && !check) {
-  const ps = path.join(root, 'scripts', 'v4', 'install-v4-windows.ps1');
-  const res = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps, '-AutoStart', '-Port', String(config.port)], { stdio: 'inherit' });
-  record('autostart', res.status === 0, res.status === 0 ? 'logon task registered' : 'the installer returned an error', res.status === 0 ? null : 'Run: powershell -ExecutionPolicy Bypass -File .\\scripts\\v4\\install-v4-windows.ps1 -AutoStart');
-} else if (process.platform === 'win32') {
-  record('autostart', false, 'not requested', 'Add --autostart to register the per-user logon task.');
+/* 6. update channel ------------------------------------------------------ */
+const updateFile = path.join(config.paths.root, 'update.json');
+const existingUpdate = readUpdateConfig(updateFile);
+if (!check && (releaseUrl || autoUpdate)) {
+  try {
+    const saved = writeUpdateConfig(updateFile, {
+      releaseUrl: releaseUrl || existingUpdate?.releaseUrl || null,
+      auto: autoUpdate || Boolean(existingUpdate?.auto),
+      time: updateTime || existingUpdate?.time || '04:00',
+    });
+    record('updates', true,
+      `${saved.releaseUrl ? `channel ${saved.releaseUrl}` : 'no channel yet'}${saved.auto ? `, checks daily at ${saved.time}` : ', manual apply'}`,
+      saved.releaseUrl ? null : 'Pass --release-url https://… so the updater knows where releases live.');
+  } catch (err) {
+    record('updates', false, String(err?.message || err), 'Pass --release-url https://… and a time like --update-time 04:00.');
+  }
+} else if (existingUpdate?.releaseUrl) {
+  record('updates', true, `channel ${existingUpdate.releaseUrl}${existingUpdate.auto ? `, checks daily at ${existingUpdate.time}` : ''}`, null);
 } else {
-  record('autostart', false, `not applicable on ${process.platform}`, 'This runs on the Windows host.');
+  record('updates', false, 'no release channel configured', 'Run setup with --release-url https://… --auto-update to finish automatic updates.');
 }
 
-/* 7. model route --------------------------------------------------------- */
+/* 7. autostart and automatic updates ------------------------------------- */
+const needInstaller = (autostart || autoUpdate) && !check;
+if (process.platform === 'win32' && needInstaller) {
+  const ps = path.join(root, 'scripts', 'v4', 'install-v4-windows.ps1');
+  const psArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps, '-Port', String(config.port)];
+  if (autostart) psArgs.push('-AutoStart');
+  if (autoUpdate) psArgs.push('-AutoUpdate', '-UpdateTime', updateTime);
+  const res = spawnSync('powershell', psArgs, { stdio: 'inherit' });
+  record('autostart', res.status === 0 && autostart, autostart ? (res.status === 0 ? 'logon task registered' : 'the installer returned an error') : 'not requested', autostart && res.status !== 0 ? 'Run: powershell -ExecutionPolicy Bypass -File .\\scripts\\v4\\install-v4-windows.ps1 -AutoStart' : null);
+  record('auto-update-task', res.status === 0 && autoUpdate, autoUpdate ? (res.status === 0 ? `daily task registered at ${updateTime}` : 'the installer returned an error') : 'not requested', autoUpdate && res.status !== 0 ? 'Run: powershell -ExecutionPolicy Bypass -File .\\scripts\\v4\\install-v4-windows.ps1 -AutoUpdate' : null);
+} else if (process.platform === 'win32') {
+  record('autostart', false, 'not requested', 'Add --autostart to register the per-user logon task.');
+  record('auto-update-task', false, 'not requested', 'Add --auto-update (with --release-url) to register the daily update task.');
+} else {
+  record('autostart', false, `not applicable on ${process.platform}`, 'This runs on the Windows host.');
+  record('auto-update-task', false, `not applicable on ${process.platform}`, 'This runs on the Windows host.');
+}
+
+/* 8. model route --------------------------------------------------------- */
 const model = config.model;
 record('model', model.kind !== 'demo', model.kind === 'demo' ? 'no provider configured; MAJIN runs in demo mode' : `${model.label} · ${model.model}`,
   model.kind === 'demo' ? 'Configure a provider in the MAJIN config (or MAJIN_V4_BASE_URL/API_KEY/MODEL).' : null);
 
-/* 8. tunnel -------------------------------------------------------------- */
+/* 9. tunnel -------------------------------------------------------------- */
 record('tunnel', Boolean(config.publicOrigin), config.publicOrigin || 'no public origin configured',
   config.publicOrigin ? null : 'Set up the tunnel once (docs/v4/DEPLOYMENT.md §3-4), then set MAJIN_V4_PUBLIC_ORIGIN.');
+
+/* 10. acceptance --------------------------------------------------------- */
+if (accept && !check) {
+  // One command, one verdict: the same checks the owner would otherwise run
+  // by hand, written to docs/v4/evidence/.
+  const acceptArgs = [path.join(root, 'scripts', 'v4', 'accept.mjs'), '--write'];
+  if (config.publicOrigin) acceptArgs.push('--url', config.publicOrigin);
+  const res = spawnSync(process.execPath, acceptArgs, { stdio: 'inherit', cwd: root });
+  record('accept', res.status === 0, res.status === 0 ? 'acceptance ran and the evidence was written' : `acceptance reported problems (exit ${res.status})`, res.status === 0 ? null : 'Read the report above; fix the FAIL lines and run setup again.');
+} else if (accept && check) {
+  record('accept', false, 'not run in --check mode', null);
+}
 
 /* report ----------------------------------------------------------------- */
 const passed = steps.filter((s) => s.ok).length;
@@ -144,7 +195,8 @@ if (blocking.length) {
 } else if (!check) {
   line('  Next: npm run v4');
   line('  Then open the URL on the phone, enter the code, and turn on what you need in Permissions.');
-  line('  Verify the whole chain any time with: npm run v4:accept -- --url https://<your-address>');
+  line('  One command does the whole install and the whole acceptance run:');
+  line('    npm run v4:setup -- --autostart --accept --release-url https://<release-base> --auto-update');
 }
 line('');
 process.exitCode = blocking.length ? 1 : 0;

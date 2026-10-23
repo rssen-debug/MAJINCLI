@@ -17,6 +17,8 @@
 #   ... -Uninstall        remove the logon task and launcher
 param(
   [switch]$AutoStart,
+  [switch]$AutoUpdate,
+  [string]$UpdateTime = '04:00',
   [switch]$Uninstall,
   [int]$Port = 7373,
   # Lanes granted at install time. Defaults to the lanes that only READ from the
@@ -29,6 +31,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $TaskName = 'MAJIN V4 Host'
+$UpdateTaskName = 'MAJIN V4 Update'
 $Launcher = Join-Path $RepoRoot 'start-majin-v4.cmd'
 
 function Write-Step($text) { Write-Host "  $text" }
@@ -38,6 +41,10 @@ if ($Uninstall) {
   if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
     Write-Step "Tog bort den schemalagda uppgiften '$TaskName'."
+  }
+  if (Get-ScheduledTask -TaskName $UpdateTaskName -ErrorAction SilentlyContinue) {
+    Unregister-ScheduledTask -TaskName $UpdateTaskName -Confirm:$false
+    Write-Step "Tog bort den schemalagda uppgiften '$UpdateTaskName'."
   }
   if (Test-Path $Launcher) { Remove-Item $Launcher -Force; Write-Step "Tog bort $Launcher." }
   $OwnerMode = Join-Path $env:LOCALAPPDATA 'MAJIN\v4\owner-mode.json'
@@ -123,6 +130,40 @@ if ($AutoStart) {
   Write-Step 'Runs on battery, no 72-hour limit, restarts up to 3 times on failure.'
 } else {
   Write-Step 'Ingen automatisk start vald. Kör med -AutoStart för en inloggningstask.'
+}
+
+if ($AutoUpdate) {
+  # Automatic updates are only meaningful with a channel and a pinned key.
+  # Both are written by `npm run v4:setup`, so this task is registered by the
+  # same flow the owner already runs — never as a separate command.
+  $UpdateConfig = Join-Path $env:LOCALAPPDATA 'MAJIN\v4\update.json'
+  if (-not (Test-Path $UpdateConfig)) {
+    Write-Step 'VARNING: ingen uppdateringskanal är konfigurerad (v4\update.json saknas).'
+    Write-Step 'Kör: npm run v4:setup -- --release-url https://... --auto-update'
+  }
+  if (-not (Test-Path (Join-Path $env:LOCALAPPDATA 'MAJIN\v4\release-key.json'))) {
+    Write-Step 'VARNING: ingen release-nyckel är pinnad. Signerade uppdateringar kan inte verifieras.'
+  }
+  $nodeExe = (Get-Command node).Source
+  $updateAction = New-ScheduledTaskAction -Execute $nodeExe `
+    -ArgumentList @('scripts\v4\update.mjs', 'apply', '--quiet', '--log') `
+    -WorkingDirectory $RepoRoot
+  $updateTrigger = New-ScheduledTaskTrigger -Daily -At $UpdateTime
+  $updateSettings = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 20) `
+    -MultipleInstances IgnoreNew `
+    -RunOnlyIfNetworkAvailable
+  Register-ScheduledTask -TaskName $UpdateTaskName -Action $updateAction -Trigger $updateTrigger `
+    -Settings $updateSettings `
+    -Description 'Checks the signed MAJIN V4 release channel, verifies the signature, installs and rolls back on a failed health check' `
+    -Force | Out-Null
+  Write-Step "Scheduled task '$UpdateTaskName' registered: daily at $UpdateTime."
+  Write-Step 'A release is installed only if its signature matches the pinned public key; a failed health check rolls back.'
+} else {
+  Write-Step 'Ingen automatisk uppdatering vald. Kör med -AutoUpdate (och sätt en kanal med v4:setup).'
 }
 
 Write-Host "`nKlart. Starta med: $Launcher" -ForegroundColor Green

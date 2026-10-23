@@ -129,6 +129,9 @@ Then run the automated gate and paste its output into `docs/v4/TEST_EVIDENCE.md`
 
 ```powershell
 npm run v4:accept -- --url https://majin.DIN-DOMAN.se --write
+
+# or do the whole install and the acceptance run in one command:
+npm run v4:setup -- --autostart --accept --release-url https://<release-base> --auto-update
 ```
 
 It exits non-zero if anything fails, and it will not claim a model while none is configured.
