@@ -1,5 +1,6 @@
 // V4 binding to the existing scheduler and the same foreground agent/store.
 import path from 'node:path';
+import crypto from 'node:crypto';
 import {z} from 'zod';
 import {Scheduler,parseWhen} from '../core/schedule.js';
 
@@ -35,7 +36,7 @@ export const taskAction=z.discriminatedUnion('action',[
   ...['pause','resume','cancel','run'].map(action=>z.object({action:z.literal(action),id:z.string().min(1)})),
 ]);
 
-export function createBackgroundTasks({root,conversations,startTurn,readSource=null,notifications=null,ready=Promise.resolve(),now=()=>Date.now()}){
+export function createBackgroundTasks({root,conversations,startTurn,readSource=null,notifications=null,audit=null,ready=Promise.resolve(),now=()=>Date.now()}){
   const active=new Map();let closed=false;
   const scheduler=new Scheduler({get:()=>undefined},{file:path.join(root,'background-tasks.json'),now,
     runTask:async({jobId,runId,input})=>{
@@ -44,6 +45,7 @@ export function createBackgroundTasks({root,conversations,startTurn,readSource=n
       const job=scheduler.jobs.find(j=>j.id===jobId);
       if(closed||job?.paused)return {status:'cancelled',text:''};
       if(!job?.metadata?.conversationId)throw Error('Task has no durable conversation');
+      audit?.assertHealthy();audit?.recordEvent('background.start',{jobId,runId});
       if(job.metadata.condition){
         if(!readSource)throw Error('Read-only source tool unavailable');
         try{
@@ -51,6 +53,7 @@ export function createBackgroundTasks({root,conversations,startTurn,readSource=n
           const document=await readSource(condition.url);
           if(closed||job.paused)return {status:'cancelled',text:''};
           const observed=evaluateCondition(document,condition);
+          audit?.recordEvent('background.observed',{jobId,runId,matched:observed.matched,observationHash:crypto.createHash('sha256').update(JSON.stringify({condition,actual:observed.actual})).digest('hex')});
           const previous=job.metadata.observation;
           const sequence=(previous?.sequence||0)+(observed.matched&&!previous?.matched?1:0);
           if(observed.matched&&!previous?.matched){
@@ -81,6 +84,7 @@ export function createBackgroundTasks({root,conversations,startTurn,readSource=n
   function list(){return scheduler.list().map(j=>({...j,conversationId:j.metadata?.conversationId||null}));}
   async function manage(raw){
     const input=taskAction.parse(raw);
+    audit?.assertHealthy();audit?.recordEvent('background.management_requested',{action:input.action,jobId:input.id||null});
     if(input.condition){const url=new URL(input.condition.url);if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.hash)throw Error('Condition source must be an HTTP(S) URL without embedded credentials or fragment');}
     if(closed)throw Error('background service stopped');
     if(input.action==='create'){

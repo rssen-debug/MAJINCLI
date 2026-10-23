@@ -21,6 +21,15 @@ const run = (args, cwd = REPO) => new Promise((resolve) => {
   execFile(process.execPath, [BIN, ...args], { cwd }, (error, stdout, stderr) => resolve({ code: error ? error.code : 0, stdout, stderr }));
 });
 
+test('a signed checkpoint detects a rewritten prefix even when the replacement chain has more rows',()=>{
+  const dir=tmp(),replacement=tmp();
+  const original=new AuditChain(dir);original.append('event',{real:true});keygen(dir);anchor(dir);
+  const changed=new AuditChain(replacement);changed.append('event',{forged:true});changed.append('event',{padding:true});
+  for(const file of ['chain.jsonl','head.json'])fs.copyFileSync(path.join(replacement,file),path.join(dir,file));
+  assert.equal(new AuditChain(dir).verify().ok,true,'rewritten chain is internally consistent');
+  const verdict=verifyAnchor(dir);assert.equal(verdict.ok,false);assert.equal(verdict.cls,'ANCHOR_MISMATCH');
+});
+
 test('1. keygen creates 0600 private key + public key; second run refuses silent rotation', () => {
   const dir = tmp();
   const r1 = keygen(dir);

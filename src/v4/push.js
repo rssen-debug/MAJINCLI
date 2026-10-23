@@ -14,7 +14,7 @@ export function validateSubscription(raw){
   return {endpoint:url.href,keys:{p256dh:raw.keys.p256dh,auth:raw.keys.auth}};
 }
 
-export function createPushService({root,subject,send=(...args)=>webpush.sendNotification(...args),now=()=>Date.now()}){
+export function createPushService({root,subject,send=(...args)=>webpush.sendNotification(...args),now=()=>Date.now(),audit=null}){
   const directory=path.join(root,'push');fs.mkdirSync(directory,{recursive:true,mode:0o700});protectAuditFile(directory);
   const file=path.join(directory,'private.json');let busy=false,timer,lastError=null;
   let state,fresh=false;
@@ -44,6 +44,7 @@ export function createPushService({root,subject,send=(...args)=>webpush.sendNoti
   async function flush(){
     if(busy||!enabled)return;busy=true;
     try{
+      audit?.assertHealthy();
       for(const item of [...state.outbox]){
         for(const delivery of item.deliveries){
           if(delivery.status!=='pending'||delivery.nextAttempt>now())continue;
@@ -54,6 +55,7 @@ export function createPushService({root,subject,send=(...args)=>webpush.sendNoti
             await send(device.subscription,JSON.stringify({id:item.id,title:item.title,body:item.body,url:`/?conversation=${encodeURIComponent(item.conversationId)}`}),{vapidDetails:{subject,publicKey:state.keys.publicKey,privateKey:state.keys.privateKey},TTL:86400,timeout:10000,urgency:'normal',topic:idOf(item.id).slice(0,32)});
             delivery.status='accepted_by_push_service';delivery.acceptedAt=new Date(now()).toISOString();
           }catch(error){delivery.statusCode=Number(error.statusCode)||null;if([404,410].includes(delivery.statusCode)){delivery.status='expired';state.subscriptions=state.subscriptions.filter(s=>s.id!==device.id);}else if(delivery.attempts>=3)delivery.status='failed';}
+          audit?.recordEvent('push.delivery',{notificationId:item.id,deviceId:delivery.device,status:delivery.status,attempts:delivery.attempts,statusCode:delivery.statusCode||null});
           save();
         }
         if(item.deliveries.every(d=>d.status!=='pending')){

@@ -320,9 +320,10 @@ const ACTIVE_STATES = new Set([
 ]);
 
 export class GoalStore {
-  constructor({ dir, cacheMax = GOAL_CACHE_MAX }) {
+  constructor({ dir, cacheMax = GOAL_CACHE_MAX, onSave = null }) {
     this.dir = dir;
     this.cacheMax = cacheMax;
+    this.onSave = onSave;
     fs.mkdirSync(dir, { recursive: true });
     // Live goal objects are a cache, not a registry: they exist so a turn keeps
     // mutating one instance. Loading is cheap and the file is the truth, so the
@@ -357,6 +358,7 @@ export class GoalStore {
   }
 
   save(goal) {
+    this.onSave?.(goal);
     goal.save(this.dir);
     return this.#remember(goal);
   }

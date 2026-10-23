@@ -57,6 +57,7 @@ import { TelemetryLedger } from '../v2/telemetry/ledger.js';
 import { createBackgroundTasks } from './background-tasks.js';
 import { createPushService } from './push.js';
 import { runTool } from '../v2/tools/runner.js';
+import { createV4Audit } from './audit.js';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui');
 
@@ -149,7 +150,8 @@ export function createV4Server({ config }) {
     dir: paths.conversations,
     maxMessages: config.limits.maxStoredMessages,
   });
-  const goals = new GoalStore({ dir: paths.goals });
+  const audit=createV4Audit({root:paths.root,workspace:workspaceDir});
+  const goals = new GoalStore({ dir: paths.goals,onSave:goal=>audit.recordGoal(goal) });
   // Reconciled goals are reported by the doctor and the boot banner; the
   // pending approvals they orphan are cleared with the same call.
   const reconciled = goals.reconcileOnBoot({ conversations });
@@ -179,9 +181,10 @@ export function createV4Server({ config }) {
   // allowlist per event, so message text, paths and secrets cannot land in it.
   const telemetry = (() => {
     try {
-      return new TelemetryLedger(path.join(paths.root, 'telemetry'));
-    } catch {
-      return null; // an unwritable data dir is reported by the doctor, not fatal here
+      const ledger=new TelemetryLedger(path.join(paths.root, 'telemetry'));
+      return {append(event,payload){try{const row=ledger.append(event,payload);audit.recordTelemetry(row);return row;}catch(error){return audit.persistenceFailure(error);}}};
+    } catch(error) {
+      return audit.persistenceFailure(error);
     }
   })();
   // Skills are data on disk. What is *usable* depends on what the owner granted,
@@ -207,6 +210,7 @@ export function createV4Server({ config }) {
     tools,
     model,
     telemetry,
+    audit,
     skills: skillsBridge,
     // The model is told where it may look. Without this it only ever tried the
     // workspace, which is why a granted folder was never searched.
@@ -528,6 +532,7 @@ export function createV4Server({ config }) {
   }
 
   function startJournalTurn({conversationId=null,text,requestId=null,voiceTurn=false,owner=null}){
+    audit.assertHealthy();
     // The turn becomes a journal entry before the response is written, so the
     // client learns its id (in the `open` event) and can reattach to the very
     // same turn if the connection drops.
@@ -566,8 +571,8 @@ export function createV4Server({ config }) {
     return {turn,finished,cancel:()=>controller.abort()};
   }
 
-  const notifications=createPushService({root:paths.root,subject:config.publicOrigin});
-  const backgroundTasks=createBackgroundTasks({root:paths.root,conversations,startTurn:startJournalTurn,notifications,ready:Promise.all([hostReady,kernelReady]),readSource:async(url)=>{
+  const notifications=createPushService({root:paths.root,subject:config.publicOrigin,audit});
+  const backgroundTasks=createBackgroundTasks({root:paths.root,conversations,startTurn:startJournalTurn,notifications,audit,ready:Promise.all([hostReady,kernelReady]),readSource:async(url)=>{
     const result=await runTool({tool:'web_fetch',input:{url,extract:'json',maxChars:1000000}},{registry:tools.registry,approvals:agent.approvals,timeoutMs:30000});
     if(!result.ok||result.data?.meta?.truncated)throw Error('Source response failed or was incomplete');
     const text=result.data?.result;
@@ -577,6 +582,14 @@ export function createV4Server({ config }) {
   for(const tool of backgroundTasks.tools)tools.registry.define(tool);
 
   const routes = {
+    'GET /api/audit':async(req,res)=>{requireSession(req);sendJson(res,200,audit.status());},
+    'POST /api/audit':async(req,res)=>{
+      requireSession(req);assertCsrfHeader(req);limiter.take('general',clientKey(req,config));
+      const body=await readJsonBody(req,4096);
+      if(body.action==='initialize'||body.action==='anchor')sendJson(res,200,{ok:true,anchor:audit.checkpoint({initialize:body.action==='initialize'})});
+      else if(body.action==='export')sendJson(res,200,{ok:true,...audit.exportPublic()});
+      else throw new HttpError(400,'AUDIT_ACTION','Unknown audit action');
+    },
     'GET /api/push':async(req,res)=>{requireSession(req);sendJson(res,200,{ok:true,...notifications.view()});},
     'POST /api/push':async(req,res)=>{
       const {session}=requireSession(req);assertCsrfHeader(req);limiter.take('general',clientKey(req,config));
@@ -1284,7 +1297,7 @@ export function createV4Server({ config }) {
 
   return {
     server,
-    context: { config, sessions, conversations, goals, tools, model, agent, kernel, kernelReady, reconciled, pairingFresh, backgroundTasks },
+    context: { config, sessions, conversations, goals, tools, model, agent, kernel, kernelReady, reconciled, pairingFresh, backgroundTasks, audit },
   };
 }
 

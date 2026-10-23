@@ -2,6 +2,11 @@
 
 ## Latest verified checkpoint — 24 October, NOT READY
 
+New audit milestone after the real-Go checkpoint: see final chronological entry.
+Audit implementation is tested and committed separately; running Ghost source
+is still e45640a until genuine process activation is verified. Do not use a new
+checkout HEAD as proof that the existing Node process loaded new audit modules.
+
 Current installed/runtime source: e45640a5a5e0de2688e4321c713908a62d231d0d.
 Use git rev-parse HEAD for the later evidence/handover commit. Older head notes
 below are historical. New code: durable V4 Scheduler binding, actual JSON source
@@ -756,3 +761,37 @@ minutes, hours, days and Monday; same schedule engine/representation, no new NLP
 engine. Model system/tool descriptions explain actual typed condition setup and
 warn that task text alone invokes the model per run. Core/background/exposure
 suite21/0/0 before the additional English regression. Keep original failed receipts.
+
+### V2 cryptographic audit binding — 24 October, PARTIAL
+
+V4 now uses SAME V2 AuditChain/AuditBind, anchor and bundle implementation.
+GoalStore save hooks record actual receipt identities/hashes (including verified
+replacements), filtered telemetry stays on the existing ledger allowlist,
+explicit approval decisions are chained, and background observation/push status
+events store safe identifiers/hashes instead of source bodies or push endpoints.
+Boot, new turns and tool dispatch check chain/anchor integrity. Persistence
+failure is surfaced as AUDIT_INTEGRITY rather than silently swallowed telemetry.
+GET /api/audit requires a paired session; POST initialize/anchor/export also
+requires CSRF. No key is silently rotated/generated at server boot. Explicit
+local audit initialization enables checkpoints on completed turns and observed
+background/push events while that local private key is available. Public export
+reuses V2 bundle verification and never copies private key material. The local
+audit identity is explicitly NOT a trusted production release signer; no external
+TSA/public witness is configured and no existence-in-time proof is claimed.
+
+Fixed genuine V2 anchor hole: a signed old head must match the ACTUAL prefix,
+even when a rewritten internally consistent chain contains MORE rows. Previous
+logic returned ANCHOR_BEHIND without verifying that signed prefix. New regression
+retains real key/signature and rewrites chain+head with a longer forged history;
+it now returns ANCHOR_MISMATCH. Existing full-rewrite diagnostic assertion retained.
+
+V2 anchor/bundle + actual V4 audit integration20/0/0. Agent/history/journal/
+universal controlled regressions43/0/0. Follow-up audit+agent failures17/0/0
+(after surfacing persistence failures); these overlap, do not sum. i18n/check
+separate. No live Ghost audit activation claimed. Earlier restart test remains
+automatic-review blocked by policy; do not bypass via another process API.
+Current running source e45640a; pull of audit source may prepare future startup,
+but cannot establish loaded-module/physical acceptance. Continue original parity
+(memory sync/self-config/reset/heartbeat/graph/team budgets), actual scenarios,
+billing safeguards and signed host/native release gates. Owner requested no more
+questions; preserve unverified external/physical gates instead of inventing PASS.

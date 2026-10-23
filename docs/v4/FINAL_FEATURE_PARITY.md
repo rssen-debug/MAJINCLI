@@ -136,7 +136,7 @@ V2 adjustments cover doctor compatibility, shell-free quoted STT execution, Wind
 | Two-store memory delta synchronization | V1 memory-sync.js excluded; canonical single-host memory covers clients, not separate-store exchange | Add an explicit approved cross-store import/sync workflow with tombstone handling, or obtain an explicit scope decision |
 | Agent self-configuration | V1 majin.js edits V1 config; V4 setup/owner mode cover only part of it | Implement typed V4 configuration changes with validation/approval; never point old tools at the wrong runtime |
 | V1 reset/cleanup actions | Old runtime-wide reset excluded | Provide a V4 preview/backup/confirmed-reset flow for the corresponding persisted state |
-| V2 cryptographic audit anchors/timestamps | Plain V4 receipts/telemetry do not provide equivalent hash-chain anchoring | Integrate the V2 audit chain and configured identity/anchor lifecycle, then verify exported bundles |
+| V2 cryptographic audit anchors/timestamps | PARTIAL: V4 now binds V2 chain/AuditBind to goal receipts, filtered telemetry, explicit consent, background observations and push delivery status. Authenticated local identity/anchor/public export endpoints and configured end-of-turn checkpoints; prefix-rewrite attack fixed | Actual V4 HTTP/file/consent/local signing/public bundle and tamper/boot refusal tests pass. New audit code not yet activated in Ghost's running process; external trusted timestamp/witness remains unconfigured. Local audit key is not production release signing |
 
 Overall parity status: **NOT COMPLETE**. “Excluded with a reason” is not accepted as a substitute for equivalent useful behavior. These gaps remain release blockers under the owner's requested definition of 100%.
 

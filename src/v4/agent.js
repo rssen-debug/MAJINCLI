@@ -157,6 +157,7 @@ export function createAgent({
   tools,
   model,
   telemetry = null,
+  audit = null,
   skills = null,
   access = null,
 }) {
@@ -164,7 +165,8 @@ export function createAgent({
     if (!telemetry) return;
     try {
       telemetry.append(event, payload);
-    } catch {
+    } catch(error) {
+      if(error.code==='AUDIT_INTEGRITY')throw error;
       /* telemetry must never break a turn */
     }
   };
@@ -365,6 +367,7 @@ export function createAgent({
   }
 
   async function executeToolCall({ call, goal, conversationId, emit, attempt = 1, signal = null, turn = null }) {
+    audit?.assertHealthy();
     // A tool called by a SUBAGENT runs while the parent's delegate call is
     // itself mid-flight (goal already WAITING_FOR_TOOL). Letting the child drive
     // the parent state machine produced "illegal transition WAITING_FOR_TOOL ->
@@ -1045,6 +1048,8 @@ export function createAgent({
     const goal = goals.get(pending.goalId);
     if (!goal || goal.state !== STATES.WAITING_FOR_APPROVAL) throw Object.assign(new Error('approval goal is not waiting'), { status: 409 });
     if (approve && !hasApprovalContinuation(pending)) throw Object.assign(new Error('approval checkpoint is invalid or unavailable; no action was executed'), { status: 409 });
+    audit?.assertHealthy();
+    audit?.consent({conversationId,tool:pending.tool,approved:approve});
 
     conversation.pendingApproval = null;
     conversations.save(conversation);
