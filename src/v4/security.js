@@ -99,13 +99,44 @@ export function assertCsrfHeader(req) {
   }
 }
 
-/** Sliding-window limiter. Deterministic clock injection for tests. */
+/**
+ * Sliding-window limiter.
+ *
+ * Bounded on purpose. The naive version (a Map keyed by client, never pruned)
+ * grows for the lifetime of the process: on an always-on host behind a tunnel,
+ * every distinct client address becomes a permanent entry. Two rules keep it
+ * proportional to *active* clients:
+ *   - expired buckets are swept before the table can grow past MAX_BUCKETS
+ *   - if a burst of new clients still fills the table, the oldest buckets are
+ *     dropped (they were about to expire anyway)
+ * The clock is injectable so the sweep is tested deterministically.
+ */
 export class RateLimiter {
+  static MAX_BUCKETS = 10_000;
+
   constructor({ windowMs = 60_000, limits = {}, now = () => Date.now() } = {}) {
     this.windowMs = windowMs;
     this.limits = limits;
     this.now = now;
     this.buckets = new Map();
+    this.sweeps = 0;
+    this.lastSweep = 0;
+  }
+
+  /** Drop buckets whose newest hit is older than the window. */
+  sweep(t = this.now()) {
+    const cutoff = t - this.windowMs;
+    let removed = 0;
+    for (const [id, hits] of this.buckets) {
+      const last = hits[hits.length - 1];
+      if (!hits.length || last <= cutoff) {
+        this.buckets.delete(id);
+        removed += 1;
+      }
+    }
+    if (removed) this.sweeps += 1;
+    this.lastSweep = t;
+    return removed;
   }
 
   /** Throws HttpError(429) when the bucket is exhausted; returns remaining. */
@@ -114,6 +145,22 @@ export class RateLimiter {
     const id = `${bucket}:${key}`;
     const t = this.now();
     const cutoff = t - this.windowMs;
+
+    // Sweep at most once per window: cheap, and it keeps the table proportional
+    // to active clients instead of to every client that ever connected.
+    if (t - this.lastSweep >= this.windowMs) this.sweep(t);
+
+    // Sweep before inserting, so a flood of new keys cannot outrun the cleanup.
+    if (!this.buckets.has(id) && this.buckets.size >= RateLimiter.MAX_BUCKETS) {
+      this.sweep(t);
+      // Still full: this is a genuine burst of distinct clients. Evict the
+      // oldest-inserted entries; Map preserves insertion order.
+      while (this.buckets.size >= RateLimiter.MAX_BUCKETS) {
+        const oldest = this.buckets.keys().next().value;
+        this.buckets.delete(oldest);
+      }
+    }
+
     const hits = (this.buckets.get(id) || []).filter((ts) => ts > cutoff);
     if (max != null && hits.length + cost > max) {
       const retryAfter = Math.max(1, Math.ceil((hits[0] + this.windowMs - t) / 1000));

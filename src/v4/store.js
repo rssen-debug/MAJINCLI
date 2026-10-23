@@ -35,12 +35,28 @@ function writeAtomic(file, value) {
   fs.renameSync(tmp, file);
 }
 
+export const CONVERSATION_CACHE_MAX = 200;
+export const CONVERSATION_LIST_MAX = 100;
+
 export class ConversationStore {
-  constructor({ dir, maxMessages = 400 }) {
+  constructor({ dir, maxMessages = 400, cacheMax = CONVERSATION_CACHE_MAX } = {}) {
     this.dir = dir;
     this.maxMessages = maxMessages;
+    this.cacheMax = cacheMax;
     fs.mkdirSync(dir, { recursive: true });
+    // LRU: insertion order is the recency order because every hit re-inserts.
+    // The file on disk is the source of truth, so eviction never loses data.
     this.cache = new Map();
+  }
+
+  #remember(conv) {
+    this.cache.delete(conv.id);
+    this.cache.set(conv.id, conv);
+    while (this.cache.size > this.cacheMax) {
+      const oldest = this.cache.keys().next().value;
+      this.cache.delete(oldest);
+    }
+    return conv;
   }
 
   #file(id) {
@@ -73,16 +89,19 @@ export class ConversationStore {
       conv.messages = conv.messages.slice(conv.messages.length - this.maxMessages);
     }
     writeAtomic(this.#file(conv.id), conv);
-    this.cache.set(conv.id, conv);
-    return conv;
+    return this.#remember(conv);
   }
 
   get(id) {
-    if (this.cache.has(id)) return this.cache.get(id);
+    if (this.cache.has(id)) {
+      const hit = this.cache.get(id);
+      this.cache.delete(id); // re-insert = most recently used
+      this.cache.set(id, hit);
+      return hit;
+    }
     const conv = readJson(this.#file(id));
     if (!conv || conv.schema !== 'majin.v4.conversation/v1') return null;
-    this.cache.set(id, conv);
-    return conv;
+    return this.#remember(conv);
   }
 
   list() {
@@ -104,7 +123,9 @@ export class ConversationStore {
         last: conv.messages.filter((m) => m.role !== 'system').slice(-1)[0]?.content?.slice(0, 120) || '',
       });
     }
-    return out.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+    // Bounded: the phone's drawer never needs every conversation ever written,
+    // and an unbounded list turns the menu into a full scan of the data dir.
+    return out.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)).slice(0, CONVERSATION_LIST_MAX);
   }
 
   remove(id) {

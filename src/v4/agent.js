@@ -283,22 +283,34 @@ export function createAgent({ config, conversations, goals, tools, model }) {
       throw Object.assign(new Error(`message exceeds ${config.limits.maxMessageChars} characters`), { status: 413 });
     }
 
+    /**
+     * A repeated requestId must never re-run tools (side effects are real), so
+     * the answer is replayed from storage. But storage is bounded: after enough
+     * turns the answer may have been truncated away. Sending an empty replay
+     * would look like MAJIN answered nothing, so that case gets its own status.
+     */
+    const replayOf = (conversationIdForReplay, messageId, found) => {
+      if (found) {
+        emit('replay', { messageId, content: found.content, conversationId: conversationIdForReplay });
+        emit('done', { status: 'replayed', conversationId: conversationIdForReplay, messageId });
+        return { status: 'replayed', conversationId: conversationIdForReplay, messageId };
+      }
+      emit('replay', { messageId, content: '', truncated: true, conversationId: conversationIdForReplay });
+      emit('done', { status: 'already_handled', conversationId: conversationIdForReplay, messageId });
+      return { status: 'already_handled', conversationId: conversationIdForReplay, messageId };
+    };
+
     const inMemory = requestId ? recentRequests.get(requestId) : null;
     if (inMemory?.messageId) {
-      const storedMsg = conversations.get(inMemory.conversationId)?.messages.find((m) => m.id === inMemory.messageId);
-      if (storedMsg) {
-        emit('replay', { messageId: inMemory.messageId, content: storedMsg.content, conversationId: inMemory.conversationId });
-        emit('done', { status: 'replayed', conversationId: inMemory.conversationId, messageId: inMemory.messageId });
-        return { status: 'replayed', conversationId: inMemory.conversationId, messageId: inMemory.messageId };
-      }
+      const conv = conversations.get(inMemory.conversationId);
+      const found = conv?.messages.find((m) => m.id === inMemory.messageId);
+      if (conv) return replayOf(inMemory.conversationId, inMemory.messageId, found);
     }
 
     const prior = conversations.getRequest(conversation.id, requestId);
     if (prior?.status === 'completed' && prior.messageId) {
-      const stored = conversations.get(conversation.id).messages.find((m) => m.id === prior.messageId);
-      emit('replay', { messageId: prior.messageId, content: stored?.content || '' });
-      emit('done', { status: 'replayed', conversationId: conversation.id, messageId: prior.messageId });
-      return { status: 'replayed', conversationId: conversation.id, messageId: prior.messageId };
+      const found = conversations.get(conversation.id).messages.find((m) => m.id === prior.messageId);
+      return replayOf(conversation.id, prior.messageId, found);
     }
 
     conversations.appendMessage(conversation.id, { role: 'user', content: message });

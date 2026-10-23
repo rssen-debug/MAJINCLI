@@ -151,6 +151,21 @@ rollback is reported as `ESCALATE`, not swallowed. `-- --dry` shows the plan and
 The decision logic is tested with an injected runner, including the rollback path and the
 escalation path, so the dangerous branch is exercised before it is ever needed.
 
+## Hardening pass: six defects found by testing the system against itself
+
+No new features in this pass. The target was the failure modes of a host that runs for months.
+
+| Defect | Consequence if shipped | Fix |
+|---|---|---|
+| Rate limiter never evicted buckets | one permanent entry per client address, for the process lifetime | sweep per window + hard cap |
+| Conversation cache never evicted | every conversation stayed in memory | LRU, 200 entries |
+| `list()` returned every conversation file | the drawer got slower as history grew | bounded to 100 |
+| First message of two devices shared the abort key `'new'` | one device silently cancelled the other | one key per turn |
+| Stop no longer stopped the turn | the journal made turns outlive the socket; stop only detached | stop sends the turn id to the server |
+| Repeated request after truncation replayed an empty answer | user sees a blank reply labelled "replayed" | explicit `already_handled`, tools never re-run |
+
+Each one has a test that failed before the fix. That is the only reason to trust the list.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in

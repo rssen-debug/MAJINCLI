@@ -656,11 +656,16 @@ function viewIntents(event, data, intents) {
 
     case 'replay':
       if (data.content) addMessage('assistant', data.content, { meta: t('state.replayed') });
+      else if (data.truncated) addMessage('assistant', t('state.truncated'), { meta: t('state.replayed') });
       break;
 
     case 'done': {
       const text = endAssistantBubble(timeLabel());
       const finalText = text || '';
+      if (data.status === 'already_handled' && !finalText) {
+        // Nothing was re-rendered above: say it once, plainly.
+        addMessage('assistant', t('state.truncated'), { meta: timeLabel() });
+      }
       if (data.status === 'completed') {
         spirit.set('done');
         if (state.tts && finalText) speak(finalText);
@@ -951,8 +956,17 @@ function bindEvents() {
   });
   els.stop.addEventListener('click', async () => {
     cancelSpeech();
-    if (state.conversationId) {
-      api('/api/cancel', { method: 'POST', body: { conversationId: state.conversationId } }).catch(() => {});
+    // The turn now outlives the socket on purpose, so stopping it is a request
+    // to the host — aborting the fetch alone would just detach and let it run.
+    // The turn id is the only handle a client has before it learns the
+    // conversation id, which is exactly the case during a first message.
+    const body = {};
+    if (state.session.turnId) body.turnId = state.session.turnId;
+    else if (state.conversationId) body.conversationId = state.conversationId;
+    if (Object.keys(body).length) {
+      try {
+        await api('/api/cancel', { method: 'POST', body });
+      } catch { /* the local abort below still releases the UI */ }
     }
     state.controller?.abort();
     spirit.set('idle');

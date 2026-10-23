@@ -119,6 +119,8 @@ export function applyEvent(state, event, data) {
       if (data?.content) {
         s.text = String(data.content);
         intents.push({ type: 'append_text', text: String(data.content), replay: true });
+      } else if (data?.truncated) {
+        intents.push({ type: 'replay_truncated' });
       }
       if (data?.conversationId) s.conversationId = data.conversationId;
       break;

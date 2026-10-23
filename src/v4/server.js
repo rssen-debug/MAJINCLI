@@ -319,7 +319,11 @@ export function createV4Server({ config }) {
     // client learns its id (in the `open` event) and can reattach to the very
     // same turn if the connection drops.
     const turn = journal.create({ conversationId: conversationId || 'new' });
-    const controller = agent.beginTurn(conversationId || 'new');
+    // The abort key must be unique per turn. Keying a *first* message by the
+    // literal 'new' meant a second device's first message cancelled the first
+    // device's turn. A known conversation still supersedes its own old turn.
+    const turnKey = conversationId ? `conv:${conversationId}` : `turn:${turn.id}`;
+    const controller = agent.beginTurn(turnKey);
     journal.append(turn, 'open', {
       at: new Date().toISOString(),
       model: agent.modelInfo,
@@ -342,7 +346,7 @@ export function createV4Server({ config }) {
       journal.finish(turn, 'failed');
       return { status: 'failed' };
     }).finally(() => {
-      agent.endTurn(conversationId || 'new', controller);
+      agent.endTurn(turnKey, controller);
     });
 
     // Replay what already happened (normally just `open`), then follow live.
@@ -529,7 +533,15 @@ export function createV4Server({ config }) {
       requireSession(req);
       assertCsrfHeader(req);
       const body = await readJsonBody(req, 4096);
-      const cancelled = agent.cancel(String(body.conversationId || ''));
+      // Accept either: the conversation (superseding its current turn) or the
+      // turn id from the `open` event, which is the only handle a client has
+      // while its very first message is still running.
+      const conversationId = body.conversationId ? String(body.conversationId) : '';
+      const turnId = body.turnId ? String(body.turnId) : '';
+      // `&&`/`||` here would leak '' or '' instead of false; the API promises a boolean.
+      let cancelled = false;
+      if (turnId) cancelled = agent.cancel(`turn:${turnId}`);
+      if (!cancelled && conversationId) cancelled = agent.cancel(`conv:${conversationId}`);
       sendJson(res, 200, { ok: true, cancelled });
     },
 

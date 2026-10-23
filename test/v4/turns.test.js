@@ -167,3 +167,67 @@ test('turn journal: the turn survives the client hanging up (work is not thrown 
     await s.close();
   }
 });
+
+test('turn journal: stop works by turn id, before the client knows the conversation', async () => {
+  const s = await startTestServer();
+  try {
+    const { cookie } = await s.pair();
+    const res = await postChat(s.base, cookie, { text: 'Skriv filen stop1.txt med innehåll: x', requestId: 's1' });
+    const turnId = res.headers.get('x-majin-turn');
+    assert.ok(turnId, 'the turn id is available immediately');
+
+    const cancel = await fetch(`${s.base}/api/cancel`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json', 'x-majin-csrf': '1', origin: s.base },
+      body: JSON.stringify({ turnId }),
+    });
+    const body = await cancel.json();
+    assert.equal(cancel.status, 200);
+    assert.equal(body.cancelled, true, 'the host accepted the stop');
+
+    const events = await readSse(res);
+    const status = events.filter((e) => e.type === 'done').pop().data.status;
+    // The demo brain may finish first; what matters is that a stop is possible
+    // without knowing the conversation id, and that the stream still terminates.
+    assert.ok(['cancelled', 'completed'].includes(status), status);
+  } finally {
+    await s.close();
+  }
+});
+
+test('turn journal: cancelling an unknown turn is a no-op, not an error', async () => {
+  const s = await startTestServer();
+  try {
+    const { cookie } = await s.pair();
+    const cancel = await fetch(`${s.base}/api/cancel`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json', 'x-majin-csrf': '1', origin: s.base },
+      body: JSON.stringify({ turnId: 'turn_does_not_exist' }),
+    });
+    assert.equal(cancel.status, 200);
+    assert.equal((await cancel.json()).cancelled, false);
+  } finally {
+    await s.close();
+  }
+});
+
+test('turn journal: cancel still requires a session and the CSRF header', async () => {
+  const s = await startTestServer();
+  try {
+    const anon = await fetch(`${s.base}/api/cancel`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-majin-csrf': '1', origin: s.base },
+      body: JSON.stringify({ turnId: 'x' }),
+    });
+    assert.equal(anon.status, 401);
+    const { cookie } = await s.pair();
+    const noCsrf = await fetch(`${s.base}/api/cancel`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json', origin: s.base },
+      body: JSON.stringify({ turnId: 'x' }),
+    });
+    assert.equal(noCsrf.status, 403);
+  } finally {
+    await s.close();
+  }
+});
