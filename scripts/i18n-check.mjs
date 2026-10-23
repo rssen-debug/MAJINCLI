@@ -45,6 +45,7 @@ const ALLOW = [
   "resolveRef(ref ||",  // parser-fallback ordinal words are Swedish INPUT vocabulary
   'svlex(',               // job-matcher input vocabulary (CV/job ad words, never shown)
   'path.join(homedir, ',  // desktop folder names we look for, not messages (Skrivbord)
+  'const STOPWORDS = new Set(',  // retrieval stopwords: input vocabulary, never rendered
 ];
 
 // Localization resources hold the product copy by design; they are data, not

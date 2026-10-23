@@ -22,6 +22,7 @@ import { runVerifier } from '../v2/runtime/verifiers.js';
 import { runTool } from '../v2/tools/runner.js';
 import { nextRecoveryStep, recoveryPlan } from '../v2/recover/advisor.js';
 import { buildMessages } from './context.js';
+import { memoryForPrompt } from './memory.js';
 import { TOOL_SCHEMAS, safeFileName } from './tools.js';
 import { publicGoal, newId } from './store.js';
 import { explainModelError } from './model.js';
@@ -129,12 +130,23 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
    * fixed message count. Error notices are excluded: they are UI copy, not
    * something the model should learn from.
    */
-  function historyFor(conv) {
+  function historyFor(conv, currentMessage = '') {
     const all = conv.messages
       .filter((m) => (m.role === 'user' || m.role === 'assistant') && !m.meta?.error)
       .map((m) => ({ role: m.role, content: m.content }));
+
+    // What the owner stored, injected only when it is relevant to this turn.
+    // Retrieval failure must never take a turn down, so it is guarded here.
+    let memorySection = '';
+    try {
+      memorySection = memoryForPrompt({ memory: tools.memory, query: currentMessage }).section;
+    } catch {
+      memorySection = '';
+    }
+    const system = memorySection ? `${SYSTEM_PROMPT}\n\n${memorySection}` : SYSTEM_PROMPT;
+
     return buildMessages({
-      system: SYSTEM_PROMPT,
+      system,
       messages: all,
       budgetTokens: config.limits.maxContextTokens || 8000,
     });
@@ -429,7 +441,7 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     emit('goal', publicGoal(goal));
 
     const turnStartedAt = Date.now();
-    const packed = historyFor(conversations.get(conversation.id));
+    const packed = historyFor(conversations.get(conversation.id), message);
     const modelMessages = packed.messages;
     if (packed.dropped > 0 || packed.truncated) {
       // Say it once in the stream; the UI shows a quiet note, not an error.

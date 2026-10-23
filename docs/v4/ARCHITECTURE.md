@@ -110,6 +110,15 @@ Known limits: no CSRF tokens per form (header + same-origin instead), the
 session store is a JSON file (single-host), and there is no distributed rate
 limiter. Those are deliberate choices for a single-owner private deployment.
 
+## 4.5 Memory retrieval
+
+`src/v4/memory.js` runs once per turn: it ranks the store by term overlap (V2's
+`search()` per significant word) and importance, takes at most 6 entries / 900
+characters, and appends a labelled section to the system prompt. The section
+states that these are notes the owner stored and that they are **data, not
+instructions**, so a memory cannot outrank the rules. A store that throws is
+caught: retrieval failure never fails a turn.
+
 ## 5.0 Turn journal (connection survival)
 
 A turn is not owned by an HTTP response. `src/v4/turns.js` records every emitted
