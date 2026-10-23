@@ -111,9 +111,12 @@ export class PluginWorker {
   }
 
   /** Proxy a tool call into the worker. Never returns a fabricated success. */
-  call(name, input, { timeoutMs = this.callTimeoutMs } = {}) {
+  call(name, input, { timeoutMs = this.callTimeoutMs, signal = null } = {}) {
     if (this.dead || !this.child) {
       return Promise.reject(Object.assign(new Error(`plugin ${this.manifest.name} is not running`), { cls: 'DEPENDENCY_MISSING' }));
+    }
+    if (signal?.aborted) {
+      return Promise.reject(Object.assign(new Error('cancelled before the plugin call started'), { cls: 'CANCELLED', code: 'ABORTED' }));
     }
     const id = ++this.counter;
     return new Promise((resolve, reject) => {
@@ -121,7 +124,21 @@ export class PluginWorker {
         this.pending.delete(id);
         reject(Object.assign(new Error(`plugin tool ${name} timed out after ${timeoutMs}ms`), { cls: 'TIMEOUT' }));
       }, timeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
+      // A cancelled call cannot be un-sent, but it can stop being awaited; and
+      // stopping the whole worker is the only way to stop the code inside it.
+      const onAbort = () => {
+        this.pending.delete(id);
+        clearTimeout(timer);
+        signal.removeEventListener?.('abort', onAbort);
+        this.stop();
+        reject(Object.assign(new Error(`plugin tool ${name} cancelled; its worker was stopped`), { cls: 'CANCELLED', code: 'ABORTED' }));
+      };
+      signal?.addEventListener?.('abort', onAbort, { once: true });
+      this.pending.set(id, {
+        resolve: (v) => { signal?.removeEventListener?.('abort', onAbort); resolve(v); },
+        reject: (e) => { signal?.removeEventListener?.('abort', onAbort); reject(e); },
+        timer,
+      });
       this.child.send({ type: 'call', id, name, input });
     });
   }

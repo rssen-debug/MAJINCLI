@@ -333,7 +333,7 @@ export function createV4Server({ config }) {
     // literal 'new' meant a second device's first message cancelled the first
     // device's turn. A known conversation still supersedes its own old turn.
     const turnKey = conversationId ? `conv:${conversationId}` : `turn:${turn.id}`;
-    const controller = agent.beginTurn(turnKey);
+    const controller = agent.beginTurn(turnKey, { owner: session.id });
     journal.append(turn, 'open', {
       at: new Date().toISOString(),
       model: agent.modelInfo,
@@ -395,7 +395,8 @@ export function createV4Server({ config }) {
     'POST /api/auth/pair': handlePair,
 
     'POST /api/auth/logout': async (req, res) => {
-      const { token } = sessionFromRequest(req);
+      const { token, session } = sessionFromRequest(req);
+      if (session) agent.cancelOwnedBy(session.id);
       if (token) sessions.revokeByToken(token);
       res.setHeader('set-cookie', clearCookie(config.auth.cookieName, { secure: isSecureRequest(req, config) }));
       sendJson(res, 200, { ok: true });

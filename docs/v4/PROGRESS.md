@@ -316,6 +316,31 @@ that test fails on the old code (verified by stashing the fix).
 Two more seams checked and found already sound: a model chosen for a conversation survives a
 reload, and the goal state shown in a reopened conversation is the live one.
 
+## Cancellation now reaches the work
+
+Pressing stop used to detach the client while the tool kept running for up to its full timeout
+(8–20 s, 15 s for plugins), and its side effects landed with no receipt. The UI said cancelled.
+That is the worst kind of lie.
+
+Two causes, both in V4:
+
+1. `executeToolCall` received **no signal at all**. V2's runner calls `def.execute(input)` with one
+   argument and V2 is not ours to change, so V4 now hands the runner a **per-call registry facade**
+   whose `get()` returns a definition bound to this call's `AbortSignal`. No shared state is
+   mutated, so two concurrent turns cannot see each other's signal.
+2. Plugin tools ran in a child process with no way to be stopped. `worker.call()` now accepts a
+   signal; on abort it stops the worker, because the only way to stop code inside a child is to
+   end the child.
+
+A tool that ignores the signal behaves exactly as before — the contract is opt-in, and the test
+uses one that obeys and one that does not.
+
+**Second seam, fixed the same day:** logging out left the turn running to completion. The revoked
+device could not read the result (its cookie is dead, verified with a 401), but the work it asked
+for still landed. `beginTurn` now records which session owns a turn, and logout calls
+`cancelOwnedBy(sessionId)` so a revoked phone's pending work stops too. A test proves one device's
+turns stop while the other's keep running.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in

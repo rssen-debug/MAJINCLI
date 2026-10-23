@@ -190,7 +190,9 @@ export class Kernel {
             }
             const key = `${cap.kind}:${cap.name}`;
             if (this.capabilities.has(key)) throw new KernelError('DUPLICATE_CAPABILITY', `${key} already registered`);
-            const callThrough = (input) => worker.call(cap.name, input);
+            // The signal from a cancelled turn reaches the child process: a
+            // plugin that keeps working after stop would be a silent side effect.
+            const callThrough = (input, ctx = {}) => worker.call(cap.name, input, { signal: ctx.signal || null });
             this.capabilities.set(key, {
               plugin: manifest.name,
               impl: Object.freeze({

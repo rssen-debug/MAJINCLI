@@ -166,7 +166,7 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
    *
    * The budget comes from the advisor, so no class can retry forever.
    */
-  async function executeToolWithRecovery({ call, goal, conversationId, emit }) {
+  async function executeToolWithRecovery({ call, goal, conversationId, emit, signal = null }) {
     const toolName = String(call.name || '');
     const def = tools.registry.get(toolName);
     const retryable = def?.tier === 'read';
@@ -176,7 +176,7 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
 
     for (;;) {
       attempt += 1;
-      const outcome = await executeToolCall({ call, goal, conversationId, emit, attempt });
+      const outcome = await executeToolCall({ call, goal, conversationId, emit, attempt, signal });
       if (outcome.ok || outcome.waiting) return outcome;
       last = outcome;
 
@@ -212,7 +212,30 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     }
   }
 
-  async function executeToolCall({ call, goal, conversationId, emit, attempt = 1 }) {
+  /**
+   * A per-call view of the tool registry that hands the execute function an
+   * AbortSignal.
+   *
+   * V2's runner calls `def.execute(input)` with one argument and V2 is not ours
+   * to change. Rather than mutating the shared definition (unsafe with two
+   * turns running), this facade returns a wrapped definition for THIS call only.
+   * A tool that ignores the signal keeps working exactly as before; one that
+   * honours it can stop when the owner presses stop.
+   */
+  function registryForCall(signal) {
+    return {
+      get(name) {
+        const def = tools.registry.get(name);
+        if (!def) return null;
+        return { ...def, execute: (input) => def.execute(input, { signal }) };
+      },
+      list() {
+        return tools.registry.list();
+      },
+    };
+  }
+
+  async function executeToolCall({ call, goal, conversationId, emit, attempt = 1, signal = null }) {
     const args = parseArgs(call.argsJson);
     if (args === null) {
       return { ok: false, error: 'tool arguments were not valid JSON', code: 'INVALID_JSON', name: call.name };
@@ -236,7 +259,7 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
       result = await runTool(
         { tool: toolName, input: args, callId: call.id },
         {
-          registry: tools.registry,
+          registry: registryForCall(signal),
           approvals,
           mode: 'balanced',
           timeoutMs: config.limits.toolTimeoutMs,
@@ -502,7 +525,7 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
         for (const call of response.toolCalls) {
           if (signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
           toolCallsUsed += 1;
-          const outcome = await executeToolWithRecovery({ call, goal, conversationId: conversation.id, emit });
+          const outcome = await executeToolWithRecovery({ call, goal, conversationId: conversation.id, emit, signal });
           goals.save(goal);
           emit('goal', publicGoal(goal));
 
@@ -848,24 +871,45 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     return { status: 'completed', conversationId, messageId: stored.id };
   }
 
-  function beginTurn(conversationId) {
+  function beginTurn(key, { owner = null } = {}) {
     const controller = new AbortController();
-    if (conversationId) {
-      running.get(conversationId)?.abort();
-      running.set(conversationId, controller);
+    if (key) {
+      running.get(key)?.controller?.abort();
+      running.set(key, { controller, owner });
     }
     return controller;
   }
 
-  function endTurn(conversationId, controller) {
-    if (conversationId && running.get(conversationId) === controller) running.delete(conversationId);
+  function endTurn(key, controller) {
+    const entry = running.get(key);
+    if (key && entry?.controller === controller) running.delete(key);
   }
 
-  function cancel(conversationId) {
-    const controller = running.get(conversationId);
-    if (!controller) return false;
-    controller.abort();
+  function cancel(key) {
+    const entry = running.get(key);
+    if (!entry) return false;
+    entry.controller.abort();
     return true;
+  }
+
+  /**
+   * Stop every turn a revoked session started.
+   *
+   * Logging out used to leave the turn running to completion: the revoked
+   * device could not see the result (its cookie is dead), but the work it asked
+   * for still landed. If an owner revokes a stolen phone, that pending work
+   * should stop too.
+   */
+  function cancelOwnedBy(owner) {
+    if (!owner) return 0;
+    let stopped = 0;
+    for (const [, entry] of running) {
+      if (entry.owner === owner) {
+        entry.controller.abort();
+        stopped += 1;
+      }
+    }
+    return stopped;
   }
 
   /** Change the model for one conversation only (never the global route). */
@@ -887,6 +931,7 @@ export function createAgent({ config, conversations, goals, tools, model, teleme
     beginTurn,
     endTurn,
     cancel,
+    cancelOwnedBy,
     isRunning: (id) => running.has(id),
     modelInfo: model.info,
   };
