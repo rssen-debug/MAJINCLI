@@ -137,3 +137,24 @@ host restart, and the separate repaired integration suite passed 5/0/0. Exact
 909d758 CI failed on the same test: Linux 513/1/7, Windows 519/1/1; runner passed.
 These are not reported as green complete runs. Subsequent focused current-source
 results and latest-head CI must be checked before final acceptance.
+
+
+### Exact 01c97b4 gates and live continuation
+
+All three CI workflows passed at 01c97b4: Linux V4 520/0/7, Windows V4 526/0/1,
+Windows runner successful. Packaged native/cold-start smoke ran on hosted Windows.
+Production signer/channel and Ghost native acceptance remain separate blockers.
+
+The real Go host inspection completed after narrowly inspected one-use process
+and wait approvals; every successful action ran once. Saved OS/CPU JSON matches
+independent Node observation. See `ghost-tool-discovery-resumed.json`; the original
+incomplete attempt is retained. General Ghost per-turn bounds are 12 rounds and
+24 tool calls. Config/key/history preservation checks still have zero mismatches.
+
+Next follow-up isolates V1 browser sessions by V4 goal, preserves consent-page
+state and closes only owned headless browsers on completion/denial/cancellation.
+A real local browser lifecycle fixture passed with an injected planner, explicitly
+not Go or physical-device proof. Shared V2 unused timers are cleared, with natural
+process-exit regression tests. Root legacy run: 1286/1/23; the one BOM-only source
+assertion is repaired and focused installer follow-up passed. A new live Go form
+acceptance harness is prepared; its actual model-driven run remains pending.

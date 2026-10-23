@@ -31,18 +31,18 @@ export async function runTool(callRaw, { registry, approvals, mode = 'balanced',
 
   const t0 = Date.now();
   const timedOut = Symbol('timeout');
-  let out;
+  let out, timer;
   try {
     out = await Promise.race([
       def.execute(inResult.data),
-      new Promise((_, rej) => setTimeout(() => rej(timedOut), timeoutMs)),
+      new Promise((_, rej) => { timer = setTimeout(() => rej(timedOut), timeoutMs); }),
     ]);
   } catch (err) {
     const cls = err === timedOut ? 'TIMEOUT' : (err.cls || 'UNKNOWN');
     telemetry?.append('task.result', { taskId: call.tool, action: `tool:${call.tool}`, durationMs: Date.now() - t0, result: 'failure', errorCls: cls, attempt: 1 });
     if (err === timedOut) throw new ToolError('TIMEOUT', `tool ${call.tool} exceeded ${timeoutMs}ms`, { tool: call.tool });
     throw err instanceof ToolError ? err : new ToolError(cls, String(err.message || err), { tool: call.tool });
-  }
+  } finally { clearTimeout(timer); }
 
   const outResult = def.outputSchema.safeParse(out);
   if (!outResult.success) throw new ToolError('INVALID_TOOL_OUTPUT', `tool ${call.tool} produced schema-mismatching output: ${outResult.error.issues[0]?.message}`, { tool: call.tool });

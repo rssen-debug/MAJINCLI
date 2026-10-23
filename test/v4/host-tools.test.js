@@ -18,6 +18,20 @@ import {
   describeCapabilities, hostCapabilities, registerHostTools, zodFromV1Params,
 } from '../../src/v4/tools/host.js';
 import { tempHome } from './helpers.mjs';
+import { v1Context } from '../../src/v4/tools/host.js';
+import { runInTurn } from '../../src/v4/turn-state.js';
+
+test('host: concurrent goals get isolated V1 sessions and approvals retain the same goal session', async () => {
+  const context = v1Context({ session: 'v4' });
+  assert.equal(context.session, 'v4', 'non-agent callers retain their explicit fallback');
+  const observed = await Promise.all(['goal_A', 'goal_B'].map((id) => runInTurn({ goal: { id } }, async () => {
+    const before = context.session;
+    await new Promise((resolve) => setImmediate(resolve));
+    return [before, context.session];
+  })));
+  assert.deepEqual(observed, [['v4:goal_A', 'v4:goal_A'], ['v4:goal_B', 'v4:goal_B']]);
+  assert.equal(runInTurn({ goal: { id: 'goal_A' } }, () => context.session), 'v4:goal_A', 'resumed checkpoint uses its original browser/job session');
+});
 
 test('host: capability detection is self-consistent on whatever host runs it', async () => {
   const caps = await hostCapabilities({ platform: 'linux' });

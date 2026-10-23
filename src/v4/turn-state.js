@@ -26,3 +26,8 @@ export function runInTurn(state, fn) {
 export function turnState() {
   return storage.getStore() || null;
 }
+
+/** Stable across an approval pause, isolated from other goals and delegates. */
+export function hostSessionId(base = 'v4', state = turnState()) {
+  return state?.goal?.id ? `${base}:${state.goal.id}` : base;
+}

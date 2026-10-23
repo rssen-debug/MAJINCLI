@@ -126,3 +126,12 @@ Actual owner-authorized tool activation: 63 tools; this count alone is not PASS.
 Canonical selection now has deployed real Go write/read and restart evidence
 (`ghost-model-selection.json`), while physical selectors, two eligible models,
 account billing protection and every other Genesis gate remain open.
+
+
+At 01c97b4, real Go host-tool discovery/approved continuation completed with one
+successful receipt per action and independent OS/CPU-file verification. This
+closes that specific continuation defect, not the whole autonomy gate. Exact-head
+Linux/Windows/runner CI passed. The next browser isolation/resource-cleanup and
+reusable live-evaluation follow-up has deterministic and actual local-process
+fixtures; real Go unknown-form acceptance is still pending. Persistent monitoring
+and locked-iPhone Web Push remain FAIL; all other original gaps remain unchanged.

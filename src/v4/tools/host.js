@@ -25,6 +25,7 @@ import { z } from 'zod';
 import { runTool } from '../../v2/tools/runner.js';
 import { searchRegistry } from '../tool-exposure.js';
 import { assertPathsAllowed } from '../path-access.js';
+import { hostSessionId } from '../turn-state.js';
 
 /**
  * The V1 tool modules and the arrays they export.
@@ -411,7 +412,7 @@ export function v1Context({
       file: dataFile,
     }),
     workspaceDir,
-    session,
+    get session() { return hostSessionId(session); },
     // Read at call time, never captured: a folder granted on the phone must be
     // usable on the very next tool call, not after a restart.
     folders,

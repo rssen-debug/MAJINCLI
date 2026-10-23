@@ -310,3 +310,81 @@ Read-only deterministic monitors need durable condition/dedup/outbox metadata,
 bounded retries and restart recovery; actual Web Push still needs implementation
 and owner-granted installed-PWA permission/locked-phone receipt. Preserve all
 original requirements, including meaningful approval details after reload.
+
+
+## Verified execution and browser-isolation follow-up
+
+Latest pushed/deployed source before this follow-up: `01c97b46fa093b4faa368baef294cdcec064add3`.
+All three exact-head CI workflows are GREEN: V4 CI 520 passed/0 failed/7 skipped;
+Windows desktop 526/0/1 including packaging, native-window smoke and packaged
+cold start; Windows runner passed. Generic builder 'signing' log messages do
+not establish an approved production identity; signer/channel and Ghost native
+acceptance remain BLOCKED. Do not mistake hosted CI smoke for Ghost installation.
+
+Live Go host inspection now COMPLETED after two narrowly inspected one-use
+approvals: Node OS/CPU query and its exact exec_wait job. `sys_info`, tools_search,
+exec_backends, exec_start, exec_wait, workspace_write, workspace_read each have
+exactly ONE successful action receipt. Independently verified JSON: win32 and
+four logical CPUs. See `evidence/ghost-tool-discovery-resumed.json`; the original
+incomplete attempt remains in `ghost-tool-discovery.json`. Attempt/start events
+include waiting and resumed dispatches; do not count them as duplicate executions.
+
+General production budget knobs were explicitly set in USER environment to
+12 model rounds / 24 tool calls, rather than resetting budgets or hardcoding this
+task. The durable live goal verifies those bounds. V1 config, keys, original
+history/pairing files remain unchanged (23 hashes match; 39 restored hashes match).
+Supervisor session is now 64738; source child was 17260. Recheck identities before
+stopping anything. Startup and physical acceptance remain separate.
+
+Browser review found V4 was passing static session 'v4' to every adapted V1 tool.
+The follow-up uses the existing AsyncLocalStorage goal ID for stable, isolated
+V1 sessions across consent pauses and delegates. The same original browser engine
+is reused. On task completion/cancellation/denial the owned HEADLESS browser is
+closed and its fleet slot returned; owner-visible windows are preserved. Waiting
+for consent keeps the task page. Two actual local browser processes passed this
+isolation/lifecycle test with an INJECTED planner, not Go. Initial Windows sync
+cleanup had EPERM; asynchronous guarded test cleanup passed. Do not hide that the
+first fixtures failed cleanup, or claim physical/device/model proof from them.
+
+Also fixed the V2 runner's unused deadline timer: successful/throwing/schema-invalid
+calls now release it. Three subprocess tests prove natural process exit before
+an otherwise-unused 30-second timer, while timeout/consent tests still pass.
+Focused browser/host/agent/cancel regression: 175 passed, 0 failed, 5 skips.
+Installer/timer/real-browser-lifecycle follow-up: 17/0/0. Eval client/fixture: 6/0/0.
+Full ROOT legacy after shared-runner change: 1286 passed, 1 failed, 23 skipped;
+only failure was the preexisting ASCII assertion rejecting the PS5 UTF-8 BOM.
+The test now checks ASCII BODY after an optional BOM (not a security bypass);
+installer tests passed in the 17-test follow-up. This is NOT a final green whole
+legacy run. Original benchmark documents were restored; new generated copies are
+in work/genesis-BENCHMARKS.md and work/genesis-SWARM_PERFORMANCE.md.
+
+Two owned failed-test Temp folders remain: majin-goal-browser-oy3bC9 and
+majin-goal-browser-dcZARi beneath Ghost's Local/Temp. Automatic approval review
+REJECTED native PowerShell cleanup as 'blocked by policy', without another reason.
+No alternate delete was attempted after that denial. Do not retry around policy.
+
+Reusable LIVE acceptance client and randomized local form fixture are now under
+`scripts/v4/evals/`. Client uses the real authenticated MAJIN HTTP/SSE pipeline,
+keeps planning in Go, bounds events/approvals, never approves unknown scopes and
+refuses to substitute demo. Cookie is never an argument or evidence value.
+Explicit `--local-owner-home` reads ONLY an existing paired session and host HMAC
+key, creates/rotates nothing, and can target ONLY loopback. Otherwise use an
+existing paired cookie in MAJIN_EVAL_COOKIE; never print it. Unit tests prove the
+local-owner helper does not modify files or forward credentials to a remote host.
+
+The controlled form has randomized field IDs, dynamic team controls, a genuine
+422 server validation step with re-render and cleared upload, actual multipart
+file bytes, one saved receipt and duplicate refusal. Backend fixtures passed;
+LIVE GO FORM ACCEPTANCE HAS NOT RUN YET. No model actions/selectors are scripted.
+Use the CLI only after committing/deploying this follow-up:
+
+```powershell
+node scripts/v4/evals/browser-form.mjs --host http://127.0.0.1:7373 --local-owner-home C:/Users/Ghost/AppData/Local/MAJIN --workspace C:/Users/Ghost/AppData/Local/MAJIN/workspace --source-dir C:/Users/Ghost/AppData/Local/MAJIN-V4-Host --out docs/v4/evidence/genesis-form-attempt-1.json --approve-controlled-actions
+```
+
+This grants one-use approvals ONLY to this isolated fixture's browser operations
+and exact synthetic upload file. It rejects other actions. Keep every failure
+artifact; a rerun requires a NEW evidence output path. A PASS here covers the
+controlled unknown-form/upload/validation chain, not external auth handoff,
+physical mobile execution, cancellation, all A–G or universal success.
+Then continue software build/test/repair and persistent scheduler/heartbeat/push.

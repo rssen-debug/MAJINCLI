@@ -28,7 +28,8 @@ import { TOOL_SCHEMAS, safeFileName, schemasFromRegistry } from './tools.js';
 import { createToolExposure } from './tool-exposure.js';
 import { createTeamTools } from './teams.js';
 import { createGraphTool } from './graph.js';
-import { runInTurn, turnState } from './turn-state.js';
+import { runInTurn, turnState, hostSessionId } from './turn-state.js';
+import { closeFor } from '../core/browser.js';
 import { z } from 'zod';
 import { publicGoal, newId } from './store.js';
 import { explainModelError } from './model.js';
@@ -879,6 +880,12 @@ export function createAgent({
       emit(aborted ? 'cancelled' : 'error', { message: reason, messageId: stored.id, goalId: goal.id });
       emit('done', { status: aborted ? 'cancelled' : 'failed', conversationId: conversation.id, goalId: goal.id });
       return { status: aborted ? 'cancelled' : 'failed', conversationId: conversation.id, goalId: goal.id };
+    } finally {
+      // Keep the page while consent is pending. Completed/cancelled headless
+      // tasks return their browser slot; owner-visible windows remain open.
+      if (goal.state !== STATES.WAITING_FOR_APPROVAL) {
+        await closeFor(hostSessionId('v4', turn), { wait: true, headlessOnly: true });
+      }
     }
   }
 
@@ -1010,9 +1017,14 @@ export function createAgent({
   async function resolveApproval({ conversationId, approve, emit = () => {}, owner = null }) {
     const key = `conv:${conversationId}`;
     if (running.has(key)) throw Object.assign(new Error('conversation is already running'), { status: 409 });
+    const goalId = conversations.get(conversationId)?.pendingApproval?.goalId;
     const controller = beginTurn(key, { owner });
     try { return await continueApproval({ conversationId, approve, emit, signal: controller.signal }); }
-    finally { endTurn(key, controller); }
+    finally {
+      endTurn(key, controller);
+      const goal = goalId ? goals.get(goalId) : null;
+      if (goal && goal.state !== STATES.WAITING_FOR_APPROVAL) await closeFor(hostSessionId('v4', { goal }), { wait: true, headlessOnly: true });
+    }
   }
 
   async function continueApproval({ conversationId, approve, emit, signal }) {

@@ -320,7 +320,7 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     })();
     return b.closed;
   };
-  const b = { session, sessionId, targetId, debuggerUrl: version.webSocketDebuggerUrl, send: null, goto: null, eval: null, close, proc, slot, knownTabs: new Set(bornTabs.map((t) => t.targetId)) };
+  const b = { session, sessionId, targetId, headless: headless !== false, debuggerUrl: version.webSocketDebuggerUrl, send: null, goto: null, eval: null, close, proc, slot, knownTabs: new Set(bornTabs.map((t) => t.targetId)) };
   /* send reads b.sessionId EVERY call — smarttab can re-wire it later */
   const send = (method, params = {}, opts = null) => sendRaw({ sessionId: b.sessionId, method, params }, opts);
   b.send = send;
@@ -386,9 +386,10 @@ export function isOpen(session) {
 }
 
 /** Close this task's browser (if any) and hand its slot back to the fleet. */
-export function closeFor(session, { wait = false } = {}) {
+export function closeFor(session, { wait = false, headlessOnly = false } = {}) {
   const b = sess.get(String(session || 'default'));
   if (!b) return wait ? Promise.resolve(false) : false;
+  if (headlessOnly && b.headless === false) return wait ? Promise.resolve(false) : false;
   let closing;
   try { closing = b.close?.(); } catch { /* gone */ }
   return wait ? Promise.resolve(closing).then(() => true) : true;
