@@ -2,6 +2,13 @@
 
 ## Ghost checkpoint — 24 October 2026, NOT READY
 
+Final observation: exact `2e4e7c59f414a5ba1fdc6c9f946f6c39cf137885`
+passed V4 CI (531/0/7), Windows desktop and runner. A source-independent final
+export encountered a full C drive. Removing only a hash-verified redundant ZIP
+recovered~132MB; retained installer/backup/data are unchanged and host health200.
+Insufficient disk headroom is an additional operational blocker. This final
+documentation follow-up changes no runtime code; its own CI is separate.
+
 Installed code: `527b021d8077d1aabf1ea8ef7bb764d3caaf58ca`.
 See [continuation handover](HANDOVER_CONTINUE.md) for the full original and
 Genesis requirements and [checkpoint evidence](evidence/genesis-form-checkpoint.json).

@@ -471,3 +471,24 @@ production ordering/reconciliation rule was changed and the original100-chat
 cap assertion remains. Agent suite15/0/0 after correction. Runner40030665849
 passed; Windows40030665852 was still in progress at this observation. Keep this
 failure record even if the next exact-head CI passes.
+
+### Final observed CI and storage incident, 24 October
+
+Exact2e4e7c59f414a5ba1fdc6c9f946f6c39cf137885 now has all THREE CI runs
+successful: V4 run40031125742/job120679344820 (538tests,531pass,0fail,7skip),
+runner40031125751, Windows desktop40031125762/job120679486738. Local syntax
+632/632 and i18n0/326files. PR401 verified open/draft/unmerged with matching head.
+This does not turn any failed live form or physical/production gate into PASS.
+
+Final status export hit ENOSPC: C drive had zero free bytes. A redundant download
+`work/alpha3-ci.zip` was removed ONLY AFTER all26 archive entries were SHA256
+matched against retained extracted files, including the installer/evidence.
+Recovered~132MB; latest free131784704bytes. Original installer, private backup,
+credentials, history and personal files retained. No removal of the two previously
+policy-denied Temp directories was retried. Their combined/other test temp data
+was inspected read-only, not deleted. The source host remains200 healthy and all23
+original selected file hashes still match;39 restore hashes remain identical.
+Disk capacity is now an ADDITIONAL NOT READY operational blocker; no claim of
+stable sustained writes/monitoring under this low-space condition. A zero-byte
+failed output export is being replaced with a validated final status receipt in
+outputs. Do not count it as a valid report until JSON parsing succeeds.
