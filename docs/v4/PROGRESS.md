@@ -163,6 +163,7 @@ No new features in this pass. The target was the failure modes of a host that ru
 | First message of two devices shared the abort key `'new'` | one device silently cancelled the other | one key per turn |
 | Stop no longer stopped the turn | the journal made turns outlive the socket; stop only detached | stop sends the turn id to the server |
 | Repeated request after truncation replayed an empty answer | user sees a blank reply labelled "replayed" | explicit `already_handled`, tools never re-run |
+| Goal store retained every goal object forever | memory grew with every task ever run | bounded cache; only non-executing goals are evicted |
 
 Each one has a test that failed before the fix. That is the only reason to trust the list.
 

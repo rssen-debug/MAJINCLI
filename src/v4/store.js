@@ -14,7 +14,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Goal } from '../v2/runtime/goal.js';
-import { STATES } from '../v2/runtime/states.js';
+import { STATES, TERMINAL } from '../v2/runtime/states.js';
 
 export function newId(prefix) {
   return `${prefix}_${Date.now().toString(36)}_${crypto.randomBytes(6).toString('hex')}`;
@@ -182,33 +182,76 @@ export class ConversationStore {
  * honest crash story: a goal saved as RUNNING when the process died did not
  * complete, and is marked BLOCKED (not silently resumed and not reported done).
  */
+export const GOAL_CACHE_MAX = 200;
+
+/**
+ * States where a goal is actively being mutated by a turn. Those objects must
+ * stay in memory; everything else is safely reloadable from disk (including
+ * BLOCKED, which a resume loads fresh on purpose).
+ */
+const ACTIVE_STATES = new Set([
+  STATES.RUNNING,
+  STATES.WAITING_FOR_TOOL,
+  STATES.WAITING_FOR_APPROVAL,
+  STATES.VERIFYING,
+  STATES.RECOVERING,
+]);
+
 export class GoalStore {
-  constructor({ dir }) {
+  constructor({ dir, cacheMax = GOAL_CACHE_MAX }) {
     this.dir = dir;
+    this.cacheMax = cacheMax;
     fs.mkdirSync(dir, { recursive: true });
+    // Live goal objects are a cache, not a registry: they exist so a turn keeps
+    // mutating one instance. Loading is cheap and the file is the truth, so the
+    // map is bounded like the conversation cache. Nothing is lost on eviction.
     this.live = new Map();
   }
 
-  track(goal) {
+  #remember(goal) {
+    this.live.delete(goal.id);
     this.live.set(goal.id, goal);
+    while (this.live.size > this.cacheMax) {
+      // Only finished goals are evicted: an in-flight goal is the object an
+      // active turn is mutating, and dropping it would orphan running work.
+      // Finished goals reload from disk cheaply.
+      const evictable = [...this.live.entries()].find(([id, g]) => id !== goal.id && !ACTIVE_STATES.has(g.state));
+      if (evictable) {
+        this.live.delete(evictable[0]);
+        continue;
+      }
+      // Everything is actively executing. That is a burst, not normal operation:
+      // allow a bounded overshoot rather than losing live work.
+      if (this.live.size <= this.cacheMax * 4) break;
+      const oldest = this.live.keys().next().value;
+      if (oldest === goal.id) break;
+      this.live.delete(oldest);
+    }
     return goal;
+  }
+
+  track(goal) {
+    return this.#remember(goal);
   }
 
   save(goal) {
     goal.save(this.dir);
-    this.live.set(goal.id, goal);
-    return goal;
+    return this.#remember(goal);
   }
 
   get(id) {
     if (!/^goal_[a-z0-9_]+$/.test(String(id))) return null;
-    if (this.live.has(id)) return this.live.get(id);
+    if (this.live.has(id)) {
+      const hit = this.live.get(id);
+      this.live.delete(id);
+      this.live.set(id, hit);
+      return hit;
+    }
     const file = path.join(this.dir, `${id}.json`);
     if (!fs.existsSync(file)) return null;
     try {
       const goal = Goal.load(file);
-      this.live.set(id, goal);
-      return goal;
+      return this.#remember(goal);
     } catch {
       return null;
     }

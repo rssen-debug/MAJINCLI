@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 183
-# pass 182
+# tests 186
+# pass 185
 # skipped 1
 # fail 0
 # skipped 0
@@ -46,6 +46,7 @@ $ npm run v4:test
 | `test/v4/backup.test.js` | 11 | round trip of a real data dir, tampering, missing/unlisted files, key leakage, unknown schema refused, dry run, overwrite refusal, version guard |
 | `test/v4/upgrade.test.js` | 8 | clean upgrade, up-to-date, rollback on a failed gate, escalation when rollback fails, fetch/checkout classification |
 | `test/v4/leaks.test.js` | 7 | bounded rate limiter and conversation cache, cache eviction loses nothing, bounded listing, abort-key collision, truncated replay |
+| `test/v4/leaks2.test.js` | 3 | bounded goal cache, evicted goals reload from disk intact, in-flight goals are never evicted |
 
 ## 2. Repository gates
 
@@ -91,6 +92,7 @@ POST /api/chat  "Skriv filen valkomst.txt med innehåll: Hej från MAJIN"
 | First message of two devices shared the abort key `'new'`, so one cancelled the other | `leaks.test.js` | one unique key per turn; a known conversation still supersedes its own turn |
 | Pressing stop no longer stopped the turn (the journal made it outlive the socket) | `turns.test.js` | stop sends `turnId` to `/api/cancel`; the API accepts a turn id or a conversation id |
 | A repeated request whose answer had been truncated replayed an empty message | `leaks.test.js` | explicit `already_handled` status instead of a blank answer; tools still never re-run |
+| The goal store kept every goal object in memory for the process lifetime | `leaks2.test.js` | bounded cache that only evicts goals which are not actively executing |
 
 ## 3.2 Browser attempt, documented
 
