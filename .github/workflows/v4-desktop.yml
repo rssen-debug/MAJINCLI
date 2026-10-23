@@ -44,6 +44,8 @@ jobs:
         run: node scripts/v4/desktop-smoke.mjs
         env:
           MAJIN_V4_DESKTOP_EXE: ${{ github.workspace }}\desktop\dist\win-unpacked\MAJIN V4.exe
+      - name: Cold-start packaged host without a system Node installation
+        run: node scripts/v4/desktop-cold-smoke.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

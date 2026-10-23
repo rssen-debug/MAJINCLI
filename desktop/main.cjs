@@ -32,14 +32,22 @@ async function healthy() {
 }
 
 function startHost() {
-  if (launchAttempted || !['127.0.0.1', 'localhost'].includes(new URL(origin).hostname)) return;
+  if (launchAttempted || new URL(origin).protocol !== 'http:'
+    || !['127.0.0.1', 'localhost'].includes(new URL(origin).hostname)) return;
   if (process.env.MAJIN_V4_DESKTOP_NO_HOST === '1') return;
   launchAttempted = true;
-  const child = spawn(process.execPath, [path.join(hostRoot, 'scripts/v4/supervise.mjs'),
+  const nodeExecutable = app.isPackaged ? path.join(hostRoot, 'runtime/node.exe') : 'node';
+  const child = spawn(nodeExecutable, [path.join(hostRoot, 'scripts/v4/desktop-host.mjs'),
     '--port', new URL(origin).port || '80', '--host', new URL(origin).hostname], {
     cwd: hostRoot,
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-    detached: true, windowsHide: true, stdio: 'ignore',
+    env: process.env,
+    detached: true, windowsHide: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+  });
+  child.on('message', (message) => {
+    if (message?.type === 'pairing' && /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(message.code || '')) {
+      dialog.showMessageBox(window, { type: 'info', title: 'Pair MAJIN V4',
+        message: 'Your one-time pairing code', detail: message.code + '\nEnter it in MAJIN on your trusted devices. Keep this code private.' });
+    }
   });
   child.on('error', (err) => dialog.showErrorBox('MAJIN host', err.message));
   child.unref();

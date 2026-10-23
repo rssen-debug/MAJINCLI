@@ -63,7 +63,7 @@ test('sandbox: a plugin tool runs in a child process and returns its result', as
     assert.equal(out.echo, 42);
     assert.notEqual(out.pid, process.pid, 'tool ran in a different process');
   } finally {
-    kernel.shutdownWorkers();
+    await kernel.shutdownWorkers();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
@@ -80,7 +80,7 @@ test('sandbox: the host survives a plugin that crashes on activation', async () 
     // host is still usable
     assert.equal(kernel.summary().apiVersion, 1);
   } finally {
-    kernel.shutdownWorkers();
+    await kernel.shutdownWorkers();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
@@ -95,7 +95,7 @@ test('sandbox: a plugin that hangs on activate is killed, not waited on forever'
     assert.ok(Date.now() - started < 5000);
     assert.equal(results[0].status, 'failed');
   } finally {
-    kernel.shutdownWorkers();
+    await kernel.shutdownWorkers();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
@@ -118,9 +118,9 @@ test('sandbox: a failing plugin is quarantined with a written reason', async () 
     const kernel2 = kernelFor(root);
     const again = await kernel2.loadPlugins(path.join(root, 'plugins'));
     assert.deepEqual(again, []);
-    kernel2.shutdownWorkers();
+    await kernel2.shutdownWorkers();
   } finally {
-    kernel.shutdownWorkers();
+    await kernel.shutdownWorkers();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
@@ -136,7 +136,7 @@ test('sandbox: an undeclared capability fails inside the worker and is quarantin
     assert.match(results[0].error, /not declared/);
     assert.equal(kernel.list().length, 0);
   } finally {
-    kernel.shutdownWorkers();
+    await kernel.shutdownWorkers();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
@@ -151,7 +151,7 @@ test('sandbox: a write tool without workspace permission is refused before it ca
     assert.equal(results[0].status, 'failed');
     assert.match(results[0].error, /workspace/);
   } finally {
-    kernel.shutdownWorkers();
+    await kernel.shutdownWorkers();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
@@ -168,7 +168,7 @@ test('sandbox: a tool that throws is reported honestly with a class', async () =
     await kernel.loadPlugins(path.join(root, 'plugins'));
     await assert.rejects(() => kernel.get('tool', 'ping').execute({}), (err) => err.cls === 'ELEMENT_NOT_FOUND');
   } finally {
-    kernel.shutdownWorkers();
+    await kernel.shutdownWorkers();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

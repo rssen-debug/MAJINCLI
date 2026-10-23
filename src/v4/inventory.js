@@ -21,6 +21,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { V1_LANES, LANE_EXPORTS, hostCapabilities } from './tools/host.js';
 
 /**
@@ -206,7 +207,7 @@ export async function readV1Modules({ root, reusedFiles = new Map() }) {
     .sort();
   const modules = [];
   for (const file of files) {
-    const mod = await import(path.join(dir, file)).catch((err) => ({ __error: String(err?.message || err) }));
+    const mod = await import(pathToFileURL(path.join(dir, file)).href).catch((err) => ({ __error: String(err?.message || err) }));
     if (mod.__error) {
       modules.push({ file, error: mod.__error, tools: [], decision: { status: 'undecided', reason: null } });
       continue;

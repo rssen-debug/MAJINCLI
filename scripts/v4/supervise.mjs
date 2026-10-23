@@ -64,6 +64,7 @@ const supervisor = new Supervisor({
   healthUrl,
   logFile,
 });
+supervisor.log('launcher_started', { pid: process.pid });
 
 function line(text) {
   process.stdout.write(`${text}\n`);

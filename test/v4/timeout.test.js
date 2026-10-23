@@ -134,7 +134,7 @@ test('timeout: a plugin worker is stopped when its call deadline passes', async 
     assert.ok(Date.now() - started < 5000, 'the call ended near its deadline');
     assert.equal(worker.dead, true, 'the worker was stopped, so no late effect can land');
   } finally {
-    worker.stop();
+    await worker.stop();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

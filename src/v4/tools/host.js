@@ -36,6 +36,19 @@ import { assertPathsAllowed } from '../path-access.js';
 const NET_TOOLS = Object.freeze(['net.dns', 'net.tcp', 'net.http', 'net.serve', 'net.serve_stop']);
 const SCREEN_TOOLS = Object.freeze(['screen.capture', 'screen.claim', 'sys.notify']);
 
+export async function interactiveWindowsSession(env = process.env) {
+  if (/^services$/i.test(env.SESSIONNAME || '')) return false;
+  if (env.SESSIONNAME) return true;
+  if (process.platform !== 'win32') return false;
+  // Desktop launchers and Scheduled Tasks often omit SESSIONNAME. Ask Windows
+  // instead of silently disabling a working browser in those sessions.
+  const { spawnSync } = await import('node:child_process');
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    '[Environment]::UserInteractive -and ([Diagnostics.Process]::GetCurrentProcess().SessionId -gt 0)'],
+  { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+  return result.status === 0 && result.stdout.trim() === 'True';
+}
+
 export const V1_LANES = Object.freeze({
   // Windows-only, because every tool drives the interactive desktop.
   desktop: { module: '../../core/tools/wincontrol.js', export: 'winControlTools', tierDefault: 'process', windowsOnly: true },
@@ -141,13 +154,11 @@ export async function hostCapabilities({
   // a real browser exists. Reported separately so the owner is not told the web
   // lane is fully functional when half of it cannot launch.
   caps.browserRuntime = { available: false, reason: null };
-  if (platform === 'win32' && !env.SESSIONNAME) {
+  if (platform === 'win32' && !await interactiveWindowsSession(env)) {
     caps.browserRuntime.reason = 'no interactive Windows session detected (service sessions cannot show a browser)';
   } else {
     const bin = await browserBinary({ platform, env });
-    const pw = await load('playwright');
     if (!bin) caps.browserRuntime.reason = 'no browser binary found (npx playwright install chromium)';
-    else if (pw.__error) caps.browserRuntime.reason = 'playwright is not installed';
     else {
       caps.browserRuntime.available = true;
       caps.browserRuntime.binary = bin;

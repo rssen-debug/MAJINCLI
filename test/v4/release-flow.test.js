@@ -68,7 +68,8 @@ test('setup: --check changes nothing and reports what is missing', () => {
     const before = fs.existsSync(path.join(home, 'v4', 'pairing.json'));
     const res = run('setup.mjs', ['--check'], { MAJIN_HOME: home });
     assert.match(res.out, /check only: nothing was changed/);
-    assert.match(res.out, /Node 22/);
+    assert.ok(res.out.includes(`Node ${process.versions.node}`), 'setup must report the actual runtime version');
+    assert.match(res.out, />= 22 required/);
     assert.equal(fs.existsSync(path.join(home, 'v4', 'pairing.json')), before, 'check mode wrote a pairing file');
   } finally {
     fs.rmSync(home, { recursive: true, force: true });

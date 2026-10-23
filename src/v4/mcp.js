@@ -146,6 +146,19 @@ export class McpServer {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
+    const transportError = (error) => {
+      this.dead = true;
+      this.exitReason = error.message;
+      for (const [, entry] of this.pending) {
+        clearTimeout(entry.timer);
+        entry.reject(new McpError('SERVER_DIED', `MCP transport closed: ${error.message}`));
+      }
+      this.pending.clear();
+    };
+    this.child.on('error', transportError);
+    this.child.stdin?.on('error', transportError);
+    this.child.stdout?.on('error', transportError);
+    this.child.stderr?.on('error', transportError);
     this.child.stdout?.setEncoding?.('utf8');
     this.child.stdout?.on('data', (chunk) => {
       this.buffer += chunk;

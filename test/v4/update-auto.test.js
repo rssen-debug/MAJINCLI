@@ -62,6 +62,7 @@ function copyRepo(dest) {
       if (!rel) return true;
       if (rel === '.git' || rel.startsWith(`.git${path.sep}`)) return false;
       if (rel === 'node_modules' || rel.startsWith(`node_modules${path.sep}`)) return false;
+      if (rel === 'desktop' || rel.startsWith(`desktop${path.sep}`)) return false;
       return true;
     },
   });
@@ -113,7 +114,7 @@ function makeOldHost(home, name) {
   copyRepo(live);
   // A real installation has installed dependencies. They are deliberately NOT
   // part of a release, and the activation must carry them across.
-  fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(live, 'node_modules'), 'dir');
+  fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(live, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   const pkg = JSON.parse(fs.readFileSync(path.join(live, 'package.json'), 'utf8'));
   const released = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
   pkg.version = '3.9.0';
