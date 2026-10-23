@@ -105,6 +105,14 @@ two messages that must stay in **one** conversation.
 That test would have caught the dropped-conversation-id bug the day it was written. Canvas,
 speech and service workers are stubbed (jsdom has none); the application code is not.
 
+The three ways a phone actually fails are covered too:
+
+| Scenario | What the test proves |
+|---|---|
+| Host unreachable | an honest error appears and the composer works again — no stuck "streaming" state |
+| Session expired mid-turn | the pairing gate re-opens with a reason instead of failing silently |
+| Connection lost **after** `open` | the client reattaches to the same turn and shows the host's real answer, not a host-failure message, and the work exists exactly once on disk |
+
 jsdom is a devDependency, so this runs in CI instead of being a local curiosity.
 
 ## What a real browser would add (and why it is still unearned)

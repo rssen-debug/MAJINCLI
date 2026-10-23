@@ -100,16 +100,54 @@ async function bootApp() {
   window.eval(PRELUDE);
 
   // Cookies: jsdom's own fetch is not used; the session cookie is forwarded here.
+  // `hooks` lets a test break the network or expire the session on purpose.
   let cookie = '';
+  const hooks = { dropChatOnce: false, expireSession: false, dropEveryChat: false, dropStreamAfterOpen: false };
   const realFetch = globalThis.fetch;
   window.fetch = async (input, init = {}) => {
     const url = typeof input === 'string' ? input : input.url;
     const absolute = url.startsWith('http') ? url : `${server.base}${url}`;
+    const isChat = url.startsWith('/api/chat') && !url.startsWith('/api/chat/stream');
+
+    if (isChat && (hooks.dropChatOnce || hooks.dropEveryChat)) {
+      hooks.dropChatOnce = false; // exactly one failure, like a network blip
+      throw new TypeError('Failed to fetch');
+    }
+
     const headers = { ...(init.headers || {}) };
     if (cookie) headers.cookie = cookie;
+    if (hooks.expireSession && isChat) headers.cookie = 'majin_v4=expired.invalid';
     const res = await realFetch(absolute, { ...init, headers });
     const setCookie = res.headers.get('set-cookie');
     if (setCookie) cookie = setCookie.split(';')[0];
+
+    // Drop the stream *after* the `open` event: this is the real-world case the
+    // journal exists for, because by then the client knows the turn id and can
+    // reattach. Failing before `open` can only ever be an error message.
+    if (isChat && hooks.dropStreamAfterOpen && res.body) {
+      hooks.dropStreamAfterOpen = false;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let seenOpen = false;
+      const patched = new ReadableStream({
+        async pull(controller) {
+          const { value, done } = await reader.read();
+          if (done) {
+            controller.close();
+            return;
+          }
+          const text = decoder.decode(value, { stream: true });
+          controller.enqueue(value);
+          if (!seenOpen && text.includes('event: open')) {
+            seenOpen = true;
+            // The next read behaves like a radio that went away.
+            controller.error(new TypeError('network lost'));
+          }
+        },
+      });
+      return new Response(patched, { status: res.status, headers: res.headers });
+    }
+
     return res;
   };
 
@@ -139,6 +177,7 @@ async function bootApp() {
     document: window.document,
     server,
     errors,
+    hooks,
     get cookie() {
       return cookie;
     },
@@ -269,6 +308,109 @@ test('client: the composer disables send while a turn is running and restores it
     await until(() => app.document.querySelector('#stop-btn').hidden === true, { label: 'turn to finish', timeoutMs: 15_000 });
     assert.equal(app.document.querySelector('#send-btn').hidden, false, 'send comes back');
     assert.equal(input.value, '', 'the composer was cleared');
+  } finally {
+    await app.close();
+  }
+});
+
+/* ------------------------------------------------------- failure paths -- */
+
+/** Pair the app and return a helper that sends one message. */
+async function paired(app) {
+  await until(() => visible(app.document.querySelector('#gate')), { label: 'gate' });
+  app.document.querySelector('#gate-code').value = app.server.context.pairingFresh;
+  app.document.querySelector('#gate-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+  await until(() => app.document.querySelector('#gate').hidden, { label: 'paired' });
+  return async (text) => {
+    const input = app.document.querySelector('#input');
+    input.value = text;
+    input.dispatchEvent(new app.window.Event('input', { bubbles: true }));
+    app.document.querySelector('#composer').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+  };
+}
+
+test('client: a network failure mid-send is reported, and the UI does not hang', { skip }, async () => {
+  const app = await bootApp();
+  try {
+    const send = await paired(app);
+    app.hooks.dropEveryChat = true; // the host is unreachable
+    await send('Skriv filen nät.txt med innehåll: x');
+
+    await until(() => {
+      const bodies = [...app.document.querySelectorAll('.msg[data-role="assistant"] .msg-body')];
+      return bodies.some((b) => /nådde inte värden|host/i.test(b.textContent));
+    }, { label: 'an honest network error', timeoutMs: 12_000, dom: () => app.document.querySelector('#thread').innerHTML.slice(0, 700) });
+
+    // the composer must be usable again, not stuck in "streaming"
+    await until(() => app.document.querySelector('#stop-btn').hidden === true, { label: 'the turn to end', timeoutMs: 12_000 });
+    assert.equal(app.document.querySelector('#send-btn').hidden, false);
+    assert.equal(app.document.querySelector('#composer').dataset.streaming, 'false');
+  } finally {
+    await app.close();
+  }
+});
+
+test('client: an expired session re-opens the pairing gate instead of failing silently', { skip }, async () => {
+  const app = await bootApp();
+  try {
+    const send = await paired(app);
+    app.hooks.expireSession = true;
+    await send('Skriv filen utgangen.txt med innehåll: x');
+
+    await until(() => app.document.querySelector('#gate').hidden === false, {
+      label: 'the gate to reappear',
+      timeoutMs: 12_000,
+      dom: () => app.document.body.innerHTML.slice(0, 500),
+    });
+    assert.match(app.document.querySelector('#gate-error').textContent, /gått ut|anslut/i);
+  } finally {
+    await app.close();
+  }
+});
+
+test('client: a connection lost after `open` is picked back up, and the answer still arrives', { skip }, async () => {
+  const app = await bootApp();
+  try {
+    const send = await paired(app);
+    // The turn starts, the client learns turnId, then the stream dies. This is
+    // the case the turn journal exists for.
+    app.hooks.dropStreamAfterOpen = true;
+    await send('Skriv filen aterkomst.txt med innehåll: kvar');
+
+    await until(() => app.document.querySelector('#stop-btn').hidden === true, {
+      label: 'the turn to end',
+      timeoutMs: 25_000,
+      dom: () => app.document.querySelector('#thread').innerHTML.slice(0, 800),
+    });
+
+    const bodies = [...app.document.querySelectorAll('.msg[data-role="assistant"] .msg-body')].map((b) => b.textContent);
+    assert.ok(bodies.length > 0, 'an assistant message exists');
+    assert.ok(
+      bodies.some((b) => /aterkomst\.txt/.test(b)),
+      `the answer must be the real one from the host, got: ${JSON.stringify(bodies)}`,
+    );
+    assert.ok(
+      !bodies.some((b) => /nådde inte värden/.test(b)),
+      'a reconnectable drop must not be reported as a host failure',
+    );
+    assert.equal(app.document.querySelector('#send-btn').hidden, false, 'composer is usable');
+    // and the work exists on the host exactly once
+    const fsMod = await import('node:fs');
+    const ws = path.join(app.server.home, 'workspace');
+    assert.deepEqual(fsMod.readdirSync(ws).filter((f) => f.startsWith('aterkomst')), ['aterkomst.txt']);
+  } finally {
+    await app.close();
+  }
+});
+
+test('client: the offline bar is shown when the device reports no network', { skip }, async () => {
+  const app = await bootApp();
+  try {
+    await until(() => visible(app.document.querySelector('#gate')), { label: 'gate' });
+    app.window.dispatchEvent(new app.window.Event('offline'));
+    assert.equal(app.document.querySelector('#offline-bar').hidden, false, 'the bar is visible');
+    app.window.dispatchEvent(new app.window.Event('online'));
+    assert.equal(app.document.querySelector('#offline-bar').hidden, true, 'and it clears again');
   } finally {
     await app.close();
   }
