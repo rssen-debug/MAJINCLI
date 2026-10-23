@@ -645,8 +645,9 @@ input[type="checkbox"] { accent-color: var(--pink); width: 18px; height: 18px; }
 /* ------------------------------------------------------------ model list -- */
 
 .model-list { list-style: none; margin: var(--s3) 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+#model-search { width: 100%; min-width: 0; padding: 9px 12px; color: var(--text); background: transparent; border: 1px solid var(--text-mute); border-radius: var(--r-sm); font: inherit; }
 .model-item {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; overflow-wrap: anywhere;
   width: 100%; padding: 11px 12px;
   border-radius: var(--r-sm);
   border: 1px solid transparent;
@@ -666,7 +667,7 @@ input[type="checkbox"] { accent-color: var(--pink); width: 18px; height: 18px; }
 }
 .model-status {
   font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase;
-  color: var(--text-mute); white-space: nowrap;
+  color: var(--text-mute); white-space: normal; text-align: left;
 }
 .model-status[data-status="verified"] { color: var(--ok); }
 .model-status[data-status="missing-key"] { color: var(--err); }

@@ -12,6 +12,7 @@
 import { complete as v1Complete } from '../core/provider/chat.js';
 import { safeFileName } from './tools.js';
 import { resolveRouteForModel, recordLiveResult } from './models.js';
+import { readModelSelection, assertModelBillingAuthorized } from './model-selection.js';
 import { t } from './ui/strings.js';
 
 export const DEMO_MODEL = 'demo-brain';
@@ -160,6 +161,8 @@ export function createModelClient(config, { workspaceDir } = {}) {
 
   /** Resolve a catalog model id to a route; null when not authorised. */
   function routeForModel(modelId) {
+    const selection = readModelSelection({ home: config.paths.home });
+    if (selection.persisted) modelId = selection.modelId;
     if (!modelId) return defaultRoute;
     return resolveRouteForModel({
       home: config.paths.home,
@@ -171,16 +174,23 @@ export function createModelClient(config, { workspaceDir } = {}) {
 
   function infoFor(modelId) {
     const route = routeForModel(modelId);
-    if (!route) return modelInfo(config);
+    if (!route) {
+      const selection = readModelSelection({ home: config.paths.home });
+      return selection.persisted ? { demo: false, provider: 'unavailable', model: selection.modelId, label: 'Selected model unavailable' } : modelInfo(config);
+    }
     return { demo: false, provider: route.providerName, model: route.model, label: `${route.label} · ${route.model}` };
   }
 
   return {
-    info: modelInfo(config),
+    get info() { return infoFor(null); },
     infoFor,
     routeForModel,
     async chat({ messages, tools = [], signal, onEvent, modelId = null }) {
       const route = routeForModel(modelId);
+      const selection = readModelSelection({ home: config.paths.home });
+      const requestedId = selection.persisted ? selection.modelId : modelId;
+      if (requestedId && !route) throw new Error('Selected model is unavailable. No fallback was attempted.');
+      if (route && requestedId) assertModelBillingAuthorized({ home: config.paths.home, modelId: requestedId, base: defaultRoute });
       const demo = !route;
       if (demo) {
         const res = await demoBrain({

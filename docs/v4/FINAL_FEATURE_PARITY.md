@@ -97,3 +97,22 @@ Overall parity status: **NOT COMPLETE**. “Excluded with a reason” is not acc
 V1 src/cli/majin.js launches an installed Edge/Chrome using --app. It does not produce the required independent desktop package. Electron was selected to reuse the exact server-served UI while providing a maintained native window, persistent isolated session, standard file dialogs, high-DPI window behavior and a Windows installer. Its larger startup/memory footprint is a tradeoff; this audit does not claim a measured startup advantage over WebView2/Tauri.
 
 The renderer has no Node integration, enables context isolation and sandboxing, restricts navigation/popups and prompts for same-origin audio. These controls follow the [Electron security checklist](https://www.electronjs.org/docs/latest/tutorial/security/). The per-user assisted installer follows [electron-builder NSIS options](https://www.electron.build/docs/nsis/). The packaged host uses a separately bundled signed Node executable, so plugin/MCP child processes do not depend on Electron-specific environment flags.
+
+
+## Genesis continuation — explicit acceptance status (2026-10-23)
+
+These additions retain every original parity row above. No new capability is
+considered complete merely because unit tests pass.
+
+| Requirement | Status | Evidence / exact remaining work |
+| --- | --- | --- |
+| Shared durable model selection | PARTIAL | Versioned V4 store, endpoint-bound cost authorization, two-client conflict/restart/HTTP routing tests, Edge + WebKit mobile/desktop UI tests; deployment and physical clients pending at this milestone |
+| Go versus Zen / catalogue metadata | PARTIAL | Exact endpoint identity, stale catalogue preservation, optional source/time/context/tool metadata; actual account entitlements and limits unverified |
+| Included model default / two eligible Go models | BLOCKED | Working owner Go route preserved; other model costs require verified entitlement or explicit authorization. No fabricated FREE/included label |
+| Model search / included filter / cost warning | PARTIAL | Two real local browser engines pass; included filter intentionally empty for unknown entitlement; physical app acceptance open |
+| Sentence-streamed narrator | PARTIAL | Same Kokoro/am_adam deployed at fffa918; loopback first segment 4270 ms vs full WAV 11563 ms; authenticated HTTPS first segment 4301 ms. Synthetic, not physical timing |
+| Physical mobile voice/interruption/reconnect | PARTIAL | Owner approved voice and English audio; natural interruption and explicit 5G reconnect remain unconfirmed |
+| Real-model scenarios A–G | PARTIAL | Existing real Go write/read and orchestration evidence; unfamiliar dynamic form/upload, build/repair, research, desktop planning, restart/resume, physical mobile execution and two-model acceptance remain |
+| Persistent natural-language monitoring / schedules | FAIL | Existing core scheduler/heartbeat must still be connected end-to-end to V4 with durable conditions/dedup/budgets/edit/pause/restart tests |
+| Locked-iPhone Web Push chain | FAIL | Subscription, secure delivery/history/deep link, controlled threshold, real source and actual locked physical iPhone receipt remain unimplemented/unverified |
+| Original Windows release / parity gates | BLOCKED | Production signer/channel absent; native activation/rollback and login acceptance outstanding; retain all original gaps above |

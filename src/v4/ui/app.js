@@ -5,11 +5,11 @@
  * never claims a task succeeded on its own. iOS voice uses foreground capture
  * and host-local STT; other browsers retain Web Speech with recording fallback.
  */
-import { createSpirit } from '/spirit.js?v=9';
-import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage, playNarratorStream } from '/voice.js?v=9';
-import { t } from '/strings.js?v=9';
-import { INITIAL, applyEvent, createSseParser } from '/session.js?v=9';
-import { VoiceCapture } from '/recorder.js?v=9';
+import { createSpirit } from '/spirit.js?v=10';
+import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage, playNarratorStream } from '/voice.js?v=10';
+import { t } from '/strings.js?v=10';
+import { INITIAL, applyEvent, createSseParser } from '/session.js?v=10';
+import { VoiceCapture } from '/recorder.js?v=10';
 
 const $ = (sel) => document.querySelector(sel);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -44,6 +44,8 @@ const els = {
   sheetModel: $('#sheet-model'),
   sheetModelNote: $('#sheet-model-note'),
   modelList: $('#model-list'),
+  modelSearch: $('#model-search'),
+  modelIncluded: $('#model-included'),
   modelSource: $('#model-source'),
   refreshModels: $('#refresh-models'),
   sheetFiles: $('#file-list'),
@@ -96,6 +98,8 @@ const els = {
 const state = {
   conversationId: null,
   modelId: null,
+  modelCatalogue: null,
+  modelSelectionVersion: 0,
   streaming: false,
   controller: null,
   model: null,
@@ -1569,6 +1573,8 @@ async function loadModels({ refresh = false } = {}) {
     const res = await api(`/api/models${refresh ? '?refresh=1' : ''}`);
     if (!res.ok) return;
     const data = await res.json();
+    state.modelCatalogue = data;
+    state.modelSelectionVersion = data.selection?.version || 0;
     renderModels(data);
   } catch { /* model list is informational; chat still works */ }
 }
@@ -1577,7 +1583,16 @@ const refreshModelsBtn = els.refreshModels;
 
 function renderModels(data) {
   els.modelList.textContent = '';
-  const models = (data.models || []).filter((m) => m.configured);
+  const query = String(els.modelSearch?.value || '').toLowerCase().trim();
+  const active = data.selection?.modelId || data.current;
+  const selected = (data.models || []).find((m) => m.id === active);
+  state.modelId = active;
+  if (selected) {
+    els.modelLabel.textContent = selected.model;
+    els.sheetModel.textContent = selected.label;
+    els.sheetModelNote.textContent = selected.billing?.label || 'Cost unknown — verify with provider';
+  }
+  const models = (data.models || []).filter((m) => m.configured && (!query || `${m.label} ${m.displayName || ''}`.toLowerCase().includes(query)) && (!els.modelIncluded?.checked || m.billing?.subscriptionIncluded === true));
   if (!models.length) {
     const li = document.createElement('li');
     li.className = 'model-empty';
@@ -1588,7 +1603,6 @@ function renderModels(data) {
       : t('model.noConfig');
     return;
   }
-  const active = state.modelId || data.current;
   for (const m of models) {
     const li = document.createElement('li');
     const btn = document.createElement('button');
@@ -1603,13 +1617,7 @@ function renderModels(data) {
     const status = document.createElement('span');
     status.className = 'model-status';
     status.dataset.status = m.status;
-    status.textContent = m.liveVerified
-      ? t('model.live')
-      : m.status === 'missing-key'
-        ? t('model.missingKey')
-        : m.status === 'discovered'
-          ? t('model.discovered')
-          : t('model.unverified');
+    status.textContent = `${m.offering === 'opencode-go' ? 'OpenCode Go · ' : m.offering === 'opencode-zen' ? 'OpenCode Zen · ' : ''}${m.statusLabel || t('model.unverified')} · ${m.billing?.label || 'Cost unknown — verify with provider'}${m.catalogStale ? ' · stale catalogue' : ''}`;
     btn.append(name, status);
     btn.addEventListener('click', () => selectModel(m.id));
     li.append(btn);
@@ -1628,13 +1636,10 @@ async function selectModel(modelId) {
     return;
   }
   try {
-    if (!state.conversationId) {
-      const created = await api('/api/conversations', { method: 'POST' });
-      const data = await created.json();
-      if (!data.ok) throw new Error(data?.error?.message || t('msg.genericError'));
-      state.conversationId = data.conversation.id;
-    }
-    const res = await api('/api/model', { method: 'POST', body: { conversationId: state.conversationId, modelId } });
+    const entry = state.modelCatalogue?.models?.find((m) => m.id === modelId);
+    const needsCostAuthorization = modelId !== state.modelId && !['included', 'free'].includes(entry?.billing?.status);
+    if (needsCostAuthorization && !globalThis.confirm(`${entry?.billing?.label || 'Cost unknown — verify with provider'}. ${t('model.costConfirm')}`)) return;
+    const res = await api('/api/model', { method: 'POST', body: { modelId, expectedVersion: state.modelSelectionVersion, authorizePotentialCost: needsCostAuthorization } });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data?.error?.message || t('model.selectFailed'));
     state.modelId = modelId;
@@ -1644,6 +1649,7 @@ async function selectModel(modelId) {
     await loadModels();
     toast(t('model.selected'));
   } catch (err) {
+    await loadModels();
     toast(err.message || t('model.selectFailed'));
   }
 }
@@ -1726,10 +1732,12 @@ function startSync() {
     if (document.visibilityState !== 'visible') return;
     if (state.streaming) return;
     refreshConversations();
+    loadModels();
   }, 6000);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       refreshConversations({ force: true });
+      loadModels();
     }
   });
   // Stop polling when the page goes away; a timer that outlives the document
@@ -1816,6 +1824,9 @@ async function refreshSidebar() {
 }
 
 function bindEvents() {
+  const filterModels = () => { if (state.modelCatalogue) renderModels(state.modelCatalogue); };
+  els.modelSearch?.addEventListener('input', filterModels);
+  els.modelIncluded?.addEventListener('change', filterModels);
   els.composer.addEventListener('submit', (ev) => {
     ev.preventDefault();
     send(els.input.value);

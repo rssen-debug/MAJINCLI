@@ -84,3 +84,29 @@ Resolve latency/physical interruption/reconnect, actual login startup, approved
 signing/native installation, production host and Electron update/rollback and all
 explicit parity gaps. Evaluate CI for the actual final head. Publish only after
 those gates have concrete evidence; the working source alpha is not a READY release.
+
+
+## Genesis continuation checkpoint (2026-10-23) — NOT READY
+
+Handover is tracked in `HANDOVER_CONTINUE.md`. Streaming narrator milestone
+`fffa918` is deployed and explicitly enabled on the source host. Authenticated
+Tailscale HTTPS delivered two WAV segments (first 4301 ms, complete 7758 ms);
+this is a synthetic text benchmark, not a physical phone PASS. Original 23
+config/key/pairing/history files still matched backup hashes; 39 restored files
+had zero mismatches. Native Windows app remains separately unaccepted.
+
+The next verified code milestone adds canonical durable model selection with
+stale-version conflicts, endpoint-bound cost authorization and no model fallback;
+search/included filter/cost warnings; exact Go/Zen endpoint identity; preservation
+of last verified catalogue on failed refresh. The existing owner Go route remains
+usable. Unknown account billing is explicitly `Cost unknown — verify with provider`.
+Do not infer subscription inclusion from a gateway, token price or model listing.
+Focused model/selection/client-DOM tests: 40/0/0. Controlled Edge and WebKit
+selector tests: 2/0/0. These are not live Go or physical device acceptance.
+
+At commit 930e2fb V4 CI and Windows runner passed; Windows desktop was cancelled.
+Latest-head CI, canonical-selector production deployment, actual Go entitlement,
+two-model switching, real-model scenarios A–G, persistent monitoring and locked
+physical iPhone push, voice interruption/reconnect, production signing, login
+startup, native installation/update/rollback and every original parity gap remain
+gates. PR 401 stays draft/open; no production release or merge is justified.

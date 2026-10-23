@@ -1310,6 +1310,6 @@ export function createAgent({
     cancel,
     cancelOwnedBy,
     isRunning: (id) => running.has(id),
-    modelInfo: model.info,
+    get modelInfo() { return model.info; },
   };
 }

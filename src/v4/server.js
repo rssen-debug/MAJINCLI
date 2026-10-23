@@ -37,6 +37,7 @@ import { createToolRegistry } from './tools.js';
 import { createModelClient } from './model.js';
 import { createAgent } from './agent.js';
 import { discoverModels, refreshAllCatalogs } from './models.js';
+import { publicModelSelection, selectCanonicalModel } from './model-selection.js';
 import { Kernel } from './kernel.js';
 import { t } from './ui/strings.js';
 import { synthesize, transcribe, sttTemplateFromEnv, VOICE_MODES, voiceCapabilities, localNarratorStream } from './voice.js';
@@ -848,9 +849,13 @@ export function createV4Server({ config }) {
         await refreshAllCatalogs({ home: paths.home, env: process.env });
       }
       const catalogue = discoverModels({ home: paths.home, env: process.env });
+      const selection = publicModelSelection({ home: paths.home });
       sendJson(res, 200, {
         ok: true,
         ...catalogue,
+        configuredDefault: catalogue.current,
+        current: selection.modelId,
+        selection,
         // A listed model is not proof of inference; the flag says so.
         caveat: t('model.caveat'),
       });
@@ -861,14 +866,8 @@ export function createV4Server({ config }) {
       assertCsrfHeader(req);
       const body = await readJsonBody(req, 4096);
       const modelId = body.modelId == null ? null : String(body.modelId);
-      const conversationId = String(body.conversationId || '');
-      if (modelId) {
-        const catalogue = discoverModels({ home: paths.home, env: process.env });
-        const known = catalogue.models.some((m) => m.id === modelId && m.configured);
-        if (!known) throw new HttpError(400, 'MODEL_NOT_CONFIGURED', 'That model is not configured on the host.');
-      }
-      const result = agent.setConversationModel({ conversationId, modelId });
-      sendJson(res, 200, { ok: true, ...result });
+      const selection = selectCanonicalModel({ home: paths.home, modelId, expectedVersion: body.expectedVersion, authorizePotentialCost: body.authorizePotentialCost, base: config.model });
+      sendJson(res, 200, { ok: true, modelId: selection.modelId, selection, info: model.infoFor(selection.modelId) });
     },
 
     'GET /api/state': async (req, res) => {
@@ -883,7 +882,7 @@ export function createV4Server({ config }) {
           configured: catalogue.models.filter((m) => m.configured).length,
           verified: catalogue.liveVerifiedCount,
           source: catalogue.source,
-          current: catalogue.current,
+          current: publicModelSelection({ home: paths.home }).modelId,
         },
         policy: config.approvals.policy,
         workspace: { label: 'arbetsyta', files: listWorkspace(tools.root) },

@@ -150,6 +150,7 @@ export const SV = {
   'model.unverified': 'okonfirmerad',
   'model.live': 'live',
   'model.selected': 'Modell vald',
+  'model.costConfirm': 'Tillåter du den här modellvägen även om extra kostnad kan tillkomma? Valet gäller alla dina enheter.',
   'model.selectFailed': 'Kunde inte byta modell',
   'model.waitForTurn': 'Vänta tills svaret är klart.',
 
