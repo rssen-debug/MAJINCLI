@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { _electron } from 'playwright';
 import { once } from 'node:events';
+import { execFileSync } from 'node:child_process';
 import { loadConfig } from '../../src/v4/config.js';
 import { loadSecret, ensurePairing } from '../../src/v4/auth.js';
 
@@ -20,6 +21,7 @@ const port = listener.address().port;
 await new Promise((resolve) => listener.close(resolve));
 const origin = `http://127.0.0.1:${port}`;
 let application;
+let nativePid;
 let verdict;
 const health = async () => {
   try { return await (await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(1000) })).json(); }
@@ -31,6 +33,7 @@ try {
     env: { ...process.env, MAJIN_HOME: home, MAJIN_V4_PROVIDER: 'demo', MAJIN_V4_DEMO: '1',
       MAJIN_V4_DESKTOP_URL: origin, MAJIN_V4_DESKTOP_NO_HOST: '0', MAJIN_V4_DESKTOP_PROFILE: path.join(home, 'profile') },
   });
+  nativePid = application.process().pid;
   const page = await application.firstWindow();
   await page.waitForSelector('#gate-code', { timeout: 30_000 });
   assert.equal((await health())?.app, 'majin');
@@ -56,8 +59,15 @@ try {
   fs.mkdirSync(path.join(root, 'docs/v4/evidence'), { recursive: true });
   fs.writeFileSync(path.join(root, 'docs/v4/evidence/desktop-cold-smoke.json'), JSON.stringify(verdict, null, 2));
   process.stdout.write('PASS packaged cold start, bundled runtime, authenticated chat and background host lifetime\n');
+} catch (error) {
+  process.stderr.write(`Cold-start acceptance failed: ${error.stack}\n`);
+  throw error;
 } finally {
-  if (application && application.process().exitCode === null) application.process().kill();
+  if (application && application.process().exitCode === null) {
+    if (process.platform === 'win32' && nativePid) {
+      try { execFileSync('taskkill', ['/PID', String(nativePid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }); } catch { /* already exited */ }
+    } else application.process().kill();
+  }
   // Terminate only the process IDs recorded by this test's private supervisor.
   const events = fs.existsSync(config.paths.logs) ? fs.readdirSync(config.paths.logs)
     .filter((name) => name.startsWith('supervisor-')).flatMap((name) => fs.readFileSync(path.join(config.paths.logs, name), 'utf8')
@@ -68,5 +78,6 @@ try {
     }
   }
   await new Promise((resolve) => setTimeout(resolve, 500));
-  fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  try { fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+  catch (error) { process.stderr.write(`Test cleanup retained ${home}: ${error.code}\n`); }
 }

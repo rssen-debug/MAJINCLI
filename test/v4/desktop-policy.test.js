@@ -1,7 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
+import { V4_VERSION } from '../../src/v4/config.js';
 const { hostOrigin, sameOrigin, restoreBounds } = createRequire(import.meta.url)('../../desktop/policy.cjs');
+
+test('desktop: native package and shared server advertise the same release', () => {
+  const desktopPackage = JSON.parse(fs.readFileSync(new URL('../../desktop/package.json', import.meta.url), 'utf8'));
+  assert.equal(desktopPackage.version, V4_VERSION);
+  assert.ok(desktopPackage.build.extraResources.some((entry) => entry.from === 'stage/host/node_modules'
+    && entry.to === 'host/node_modules'), 'the independent Node host needs its own runtime dependencies');
+});
 
 test('desktop: only loopback HTTP or HTTPS origins, without embedded credentials', () => {
   assert.equal(hostOrigin(), 'http://127.0.0.1:7373');

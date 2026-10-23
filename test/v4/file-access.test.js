@@ -191,7 +191,7 @@ test('files: path policy resolves symlinks and judges the real target', () => {
     const link = path.join(dirs.workspace, 'genväg');
     let linked = true;
     try {
-      fs.symlinkSync(dirs.secret, link, 'dir');
+      fs.symlinkSync(dirs.secret, link, process.platform === 'win32' ? 'junction' : 'dir');
     } catch {
       linked = false; // Windows without developer mode cannot create symlinks
     }

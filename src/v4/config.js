@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { parseFlags } from './kernel.js';
+export const V4_VERSION = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
 export const V4_MIN_NODE = '22.0.0';
 
@@ -188,7 +189,7 @@ export function loadConfig({ env = process.env, argv = [], platform = process.pl
   const writePolicy = (env.MAJIN_V4_WRITE_POLICY || 'sandbox-auto').toLowerCase();
 
   return {
-    version: '4.0.0-alpha',
+    version: V4_VERSION,
     node: process.versions.node,
     paths,
     host,

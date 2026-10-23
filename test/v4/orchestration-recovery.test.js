@@ -16,6 +16,8 @@ test('team: failed nodes are retried on resume; only successful work is skipped'
     const goals = [{ id: 'a', member: 'worker', input: 'first' }, { id: 'b', member: 'worker', input: 'second', deps: ['a'] }];
     const first = await runTeam({ store, team: 'recovery', goals, makeWorker: () => async () => ({ ok: false, error: 'transient', steps: 1 }) });
     assert.deepEqual(store.loadCheckpoint('recovery', first.runId).done, {});
+    // A checkpoint written by an older version must also be repaired on read.
+    store.saveCheckpoint('recovery', first.runId, { done: { a: { ok: false, steps: 1 } } });
     const calls = [];
     const resumed = await runTeam({ store, team: 'recovery', goals, resumeId: first.runId,
       makeWorker: () => async (node) => { calls.push(node.id); return { ok: true, text: node.id, steps: 1 }; } });

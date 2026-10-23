@@ -71,6 +71,14 @@ async function connect() {
 
 async function boot() {
   app.setAppUserModelId('com.majin.v4');
+  if (process.argv.includes('--background')) {
+    // Login starts only the shared Node host; Chromium need not remain open.
+    startHost();
+    const deadline = Date.now() + 25_000;
+    while (!await healthy() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 500));
+    app.exit(await healthy() ? 0 : 1);
+    return;
+  }
   const partition = session.fromPartition('persist:majin-v4');
   partition.setPermissionCheckHandler((_contents, _permission, _requestOrigin) => false);
   partition.setPermissionRequestHandler(async (contents, permission, callback, details) => {
@@ -117,7 +125,11 @@ async function boot() {
     fs.renameSync(temp, boundsFile());
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: 'MAJIN', submenu: [{ label: 'Reconnect', click: connect }, { type: 'separator' }, { role: 'quit' }] },
+    { label: 'MAJIN', submenu: [{ label: 'Reconnect', click: connect },
+      { label: 'Start host when I log in', type: 'checkbox', enabled: app.isPackaged,
+        checked: app.getLoginItemSettings().openAtLogin,
+        click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--background'] }) },
+      { type: 'separator' }, { role: 'quit' }] },
     { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
   ]));
   await connect();

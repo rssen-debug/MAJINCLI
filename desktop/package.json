@@ -1,6 +1,6 @@
 {
   "name": "majin-v4-desktop",
-  "version": "4.0.0-alpha.1",
+  "version": "4.0.0-alpha.2",
   "description": "MAJIN V4 Windows client for the shared private host",
   "author": "MAJIN contributors",
   "license": "MIT",
@@ -18,15 +18,33 @@
   "build": {
     "appId": "com.majin.v4",
     "productName": "MAJIN V4",
-    "directories": { "output": "dist" },
-    "files": ["main.cjs", "policy.cjs", "offline.html", "package.json"],
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "policy.cjs",
+      "offline.html",
+      "package.json"
+    ],
     "extraResources": [
-      { "from": "stage/host", "to": "host" },
-      { "from": "../src/v4/ui/icons/icon-512.png", "to": "icon.png" }
+      {
+        "from": "stage/host",
+        "to": "host"
+      },
+      {
+        "from": "stage/host/node_modules",
+        "to": "host/node_modules",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../src/v4/ui/icons/icon-512.png",
+        "to": "icon.png"
+      }
     ],
     "win": {
       "target": "nsis",
-      "icon": "../src/v4/ui/icons/icon-512.png",
+      "icon": "stage/icon.ico",
       "artifactName": "MAJIN-V4-${version}-Setup.${ext}"
     },
     "nsis": {
@@ -36,6 +54,7 @@
       "allowToChangeInstallationDirectory": true,
       "createStartMenuShortcut": true,
       "createDesktopShortcut": false,
+      "runAfterFinish": false,
       "deleteAppDataOnUninstall": false
     }
   }
