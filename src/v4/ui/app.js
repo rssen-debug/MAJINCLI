@@ -6,10 +6,10 @@
  * (SpeechRecognition + SpeechSynthesis) so it works without extra services,
  * and every unsupported capability is reported instead of faked.
  */
-import { createSpirit } from '/spirit.js';
-import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage } from '/voice.js';
-import { t } from '/strings.js';
-import { INITIAL, applyEvent, createSseParser } from '/session.js';
+import { createSpirit } from '/spirit.js?v=5';
+import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage } from '/voice.js?v=5';
+import { t } from '/strings.js?v=5';
+import { INITIAL, applyEvent, createSseParser } from '/session.js?v=5';
 
 const $ = (sel) => document.querySelector(sel);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1926,9 +1926,15 @@ function bindEvents() {
   if (!navigator.onLine) els.offline.hidden = false;
   // Keep the composer visible when the mobile keyboard opens.
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => {
+    const resizeViewport = () => {
+      // Safari resizes the visual viewport for its keyboard, while dvh can
+      // continue to describe the larger layout viewport.
+      document.documentElement.style.setProperty('--app-height', `${window.visualViewport.height}px`);
       if (document.activeElement === els.input) setTimeout(() => scrollDown(true), 50);
-    });
+    };
+    window.visualViewport.addEventListener('resize', resizeViewport);
+    window.visualViewport.addEventListener('scroll', resizeViewport);
+    resizeViewport();
   }
 }
 
@@ -1942,7 +1948,7 @@ function restorePrefs() {
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {
       /* offline shell is optional; the app works without it */
     });
   });

@@ -7,16 +7,16 @@
  */
 // Bump this whenever the shell changes: an installed PWA otherwise keeps the
 // old HTML/CSS/JS until every cache entry expires independently.
-const VERSION = 'majin-v4-shell-4';
+const VERSION = 'majin-v4-shell-5';
 const SHELL = [
   '/',
   '/index.html',
-  '/app.css',
-  '/app.js',
-  '/spirit.js',
-  '/voice.js',
-  '/strings.js',
-  '/session.js',
+  '/app.css?v=5',
+  '/app.js?v=5',
+  '/spirit.js?v=5',
+  '/voice.js?v=5',
+  '/strings.js?v=5',
+  '/session.js?v=5',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -50,23 +50,21 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => caches.match('/index.html').then((r) => r || Response.error())),
+      fetch(request).catch(() => caches.open(VERSION).then((cache) => cache.match('/index.html')).then((r) => r || Response.error())),
     );
     return;
   }
 
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((res) => {
-          if (res.ok && SHELL.includes(url.pathname)) {
-            const copy = res.clone();
-            caches.open(VERSION).then((cache) => cache.put(request, copy));
-          }
-          return res;
-        })
-        .catch(() => cached || Response.error());
-      return cached || network;
-    }),
-  );
+  if (!SHELL.includes(url.pathname + url.search)) return;
+  // Mutable shell code must be fresh online. Read only this worker's cache:
+  // an old in-flight worker can recreate an obsolete cache after activation.
+  event.respondWith(caches.open(VERSION).then(async (cache) => {
+    try {
+      const response = await fetch(request);
+      if (response.ok) await cache.put(request, response.clone());
+      return response;
+    } catch {
+      return await cache.match(request) || Response.error();
+    }
+  }));
 });

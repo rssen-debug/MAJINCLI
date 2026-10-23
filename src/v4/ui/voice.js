@@ -7,7 +7,7 @@
  * limitation (no background mic on iOS, engine needs network) is surfaced in
  * the UI instead of hidden.
  */
-import { t } from './strings.js';
+import { t } from './strings.js?v=5';
 
 /** Recognition language follows the phone, defaulting to Swedish. */
 export function recognitionLang(navigatorLanguage = 'sv-SE') {
