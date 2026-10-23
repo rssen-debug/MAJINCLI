@@ -129,9 +129,16 @@ test('e2e: real browser acceptance on phone viewports', { skip: launched.skip ||
       await page.click('#send-btn');
 
       // the tool card must reach the verified state, driven by the server
-      await page.waitForSelector('.tool[data-state="verified"]', { timeout: 15_000 });
-      const toolText = await page.textContent('.tool[data-state="verified"] .tool-summary');
+      // Read state and summary in one browser task. An incremental history
+      // refresh may replace the transcript between two separate locator calls.
+      const verified = await page.waitForFunction(() => {
+        const text = document.querySelector('.tool[data-state="verified"] .tool-summary')?.textContent;
+        return text?.trim() || false;
+      }, null, { timeout: 15_000 });
+      const toolText = await verified.jsonValue();
       assert.ok(toolText && toolText.length > 0, `${vp.name}: tool summary empty`);
+      assert.equal(fs.readFileSync(path.join(s.home, 'workspace', `e2e-${vp.name}.txt`), 'utf8'), 'klart',
+        `${vp.name}: verified tool card must correspond to actual saved bytes`);
 
       // the answer arrives as text, and the conversation id survives a reload
       await page.waitForFunction(() => {

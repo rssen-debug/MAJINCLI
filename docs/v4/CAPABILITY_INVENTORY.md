@@ -1,6 +1,6 @@
 # MAJIN capability inventory (generated)
 
-Generated 2026-10-23T17:05:48.522Z on win32. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
+Generated 2026-10-23T17:09:08.191Z on win32. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
 
 ## Totals
 
