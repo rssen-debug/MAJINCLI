@@ -210,6 +210,9 @@ export function loadConfig({ env = process.env, argv = [], platform = process.pl
       maxBodyBytes: int(env.MAJIN_V4_MAX_BODY_BYTES, 64 * 1024),
       maxMessageChars: int(env.MAJIN_V4_MAX_MESSAGE_CHARS, 8000),
       maxModelRounds: int(env.MAJIN_V4_MAX_MODEL_ROUNDS, 4),
+      // Conversation history sent to the model, in estimated tokens. Over this,
+      // the oldest turns are dropped instead of failing the whole request.
+      maxContextTokens: int(env.MAJIN_V4_MAX_CONTEXT_TOKENS, 8000),
       maxToolCallsPerTurn: int(env.MAJIN_V4_MAX_TOOL_CALLS, 6),
       toolTimeoutMs: int(env.MAJIN_V4_TOOL_TIMEOUT_MS, 20_000),
       modelTimeoutMs: int(env.MAJIN_V4_MODEL_TIMEOUT_MS, 120_000),

@@ -21,6 +21,7 @@ import { STATES } from '../v2/runtime/states.js';
 import { runVerifier } from '../v2/runtime/verifiers.js';
 import { runTool } from '../v2/tools/runner.js';
 import { nextRecoveryStep, recoveryPlan } from '../v2/recover/advisor.js';
+import { buildMessages } from './context.js';
 import { TOOL_SCHEMAS, safeFileName } from './tools.js';
 import { publicGoal, newId } from './store.js';
 import { explainModelError } from './model.js';
@@ -109,11 +110,20 @@ export function createAgent({ config, conversations, goals, tools, model }) {
   // stored turn instead of running tools twice. Bounded and ordered.
   const recentRequests = new Map();
 
+  /**
+   * Conversation history, bounded by the configured token budget instead of a
+   * fixed message count. Error notices are excluded: they are UI copy, not
+   * something the model should learn from.
+   */
   function historyFor(conv) {
-    return conv.messages
+    const all = conv.messages
       .filter((m) => (m.role === 'user' || m.role === 'assistant') && !m.meta?.error)
-      .slice(-30)
       .map((m) => ({ role: m.role, content: m.content }));
+    return buildMessages({
+      system: SYSTEM_PROMPT,
+      messages: all,
+      budgetTokens: config.limits.maxContextTokens || 8000,
+    });
   }
 
   /**
@@ -400,10 +410,12 @@ export function createAgent({ config, conversations, goals, tools, model }) {
     goals.save(goal);
     emit('goal', publicGoal(goal));
 
-    const modelMessages = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...historyFor(conversations.get(conversation.id)),
-    ];
+    const packed = historyFor(conversations.get(conversation.id));
+    const modelMessages = packed.messages;
+    if (packed.dropped > 0 || packed.truncated) {
+      // Say it once in the stream; the UI shows a quiet note, not an error.
+      emit('context', { dropped: packed.dropped, truncated: packed.truncated, tokens: packed.tokens });
+    }
 
     let finalText = '';
     let toolCallsUsed = 0;

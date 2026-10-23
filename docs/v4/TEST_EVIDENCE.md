@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 221
-# pass 220
+# tests 229
+# pass 228
 # skipped 1
 # fail 0
 # skipped 0
@@ -47,6 +47,7 @@ $ npm run v4:test
 | `test/v4/upgrade.test.js` | 8 | clean upgrade, up-to-date, rollback on a failed gate, escalation when rollback fails, fetch/checkout classification |
 | `test/v4/leaks.test.js` | 7 | bounded rate limiter and conversation cache, cache eviction loses nothing, bounded listing, abort-key collision, truncated replay |
 | `test/v4/leaks2.test.js` | 3 | bounded goal cache, evicted goals reload from disk intact, in-flight goals are never evicted |
+| `test/v4/context.test.js` | 8 | history is trimmed to the token budget, the newest message always survives, the system prompt is never trimmed, an oversized message is truncated with a visible marker, and the packer's own edge cases |
 | `test/v4/recovery.test.js` | 4 | a flaky read tool recovers; a write tool is attempted exactly once; the retry budget is the advisor's, not a loop; a human-only failure class executes nothing and surfaces the advice |
 | `test/v4/cli.test.js` | 11 | the commands the owner types, spawned as real subprocesses: doctor (text + JSON), progress, backup → verify → restore round trip, overwrite refusal, tamper detection, plugin list/quarantine, upgrade --dry, bench, unknown command |
 | `test/v4/windows-installer.test.js` | 9 | the Windows task runs on battery, has no 72-hour limit, restarts on failure, changes nothing machine-wide, has a clean uninstall, refuses old Node, and does not collide with V1's task |
@@ -59,7 +60,7 @@ $ npm run check
 506/506 files parse cleanly.
 
 $ npm run i18n
-0 Swedish string literal(s) in 270 files
+0 Swedish string literal(s) in 271 files
 
 $ npm run v4:progress --check
 67.5/100 verified points, matrix valid (exit 0)
@@ -97,6 +98,7 @@ POST /api/chat  "Skriv filen valkomst.txt med innehåll: Hej från MAJIN"
 | Pressing stop no longer stopped the turn (the journal made it outlive the socket) | `turns.test.js` | stop sends `turnId` to `/api/cancel`; the API accepts a turn id or a conversation id |
 | A repeated request whose answer had been truncated replayed an empty message | `leaks.test.js` | explicit `already_handled` status instead of a blank answer; tools still never re-run |
 | The goal store kept every goal object in memory for the process lifetime | `leaks2.test.js` | bounded cache that only evicts goals which are not actively executing |
+| Conversation history was a fixed `slice(-30)` with no token budget, so a long chat could exceed a small model's window and fail the turn | `context.test.js` | budget-aware packing with a visible marker; the newest message and the system prompt always survive |
 
 ## 3.2 Browser attempt, documented
 

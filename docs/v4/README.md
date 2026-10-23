@@ -8,7 +8,7 @@ npm ci
 npm run v4:doctor      # read-only host check
 npm run v4             # start the host on 127.0.0.1:7373
 npm run v4:pair -- --rotate   # new pairing code
-npm run v4:test        # 220 tests (+1 browser spec that skips without a binary)
+npm run v4:test        # 228 tests (+1 browser spec that skips without a binary)
 npm run v4:progress    # verified points, recomputed from the matrix
 npm run v4:bench       # benchmark run, writes docs/v4/benchmarks/
 npm run v4:plugins     # list installed/quarantined plugins

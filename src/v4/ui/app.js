@@ -625,6 +625,11 @@ function viewIntents(event, data, intents) {
       break;
     }
 
+    case 'context':
+      // Quiet, factual: the turn still runs, just with a shorter history.
+      els.hint.textContent = t('state.contextTrimmed');
+      break;
+
     case 'recovery': {
       // The host is retrying on its own; say so instead of looking frozen.
       spirit.set('working');

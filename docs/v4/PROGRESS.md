@@ -184,6 +184,7 @@ No new features in this pass. The target was the failure modes of a host that ru
 | Stop no longer stopped the turn | the journal made turns outlive the socket; stop only detached | stop sends the turn id to the server |
 | Repeated request after truncation replayed an empty answer | user sees a blank reply labelled "replayed" | explicit `already_handled`, tools never re-run |
 | Goal store retained every goal object forever | memory grew with every task ever run | bounded cache; only non-executing goals are evicted |
+| Conversation history had no token budget | a long chat on a small model failed the whole turn with "context length exceeded" | budget-aware packing reusing V2's token estimator; newest message + system prompt always survive |
 
 Each one has a test that failed before the fix. That is the only reason to trust the list.
 
@@ -237,6 +238,25 @@ The UI shows "Försöker igen (1) efter TIMEOUT" instead of appearing frozen.
 matrix was written, and adding a criterion now — then marking it verified — would be scoring my
 own homework. It is recorded here as delivered capability with evidence
 (`test/v4/recovery.test.js`), and the matrix stays at 78.5/100.
+
+## Conversation context now fits the model
+
+`historyFor()` sent the last 30 messages whatever their size. Forty turns of long answers is
+normal on a phone, and on a small-context model that turns every message into a provider error
+the user cannot act on.
+
+V4 now packs history against a token budget (`MAJIN_V4_MAX_CONTEXT_TOKENS`, default 8000),
+reusing V2's `estimateTokens` so the whole product measures tokens the same way. V2's `pack()`
+is deliberately not used: it flattens prioritised sections into one string and destroys the
+role structure a chat model needs.
+
+The rules, each with a test that failed first:
+
+1. the newest message always reaches the model, truncated from the tail with a visible marker
+   if it alone exceeds the budget — the marker is counted inside the budget;
+2. older turns are dropped oldest-first until it fits;
+3. the system prompt is never trimmed;
+4. when anything was dropped the client shows a quiet note, not an error.
 
 ## Next engineering objective
 
