@@ -6,6 +6,10 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {Scheduler,parseWhen,cronMatch,nextRun} from '../src/core/schedule.js';
 const cfg={get:()=>false};
+test('human English intervals and Monday resolve to the same existing schedule representation',()=>{
+  for(const [input,ms] of [['every 1 minute',60000],['every 2 minutes',120000],['every 3 seconds',3000],['every 1 hour',3600000],['every 2 days',172800000]])assert.equal(parseWhen(input).everyMs,ms);
+  assert.equal(parseWhen('10:00 mon').spec,'0 10 * * 1');
+});
 function scratch(){return fs.mkdtempSync(path.join(os.tmpdir(),'majin-core-schedule-'));}
 function clean(home){const resolved=path.resolve(home);assert.ok(resolved.startsWith(path.resolve(os.tmpdir())+path.sep+'majin-core-schedule-'));fs.rmSync(resolved,{recursive:true,force:true});}
 

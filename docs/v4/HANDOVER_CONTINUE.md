@@ -713,3 +713,15 @@ physical locked iPhone notification receipt/opening, transport acknowledgements
 from the physical device, heartbeat digest integration and token/currency budgets.
 Network push acceptance is not proof of phone delivery. Native production signing,
 app/host updates, other original/Genesis gates remain open; PR stays NOT READY.
+
+### Live monitoring follow-up — 24 October
+
+Owner explicitly requests no more questions; continue all available engineering.
+Physical receipt still requires evidence and is not inferred from that consent.
+Live Go monitor attempts1/2 were scoped-denied and remain FAIL: no task created.
+Attempt2 omitted the deterministic condition and used 'every 1 minute', exposing
+missing English interval aliases. Core parser now supports English seconds,
+minutes, hours, days and Monday; same schedule engine/representation, no new NLP
+engine. Model system/tool descriptions explain actual typed condition setup and
+warn that task text alone invokes the model per run. Core/background/exposure
+suite21/0/0 before the additional English regression. Keep original failed receipts.

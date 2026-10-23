@@ -27,7 +27,7 @@ const definition=z.object({
   task:z.string().trim().min(1).max(12000),
   maxRuns:z.number().int().min(1).max(1000),
   notify:z.boolean(),
-  condition:conditionSchema.nullable(),
+  condition:conditionSchema.nullable().describe('Required for deterministic monitoring: actual JSON source URL, pointer, operator and typed threshold. Without condition, the task invokes the model each run.'),
 });
 export const taskAction=z.discriminatedUnion('action',[
   definition.extend({action:z.literal('create'),maxRuns:definition.shape.maxRuns.default(20),notify:z.boolean().default(false),condition:conditionSchema.nullable().default(null)}),

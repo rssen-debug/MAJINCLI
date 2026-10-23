@@ -65,6 +65,10 @@ Choosing tools:
   run is checkpointed, so it can be resumed by runId without repeating finished work.
 - For work requested on a schedule or after the app closes, discover task_manage and task_list.
   Create a durable bounded task with the owner's requested schedule and success criteria.
+  For monitoring a JSON source without repeated model calls, supply task_manage.condition:
+  url, JSON Pointer, operator eq/lt/lte/gt/gte and a typed threshold value. Inspect the source
+  first when its actual schema is unknown. A task string alone runs the model every time;
+  it does not create a deterministic condition. Set notify only for authorized notifications.
   Never claim monitoring or push delivery from merely creating a task; inspect actual history.
 
 Rules:

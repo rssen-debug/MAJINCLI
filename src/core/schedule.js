@@ -17,10 +17,10 @@ export function parseWhen(input) {
   if(raw.length>500)throw new Error('schedule expression exceeds 500 characters');
   const s = raw.toLowerCase().replace(/\s+/g, ' ');
   if (CRON_NAMES[s]) return { kind: 'cron', spec: CRON_NAMES[s], display: s };
-  const every = /(?:^|\s)(?:varje|var|every)\s+(\d+)\s*(s|sek|sekund|sekunder|m|min|minuter|h|tim|timme|timmar|d|dag|dagar)\b/.exec(s);
+  const every = /(?:^|\s)(?:varje|var|every)\s+(\d+)\s*(s|sec|second|seconds|sek|sekund|sekunder|m|min|minute|minutes|minuter|h|hour|hours|tim|timme|timmar|d|day|days|dag|dagar)\b/.exec(s);
   if (every) {
     const n = Number(every[1]);
-    const unit = { s: 1000, sek: 1000, sekund: 1000, sekunder: 1000, m: 60000, min: 60000, minuter: 60000, h: 3600000, tim: 3600000, timme: 3600000, timmar: 3600000, d: 86400000, dag: 86400000, dagar: 86400000 }[every[2]];
+    const unit = { s: 1000, sec:1000, second:1000, seconds:1000, sek: 1000, sekund: 1000, sekunder: 1000, m: 60000, min: 60000, minute:60000, minutes:60000, minuter: 60000, h: 3600000, hour:3600000, hours:3600000, tim: 3600000, timme: 3600000, timmar: 3600000, d: 86400000, day:86400000, days:86400000, dag: 86400000, dagar: 86400000 }[every[2]];
     if (!Number.isSafeInteger(n * unit) || n * unit < 1000 || n * unit > 8640000000000000) throw new Error(`invalid interval: "${raw}"`);
     const label = unit === 60000 ? ' min' : unit === 3600000 ? ' h' : unit === 86400000 ? ' dag' : ' s';
     return { kind: 'every', everyMs: n * unit, display: `var ${n}${label}` };
@@ -41,7 +41,7 @@ export function parseWhen(input) {
   }
   const dayTime = /^(\d{1,2}):(\d{2})\s+(\S+)$/.exec(s);
   if (dayTime) {
-    const dayNames = { sun: 0, sön: 0, man: 1, mån: 1, tis: 2, tue: 2, ons: 3, wed: 3, tor: 4, tors: 4, thu: 4, fre: 5, fri: 5, lör: 6, sat: 6 };
+    const dayNames = { sun: 0, sön: 0, mon:1, man: 1, mån: 1, tis: 2, tue: 2, ons: 3, wed: 3, tor: 4, tors: 4, thu: 4, fre: 5, fri: 5, lör: 6, sat: 6 };
     const key = String(dayTime[3]).slice(0, 3).toLowerCase();
     const dow = dayNames[key];
     const h = Number(dayTime[1]);
