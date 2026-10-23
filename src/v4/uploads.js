@@ -33,6 +33,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { extractText, ExtractError } from './extract.js';
 
 /** Types the interface can actually render. Nothing executable. */
 export const UPLOAD_TYPES = Object.freeze({
@@ -189,6 +190,12 @@ export class UploadStore {
     }
 
     fs.writeFileSync(target, buf, { mode: 0o600, flag: 'wx' });
+
+    // Say up front whether MAJIN can read the contents, and how far. An upload
+    // whose text cannot be read is not a failure of the upload, but the owner
+    // must know before asking "read my CV".
+    const readable = describeReadability(buf, finalName);
+
     return {
       name: finalName,
       type: declared,
@@ -196,6 +203,7 @@ export class UploadStore {
       bytes: buf.length,
       sha256: crypto.createHash('sha256').update(buf).digest('hex'),
       inline: INLINE_TYPES.has(declared),
+      ...readable,
     };
   }
 
@@ -226,6 +234,33 @@ export class UploadStore {
     } catch {
       return [];
     }
+  }
+}
+
+/**
+ * Describe what the extraction layer can do with this file, without keeping
+ * the text in the API response (the agent reads it through `document_read`).
+ */
+export function describeReadability(buf, fileName) {
+  try {
+    const { kind, confidence, text } = extractText(buf, { fileName });
+    return {
+      readable: true,
+      textKind: kind,
+      textConfidence: confidence,
+      textChars: text.length,
+    };
+  } catch (err) {
+    if (err instanceof ExtractError) {
+      return {
+        readable: false,
+        readError: err.code,
+        readNote: err.code === 'NO_TEXT_LAYER'
+          ? 'the PDF has no text layer (probably a scan); OCR is not built in'
+          : err.message,
+      };
+    }
+    return { readable: false, readError: 'EXTRACT_FAILED', readNote: String(err?.message || err) };
   }
 }
 

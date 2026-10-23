@@ -9,7 +9,7 @@
   ],
   "tools": [
     "fs_search",
-    "fs_read",
+    "document_read",
     "web_search",
     "jobs_search",
     "jobs_match",

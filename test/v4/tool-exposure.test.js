@@ -241,7 +241,7 @@ test('exposure: with host tools off, the model still gets the workspace set only
     };
     await readSse(await postChat(s.base, cookie, { text: 'Hej', requestId: 'x2' }));
     const names = seen[0].map((t) => t.name);
-    assert.deepEqual(names.sort(), ['memory_save', 'memory_search', 'workspace_list', 'workspace_read', 'workspace_write']);
+    assert.deepEqual(names.sort(), ['document_read', 'memory_save', 'memory_search', 'workspace_list', 'workspace_read', 'workspace_write']);
   } finally {
     await s.close();
     fs.rmSync(home, { recursive: true, force: true });

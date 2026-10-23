@@ -61,7 +61,7 @@ test('skills: a PREFERRED tool that is missing degrades the skill instead of hid
   const { usable } = usableSkills({
     skills: [job],
     grantedLanes: ['files', 'web'],
-    availableTools: ['fs_search', 'fs_read', 'web_search', 'jobs_search', 'jobs_match', 'jobs_prepare'],
+    availableTools: ['fs_search', 'fs_read', 'document_read', 'web_search', 'jobs_search', 'jobs_match', 'jobs_prepare'],
   });
   assert.equal(usable.length, 1, 'the procedure is still followable without a browser');
   // compare a COPY: sorting in place would change what renderSkills sees

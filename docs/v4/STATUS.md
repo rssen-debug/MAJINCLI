@@ -35,7 +35,7 @@ tills du har kört kommandot som bevisar det.
 | Riktig inferens via OpenCode Go | ingen nyckel i den här miljön | `npm run v4:accept` |
 | iPhone/Android över Tailscale | ingen telefon, ingen tunnel | `npm run v4:accept -- --url https://…` |
 | Automatisk uppdatering utan PowerShell | **inte byggd** — se nedan | — |
-| PDF/DOCX-textutvinning | **inte byggd** — uppladdning tar emot filen, men MAJIN läser den inte | — |
+| PDF/DOCX-textutvinning | **byggd och testad** — se `extract.test.js`; det som återstår är din riktiga CV-fil | `npm run v4:tools -- --probe` |
 
 ## Inte byggt alls (och varför)
 

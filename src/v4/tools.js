@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { ToolRegistry } from '../v2/tools/registry.js';
 import { runTool } from '../v2/tools/runner.js';
 import { MemoryStore } from '../v2/memory/store.js';
+import { extractText, ExtractError } from './extract.js';
 
 export const MAX_FILE_BYTES = 1_000_000;
 export const MAX_READ_BYTES = 200_000;
@@ -175,6 +176,62 @@ export function createToolRegistry({ workspaceDir, memoryDir }) {
     },
   });
 
+  /**
+   * Read the text out of a document in the workspace: PDF, DOCX, XLSX or plain
+   * text. This is what makes "find my CV and read it" a real task instead of a
+   * file upload with nothing inside.
+   *
+   * The result carries `confidence`: 'text' when the extraction is clean,
+   * 'partial' when some glyphs use a font encoding that could not be mapped.
+   * A caller must not present 'partial' as a clean read.
+   */
+  registry.define({
+    name: 'document_read',
+    description: 'Read the text inside a document in the workspace (PDF, DOCX, XLSX, txt, md, csv, json).',
+    tier: 'read',
+    inputSchema: z.object({
+      fileName: z.string().min(1).max(120),
+      maxChars: z.number().int().min(100).max(100_000).optional(),
+    }),
+    outputSchema: z.object({
+      fileName: z.string(),
+      kind: z.string(),
+      confidence: z.enum(['text', 'partial']),
+      chars: z.number().int().nonnegative(),
+      truncated: z.boolean(),
+      text: z.string(),
+      warning: z.string().optional(),
+    }),
+    execute: async ({ fileName, maxChars = 20_000 }) => {
+      const { name, target } = targetFor(root, fileName);
+      let stat;
+      try {
+        stat = fs.statSync(target);
+      } catch {
+        throw new WorkspaceError('NOT_FOUND', `"${name}" does not exist in the workspace`);
+      }
+      if (!stat.isFile()) throw new WorkspaceError('NOT_A_FILE', `"${name}" is not a regular file`);
+      let result;
+      try {
+        result = extractText(fs.readFileSync(target), { fileName: name });
+      } catch (err) {
+        if (err instanceof ExtractError) throw new WorkspaceError('EXTRACT_FAILED', `${err.code}: ${err.message}`);
+        throw err;
+      }
+      const truncated = result.text.length > maxChars;
+      return {
+        fileName: name,
+        kind: result.kind,
+        confidence: result.confidence,
+        chars: result.text.length,
+        truncated,
+        text: truncated ? `${result.text.slice(0, maxChars)}
+[truncated]` : result.text,
+        ...(result.warning ? { warning: result.warning } : {}),
+      };
+    },
+  });
+
   registry.define({
     name: 'memory_save',
     description: 'Remember a durable user preference or fact (key + short text) for future conversations.',
@@ -295,6 +352,19 @@ export const TOOL_SCHEMAS = [
     name: 'workspace_list',
     description: 'List files in the user workspace.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'document_read',
+    description: 'Read the text inside a document in the workspace (PDF, DOCX, XLSX, txt).',
+    parameters: {
+      type: 'object',
+      properties: {
+        fileName: { type: 'string', description: 'Leaf filename in the workspace, e.g. "cv.pdf".' },
+        maxChars: { type: 'number', description: 'How much text to return (default 20000).' },
+      },
+      required: ['fileName'],
+      additionalProperties: false,
+    },
   },
   {
     name: 'memory_save',

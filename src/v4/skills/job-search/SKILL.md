@@ -4,8 +4,12 @@ Följ den här ordningen. Stanna och rapportera om ett steg inte kan göras.
    Leta efter filnamn som innehåller cv, resume, merit eller liknande, med
    filtillägg .pdf, .docx, .md eller .txt. Om flera hittas: välj den senast
    ändrade och säg vilken du valde och varför.
-2. **Läs det.** `fs_read` på filen. Sammanfatta kort: roller, år, kompetenser,
-   språk. Hitta inte på något som inte står i texten.
+2. **Läs det.** Använd `document_read` — den läser texten i PDF, DOCX och XLSX.
+   `fs_read` visar bara rå bytes för de formaten och är fel verktyg här.
+   Sammanfatta kort: roller, år, kompetenser, språk. Hitta inte på något som
+   inte står i texten. Om `document_read` svarar `confidence: "partial"` ska du
+   säga att en del tecken kan vara felavlästa. Om den svarar `NO_TEXT_LAYER` är
+   filen en skanning — säg det och be om en textbaserad version.
 3. **Sök jobb.** `web_search` eller `jobs_search` med termer som kommer från
    CV:t (roll, ort, senioritet). Ägaren anger ofta ort och antal.
 4. **Verifiera.** Öppna annonsen med `browser_open` och kontrollera att den

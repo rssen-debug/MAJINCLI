@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 368
-# pass 367
+# tests 386
+# pass 385
 # skipped 1
 # fail 0
 # skipped 0
@@ -47,6 +47,7 @@ $ npm run v4:test
 | `test/v4/upgrade.test.js` | 8 | clean upgrade, up-to-date, rollback on a failed gate, escalation when rollback fails, fetch/checkout classification |
 | `test/v4/leaks.test.js` | 7 | bounded rate limiter and conversation cache, cache eviction loses nothing, bounded listing, abort-key collision, truncated replay |
 | `test/v4/leaks2.test.js` | 3 | bounded goal cache, evicted goals reload from disk intact, in-flight goals are never evicted |
+| `test/v4/extract.test.js` | 18 | real ZIP parsing, DOCX text with paragraphs/tabs/entities, XLSX shared strings, PDF Flate and uncompressed streams, TJ arrays and escapes, encrypted PDF refused, scan reported as NO_TEXT_LAYER, dispatcher by extension or magic bytes, and the CV scenario end to end through an upload + `document_read` |
 | `test/v4/owner-mode.test.js` | 21 | nothing granted by default, grants persist, 0600 file, folder implies files, files inert without a folder, drive roots refused (portable across platforms), inside-only path check, immediate revoke, per-lane revoke, unknown lanes refused, audit history, corrupt file degrades to nothing, live grant/revoke through the API without a restart, grant survives restart |
 | `test/v4/skills.test.js` | 15 | shipped skills well formed, withheld without required lanes, withheld without required tools, degraded (not hidden) when a preferred tool is missing, bounded prompt section, malformed skill skipped, directory/name mismatch, oversized body capped, experimental hidden, phone view explains every block, `prefers` never widens access |
 | `test/v4/uploads.test.js` | 16 | leaf names, executable types refused, real PNG stored with a hash, lying payloads refused, size enforced, collisions suffixed, `data:` URLs accepted, traversal impossible, sandbox headers for HTML/SVG, session + CSRF required, a photo lands in the workspace, an agent-written page is served sandboxed |
