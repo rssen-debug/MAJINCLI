@@ -243,7 +243,7 @@ export class Scheduler {
 
   async fire(j, { manual = false } = {}) {
     if(this.running.has(j.id))return {error:'job already running',code:'already_running'};
-    if(j.maxRuns!=null && (j.runCount||0)>=j.maxRuns)return {error:'run budget exhausted',code:'run_budget'};
+    if(j.maxRuns!=null && (j.runCount||0)>=j.maxRuns){j.paused=true;this.save();return {error:'run budget exhausted',code:'run_budget'};}
     this.running.add(j.id);
     const previous={lastRun:j.lastRun,running:j.running,runId:j.runId,runCount:j.runCount};
     j.lastRun = new Date(this.now()).toISOString();j.running=true;j.runId=crypto.randomUUID();
@@ -295,6 +295,8 @@ function load(file,now) {
     return raw.map((j) => {
       if(!j || typeof j!=='object' || typeof j.id!=='string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(j.id) || ids.has(j.id))throw new Error('invalid or duplicate schedule identifier');
       ids.add(j.id);
+      if(j.maxRuns!=null&&(!Number.isSafeInteger(j.maxRuns)||j.maxRuns<1||j.maxRuns>10000))throw new Error('invalid stored run budget');
+      if(j.runCount!=null&&(!Number.isSafeInteger(j.runCount)||j.runCount<0))throw new Error('invalid stored run count');
       if(j.nextRun!==undefined && j.nextRun!==null && !Number.isFinite(j.nextRun))throw new Error('invalid next schedule time');
       const spec=j.spec || parseWhen(j.when);
       nextRun(spec,now); // Reject corrupt/unsafe expressions before any timer is armed.

@@ -247,7 +247,7 @@ test('exposure: with host tools off, the model gets the workspace set plus disco
     // Discovery is core: without it the model could never reach a tool that
     // does not fit in the per-request budget.
     assert.deepEqual(names.sort(), [
-      'document_read', 'memory_save', 'memory_search', 'tools_activate', 'tools_search',
+      'document_read', 'memory_save', 'memory_search', 'task_list', 'task_manage', 'tools_activate', 'tools_search',
       'workspace_list', 'workspace_read', 'workspace_write',
     ]);
   } finally {

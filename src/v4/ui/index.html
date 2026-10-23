@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="MAJIN" />
-  <link rel="stylesheet" href="/app.css?v=12" />
+  <link rel="stylesheet" href="/app.css?v=13" />
 </head>
 <body>
   <div class="aurora" aria-hidden="true"></div>
@@ -152,6 +152,10 @@
     <div class="sheet-section">
       <h3>Uppgifter</h3>
       <ul class="goal-list" id="goal-list"></ul>
+      <button type="button" class="btn ghost wide" id="push-enable">Enable notifications</button>
+      <button type="button" class="btn ghost wide" id="push-test" hidden>Send a test notification</button>
+      <button type="button" class="btn ghost wide" id="push-disable" hidden>Disable notifications on this device</button>
+      <p class="sheet-note" id="push-status"></p>
     </div>
 
     <div class="sheet-section">
@@ -265,6 +269,6 @@
     </details>
   </template>
 
-  <script type="module" src="/app.js?v=12"></script>
+  <script type="module" src="/app.js?v=13"></script>
 </body>
 </html>

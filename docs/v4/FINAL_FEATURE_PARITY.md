@@ -1,5 +1,19 @@
 # Final feature parity audit — MAJIN V4
 
+**Latest 24 October implementation — NOT READY:** V4 now binds the existing
+Scheduler to the same journal turn/agent/conversation store. Typed approved task
+creation, authenticated management, total-run budgets, edit/pause/cancel/restart
+and real HTTP-condition evaluation are implemented. Conditional threshold alerts
+deduplicate across reload; unchanged checks make no model calls. Web Push has
+private persistent VAPID identity, explicit device subscription, encrypted
+delivery, bounded retries, expiry/history and same-origin notification links.
+Controlled push/monitor tests9/0/0; earlier security/scheduler integration40/0/0;
+actual Chromium mobile-touch plus Chromium/WebKit model-selector and owner/tool
+exposure suite32/0/0. These overlapping suites are not a full release total.
+Actual locked iPhone receipt and live-Go natural-language monitoring remain
+unverified. Whole monitoring/push gate remains PARTIAL. Real-Go software creation
+and repair receipts remain FAIL. Older paragraphs below are historical snapshots.
+
 **24 October continuation — NOT READY:** grounded file uploads now share the
 existing live workspace/folder-grant enforcement; real local DOM tests verify
 actual uploaded bytes and reject stale/ambiguous targets. Browser cancellation
@@ -139,7 +153,7 @@ considered complete merely because unit tests pass.
 | Sentence-streamed narrator | PARTIAL | Same Kokoro/am_adam deployed at fffa918; loopback first segment 4270 ms vs full WAV 11563 ms; authenticated HTTPS first segment 4301 ms. Synthetic, not physical timing |
 | Physical mobile voice/interruption/reconnect | PARTIAL | Owner approved voice and English audio; natural interruption and explicit 5G reconnect remain unconfirmed |
 | Real-model scenarios A–G | PARTIAL | Existing real Go write/read and orchestration evidence; unfamiliar dynamic form/upload, build/repair, research, desktop planning, restart/resume, physical mobile execution and two-model acceptance remain |
-| Persistent natural-language monitoring / schedules | FAIL | Existing core scheduler/heartbeat must still be connected end-to-end to V4 with durable conditions/dedup/budgets/edit/pause/restart tests |
+| Persistent natural-language monitoring / schedules | PARTIAL | Existing Scheduler now bound to V4 with durable tasks, JSON-source conditions, threshold deduplication, total-run limits, three bounded source failures, edit/pause/cancel/reload and Web Push outbox. Controlled tests pass; live Go creation/source discovery, physical locked-iPhone receipt, token/currency budgets and heartbeat digest integration remain required |
 | Locked-iPhone Web Push chain | FAIL | Subscription, secure delivery/history/deep link, controlled threshold, real source and actual locked physical iPhone receipt remain unimplemented/unverified |
 | Original Windows release / parity gates | BLOCKED | Production signer/channel absent; native activation/rollback and login acceptance outstanding; retain all original gaps above |
 

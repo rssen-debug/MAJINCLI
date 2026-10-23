@@ -5,11 +5,11 @@
  * never claims a task succeeded on its own. iOS voice uses foreground capture
  * and host-local STT; other browsers retain Web Speech with recording fallback.
  */
-import { createSpirit } from '/spirit.js?v=12';
-import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage, playNarratorStream } from '/voice.js?v=12';
-import { t } from '/strings.js?v=12';
-import { INITIAL, applyEvent, createSseParser } from '/session.js?v=12';
-import { VoiceCapture } from '/recorder.js?v=12';
+import { createSpirit } from '/spirit.js?v=13';
+import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage, playNarratorStream } from '/voice.js?v=13';
+import { t } from '/strings.js?v=13';
+import { INITIAL, applyEvent, createSseParser } from '/session.js?v=13';
+import { VoiceCapture } from '/recorder.js?v=13';
 
 const $ = (sel) => document.querySelector(sel);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -2093,7 +2093,39 @@ async function main() {
   if (reducedMotion) spirit.set('idle');
   await boot();
   await restoreConversation();
+  const linkedConversation=new URL(location.href).searchParams.get('conversation');
+  if(linkedConversation&&/^conv_[a-z0-9_]+$/.test(linkedConversation))await openConversation(linkedConversation);
+  bindPush();
   startSync();
 }
 
 main();
+
+function bindPush(){
+  const enable=$('#push-enable'),test=$('#push-test'),disable=$('#push-disable'),note=$('#push-status');
+  if(!enable)return;
+  const request=async body=>{const response=await api('/api/push',body?{method:'POST',body}:{});const data=await response.json();if(!response.ok||!data.ok)throw Error(data.error?.message||'Notification request failed');return data;};
+  const supported='serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+  if(!supported){enable.disabled=true;note.textContent='Notifications require a supported browser. On iPhone, add MAJIN to the Home Screen and open that app.';return;}
+  enable.addEventListener('click',async()=>{
+    enable.disabled=true;
+    try{
+      // Request in the actual click gesture; Safari requires an installed PWA.
+      const permission=await Notification.requestPermission();
+      if(permission!=='granted')throw Error('Notification permission was not granted. Check this device’s settings.');
+      const config=await request();
+      if(!config.enabled)throw Error('Host needs its HTTPS public origin configured.');
+      const registration=await navigator.serviceWorker.ready;
+      const bytes=Uint8Array.from(atob(config.publicKey.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+      const subscription=await registration.pushManager.getSubscription()||await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:bytes});
+      await request({action:'subscribe',subscription:subscription.toJSON()});
+      test.hidden=false;disable.hidden=false;note.textContent='This device subscribed. A test must arrive while the phone is locked before physical acceptance.';
+    }catch(error){note.textContent=error.message;}finally{enable.disabled=false;}
+  });
+  test.addEventListener('click',async()=>{
+    test.disabled=true;try{await request({action:'test'});note.textContent='Test queued. Check the locked phone; server acceptance alone does not prove receipt.';}catch(error){note.textContent=error.message;}finally{test.disabled=false;}
+  });
+  disable.addEventListener('click',async()=>{
+    try{const registration=await navigator.serviceWorker.ready;const subscription=await registration.pushManager.getSubscription();if(subscription){await request({action:'unsubscribe',endpoint:subscription.endpoint});await subscription.unsubscribe();}test.hidden=true;disable.hidden=true;note.textContent='Notifications disabled on this device.';}catch(error){note.textContent=error.message;}
+  });
+}

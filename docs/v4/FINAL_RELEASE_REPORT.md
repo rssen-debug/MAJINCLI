@@ -1,5 +1,32 @@
 # MAJIN V4 release verification — 23 October 2026
 
+## Latest implementation checkpoint — 24 October 2026, NOT READY
+
+HTTP safety commit daf04bf905ed1ecda8944a5f54ca4cf7ff5c1d56 passed all three CI
+flows. Background binding commit dabcda6e17f5e4ccbdc5017aa51061f61f254641
+failed Linux534/3/7 and Windows540/3/1: two exact old base-tool lists and a
+genuine provider-schema issue (task_manage root union lacked object type).
+The tool now exposes an object schema while retaining discriminated action
+validation. Base-tool expectations explicitly include the two new built-ins;
+host revocation and external task-creation approval assertions remain enforced.
+Relevant owner/exposure plus actual mobile-touch/model browser suite32/0/0.
+
+The existing Scheduler now drives V4 background tasks through the same agent
+and conversations. JSON conditions use actual source values and no LLM polling;
+alerts/outbox are durable and deduplicated. Explicit-device Web Push uses real
+encryption and private VAPID keys; provider acceptance is labelled separately
+from physical receipt. Controlled push/monitor suite9/0/0; security/scheduler
+suite40/0/0 before later hardening, source parse641/641 at that observation.
+No actual locked iPhone push receipt yet; no live-Go monitoring PASS.
+
+Two live Go software creations and one repair remain FAIL. Model artifacts,
+independent CLI results, generated tests and scope/harness failures are retained
+in genesis-software-attempt-1/-2.json and genesis-software-repair-1.json. Five
+earlier form FAIL receipts remain unchanged. All Genesis scenarios, original
+parity, model billing, physical voice and production release gates remain binding.
+Owner reports disk cleanup finished (~50GB); no further disk investigation.
+Later dated handover entries take precedence over older installed-head notes.
+
 ## Ghost checkpoint — 24 October 2026, NOT READY
 
 Final observation: exact `2e4e7c59f414a5ba1fdc6c9f946f6c39cf137885`

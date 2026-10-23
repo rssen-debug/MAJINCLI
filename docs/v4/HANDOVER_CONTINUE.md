@@ -671,3 +671,45 @@ used genuine Go and actual patch/process/log tools but regressed CLI shape and
 exhausted recovery with invalid arguments; independent checks still fail.
 Do not hide either model defects or harness defects, or label scenarioB complete.
 Five older form FAIL receipts remain intact; no further form attempt was run.
+
+### Conditional monitoring and encrypted Web Push — 24 October, PARTIAL
+
+New runtime implementation: same Scheduler tasks can inspect actual JSON via
+registered read-only web_fetch and deterministic JSON Pointer/comparison. Numeric
+types are checked; missing/incomplete/invalid sources fail honestly. Unchanged
+checks do not invoke the model. Threshold edges have stable durable IDs and
+notification outbox deduplication; chat evidence records observed value/source.
+At most3 source failures before pause; owner cancellation during an in-flight
+read prevents a late alert. Total-run budgets are checkpointed, exhausted jobs
+pause even after an attempted resume. Cancellation/history remain durable.
+
+Added pinned web-push3.6.7 with lockfile integrity. Official implementation
+reference: https://github.com/web-push-libs/web-push#readme
+VAPID keys generated once and persisted BEFORE exposing the public key, inside
+an actual ACL-protected private directory. These local push keys are NOT a
+production release-signing identity. Subscriptions require explicit authenticated
+user interaction, valid HTTPS push service endpoint/encryption keys, max10
+registered devices. Delivery encrypts payload; bounded outbox100/history200,
+three transient retries and expired-device removal. History explicitly labels
+accepted_by_push_service, never physical receipt. Generic lock-screen body,
+stable notification tag, same-origin conversation deep links, enable/test/disable
+controls in the existing menu. PWA shell13 invalidates old asset versions.
+
+Latest focused push/core scheduler suite16/0/0 after run-budget/key persistence
+hardening. Earlier push/background9/0/0; security/scheduler40/0/0 (overlap; do not
+sum). Actual Chrome mobile touch plus Chrome/WebKit model selectors and owner/
+exposure32/0/0, zero skips after using existing installed Chrome executable.
+Parse641/641 observed before last tiny edits; i18n remains separate.
+
+Exact dabcda6 CI failed3 assertions on Linux and Windows: obsolete exact base-tool
+lists and a real model-facing root-union schema defect. task_manage now exposes
+an object input schema while retaining typed action validation internally. Tests
+explicitly include task_list/task_manage built-ins; host tools still disappear
+on revoke and task management still requires scoped approval. No security rule
+was relaxed. New-head CI/install/live Go and locked-iPhone acceptance required.
+
+Missing: live-Go natural-language task creation and real external source test,
+physical locked iPhone notification receipt/opening, transport acknowledgements
+from the physical device, heartbeat digest integration and token/currency budgets.
+Network push acceptance is not proof of phone delivery. Native production signing,
+app/host updates, other original/Genesis gates remain open; PR stays NOT READY.

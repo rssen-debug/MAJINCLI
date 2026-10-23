@@ -7,6 +7,7 @@
  * happens in a request handler — the agent owns it, behind approvals.
  */
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -54,6 +55,8 @@ import { parseMcpConfig, connectServers } from './mcp.js';
 import { registerMcpTools } from './mcp-tools.js';
 import { TelemetryLedger } from '../v2/telemetry/ledger.js';
 import { createBackgroundTasks } from './background-tasks.js';
+import { createPushService } from './push.js';
+import { runTool } from '../v2/tools/runner.js';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui');
 
@@ -563,10 +566,31 @@ export function createV4Server({ config }) {
     return {turn,finished,cancel:()=>controller.abort()};
   }
 
-  const backgroundTasks=createBackgroundTasks({root:paths.root,conversations,startTurn:startJournalTurn,ready:Promise.all([hostReady,kernelReady])});
+  const notifications=createPushService({root:paths.root,subject:config.publicOrigin});
+  const backgroundTasks=createBackgroundTasks({root:paths.root,conversations,startTurn:startJournalTurn,notifications,ready:Promise.all([hostReady,kernelReady]),readSource:async(url)=>{
+    const result=await runTool({tool:'web_fetch',input:{url,extract:'json',maxChars:1000000}},{registry:tools.registry,approvals:agent.approvals,timeoutMs:30000});
+    if(!result.ok||result.data?.meta?.truncated)throw Error('Source response failed or was incomplete');
+    const text=result.data?.result;
+    if(typeof text!=='string'||!text.includes('\n\n'))throw Error('Source returned no JSON document');
+    return JSON.parse(text.slice(text.indexOf('\n\n')+2));
+  }});
   for(const tool of backgroundTasks.tools)tools.registry.define(tool);
 
   const routes = {
+    'GET /api/push':async(req,res)=>{requireSession(req);sendJson(res,200,{ok:true,...notifications.view()});},
+    'POST /api/push':async(req,res)=>{
+      const {session}=requireSession(req);assertCsrfHeader(req);limiter.take('general',clientKey(req,config));
+      const body=await readJsonBody(req,16384);
+      try{
+        if(body.action==='subscribe')sendJson(res,200,{ok:true,...notifications.subscribe(body.subscription,session.id)});
+        else if(body.action==='unsubscribe'){notifications.unsubscribe(String(body.endpoint||''),session.id);sendJson(res,200,{ok:true});}
+        else if(body.action==='test'){
+          const conv=conversations.create({title:'Notification test',titlePolicy:'manual'});
+          const id=`test:${crypto.randomUUID()}`;
+          notifications.enqueue({id,conversationId:conv.id});await notifications.flush();sendJson(res,200,{ok:true,id,note:'Push-service acceptance is not physical device receipt.'});
+        }else throw Error('Unknown notification action');
+      }catch(error){throw new HttpError(400,'PUSH_ACTION',error.message);}
+    },
     'GET /api/tasks': async(req,res)=>{
       requireSession(req);sendJson(res,200,{ok:true,tasks:backgroundTasks.list()});
     },
@@ -1249,13 +1273,14 @@ export function createV4Server({ config }) {
   // Workers are killed when the listener closes, so a stopped host leaves no
   // orphaned plugin processes behind.
   server.on('close', () => {
+    notifications.stop();
     backgroundTasks.stop();
     kernel.shutdownWorkers();
     // MCP children are processes too: closing the host must not leave them.
     for (const entry of mcpState.connected) entry.server.stop();
     mcpState.connected = [];
   });
-  server.once('listening',()=>{void Promise.all([hostReady,kernelReady]).then(()=>backgroundTasks.start()).catch(()=>backgroundTasks.stop());});
+  server.once('listening',()=>{notifications.start();void Promise.all([hostReady,kernelReady]).then(()=>backgroundTasks.start()).catch(()=>backgroundTasks.stop());});
 
   return {
     server,
