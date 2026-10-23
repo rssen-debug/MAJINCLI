@@ -1,0 +1,2 @@
+# Host-local recognition; provision model separately, never download per request.
+faster-whisper==1.2.1

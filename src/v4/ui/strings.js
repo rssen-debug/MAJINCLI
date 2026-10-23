@@ -7,6 +7,17 @@
  * declared localization resource and is exempt for that reason only.
  */
 export const SV = {
+  'voice.capture.requesting': 'Tillåt mikrofonen i Safari…',
+  'voice.capture.listening': 'Lyssnar – tryck på mikrofonen för att avsluta.',
+  'voice.capture.transcribing': 'Tolkar tal på värden…',
+  'voice.capture.blocked': 'Mikrofonen är blockerad. Tillåt mikrofon för denna webbplats i Safaris webbplatsinställningar.',
+  'voice.capture.missing': 'Ingen mikrofon hittades.',
+  'voice.capture.unconfigured': 'Taligenkänning på servern är inte konfigurerad.',
+  'voice.capture.failed': 'Taligenkänning misslyckades. Tryck på mikrofonen för att försöka igen.',
+  'voice.capture.ready': 'Mikrofon via säker ljudinspelning och lokal taligenkänning på värden. Aktiv endast i öppen flik; tryck igen för att avsluta.',
+  'voice.capture.fallback': 'Nästa mikrofontryck använder ljudinspelning och serverns taligenkänning.',
+  'voice.capture.size': 'Inspelningen är för stor.',
+  'voice.capture.interrupted': 'Ljudinspelningen avbröts. Tryck på mikrofonen igen.',
   'gate.title': 'Anslut enheten',
   'gate.copy': 'Ange parkodningen som visades på MAJIN-värden första gången den startade.',
   'gate.code': 'Parkod',

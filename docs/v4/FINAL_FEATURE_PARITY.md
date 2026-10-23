@@ -2,6 +2,15 @@
 
 Audit date: 2026-10-23. Target: `v4/main`, integration PR [#401](https://github.com/rssen-debug/MAJINCLI/pull/401).
 
+**Current Ghost delta — NOT READY:** [Ghost acceptance](GHOST_ACCEPTANCE_20261023.md)
+records verified backup/restore, live provider, crash recovery, shared history,
+CLI migration and owner-confirmed mobile chat repair. The owner reports Safari
+microphone failure; the new recording/local STT path is not physically accepted.
+Production signing/native installation, login startup, updates and the functional
+gaps below remain requirements. Initial krist-only paragraphs are historical.
+V2 permission hardening adds one inventory component; the STT path reuses that
+privacy helper (now 22/52 imported). It does not wire V2 cryptographic audit into V4.
+
 Source snapshots actually fetched:
 
 | Version | Branch | Commit |

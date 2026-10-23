@@ -1,12 +1,22 @@
 # MAJIN V4 release verification — 23 October 2026
 
+Latest Ghost follow-up: **NOT READY**. See [Ghost acceptance](GHOST_ACCEPTANCE_20261023.md)
+and [machine-readable evidence](evidence/ghost-acceptance.json). Backup/restore,
+real inference, crash recovery, shared authenticated history and mobile input
+repair are verified. Ghost legacy regression is now 1284 passed, 0 failed,
+23 skipped (43 failures reproduced and repaired). The owner confirms mobile
+chat works but reports the Safari microphone still fails; iOS recording/server
+STT follow-up is under test, with physical voice acceptance pending. Native
+installation, login startup, production signing/updates and parity remain open.
+The alpha.2/alpha.3 krist records below are historical, not current Ghost claims.
+
 Latest tested candidate: **4.0.0-alpha.3** implements durable inline tool history using the existing server receipts. See [HISTORY_RECEIPTS_ALPHA3.md](HISTORY_RECEIPTS_ALPHA3.md) for installed-package verification, the 30/30 targeted tests, the 492-pass/1-fail full local run and the successful 12-test isolated rerun. Its installer and bundled-host history recovery passed on krist. The alpha.2 build identity and original failures below remain historical evidence, not claims about the newer package. Alpha.3 evidence is recorded separately; production status remains NOT READY.
 
 ## Verdict: NOT READY for the requested production release
 
 The repository is accessible through the owner's GitHub connection. The work is on `codex/v4-final-integration-20261023`, with draft [PR #401](https://github.com/rssen-debug/MAJINCLI/pull/401) targeting `v4/main`. The initial Windows candidate was **4.0.0-alpha.2**; the tested alpha.3 follow-up is described above. No production release was published, no PR was merged, and no production signing identity or update channel was invented.
 
-Development and local acceptance ran on **krist**, with owner authorization. **Ghost was not connected**: its installation path was absent and its private Tailscale hostname did not resolve. GitHub access did not provide Ghost access.
+Initial alpha.2/alpha.3 development and local acceptance ran on **krist**, with owner authorization; Ghost was not connected then. The subsequent Ghost source-host work is documented above and does not retroactively establish native-package acceptance on Ghost.
 
 ## What changed
 
@@ -32,12 +42,12 @@ The machine-readable [test report](FINAL_TEST_RESULTS.json) separates overlappin
 
 ## Production blockers
 
-1. Ghost installation/configuration, backup, migration, actual login startup and crash recovery have not been accepted on the target. Existing data, sessions, trust and credentials require preservation before installation.
-2. Real iPhone/Android, private networking, 5G reconnect, uploads/history sync and physical voice acceptance remain unverified. Automatic voice barge-in is absent; browser recognition needs a configured fallback where unavailable.
+1. Ghost backup/restore, preserved configuration, source-host inference/history and child crash recovery are verified. Native installation and actual login startup remain unaccepted; failed scheduled task is disabled while the manual supervisor runs.
+2. Real iPhone chat over Tailscale is owner-confirmed. Physical microphone/speaker, natural voice interruption, explicit 5G reconnect and the remaining device/upload walkthrough are pending; a new iOS recording/server STT path must pass physical acceptance.
 3. The installer is an **unsigned test artifact**. A pinned trusted production signer/channel is absent. Existing signed host update tests use disposable keys; they do not establish production trust.
 4. Signed host updates do not replace the running Electron shell. Native-shell automatic update activation and rollback remain unimplemented.
 5. Functional gaps remain for outbound channels, proactive event digests, separate-store memory synchronization, some typed self-configuration/reset behavior, V2 cryptographic audit anchoring, durable graph pause/replanning and whole-team token/currency accounting. See the parity table. Scanned-PDF OCR is unsupported.
-6. The 44 legacy test failures remain unresolved. Latest CI must be evaluated for the actual PR head, not an earlier commit.
+6. Historical krist legacy result was 44 failures. Ghost reproduced 43 failures; repairs yielded 1284 passed, 0 failed, 23 skipped. The last full local V4 had one installer text assertion failure, subsequently corrected and verified in 15 targeted tests. Latest CI must be evaluated for the actual PR head, not an earlier commit.
 
 Closed in alpha.3: the inline-history receipt gap. Both opening and refreshing a conversation render durable server receipts, with visible historical labels, original times, and no assertion of current file existence. Physical target/device verification remains separate.
 

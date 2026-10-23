@@ -1,6 +1,6 @@
 {
   "schema": "majin.v4.capability-inventory/v1",
-  "generatedAt": "2026-10-23T18:45:18.482Z",
+  "generatedAt": "2026-10-23T19:31:45.103Z",
   "platform": "win32",
   "v1": {
     "modules": [
@@ -2275,12 +2275,13 @@
       },
       {
         "path": "src/v2/audit/permissions.js",
-        "status": "not-used",
+        "status": "reused",
         "importedBy": [
           "src/v2/audit/anchor.js",
-          "src/v2/audit/chain.js"
+          "src/v2/audit/chain.js",
+          "src/v4/server.js"
         ],
-        "reason": "Protects V2 audit keys and chain files with POSIX modes or NTFS ACLs. V4 cryptographic audit integration remains an explicit release blocker; this helper alone does not establish V4 audit parity."
+        "reason": "imported by src/v2/audit/anchor.js, src/v2/audit/chain.js, src/v4/server.js"
       },
       {
         "path": "src/v2/audit/timestamp.js",
@@ -2675,8 +2676,8 @@
     ],
     "totals": {
       "components": 52,
-      "reused": 21,
-      "notUsed": 31
+      "reused": 22,
+      "notUsed": 30
     }
   },
   "v3": {

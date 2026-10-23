@@ -8,6 +8,7 @@
  */
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertNodeSupported } from './config.js';
@@ -38,7 +39,8 @@ import { createAgent } from './agent.js';
 import { discoverModels, refreshAllCatalogs } from './models.js';
 import { Kernel } from './kernel.js';
 import { t } from './ui/strings.js';
-import { synthesize, VOICE_MODES, voiceCapabilities } from './voice.js';
+import { synthesize, transcribe, sttTemplateFromEnv, VOICE_MODES, voiceCapabilities } from './voice.js';
+import { protectAuditFile } from '../v2/audit/permissions.js';
 import { TurnJournal } from './turns.js';
 import { hostCapabilities, describeCapabilities, registerHostTools } from './tools/host.js';
 import { UploadStore, UploadError, serveHeadersFor, typeForName, MAX_UPLOAD_BYTES } from './uploads.js';
@@ -58,6 +60,7 @@ const STATIC = {
   '/app.js': { file: 'app.js', type: 'text/javascript; charset=utf-8' },
   '/spirit.js': { file: 'spirit.js', type: 'text/javascript; charset=utf-8' },
   '/voice.js': { file: 'voice.js', type: 'text/javascript; charset=utf-8' },
+  '/recorder.js': { file: 'recorder.js', type: 'text/javascript; charset=utf-8' },
   '/strings.js': { file: 'strings.js', type: 'text/javascript; charset=utf-8' },
   '/session.js': { file: 'session.js', type: 'text/javascript; charset=utf-8' },
   '/manifest.webmanifest': { file: 'manifest.webmanifest', type: 'application/manifest+json; charset=utf-8' },
@@ -589,6 +592,40 @@ export function createV4Server({ config }) {
       sendJson(res, 200, { ok: true });
     },
 
+    'POST /api/voice/transcribe': async (req, res) => {
+      requireSession(req);
+      assertCsrfHeader(req);
+      limiter.take('general', clientKey(req, config));
+      const command = sttTemplateFromEnv();
+      if (!command) throw new HttpError(503, 'STT_NOT_CONFIGURED', 'Server speech recognition is not configured.');
+      if (routes.sttBusy) throw new HttpError(429, 'STT_BUSY', 'Speech recognition is busy; try again.');
+      routes.sttBusy = true;
+      let dir;
+      try {
+        const body = await readJsonBody(req, 6 * 1024 * 1024);
+        const type = String(body.type || '').split(';')[0].trim().toLowerCase();
+        const extensions = { 'audio/mp4': 'm4a', 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/wav': 'wav' };
+        if (!extensions[type]) throw new HttpError(415, 'AUDIO_TYPE', 'Use MP4/AAC, WebM, Ogg or WAV audio.');
+        if (typeof body.data !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(body.data)) throw new HttpError(400, 'AUDIO_DATA', 'Invalid base64 audio.');
+        const audio = Buffer.from(body.data, 'base64');
+        if (!audio.length || audio.length > 4 * 1024 * 1024) throw new HttpError(413, 'AUDIO_SIZE', 'Audio must be between 1 byte and 4 MiB.');
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-stt-'));
+        protectAuditFile(dir);
+        const file = path.join(dir, `capture.${extensions[type]}`);
+        fs.writeFileSync(file, audio, { mode: 0o600, flag: 'wx' });
+        const result = await transcribe({ audioPath: file, command });
+        // Never expose a local path/command, or call a fixture a real recognizer.
+        sendJson(res, result.ok ? 200 : 422, {
+          ok: result.ok, transcript: result.transcript, provider: result.provider,
+          synthetic: result.synthetic === true, elapsedMs: result.elapsedMs,
+          ...(!result.ok ? { error: { code: result.errorClass || 'NO_SPEECH', message: 'No speech could be transcribed. Try again.' } } : {}),
+        });
+      } finally {
+        if (dir) fs.rmSync(dir, { recursive: true, force: true });
+        routes.sttBusy = false;
+      }
+    },
+
     'POST /api/voice/speak': async (req, res) => {
       const { session } = requireSession(req);
       assertCsrfHeader(req);
@@ -644,7 +681,7 @@ export function createV4Server({ config }) {
         modes: VOICE_MODES,
         default: 'auto',
         // The browser engine is what the phone actually uses today.
-        clientEngine: 'SpeechSynthesis + SpeechRecognition',
+        clientEngine: 'SpeechSynthesis + MediaRecorder/server STT (iOS), SpeechRecognition fallback',
         serverSide: {
           ...voiceCapabilities(),
           note: 'Buffer is a deterministic offline provider that proves the pipeline, not a voice.',

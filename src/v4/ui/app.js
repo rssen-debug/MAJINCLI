@@ -2,14 +2,14 @@
  * MAJIN V4 — client.
  *
  * The browser is a thin, honest client: it renders what the server proves and
- * never claims a task succeeded on its own. Voice uses the browser engines
- * (SpeechRecognition + SpeechSynthesis) so it works without extra services,
- * and every unsupported capability is reported instead of faked.
+ * never claims a task succeeded on its own. iOS voice uses foreground capture
+ * and host-local STT; other browsers retain Web Speech with recording fallback.
  */
-import { createSpirit } from '/spirit.js?v=5';
-import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage } from '/voice.js?v=5';
-import { t } from '/strings.js?v=5';
-import { INITIAL, applyEvent, createSseParser } from '/session.js?v=5';
+import { createSpirit } from '/spirit.js?v=6';
+import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage } from '/voice.js?v=6';
+import { t } from '/strings.js?v=6';
+import { INITIAL, applyEvent, createSseParser } from '/session.js?v=6';
+import { VoiceCapture } from '/recorder.js?v=6';
 
 const $ = (sel) => document.querySelector(sel);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1325,8 +1325,61 @@ async function resolveApproval(approve) {
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const voiceSupport = detectVoiceSupport(window);
+const canRecord = Boolean(window.isSecureContext && navigator.mediaDevices?.getUserMedia && window.MediaRecorder && (window.AudioContext || window.webkitAudioContext));
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let preferRecording = isIOS || !SpeechRecognition;
+let voiceRequest = null;
+const capture = new VoiceCapture({
+  onState(mode) {
+    state.listening = capture.active;
+    els.mic.setAttribute('aria-pressed', String(capture.active));
+    spirit.set(mode === 'listening' ? 'listening' : 'idle');
+    els.hint.textContent = mode === 'idle' ? '' : t(`voice.capture.${mode}`);
+  },
+  onError(err) {
+    els.hint.textContent = err.name === 'NotAllowedError'
+      ? t('voice.capture.blocked')
+      : err.name === 'NotFoundError' ? t('voice.capture.missing') : err.message;
+  },
+  onSpeech() { if (window.speechSynthesis?.speaking || state.streaming) void interruptVoiceTurn(); },
+  async onSegment(blob) {
+    voiceRequest = new AbortController();
+    const request = voiceRequest;
+    const timer = setTimeout(() => request.abort(), 120000);
+    try {
+      const data = await new Promise((resolve, reject) => {
+        const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(blob);
+      });
+      if (!capture.active) return;
+      const response = await api('/api/voice/transcribe', { method: 'POST', body: { data, type: blob.type }, signal: request.signal });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error?.code === 'STT_NOT_CONFIGURED' ? t('voice.capture.unconfigured') : t('voice.capture.failed'));
+      if (!capture.active || request.signal.aborted) return;
+      const text = String(result.transcript || '').trim();
+      if (!text) return;
+      els.input.value = text; resizeInput();
+      if (shouldAutoSend({ finalTranscript: text, autosend: state.autosend, streaming: state.streaming })) send(text);
+    } finally { clearTimeout(timer); if (voiceRequest === request) voiceRequest = null; }
+  },
+});
+
+async function interruptVoiceTurn() {
+  cancelSpeech();
+  const body = state.session.turnId ? { turnId: state.session.turnId } : state.conversationId ? { conversationId: state.conversationId } : null;
+  state.controller?.abort();
+  if (body && state.streaming) { try { await api('/api/cancel', { method: 'POST', body }); } catch {} }
+}
+
+function stopCapture() { capture.stop(); voiceRequest?.abort(); state.recognition?.abort(); }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible') { stopCapture(); cancelSpeech(); } });
+window.addEventListener('pagehide', stopCapture);
+window.addEventListener('offline', stopCapture);
 
 function setupVoice() {
+  if (canRecord && preferRecording) {
+    els.voiceNote.textContent = t('voice.capture.ready');
+    return;
+  }
   if (!voiceSupport.recognition) {
     els.mic.disabled = true;
     els.mic.setAttribute('aria-disabled', 'true');
@@ -1364,6 +1417,10 @@ function setupVoice() {
     }
   };
   rec.onerror = (ev) => {
+    if (canRecord && ['network', 'service-not-allowed', 'audio-capture', 'not-allowed'].includes(ev.error)) {
+      preferRecording = true;
+      els.voiceNote.textContent = t('voice.capture.fallback');
+    }
     const msg = voiceErrorMessage(ev.error);
     if (msg) els.hint.textContent = msg;
   };
@@ -1388,6 +1445,19 @@ function setupVoice() {
 }
 
 function toggleListening() {
+  if (canRecord && preferRecording) {
+    if (capture.active) { stopCapture(); return; }
+    cancelSpeech();
+    // Unlock synthesis in the actual microphone tap, before asynchronous iOS
+    // permission/STT work. The owner explicitly starts a two-way voice session.
+    if (voiceSupport.synthesis) {
+      const unlock = new SpeechSynthesisUtterance('');
+      window.speechSynthesis.speak(unlock);
+      state.tts = true; els.ttsToggle.checked = true;
+    }
+    void capture.start();
+    return;
+  }
   const rec = state.recognition;
   if (!rec) return;
   if (state.listening) {
@@ -1715,6 +1785,7 @@ function bindEvents() {
     }
   });
   els.stop.addEventListener('click', async () => {
+    stopCapture();
     cancelSpeech();
     // The turn now outlives the socket on purpose, so stopping it is a request
     // to the host — aborting the fetch alone would just detach and let it run.
