@@ -429,3 +429,13 @@ selector/ref; they still run the existing read-only verifier. Real DOM checkbox
 test passes. Browser/grounding/verification regression 49/0/0, plus updated
 physical-DOM regression 1/0/0. No physical iPhone or live Go PASS from these tests.
 No turn or tool budget was increased. Continue with a fresh live evidence path.
+
+Attempt 4 on exact 37c0a25b561fc85ea5aa0276e5abb546f0a7283b is FAIL and
+preserved in genesis-form-attempt-4.json: filled/uploaded/clicked but no server
+submission. Failed operations include filling a checkbox and a malformed click
+expectation. Twelve rounds exhausted honestly. The model now receives remaining
+round/tool counts on each request, guidance to batch independent grounded calls,
+re-observe changed identities and reserve outcome verification. Counts are not
+reset or increased; the note is not accumulated in conversation history.
+Agent failure/continuation/cancel/budget regression 15/0/0. Last controlled form
+attempt is number 5; do not continue unlimited attempts or erase failures.

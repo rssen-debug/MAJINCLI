@@ -57,6 +57,21 @@ test('spoken turns ask for concise same-language replies without affecting typed
   } finally { s.cleanup(); }
 });
 
+test('model sees diminishing execution bounds without accumulating instructions in history', async () => {
+  const requests=[];
+  const call={id:'observe',name:'observe',argsJson:'{}'};
+  const s=build({toolDef:{name:'observe',description:'Controlled observation',tier:'read',inputSchema:z.object({}),outputSchema:z.object({ok:z.boolean()}),execute:async()=>({ok:true})},
+    modelScript:[{toolCalls:[call]},{toolCalls:[{...call,id:'observe2'}]},{text:'Observed twice.'}],onRequest:r=>requests.push(r)});
+  try {
+    assert.equal((await s.agent.runTurn({text:'Observe twice.'})).status,'completed');
+    for (const [index,request] of requests.entries()) {
+      const system=request.messages[0].content;
+      assert.match(system,new RegExp(`${3-index} model responses including this one, ${3-index} tool calls left`));
+      assert.equal(system.split('Execution budget for this response:').length,2);
+    }
+  } finally {s.cleanup();}
+});
+
 const explodingTool = {
   name: 'explode',
   description: 'always throws a classified error',

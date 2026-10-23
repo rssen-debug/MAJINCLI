@@ -674,8 +674,11 @@ export function createAgent({
           if (signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
 
           emit('state', { state: 'thinking', round: rounds });
+          const budgetNote = `\nExecution budget for this response: ${config.limits.maxModelRounds - rounds + 1} model responses including this one, ${config.limits.maxToolCallsPerTurn - toolCallsUsed} tool calls left. Batch independent, already-grounded actions when useful; tools execute in order. Re-observe after actions that change control identities. Correct named schema arguments before retrying. Reserve a response to verify and report the actual outcome. Never repeat an irreversible action merely because verification failed.`;
+          const requestMessages = modelMessages.map((message, index) => index === 0 && message.role === 'system'
+            ? { ...message, content: message.content + budgetNote } : message);
           response = await model.chat({
-            messages: modelMessages,
+            messages: requestMessages,
             // Every registered tool, not a fixed list. This was the reported bug:
             // the model was only ever told about five workspace tools, so host
             // file/shell/Windows tools could not be called even when registered.
