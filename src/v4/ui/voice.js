@@ -5,7 +5,7 @@
  * lives in recorder.js and needs an explicit microphone session. Neither
  * lane promises background listening or physical voice acceptance.
  */
-import { t } from './strings.js?v=7';
+import { t } from './strings.js?v=8';
 
 /** Recognition language follows the phone, defaulting to Swedish. */
 export function recognitionLang(navigatorLanguage = 'sv-SE') {

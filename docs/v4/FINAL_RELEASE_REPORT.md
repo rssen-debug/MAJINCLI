@@ -1,5 +1,23 @@
 # MAJIN V4 release verification — 23 October 2026
 
+Latest saved status: **NOT READY** — [final Ghost evidence](evidence/ghost-final-status.json).
+The completed local V4 run passed 505/505 with no skips; it started at `526b0e6`
+and received repairs during execution, so it is not represented as an immutable
+latest-head run. Exact-code CI for `0dad743` passed 501/506 with five explicit
+Linux browser/Windows-parser skips, parsed 617 sources and passed i18n; Windows
+runner also passed. Windows desktop packaging was still running at observation.
+The later owner-requested hero copy change has its own passing boot check and
+needs its new head's CI. Legacy remains 1284 passed/0 failed/23 skipped.
+
+The owner now approves Kokoro/am_adam and the English audio reply on iPhone 13,
+but still reports latency. Actual synthetic English audio -> OpenCode -> verified
+Kokoro WAV over Tailscale HTTPS succeeded in 11.266 seconds. Natural barge-in,
+explicit 5G reconnect and complete physical voice acceptance remain unconfirmed.
+Original 23 selected data/config/key/pairing files still match; six existing
+sessions continue to see shared history. Desktop opening was not verified:
+native installation is blocked, and browser automation's saved origin permission
+still denied access after the owner gave renewed consent. No policy was bypassed.
+
 Latest Ghost follow-up: **NOT READY**. See [Ghost acceptance](GHOST_ACCEPTANCE_20261023.md)
 and [machine-readable evidence](evidence/ghost-acceptance.json). Backup/restore,
 real inference, crash recovery, shared authenticated history and mobile input
@@ -10,7 +28,8 @@ and missing prior narrator. The follow-up restores existing Kokoro/am_adam, warm
 local STT and language detection; physical voice acceptance is still failed/pending.
 The new DOM module-list regression was corrected (18/18 targeted pass). Native
 installation, login startup, production signing/updates and parity remain open.
-The alpha.2/alpha.3 krist records below are historical, not current Ghost claims.
+The alpha.2/alpha.3 krist records below and the intermediate failures above are
+historical snapshots; the latest evidence at the top takes precedence.
 
 Latest tested candidate: **4.0.0-alpha.3** implements durable inline tool history using the existing server receipts. See [HISTORY_RECEIPTS_ALPHA3.md](HISTORY_RECEIPTS_ALPHA3.md) for installed-package verification, the 30/30 targeted tests, the 492-pass/1-fail full local run and the successful 12-test isolated rerun. Its installer and bundled-host history recovery passed on krist. The alpha.2 build identity and original failures below remain historical evidence, not claims about the newer package. Alpha.3 evidence is recorded separately; production status remains NOT READY.
 
@@ -59,4 +78,9 @@ The initial alpha.2 installer contains runtime source matching GitHub commit `99
 
 ## Single target handoff
 
-Open this project on Ghost, connect its private network and run the same installer/host verification with its existing configuration after a verified backup. Preserve the owner-selected provider settings and trust material. Then run physical phone/voice/reconnect acceptance, provision the approved production signing identity/channel, complete native-shell update/rollback and the explicit parity gaps, and resolve the legacy suite. Publish only after those gates have concrete passing evidence. Until then, use this as a local alpha candidate, not the promised final Godmode release.
+Continue on this branch with Ghost's existing source host, provider, private backup
+and supervised local audio worker. Preserve keys, data and original installation.
+Resolve latency/physical interruption/reconnect, actual login startup, approved
+signing/native installation, production host and Electron update/rollback and all
+explicit parity gaps. Evaluate CI for the actual final head. Publish only after
+those gates have concrete evidence; the working source alpha is not a READY release.

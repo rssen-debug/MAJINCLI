@@ -5,11 +5,11 @@
  * never claims a task succeeded on its own. iOS voice uses foreground capture
  * and host-local STT; other browsers retain Web Speech with recording fallback.
  */
-import { createSpirit } from '/spirit.js?v=7';
-import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage } from '/voice.js?v=7';
-import { t } from '/strings.js?v=7';
-import { INITIAL, applyEvent, createSseParser } from '/session.js?v=7';
-import { VoiceCapture } from '/recorder.js?v=7';
+import { createSpirit } from '/spirit.js?v=8';
+import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage } from '/voice.js?v=8';
+import { t } from '/strings.js?v=8';
+import { INITIAL, applyEvent, createSseParser } from '/session.js?v=8';
+import { VoiceCapture } from '/recorder.js?v=8';
 
 const $ = (sel) => document.querySelector(sel);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -68,8 +68,6 @@ const els = {
   approvalDeny: $('#approval-deny'),
   approvalDismiss: $('#approval-dismiss'),
   heroTitle: $('#hero-title'),
-  heroSub: $('#hero-sub'),
-  suggestions: $('#suggestions'),
   newChat: $('#new-chat'),
   logout: $('#logout'),
   historyBtn: $('#history-btn'),
@@ -2009,13 +2007,6 @@ function bindEvents() {
     toast(t('model.refreshing'), 8000);
     await loadModels({ refresh: true });
     els.refreshModels.disabled = false;
-  });
-  els.suggestions.addEventListener('click', (ev) => {
-    const btn = ev.target.closest('[data-fill]');
-    if (!btn) return;
-    els.input.value = btn.dataset.fill;
-    resizeInput();
-    els.input.focus();
   });
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;

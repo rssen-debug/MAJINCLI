@@ -30,8 +30,7 @@ export const SV = {
   'gate.expired': 'Sessionen har gått ut. Anslut igen.',
   'gate.loggedOut': 'Utloggad.',
 
-  'hero.title': 'Vad vill du få gjort?',
-  'hero.sub': 'Säg det. MAJIN planerar, utför och visar beviset.',
+  'hero.title': 'Majin lets run it.',
   'hero.demoHint': 'Demo-läge — koppla en modell för fri konversation.',
 
   'composer.placeholder': 'Skriv eller tryck på mikrofonen…',

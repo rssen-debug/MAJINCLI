@@ -3,6 +3,27 @@
 **NOT READY.** Source-host acceptance is separate from the unsigned native Windows
 distribution. Work remains on draft [PR #401](https://github.com/rssen-debug/MAJINCLI/pull/401).
 
+## Latest follow-up
+
+[Final machine-readable status](evidence/ghost-final-status.json) records the
+completed local 505-pass/0-fail/0-skip run, exact `0dad743` V4 CI 501-pass/0-fail/
+5-skip result and the 11.266-second successful deployed English audio/model/audio
+roundtrip. The local full run started at `526b0e6` and the checkout was repaired
+during execution; exact-head CI is recorded separately rather than conflating
+those sources. Windows packaging was still running at the saved observation.
+
+The owner approves the restored voice and English reply on the real iPhone:
+“ja de bra forf lite seg på att svara men kanske de för jag är på 5g fortsätt göra
+klart den sen öppna appen på min dator också”. This is partial physical acceptance;
+latency remains a defect, and natural interruption/5G reconnect were not separately
+confirmed. Renewed permission did not overcome a saved browser-origin denial, so
+automatic desktop opening remains unverified. Original 23 data/key/config files
+still match and six existing sessions retain shared history.
+
+Owner-requested UI: “Majin lets run it.” replaces the old Swedish hero and the
+three prompt suggestion buttons are removed. Existing client boot test passes.
+The source files are deployed without restarting the model/audio processes.
+
 ## Verified on Ghost
 
 * Backup/restore: 39 data files, 46,961 bytes, zero restore mismatches. Original

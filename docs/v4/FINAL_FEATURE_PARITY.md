@@ -11,6 +11,15 @@ gaps below remain requirements. Initial krist-only paragraphs are historical.
 V2 permission hardening adds one inventory component; the STT path reuses that
 privacy helper (now 22/52 imported). It does not wire V2 cryptographic audit into V4.
 
+Latest [final evidence](evidence/ghost-final-status.json): owner approves the
+restored Kokoro/am_adam voice and English reply; latency remains unsatisfactory.
+Synthetic complete HTTPS audio/model/audio roundtrip succeeded in 11.266 s.
+Exact `0dad743` CI passed (501/506, five platform/browser skips), while the local
+completed run passed 505/505 across an actively repaired checkout. No original
+functional requirement is waived by these results. The owner-requested start
+screen now says only “Majin lets run it.” and removes the three suggestion chips;
+its boot check passes. New-head CI and full release gates remain separate.
+
 Source snapshots actually fetched:
 
 | Version | Branch | Commit |
