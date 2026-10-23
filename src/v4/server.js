@@ -961,7 +961,7 @@ export function createV4Server({ config }) {
     },
 
     'POST /api/approve': async (req, res) => {
-      requireSession(req);
+      const { session } = requireSession(req);
       assertCsrfHeader(req);
       const body = await readJsonBody(req, 4096);
       const conversationId = String(body.conversationId || '');
@@ -969,6 +969,7 @@ export function createV4Server({ config }) {
       try {
         await agent.resolveApproval({
           conversationId,
+          owner: session.id,
           approve: body.approve === true,
           emit: (type, data) => sse.send(type, data),
         });

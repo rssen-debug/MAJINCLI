@@ -110,3 +110,30 @@ two-model switching, real-model scenarios A–G, persistent monitoring and locke
 physical iPhone push, voice interruption/reconnect, production signing, login
 startup, native installation/update/rollback and every original parity gap remain
 gates. PR 401 stays draft/open; no production release or merge is justified.
+
+
+### Subsequent verified Ghost checkpoint — 909d758
+
+Canonical selector and usage adapter are deployed. Actual Go catalogue: 37 entries.
+Two existing sessions agreed on durable model selection version 1; stale update
+409. Actual `glm-5.3-flash` used workspace_write/read and exact file bytes were
+verified independently. Selection survived another child restart. Original V1
+configuration remained byte-identical. See `evidence/ghost-model-selection.json`.
+Account entitlement and Extra Usage remain unknown; no second model was authorized.
+
+Owner explicitly authorized computer access; 63 existing host tools were activated,
+with filesystem access limited to MAJIN workspace and approval policy unchanged.
+A real Go host-inspection task selected real host tools and waited for process
+consent; it did not finish. This exposed an approval-continuation defect, now
+repaired in the same model loop with durable context/counters and no repeated
+prior actions. Valid waiting checkpoints survive boot, legacy/invalid snapshots
+fail closed, and Stop works during continued execution. Live retest follows
+commit/deployment; the incomplete discovery evidence is deliberately retained.
+
+Full local V4 after the core repair: 524 passed, 1 failed, 0 skipped. The one
+failure was an old integration expectation for per-conversation model selection
+without version/cost authorization. It is updated for canonical selection and
+host restart, and the separate repaired integration suite passed 5/0/0. Exact
+909d758 CI failed on the same test: Linux 513/1/7, Windows 519/1/1; runner passed.
+These are not reported as green complete runs. Subsequent focused current-source
+results and latest-head CI must be checked before final acceptance.

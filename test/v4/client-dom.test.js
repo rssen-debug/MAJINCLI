@@ -207,6 +207,39 @@ async function until(fn, { timeoutMs = 8000, label = 'condition', dom = () => ''
 
 const visible = (el) => el && !el.hidden && el.style.display !== 'none';
 
+for (const cancel of [false, true]) test(`approval UI: continued model work remains ${cancel ? 'cancellable' : 'busy until completed'}`, { skip }, async () => {
+  const server = await startTestServer({ env: { MAJIN_V4_WRITE_POLICY: 'strict' } });
+  const originalChat = server.context.model.chat;
+  let calls = 0, release;
+  const held = new Promise((resolve) => { release = resolve; });
+  server.context.model.chat = async (request) => {
+    calls++;
+    if (calls === 2) await Promise.race([held, new Promise((_, reject) => request.signal.addEventListener('abort', () => reject(Object.assign(new Error('cancelled'), { name: 'AbortError' })), { once: true }))]);
+    return originalChat(request);
+  };
+  const app = await bootApp({ server, session: server.existingSession() });
+  try {
+    await until(() => app.document.querySelector('#gate').hidden, { label: 'authenticated app' });
+    const input = app.document.querySelector('#input');
+    input.value = 'Skriv filen approval-ui.txt med innehåll: approved';
+    input.dispatchEvent(new app.window.Event('input', { bubbles: true }));
+    app.document.querySelector('#composer').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+    await until(() => visible(app.document.querySelector('#approval')) && app.document.querySelector('#stop-btn').hidden, { label: 'pending approval' });
+    assert.equal(fs.existsSync(path.join(server.home, 'workspace', 'approval-ui.txt')), false);
+    app.document.querySelector('#approval-allow').click();
+    await until(() => calls === 2, { label: 'original model plan resumed' });
+    assert.equal(app.document.querySelector('#send-btn').disabled, true);
+    assert.equal(app.document.querySelector('#stop-btn').hidden, false);
+    assert.equal(fs.readFileSync(path.join(server.home, 'workspace', 'approval-ui.txt'), 'utf8'), 'approved');
+    if (cancel) app.document.querySelector('#stop-btn').click(); else release();
+    await until(() => app.document.querySelector('#stop-btn').hidden, { label: 'continuation ended' });
+    const id = server.context.conversations.list()[0].id;
+    const goalId = server.context.conversations.get(id).messages.at(-1).meta.goalId;
+    assert.equal(server.context.goals.get(goalId).state, cancel ? 'CANCELLED' : 'COMPLETED');
+    assert.deepEqual(app.errors, []);
+  } finally { release(); await app.close(); }
+});
+
 test('client: the real app boots, asks for pairing and shows no console error', { skip }, async () => {
   const app = await bootApp();
   try {

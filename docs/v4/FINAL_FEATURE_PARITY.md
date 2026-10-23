@@ -116,3 +116,13 @@ considered complete merely because unit tests pass.
 | Persistent natural-language monitoring / schedules | FAIL | Existing core scheduler/heartbeat must still be connected end-to-end to V4 with durable conditions/dedup/budgets/edit/pause/restart tests |
 | Locked-iPhone Web Push chain | FAIL | Subscription, secure delivery/history/deep link, controlled threshold, real source and actual locked physical iPhone receipt remain unimplemented/unverified |
 | Original Windows release / parity gates | BLOCKED | Production signer/channel absent; native activation/rollback and login acceptance outstanding; retain all original gaps above |
+
+
+Approval continuation remains PARTIAL until the live retest. Deterministic
+regressions now prove original model/batch context survives one-use approvals
+and disk reload/boot, prior actions do not repeat, budgets do not reset, invalid
+checkpoints execute nothing, and continued work can be cancelled from the UI.
+Actual owner-authorized tool activation: 63 tools; this count alone is not PASS.
+Canonical selection now has deployed real Go write/read and restart evidence
+(`ghost-model-selection.json`), while physical selectors, two eligible models,
+account billing protection and every other Genesis gate remain open.

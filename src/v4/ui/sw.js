@@ -7,17 +7,17 @@
  */
 // Bump this whenever the shell changes: an installed PWA otherwise keeps the
 // old HTML/CSS/JS until every cache entry expires independently.
-const VERSION = 'majin-v4-shell-11';
+const VERSION = 'majin-v4-shell-12';
 const SHELL = [
   '/',
   '/index.html',
-  '/app.css?v=11',
-  '/app.js?v=11',
-  '/spirit.js?v=11',
-  '/voice.js?v=11',
-  '/recorder.js?v=11',
-  '/strings.js?v=11',
-  '/session.js?v=11',
+  '/app.css?v=12',
+  '/app.js?v=12',
+  '/spirit.js?v=12',
+  '/voice.js?v=12',
+  '/recorder.js?v=12',
+  '/strings.js?v=12',
+  '/session.js?v=12',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png',

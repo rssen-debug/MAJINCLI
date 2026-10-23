@@ -5,11 +5,11 @@
  * never claims a task succeeded on its own. iOS voice uses foreground capture
  * and host-local STT; other browsers retain Web Speech with recording fallback.
  */
-import { createSpirit } from '/spirit.js?v=11';
-import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage, playNarratorStream } from '/voice.js?v=11';
-import { t } from '/strings.js?v=11';
-import { INITIAL, applyEvent, createSseParser } from '/session.js?v=11';
-import { VoiceCapture } from '/recorder.js?v=11';
+import { createSpirit } from '/spirit.js?v=12';
+import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage, playNarratorStream } from '/voice.js?v=12';
+import { t } from '/strings.js?v=12';
+import { INITIAL, applyEvent, createSseParser } from '/session.js?v=12';
+import { VoiceCapture } from '/recorder.js?v=12';
 
 const $ = (sel) => document.querySelector(sel);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1028,16 +1028,7 @@ async function send(text, { voiceTurn = false } = {}) {
   addMessage('user', message, { meta: timeLabel() });
   hideApproval();
 
-  state.streaming = true;
-  els.send.hidden = true;
-  els.stop.hidden = false;
-  els.send.disabled = true;
-  els.composer.dataset.streaming = 'true';
-  spirit.set('thinking');
-  els.hint.textContent = '';
-
-  const controller = new AbortController();
-  state.controller = controller;
+  const controller = startStream();
 
   const body = { text: message, requestId: newRequestId() };
   if (voiceTurn) body.voiceTurn = true;
@@ -1097,6 +1088,18 @@ async function tryReattach({ attempts = 3 } = {}) {
     }
   }
   return false;
+}
+
+function startStream(mode = 'thinking') {
+  state.streaming = true;
+  els.send.hidden = true;
+  els.stop.hidden = false;
+  els.send.disabled = true;
+  els.composer.dataset.streaming = 'true';
+  spirit.set(mode);
+  els.hint.textContent = '';
+  state.controller = new AbortController();
+  return state.controller;
 }
 
 function finishStream() {
@@ -1306,20 +1309,24 @@ function hideApproval() {
 }
 
 async function resolveApproval(approve) {
+  if (state.streaming) return;
   if (!state.conversationId) {
     hideApproval();
     return;
   }
   hideApproval();
-  spirit.set(approve ? 'working' : 'idle');
+  const controller = startStream(approve ? 'working' : 'idle');
   try {
-    const res = await api('/api/approve', { method: 'POST', body: { conversationId: state.conversationId, approve } });
+    const res = await api('/api/approve', { method: 'POST', body: { conversationId: state.conversationId, approve }, signal: controller.signal });
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-    await readStream(res.body, new AbortController().signal);
+    await readStream(res.body, controller.signal);
   } catch (err) {
-    addMessage('assistant', t('msg.approvalFailed', { error: err.message }), { error: true, meta: timeLabel() });
-    spirit.set('error');
+    if (err.name !== 'AbortError') {
+      addMessage('assistant', t('msg.approvalFailed', { error: err.message }), { error: true, meta: timeLabel() });
+      spirit.set('error');
+    }
   } finally {
+    finishStream();
     refreshSidebar();
   }
 }
@@ -1852,7 +1859,7 @@ function bindEvents() {
     // conversation id, which is exactly the case during a first message.
     const body = {};
     if (state.session.turnId) body.turnId = state.session.turnId;
-    else if (state.conversationId) body.conversationId = state.conversationId;
+    if (state.conversationId) body.conversationId = state.conversationId;
     if (Object.keys(body).length) {
       try {
         await api('/api/cancel', { method: 'POST', body });

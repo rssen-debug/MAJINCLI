@@ -1,6 +1,6 @@
 # MAJIN V4 — continuation handover
 
-Status: **NOT READY**. Latest pushed product milestone before this follow-up: `8ab843422f1a74cbce6bd350e7a0131d7b3ac9f8`. Initial handover: `f62e6f6f9d27d16e63228125cb041e129324d437`. Use `git rev-parse HEAD` for this updated milestone identity.
+Status: **NOT READY**. Latest pushed/deployed product before the approval-continuation milestone: `909d758e5c10ce8d58d62cca67cd78a5a8da4bdd`. Initial handover: `f62e6f6f9d27d16e63228125cb041e129324d437`. Use `git rev-parse HEAD` for this updated milestone identity.
 Branch `codex/v4-final-integration-20261023`, draft [PR 401](https://github.com/rssen-debug/MAJINCLI/pull/401), target `v4/main`; no merge or production publication.
 
 ## Mission and scope
@@ -210,3 +210,103 @@ runs; do not add overlapping counts. The working Go config remains unchanged.
 Do not infer Extra Usage disabled: official Go docs explain that enabled Console
 Extra Usage can bill the existing Go route after allowance exhaustion. Account
 verification remains required before claiming no extra charges.
+
+
+## Live model/canonical selection and host activation — current checkpoint
+
+`evidence/ghost-model-selection.json` records actual authenticated Tailscale
+HTTPS: 37 live Go catalogue entries, validated usage windows, canonical
+`opencode-go/glm-5.3-flash` version 1 in two existing sessions, stale update 409,
+real model workspace_write + workspace_read, independently verified exact file
+bytes and original V1 config unchanged. After another source child restart,
+selection version 1 and both sessions still agreed. Account inclusion/Extra
+Usage remain unknown; no other model was authorized or tested. Full physical
+mobile/Windows selector acceptance remains open.
+
+The owner then explicitly said in this chat: full computer access, continue.
+Owner Mode was OFF. Using that authorization, activated 63 existing host tools
+in files/shell/sys/web/research/net/desktop/screen/computer/audit/learn/flows.
+Filesystem grant is ONLY the MAJIN workspace. Existing approval policy remains
+unchanged; no system-drive/profile/credential-folder grant. Other lanes were
+not needed. Recheck `/api/capabilities` rather than assuming registration means
+actual execution. Existing supervisor session 55449 remains active; parent PID
+was 15736 and source child was 14980 before the next restart; identify afresh.
+
+Actual Go discovery probe selected sys_info, exec_backends and exec_start, then
+correctly waited for process consent. It did NOT finish or create the requested
+artifact (`evidence/ghost-tool-discovery.json` records failure/incomplete, not
+PASS). That exposed a P0 bug: resolving approval executed only the held action
+and prematurely completed the task, abandoning the remaining model plan.
+
+The current verified code fix extracts the EXISTING model loop for fresh and
+continued turns (no duplicate agent engine), persists pending batch/model context,
+prior tool results, budget counters, request ID and tool exposure, then resumes
+at the exact held call after one-use consent. Earlier actions are not repeated.
+Valid pending checkpoints survive host boot, including conversations older than
+the drawer's 100-row limit. Malformed or legacy checkpoints fail closed. Approval
+continuations remain cancellable and session-owned, and model-round exhaustion
+now reports incomplete failure instead of success. One-shot approval is retained.
+
+Focused results before the full run: agent/turn/context/client-DOM 52/0/0;
+agent/crash/conversation after drawer-limit change 34/0/0. New regressions cover
+multiple held actions in one batch, real disk reload/reconciliation, no duplicate
+side effects/approval, unreset budgets, invalid checkpoints and cancellation.
+A justified full V4 run with concurrency 2 was started after the final shared-loop
+code edits, log `../genesis-full-v4.log`, exec session 79719. Do not claim it passed
+until completion or change tested source during that run. Source tests can spend
+up to their 120-second child timeouts in acceptance/CLI fixtures. Preserve failed
+results. Do not kill unrelated Codex/MCP/browser processes by executable name.
+
+Next: finish full run, repair actual failures, commit/push/deploy this milestone,
+then repeat the REAL Go host-inspection probe and explicitly inspect any held
+process command before approving under the owner's authorized controlled test.
+The old pre-fix pending probe has no continuation and must not be claimed resumed;
+boot reconciliation will block it honestly. The previous generated read-only
+command was a Node OS/platform/CPU query, not an arbitrary shell operation.
+Then prioritize previously unseen browser form/upload and software build/repair
+with real Go, followed by persistent scheduler/heartbeat/Web Push. Keep the
+complete original acceptance matrix and every external release blocker.
+
+Potential budget issue: production defaults are four model rounds/six tool calls
+per turn. Do not hardcode a special case or reset counters to make acceptance
+pass; longer tasks need an explicitly bounded general budget policy. Persistent
+monitoring is still FAIL and locked physical iPhone push is still FAIL.
+
+
+### Full regression result and integration repair
+
+The full V4 run finished: **524 passed, 1 failed, 0 skipped / 525 tests**,
+472.162 seconds. Only failure: the OLD per-conversation model-selection
+integration test sent no expectedVersion/cost authorization and expected 200;
+the new protective API correctly returned 409. The same sole failure occurred
+in exact `909d758` CI: Linux 513/1/7; Windows 519/1/1. Windows runner passed;
+packaging was skipped after the failed test gate. Do not call those CI runs green.
+The integration test is updated to the requested canonical setting, explicit
+cost authorization and actual host restart. Separate repaired integration suite:
+5 passed/0 failed/0 skipped. No authorization gate was relaxed.
+
+Review also found that the UI did not show Stop during approval continuation.
+Fresh turns and continuations now share startStream/finishStream; Stop includes
+both current turn and conversation handles so an old finished journal ID cannot
+hide the resumed task. Real-client DOM tests prove continued work remains busy,
+completes normally, and can be cancelled: 2/0/0. PWA shell 12 carries this change.
+The final current-source focused suite (agent failures/cancel/client DOM/
+integration) finished: **45 passed, 0 failed, 0 skipped**, log
+`../genesis-final-focused.log`. i18n: 0 stray Swedish literals in 322 files. Full-run browser output was copied to
+`evidence/genesis-browser-run.json`; original historical browser-run.json restored.
+
+Do not begin an identical full suite again merely to obtain a green count:
+product core was stable during the full run; later changes are the corrected
+integration fixture and focused-tested UI busy/cancel handler. New exact-head CI
+will provide the immutable complete gate; recheck it. A final release still
+requires every whole-suite/release gate and real-world acceptance.
+
+Next scheduler review findings (not yet changed): core Scheduler uses a module-
+global file path, non-atomic save that swallows errors, and manual fire does not
+exclude an already-running job. Reuse and repair this engine when binding V4,
+rather than introducing another scheduler. Cron zero steps/ranges must be
+validated BEFORE loops; `*/0` currently risks a synchronous infinite loop.
+Read-only deterministic monitors need durable condition/dedup/outbox metadata,
+bounded retries and restart recovery; actual Web Push still needs implementation
+and owner-granted installed-PWA permission/locked-phone receipt. Preserve all
+original requirements, including meaningful approval details after reload.

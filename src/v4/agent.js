@@ -33,6 +33,7 @@ import { z } from 'zod';
 import { publicGoal, newId } from './store.js';
 import { explainModelError } from './model.js';
 import { t } from './ui/strings.js';
+import { hasApprovalContinuation } from './approval-continuation.js';
 
 const SYSTEM_PROMPT = `You are MAJIN, a private assistant running on the owner's own Windows machine.
 You speak in the language the user writes in (Swedish or English) and you are brief.
@@ -637,61 +638,75 @@ export function createAgent({
       emit('context', { dropped: packed.dropped, truncated: packed.truncated, tokens: packed.tokens });
     }
 
-    let finalText = '';
-    let toolCallsUsed = 0;
-    let rounds = 0;
+    return executeModelLoop({ conversation, goal, exposure, turn, modelMessages, signal, emit, turnStartedAt, requestId });
+  }
+
+  // The same bounded loop handles fresh turns and durable approval continuations.
+  async function executeModelLoop({ conversation, goal, exposure, turn, modelMessages, signal, emit, turnStartedAt, requestId, continuation = null }) {
+    let finalText = continuation?.finalText || '';
+    let toolCallsUsed = continuation?.toolCallsUsed || 0;
+    let rounds = continuation?.rounds || 0;
     let assistantMessageId = null;
     // A turn may not end in a confident sentence after an unrecovered tool
     // failure. The last tool outcome decides whether the answer is allowed to
     // be treated as a success.
     let lastOutcome = null;
     let lastRefusal = null;
+    let finishedReasoning = false;
 
     try {
-      goal.transition(STATES.READY, 'model route resolved');
-      goal.transition(STATES.RUNNING, 'executing turn');
+      if (!continuation) {
+        goal.transition(STATES.READY, 'model route resolved');
+        goal.transition(STATES.RUNNING, 'executing turn');
+      }
       goals.save(goal);
 
-      while (rounds < config.limits.maxModelRounds) {
-        rounds += 1;
-        if (signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
+      while (continuation || rounds < config.limits.maxModelRounds) {
+        let response, toolMessages = [], startAt = 0;
+        if (continuation) {
+          response = continuation.response;
+          toolMessages = continuation.toolMessages;
+          startAt = continuation.startAt;
+          continuation = null;
+        } else {
+          rounds += 1;
+          if (signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
 
-        emit('state', { state: 'thinking', round: rounds });
-        const response = await model.chat({
-          messages: modelMessages,
-          // Every registered tool, not a fixed list. This was the reported bug:
-          // the model was only ever told about five workspace tools, so host
-          // file/shell/Windows tools could not be called even when registered.
-          tools: exposure.schemas(),
-          signal,
-          modelId: conversation.modelId || null,
-          onEvent: (ev) => {
-            if (signal?.aborted) return;
-            if (ev.type === 'delta') emit('delta', { text: ev.text });
-            else if (ev.type === 'thinking') emit('thinking', { text: ev.text });
-          },
-        });
+          emit('state', { state: 'thinking', round: rounds });
+          response = await model.chat({
+            messages: modelMessages,
+            // Every registered tool, not a fixed list. This was the reported bug:
+            // the model was only ever told about five workspace tools, so host
+            // file/shell/Windows tools could not be called even when registered.
+            tools: exposure.schemas(),
+            signal,
+            modelId: conversation.modelId || null,
+            onEvent: (ev) => {
+              if (signal?.aborted) return;
+              if (ev.type === 'delta') emit('delta', { text: ev.text });
+              else if (ev.type === 'thinking') emit('thinking', { text: ev.text });
+            },
+          });
 
-        record('model.call', {
-          provider: response.provider || model.info.provider,
-          model: response.model || model.info.model,
-          elapsedMs: response.elapsedMs || 0,
-          usageInput: response.usage?.input || 0,
-          usageOutput: response.usage?.output || 0,
-          usageTotal: (response.usage?.input || 0) + (response.usage?.output || 0),
-          result: 'ok',
-        });
-        if (response.text) finalText += response.text;
-        if (response.refused) lastRefusal = response.refused;
+          record('model.call', {
+            provider: response.provider || model.info.provider,
+            model: response.model || model.info.model,
+            elapsedMs: response.elapsedMs || 0,
+            usageInput: response.usage?.input || 0,
+            usageOutput: response.usage?.output || 0,
+            usageTotal: (response.usage?.input || 0) + (response.usage?.output || 0),
+            result: 'ok',
+          });
+          if (response.text) finalText += response.text;
+          if (response.refused) lastRefusal = response.refused;
 
-        if (!response.toolCalls?.length) break;
-
-        if (toolCallsUsed + response.toolCalls.length > config.limits.maxToolCallsPerTurn) {
+          if (!response.toolCalls?.length) { finishedReasoning = true; break; }
+        }
+        if (toolCallsUsed + response.toolCalls.length - startAt > config.limits.maxToolCallsPerTurn) {
           throw Object.assign(new Error(`tool budget exceeded (${config.limits.maxToolCallsPerTurn})`), { code: 'TOOL_BUDGET' });
         }
-
-        const toolMessages = [];
-        for (const call of response.toolCalls) {
+        for (const [index, call] of response.toolCalls.entries()) {
+          if (index < startAt) continue;
           if (signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
           toolCallsUsed += 1;
           const outcome = await executeToolWithRecovery({ call, goal, conversationId: conversation.id, emit, signal, turn });
@@ -716,6 +731,11 @@ export function createAgent({
               scope: outcome.scope,
               reason: outcome.reason,
               requestedAt: new Date().toISOString(),
+              continuation: {
+                v: 1, modelMessages, response: { text: response.text || null, toolCalls: response.toolCalls },
+                toolMessages, startAt: index, finalText, toolCallsUsed: toolCallsUsed - 1, rounds,
+                requestId, turnStartedAt, exposed: exposure.schemas().map((schema) => schema.name),
+              },
             };
             conversations.save(conversation);
             emit('approval_required', {
@@ -740,6 +760,7 @@ export function createAgent({
         modelMessages.push(...toolMessages);
       }
 
+      if (!finishedReasoning) throw Object.assign(new Error(`model round budget exhausted (${config.limits.maxModelRounds}); task is incomplete`), { code: 'MODEL_BUDGET' });
       if (lastRefusal && toolCallsUsed === 0) {
         throw Object.assign(new Error(lastRefusal.reason || t('common.toolFailed')), {
           code: 'REQUEST_REFUSED',
@@ -986,12 +1007,22 @@ export function createAgent({
   }
 
   /** Resolve a pending strict-policy approval for a conversation. */
-  async function resolveApproval({ conversationId, approve, emit = () => {} }) {
+  async function resolveApproval({ conversationId, approve, emit = () => {}, owner = null }) {
+    const key = `conv:${conversationId}`;
+    if (running.has(key)) throw Object.assign(new Error('conversation is already running'), { status: 409 });
+    const controller = beginTurn(key, { owner });
+    try { return await continueApproval({ conversationId, approve, emit, signal: controller.signal }); }
+    finally { endTurn(key, controller); }
+  }
+
+  async function continueApproval({ conversationId, approve, emit, signal }) {
     const conversation = conversations.get(conversationId);
     if (!conversation) throw Object.assign(new Error('conversation not found'), { status: 404 });
     const pending = conversation.pendingApproval;
     if (!pending) throw Object.assign(new Error('no pending approval'), { status: 409 });
     const goal = goals.get(pending.goalId);
+    if (!goal || goal.state !== STATES.WAITING_FOR_APPROVAL) throw Object.assign(new Error('approval goal is not waiting'), { status: 409 });
+    if (approve && !hasApprovalContinuation(pending)) throw Object.assign(new Error('approval checkpoint is invalid or unavailable; no action was executed'), { status: 409 });
 
     conversation.pendingApproval = null;
     conversations.save(conversation);
@@ -1018,34 +1049,12 @@ export function createAgent({
     }
 
     emit('state', { state: 'working' });
-    const outcome = await executeToolWithRecovery({
-      call: { id: pending.callId, name: pending.tool, argsJson: JSON.stringify(pending.input) },
-      goal,
-      conversationId,
-      emit,
-      turn: { exposure: createToolExposure({ registry: tools.registry }), depth: 0, goal, conversationId, emit, signal: null, model },
-    });
-
-    if (goal && goal.state === STATES.VERIFYING) {
-      const uncovered = goal.uncoveredAcceptance();
-      if (!uncovered.length) goal.complete();
-    } else if (goal && goal.state === STATES.RUNNING) {
-      goal.transition(STATES.VERIFYING, 'approved action finished');
-      if (!goal.uncoveredAcceptance().length) goal.complete();
-    }
-    if (goal) goals.save(goal);
-
-    const summary = outcome.ok
-      ? t('agent.approved', { tool: pending.tool })
-      : t('agent.notExecuted', { error: outcome.error || t('common.unknownError') });
-    const stored = conversations.appendMessage(conversation.id, {
-      role: 'assistant',
-      content: summary,
-      meta: { goalId: pending.goalId, approval: 'granted' },
-    });
-    emit('goal', publicGoal(goal));
-    emit('done', { status: 'completed', conversationId, messageId: stored.id, goalId: pending.goalId });
-    return { status: 'completed', conversationId, messageId: stored.id };
+    const saved = pending.continuation;
+    const exposure = createToolExposure({ registry: tools.registry, maxVisible: config.limits.maxVisibleTools || 64 });
+    exposure.activate(saved.exposed || []);
+    const turn = { exposure, depth: 0, goal, conversationId, emit, signal, model };
+    return executeModelLoop({ conversation, goal, exposure, turn, modelMessages: saved.modelMessages, signal, emit,
+      turnStartedAt: saved.turnStartedAt, requestId: saved.requestId, continuation: saved });
   }
 
   /**
