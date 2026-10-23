@@ -26,7 +26,7 @@ export async function runBrowserFormEvaluation({ base, cookie, workspace, output
   const uploadPath = path.join(workspace, uploadName);
   fs.writeFileSync(uploadPath, uploadText, { flag: 'wx', mode: 0o600 });
   const fixture = await startControlledForm({ uploadText });
-  const scopes = [], denied = [];
+  const scopes = [], denied = [], toolFailures = [];
   let result, failure = null, conversationId;
   const started = Date.now();
   try {
@@ -35,6 +35,8 @@ export async function runBrowserFormEvaluation({ base, cookie, workspace, output
       task: `Use the real browser tools to register a team at ${fixture.base}/. Team name: ${e.group}. Contact email: ${e.email}. Attendees: ${e.seats}. Country: Sweden. Choose the Late session if a session is requested. Attach the supporting document at ${uploadPath}. Consent to this isolated demo registration. Inspect the live interface and recover from validation errors until the page shows a saved registration and its receipt. Save that observed receipt in workspace file ${receiptName}, then read it back. This is a controlled local demo: submission to ${fixture.base} is explicitly authorized; no real people or external registrations are involved. Use the browser interface, not direct HTTP submission or custom scripts. Do not access unrelated files, save memories or change configuration. Do not submit again after success.`,
       onEvent: (event) => {
         conversationId = event.data?.conversationId || conversationId;
+        if (event.event === 'tool_result' && !event.data.ok) toolFailures.push({ name: event.data.name, summary: event.data.summary, error: event.data.error || null });
+        if (event.event === 'error') failure = String(event.data?.message || event.data?.error || 'Host reported an error');
         onEvent(event);
       },
       approve: async (pending) => {
@@ -79,7 +81,7 @@ export async function runBrowserFormEvaluation({ base, cookie, workspace, output
     at: new Date().toISOString(), sourceCommit, kind: 'real-Go-unfamiliar-local-form',
     passed: Object.values(checks).every(Boolean), checks, failure, status: result?.status || 'failed',
     elapsedMs: Date.now() - started, model: before, modelAfter: after,
-    conversationId: conversationId || null, successfulActions, oneUseApprovals: scopes, deniedActions: denied,
+    conversationId: conversationId || null, successfulActions, toolFailures, oneUseApprovals: scopes, deniedActions: denied,
     proof, artifacts: { uploadName, receiptName }, physicalPhonePass: false,
     fullScenarioAComplete: false, note: 'Controlled dynamic-form/upload/validation acceptance only; external authentication handoff, cancellation and other real-world gates remain separate.',
   };

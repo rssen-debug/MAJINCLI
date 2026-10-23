@@ -21,6 +21,15 @@ import { tempHome } from './helpers.mjs';
 import { v1Context } from '../../src/v4/tools/host.js';
 import { runInTurn } from '../../src/v4/turn-state.js';
 
+test('host: rejected input names the missing argument without echoing private values', async () => {
+  const registry = new ToolRegistry(); let executed = false;
+  registry.define({ name: 'controlled_fill', description: 'Test input error', tier: 'read', inputSchema: z.object({value:z.string()}), outputSchema:z.object({}), execute:async()=>{executed=true;return {};} });
+  await assert.rejects(runTool({tool:'controlled_fill',input:{text:'private-content'}},{registry}), error => {
+    assert.match(error.message,/at value:/); assert.doesNotMatch(error.message,/private-content/); return true;
+  });
+  assert.equal(executed,false);
+});
+
 test('host: concurrent goals get isolated V1 sessions and approvals retain the same goal session', async () => {
   const context = v1Context({ session: 'v4' });
   assert.equal(context.session, 'v4', 'non-agent callers retain their explicit fallback');

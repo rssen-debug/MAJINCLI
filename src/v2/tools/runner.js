@@ -16,7 +16,11 @@ export async function runTool(callRaw, { registry, approvals, mode = 'balanced',
   if (!def) throw new ToolError('INVALID_TOOL_OUTPUT', `unknown tool: ${call.tool}`);
 
   const inResult = def.inputSchema.safeParse(call.input);
-  if (!inResult.success) throw new ToolError('INVALID_TOOL_INPUT:MAJIN', `tool ${call.tool} input failed schema: ${inResult.error.issues[0]?.message}`, { tool: call.tool });
+  if (!inResult.success) {
+    const issue = inResult.error.issues[0];
+    const field = issue?.path?.join('.') || '(arguments)';
+    throw new ToolError('INVALID_TOOL_INPUT:MAJIN', `tool ${call.tool} input failed schema at ${field}: ${issue?.message}. Correct the named argument using the tool schema.`, { tool: call.tool });
+  }
 
   const tier = TIER_DEFAULT[def.tier] || 'hold';
   const scope = `tool:${call.tool}`;

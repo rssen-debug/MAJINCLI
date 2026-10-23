@@ -388,3 +388,30 @@ artifact; a rerun requires a NEW evidence output path. A PASS here covers the
 controlled unknown-form/upload/validation chain, not external auth handoff,
 physical mobile execution, cancellation, all A–G or universal success.
 Then continue software build/test/repair and persistent scheduler/heartbeat/push.
+
+### Controlled Go form failures and select repair, 2026-10-23
+
+Actual installed source 43003d350704abff768bf381c6e36a0c59b2465e ran two
+real Go/glm-5.3-flash form attempts. BOTH FAIL, preserved in
+`evidence/genesis-form-attempt-1.json` and `genesis-form-attempt-2.json`.
+Neither submitted or uploaded anything; both exhausted 12 model rounds.
+Attempt 2 includes actual tool errors: select input reported immediate value
+rejection; repeated malformed calls omitted a required string argument. The
+first evidence's failure:null was an eval-reporting gap, not absence of failure.
+The harness now retains SSE error text and individual tool failures.
+
+The existing browser.fill now accepts an exact internal option value or unique
+visible label, refuses ambiguous/disabled/missing options before mutation, and
+checks retention against the resolved internal value without exposing typed
+values. Unknown labels return bounded current option labels. Schema errors now
+name the argument to correct without echoing input contents. No input validation,
+consent rule or turn budget was relaxed. No task-specific selectors were added.
+Actual local-browser regression passed, including ambiguous/disabled choices,
+internal value retention and output privacy. First focused suite 35/0/0; shared
+runner/host follow-up 32/0/0. This repair has NOT yet passed live Go acceptance.
+Next attempt must use a fresh evidence path after deployment; preserve failures.
+
+All three CI runs for exact 43003d3 verified successful: V4 40029142561,
+Windows desktop 40029142247, runner 40029142289. This is hosted CI, not trusted
+production signing or physical Ghost native-install acceptance. Overall NOT READY;
+all earlier Genesis, persistent scheduler/push and release blockers remain open.

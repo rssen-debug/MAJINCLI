@@ -520,7 +520,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     name: 'browser.fill',
     group: 'web',
     risk: 'exec',
-    desc: 'Type text into an input/textarea/select (real events — frameworks see it) and confirm the value stuck. Use browser.click for buttons and checkboxes.',
+    desc: 'Fill one input/textarea/select with the required value argument (string). For selects, value may be an exact option value or unique visible option label. Real events and retention verification. Use browser.click for buttons and checkboxes.',
     params: { selector: 'string optional CSS selector of the field', ref: 'string optional numbered ref from browser.elements, e.g. e4 (exclusive with selector)', value: 'string: what to type' },
     async run({ selector, ref, value }, ctx) {
       const session = ctx.session || 'default';
@@ -560,14 +560,23 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           return {found:true,blocked:'hidden'};
         if (el.disabled || el.readOnly || el.matches('[aria-disabled="true"]') || el.closest('[inert]'))
           return {found:true,blocked:'disabled_or_readonly'};
+        let targetValue = ${val};
+        if (el.tagName === 'SELECT') {
+          const available = [...el.options].filter(o => !o.disabled && !o.parentElement?.disabled);
+          let matches = available.filter(o => o.value === targetValue);
+          if (!matches.length) matches = available.filter(o => o.label.trim() === targetValue);
+          if (matches.length !== 1) return {found:true,blocked:'option_not_unique',
+            options:available.slice(0,30).map(o=>o.label.trim().slice(0,100))};
+          targetValue = matches[0].value;
+        }
         el.focus();
         const proto = el.tagName === 'SELECT' ? window.HTMLSelectElement.prototype : (el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype);
         const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-        if (setter) setter.call(el, ${val}); else el.value = ${val};
+        if (setter) setter.call(el, targetValue); else el.value = targetValue;
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
         // Report only equality with the requested input, never the raw value.
-        return { found: true, stuck: el.value === ${val} };
+        return { found: true, stuck: el.value === targetValue, targetValue };
       })()`);
       if (!r.found) {
         const controls = await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
@@ -575,6 +584,8 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           hint: 'Use EXACT selectors from these live controls. Checkboxes and buttons need browser.click, not browser.fill. Do not reopen the page to guess fields.' + formatControlHints(controls),
         } };
       }
+      if (r.blocked === 'option_not_unique') return {ok:false,error:{code:r.blocked,
+        message:'No unique enabled select option matches. Use an exact visible label from these current options: '+JSON.stringify(r.options)}};
       if (r.blocked) return {ok:false,error:{code:r.blocked,
         message:r.blocked==='ambiguous_target' ? 'Selector matched '+r.count+' fields; nothing changed. Narrow the selector.' : 'Target is '+r.blocked+'; nothing changed.'}};
       if (r.wrongType) {
@@ -591,7 +602,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           String(nodes[0].id||'')===expected.id &&
           String(nodes[0].name||'')===expected.name &&
           String(nodes[0].type||'').toLowerCase()===expected.type)) &&
-          nodes[0].value === ${val};
+          nodes[0].value === ${JSON.stringify(r.targetValue)};
       })()`).catch(() => false);
       if (!retained) return {ok:false,error:{code:'value_reverted',
         message:'Field initially accepted input but the app reverted it after its framework update. Re-observe before retrying.'},
