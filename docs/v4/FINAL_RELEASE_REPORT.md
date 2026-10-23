@@ -1,5 +1,55 @@
 # MAJIN V4 release verification — 23 October 2026
 
+## Ghost checkpoint — 24 October 2026, NOT READY
+
+Installed code: `527b021d8077d1aabf1ea8ef7bb764d3caaf58ca`.
+See [continuation handover](HANDOVER_CONTINUE.md) for the full original and
+Genesis requirements and [checkpoint evidence](evidence/genesis-form-checkpoint.json).
+Five actual Go/glm-5.3-flash unknown-form attempts ALL FAILED; each immutable
+attempt receipt remains in evidence/genesis-form-attempt-1.json through -5.json.
+There were zero server submissions or saved registrations. No universal-form,
+job-application or general desktop-autonomy PASS is claimed.
+
+Repairs deployed: unique visible select-label resolution with retained-value
+verification; schema errors identify the argument; grounded button names retain
+letter s; actual changed anonymous buttons remain blocked; checkbox assertions
+bind to the clicked target; the real model sees remaining execution budgets.
+No task-specific selectors, fake model result or raised budget was substituted.
+Focused results: select/host/eval 35/0/0; runner/host 32/0/0; browser/grounding/
+verification 49/0/0; updated actual local DOM regression 1/0/0; agent failure/
+continuation/cancel/budgets 15/0/0. These overlapping suites are not a full-run
+total or physical-phone acceptance. i18n: 0 stray Swedish literals in 326 files.
+Fresh preservation check: 23 original files unchanged; 39 restored files have
+zero hash mismatches. Existing configuration/keys/history were preserved.
+
+All three CI jobs for 43003d3 succeeded. For 37c0a25, V4 and runner succeeded;
+Windows desktop was cancelled, not passed. Exact installed 527b021 CI is recorded
+separately in the checkpoint; no unobserved result is declared green.
+Its V4 run40030665846 failed530/1/7 on the old-conversation fixture timestamp
+assumption. The fixture now explicitly ages its pending chat; the15 agent tests
+pass locally. Production chat ordering was unchanged. Runner passed, Windows
+desktop remained in progress at observation. New-head CI remains required.
+
+Release blockers remain: real-model scenarios A–G including unknown forms;
+two verified eligible Go models and account billing protection; persistent
+schedules/conditions, deduplication, budgets, recovery, edit/pause/cancel and
+locked physical iPhone Web Push; complete physical iPhone/Ghost voice,
+interruption, 5G reconnect and acceptable latency; approved production signer/
+channel with actual host and native update activation/rollback; Ghost native
+installation and actual login startup. All parity gaps in FINAL_FEATURE_PARITY.md
+remain: configured outbound channels, heartbeat digests, separate-store memory
+sync, typed self-configuration/reset, cryptographic audit anchors, durable graph
+resume/replanning, team token/currency budgets, OCR, rich/large-file previews and
+physical DPI/multimonitor checks. None is waived or hidden by passing CI.
+
+Automatic approval review rejected cleanup of two known test Temp directories
+as 'blocked by policy'. They remain preserved; no alternate deletion attempted.
+Earlier native/browser/startup policy restrictions remain separate from source
+host availability; broad owner consent does not establish approved signing.
+
+The paragraphs below are historical checkpoints, retained with their dates and
+scope. The NOT READY verdict above takes precedence.
+
 Latest saved status: **NOT READY** — [final Ghost evidence](evidence/ghost-final-status.json).
 The completed local V4 run passed 505/505 with no skips; it started at `526b0e6`
 and received repairs during execution, so it is not represented as an immutable

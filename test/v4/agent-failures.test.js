@@ -208,6 +208,11 @@ test('approval resumes the original batch and model after restart without repeat
     const waiting = await h.agent.runTurn({ text: 'Inspect, perform two held actions, then report.', requestId: 'durable-approval-request' });
     assert.equal(waiting.status, 'awaiting_approval');
     assert.equal(readCalls, 1); assert.equal(heldCalls, 0);
+    // Make the fixture genuinely older. Fast CI filesystems can create several
+    // conversations in one millisecond; tied timestamps do not imply age.
+    const older = h.conversations.get(waiting.conversationId);
+    older.updatedAt = new Date(Date.now() - 60000).toISOString();
+    fs.writeFileSync(path.join(h.home, 'conv', waiting.conversationId + '.json'), JSON.stringify(older));
     for (let i = 0; i < 101; i++) h.conversations.create({ title: `Newer conversation ${i}` });
     assert.equal(h.conversations.list().some((c) => c.id === waiting.conversationId), false, 'the pending task is older than the drawer cap');
     // Real disk reload + boot reconciliation, rather than retaining live maps.

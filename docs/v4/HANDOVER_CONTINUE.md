@@ -439,3 +439,35 @@ re-observe changed identities and reserve outcome verification. Counts are not
 reset or increased; the note is not accumulated in conversation history.
 Agent failure/continuation/cancel/budget regression 15/0/0. Last controlled form
 attempt is number 5; do not continue unlimited attempts or erase failures.
+
+### End of bounded form run — 24 October 2026, NOT READY
+
+Attempt 5 ran real Go on deployed 527b021d8077d1aabf1ea8ef7bb764d3caaf58ca.
+FAIL: browser_upload received CSS `[e3]` instead of an actual file-input selector;
+the model did not recover before twelve rounds. No server submissions or receipt.
+Saved genesis-form-attempt-5.json; all FIVE attempts remain. No more form attempts
+in this run. A prior CLI preflight hit ECONNREFUSED during source-child restart;
+no model task or fixture was started then. Supervisor recovered; health returned
+200, source child PID13020, parent9636 at observation. Existing supervisor exec
+session64738 remains live; do not stop it casually.
+
+Current installed/source code head527b021. Last owner consent gives broad computer
+access but does not provide production signing identity or override managed
+policy. Data recheck at22:00:46UTC: all23 original selected files unchanged,39
+restore hashes match. Public-safe receipt in outputs/MAJIN-data-preservation-20261024.json.
+No unrelated personal data, credentials or external registration was submitted.
+Latest reports explicitly retain all legacy and Genesis gates. End status is
+NOT READY, not partial READY. Next work needs a general fix for live control
+grounding/tool misuse and bounded durable continuation, then genuine scenarios
+A–G and persistent scheduler/heartbeat/push; retain production/physical blockers.
+One source-follow-up risk remains: V1 browser calls may outlive V4 tool abort and
+reopen after cleanup. Do not claim complete browser crash/resource recovery.
+
+CI527b021 V4 run40030665846 failed:530pass/1fail/7skip. Sole failure was the
+test's 'pending task older than drawer cap' assertion: fast Linux creation can
+share updatedAt timestamps. The fixture now explicitly ages the pending chat by
+60seconds on disk and in its loaded object before creating101 newer chats. No
+production ordering/reconciliation rule was changed and the original100-chat
+cap assertion remains. Agent suite15/0/0 after correction. Runner40030665849
+passed; Windows40030665852 was still in progress at this observation. Keep this
+failure record even if the next exact-head CI passes.

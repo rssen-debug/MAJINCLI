@@ -1,5 +1,17 @@
 # Final feature parity audit — MAJIN V4
 
+**24 October Ghost checkpoint — NOT READY:** installed `527b021d8077d1aabf1ea8ef7bb764d3caaf58ca`.
+All five real Go unknown-form attempts failed and are preserved, with zero server
+submissions. Browser repairs and bounded model guidance pass focused regressions;
+they do not establish universal autonomy. Canonical selection and the earlier
+real Go approved tool continuation remain verified within their recorded scope.
+See [current release checkpoint](FINAL_RELEASE_REPORT.md) and
+[machine-readable evidence](evidence/genesis-form-checkpoint.json). Every original
+parity row and Genesis gate below remains in scope. Persistent scheduling/Web
+Push, production signing/update activation/rollback, full physical acceptance,
+two eligible models/billing protection and real-model scenarios remain open.
+Older 'pending'/'latest' paragraphs below are dated historical observations.
+
 Audit date: 2026-10-23. Target: `v4/main`, integration PR [#401](https://github.com/rssen-debug/MAJINCLI/pull/401).
 
 **Current Ghost delta — NOT READY:** [Ghost acceptance](GHOST_ACCEPTANCE_20261023.md)
