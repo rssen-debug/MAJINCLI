@@ -18,8 +18,8 @@ UI verification is static-contract plus real HTTP asset tests, not screenshots.
 
 ```
 $ npm run v4:test
-# tests 195
-# pass 194
+# tests 204
+# pass 203
 # skipped 1
 # fail 0
 # skipped 0
@@ -47,6 +47,7 @@ $ npm run v4:test
 | `test/v4/upgrade.test.js` | 8 | clean upgrade, up-to-date, rollback on a failed gate, escalation when rollback fails, fetch/checkout classification |
 | `test/v4/leaks.test.js` | 7 | bounded rate limiter and conversation cache, cache eviction loses nothing, bounded listing, abort-key collision, truncated replay |
 | `test/v4/leaks2.test.js` | 3 | bounded goal cache, evicted goals reload from disk intact, in-flight goals are never evicted |
+| `test/v4/windows-installer.test.js` | 9 | the Windows task runs on battery, has no 72-hour limit, restarts on failure, changes nothing machine-wide, has a clean uninstall, refuses old Node, and does not collide with V1's task |
 | `test/v4/client-dom.test.js` | 9 | **the real `app.js` executed in a real DOM (jsdom)** against a real host: boots and shows the gate, pairs, sends a message, renders a verified tool card, keeps one conversation across two messages, restores the composer, and the three failure paths — unreachable host, expired session, and a connection lost *after* `open` that is picked back up with the real answer |
 
 ## 2. Repository gates

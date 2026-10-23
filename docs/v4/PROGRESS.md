@@ -187,6 +187,17 @@ No new features in this pass. The target was the failure modes of a host that ru
 
 Each one has a test that failed before the fix. That is the only reason to trust the list.
 
+## Windows autostart: a defect V1 had already solved
+
+My installer registered the logon task without two settings V1 has used for a long time:
+
+- **battery**: Task Scheduler stops a task when the charger is unplugged unless told otherwise
+- **72-hour limit**: the default `ExecutionTimeLimit` is 72 hours, after which Windows kills it
+
+Both are now copied from `install.ps1`, V4's restart-on-failure is kept, and
+`test/v4/windows-installer.test.js` fails if either disappears. This is the honest
+answer to "is there something on GitHub to reuse": yes, and ignoring it cost a bug.
+
 ## Next engineering objective
 
 Wire the tunnel and a real provider on the Windows host, then run the acceptance scenario in

@@ -71,11 +71,26 @@ Push-Location $RepoRoot
 try { & node scripts/v4/host-doctor.mjs } finally { Pop-Location }
 
 if ($AutoStart) {
+  # Task settings reuse V1's proven choices (install.ps1, the 'MAJIN' task):
+  #   -AllowStartIfOnBatteries / -DontStopIfGoingOnBatteries
+  #       A host on a laptop must keep running when the charger is unplugged.
+  #       Without these, Task Scheduler's default stops it on battery.
+  #   -ExecutionTimeLimit ([TimeSpan]::Zero)
+  #       Zero means NO limit. Omitted, the default is 72 hours and Windows
+  #       kills the host after three days of uptime.
+  # V4 adds -StartWhenAvailable and restart-on-failure, which V1 does not have.
   $action = New-ScheduledTaskAction -Execute $Launcher -WorkingDirectory $RepoRoot
   $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-  $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Days 0)
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Description 'Startar MAJIN V4 när användaren loggar in.' -Force | Out-Null
-  Write-Step "Schemalagd uppgift '$TaskName' registrerad för $env:USERNAME (endast inloggning, ingen maskinbred ändring)."
+  $settings = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
+    -ExecutionTimeLimit ([TimeSpan]::Zero) `
+    -StartWhenAvailable `
+    -RestartCount 3 `
+    -RestartInterval (New-TimeSpan -Minutes 1)
+  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Description 'Starts the MAJIN V4 host when the user logs in' -Force | Out-Null
+  Write-Step "Scheduled task '$TaskName' registered for $env:USERNAME (logon only, no machine-wide change)."
+  Write-Step 'Runs on battery, no 72-hour limit, restarts up to 3 times on failure.'
 } else {
   Write-Step 'Ingen automatisk start vald. Kör med -AutoStart för en inloggningstask.'
 }

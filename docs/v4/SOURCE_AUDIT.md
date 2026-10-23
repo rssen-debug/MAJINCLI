@@ -30,7 +30,7 @@ needs a host/credential; **scaffold** = structure without runtime evidence.
 | Tools | `src/core/tools/*`, shell/fs/browser | usable | not reused; V4 exposes a minimal typed workspace surface |
 | Memory | `src/core/memory.js` | usable | V2 store preferred (cleaner contract) |
 | Voice | V1 channels/voice are UI-bound | scaffold | not reused in the browser client |
-| Windows install / startup | `install.ps1`, `start-majin.cmd` | usable | pattern reused; V4 gets its own per-user task |
+| Windows install / startup | `install.ps1`, `start-majin.cmd` | usable | **task settings reused** (see below); V4 keeps its own launcher and task name |
 
 ### V2 (`v2/main`)
 
@@ -92,6 +92,32 @@ part with no security coupling: the model catalog implementation.
 | `models.js` (discovery) | V1 has a catalog but no safe, secret-free projection for a remote client — the *fetching* is V1's code, only the projection is new |
 | `kernel.js` | No versioned capability contract exists in any prior version |
 | `ui/*` | No mobile/PWA surface exists |
+
+## 3.1 Windows autostart: what V1 taught V4
+
+V1's `install.ps1` registers the `MAJIN` task with three settings that are easy to
+miss and expensive to discover in production:
+
+| Setting | What happens without it |
+|---|---|
+| `-AllowStartIfOnBatteries` + `-DontStopIfGoingOnBatteries` | on a laptop, Task Scheduler stops the host the moment the charger is unplugged |
+| `-ExecutionTimeLimit ([TimeSpan]::Zero)` | the default limit is 72 hours, so Windows kills the host after three days of uptime |
+
+V4's first installer omitted both. It was fixed by copying V1's choices and adding
+`-StartWhenAvailable` plus restart-on-failure, which V1 does not have.
+`test/v4/windows-installer.test.js` now fails if either setting disappears, and it
+also asserts that V4's task name does not collide with V1's.
+
+Not reused: V1 also writes Start-menu and Desktop shortcuts and copies a payload
+into `%LOCALAPPDATA%`; V4 runs from its own checkout and only needs a launcher.
+
+## 3.2 Diagnostics: why V4 has its own doctor
+
+`src/v2/ops/doctor.js` is real but V2-specific — its ten checks cover
+`bin/majin-v2.mjs`, the OpenCode key, the GUI runner, whisper and the Studio port.
+None of those exist in V4. `scripts/v4/host-doctor.mjs` therefore checks the V4
+surface: Node floor, data dir, workspace, HMAC key, pairing record, the V1 config
+it reads models from, public origin and proxy trust.
 
 ## 4. Limitations found in reused code (not modified)
 
