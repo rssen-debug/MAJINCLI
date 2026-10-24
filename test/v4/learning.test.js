@@ -891,3 +891,52 @@ test('learning: prior experiences reach the real system prompt', async () => {
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('learning: the same job with different scaffolding stays ONE skill', async () => {
+  const { LearnedSkillStore, taskSignature, sameProcedureFamily, SKILL_STATES: ST } = await import('../../src/v4/learning.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-fam-'));
+  try {
+    // Order no longer changes identity.
+    assert.equal(taskSignature({ tools: ['fs_find', 'fs_read'] }), taskSignature({ tools: ['fs_read', 'fs_find'] }));
+    // One extra exploratory read is the same job.
+    assert.equal(sameProcedureFamily(['fs_find', 'fs_read'], ['fs_find', 'fs_list', 'fs_read']), true);
+    // A different approach is not.
+    assert.equal(sameProcedureFamily(['fs_find', 'fs_read'], ['shell_run', 'workspace_write']), false);
+
+    const store = new LearnedSkillStore({ dir, fingerprint: 'fp' });
+    const goal = (objective) => ({
+      id: 'g', objective, state: 'COMPLETED',
+      receipts: [{ id: 'r1', action: 'tool:fs_read', target: 'a.txt', result: 'success', verified: true, evidence: { verifier: 'v2.file' } }],
+    });
+    const laneFor = (name) => ({ fs_find: 'files', fs_read: 'files', fs_list: 'files' }[name] || null);
+
+    const first = store.observe({
+      goal: goal('Hitta CV:t i mappen och läs det'),
+      trace: [{ name: 'fs_find', argsShape: 'name,path', ok: true }, { name: 'fs_read', argsShape: 'path', ok: true, verified: true }],
+      grantedLanes: ['files'], laneFor,
+    });
+    assert.equal(first.action, 'created');
+
+    // The second success took a slightly different path: an extra fs_list first.
+    const second = store.observe({
+      goal: goal('Hitta fakturan i mappen och läs den'),
+      trace: [
+        { name: 'fs_find', argsShape: 'name,path', ok: true },
+        { name: 'fs_list', argsShape: 'path', ok: true },
+        { name: 'fs_read', argsShape: 'path', ok: true, verified: true },
+      ],
+      grantedLanes: ['files'], laneFor,
+    });
+    assert.equal(second.action, 'updated', 'a slightly different path created a second skill');
+    assert.equal(second.name, first.name, 'the two runs did not fold into one skill');
+
+    const skills = store.list();
+    assert.equal(skills.length, 1, `expected one skill, found ${skills.length}`);
+    assert.equal(skills[0].learned.successes, 2);
+    assert.equal(skills[0].learned.state, ST.VERIFIED);
+    assert.ok(skills[0].tools.includes('fs_list'), 'the extra tool was not recorded');
+    assert.deepEqual(skills[0].requires, ['files'], 'permission must not widen');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -168,12 +168,36 @@ const shortHash = (value, len = 10) => crypto.createHash('sha256').update(String
  * tool sequence plus the goal's topic words, not the exact wording.
  */
 export function taskSignature({ goalText, tools = [] }) {
-  // Identity of the PROCEDURE: the tool path. Two differently worded requests
-  // that need the same steps are the same procedure, which is what makes a
-  // second verified success meaningful.
-  const seq = tools.filter(Boolean).join('>');
+  /**
+   * Identity of the PROCEDURE: the SET of tools, order-insensitive.
+   *
+   * The first version hashed the exact ordered sequence. A real Go run showed why
+   * that fragments knowledge: the same kind of job produced
+   * `fs_find>fs_read` once and `fs_find>fs_list>fs_read` the next time, purely
+   * because the model took a look around first, and the second run created a
+   * separate skill with its own success count. Two skills, one job, neither ever
+   * reaching REUSABLE.
+   */
+  const set = [...new Set(tools.filter(Boolean))].sort().join('+');
   void goalText;
-  return shortHash(`procedure|${seq}`, 12);
+  return shortHash(`procedure|${set}`, 12);
+}
+
+/**
+ * Are two tool sets the same job with slightly different scaffolding?
+ *
+ * Jaccard similarity on the tool sets, with a threshold high enough that adding
+ * one exploratory read keeps a skill together while a genuinely different
+ * approach stays separate. Used only when an exact signature match is not found.
+ */
+export function sameProcedureFamily(a = [], b = []) {
+  const left = new Set(a.filter(Boolean));
+  const right = new Set(b.filter(Boolean));
+  if (!left.size || !right.size) return false;
+  let shared = 0;
+  for (const t of left) if (right.has(t)) shared += 1;
+  const union = left.size + right.size - shared;
+  return union > 0 && shared / union >= 0.6;
 }
 
 /**
@@ -694,7 +718,18 @@ export class LearnedSkillStore {
     }
     const candidate = extracted.candidate;
 
-    const existing = this.get(candidate.name);
+    /**
+     * Find the skill this success belongs to.
+     *
+     * Exact name first. Otherwise: same category and a tool set close enough to
+     * be the same job with different scaffolding (a real Go run produced
+     * `fs_find>fs_read` and `fs_find>fs_list>fs_read` for the same task and
+     * fragmented into two skills that could never promote). A genuinely different
+     * approach stays separate, because its tool sets do not overlap enough.
+     */
+    const family = this.list().find((x) => x.learned.category === candidate.learned.category
+      && sameProcedureFamily(x.tools || [], candidate.tools || []));
+    const existing = this.get(candidate.name) || family || null;
     if (!existing) {
       const skill = { ...candidate };
       skill.learned.confidence = confidenceOf(skill.learned);
@@ -715,7 +750,15 @@ export class LearnedSkillStore {
     // Keep the newest verified evidence, bounded.
     learned.evidence = [...candidate.learned.evidence, ...(learned.evidence || [])].slice(0, LEARNING_LIMITS.maxEvidence);
     learned.verification = candidate.learned.verification;
-    // A tool may have been added by the successful path; permission still only narrows.
+    // The successful path may have used a tool the stored one did not. Record it,
+    // and keep requiring only what the owner granted — permission only narrows.
+    const granted = new Set(grantedLanes);
+    const laneFn = typeof laneFor === 'function' ? laneFor : (name) => laneOf(registry, name);
+    existing.tools = [...new Set([...(existing.tools || []), ...(candidate.tools || [])])];
+    existing.requires = [...new Set([
+      ...(existing.requires || []),
+      ...candidate.tools.map((t) => laneFn(t)).filter((lane) => lane && (granted.has(lane) || lane === 'workspace')),
+    ])];
     learned.procedure = mergeProcedures(learned.procedure || [], candidate.learned.procedure);
     learned.avoid = mergeAvoid(learned.avoid || [], candidate.learned.avoid);
     learned.environment = candidate.learned.environment;
