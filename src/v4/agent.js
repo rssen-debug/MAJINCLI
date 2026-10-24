@@ -883,6 +883,20 @@ export function createAgent({
     let lastOutcome = null;
     let lastRefusal = null;
     let finishedReasoning = false;
+    // A bounded continuation is permitted only after a successful tool outcome.
+    // A stuck agent must not burn unlimited provider calls on repeated failures.
+    let roundLimit = config.limits.maxModelRounds;
+    let toolLimit = config.limits.maxToolCallsPerTurn;
+    let extended = false;
+    const maybeExtend = () => {
+      if (extended || !lastOutcome?.ok || toolCallsUsed === 0 || signal?.aborted) return false;
+      extended = true;
+      roundLimit += Math.min(8, Math.max(1, config.limits.maxModelRounds));
+      toolLimit += Math.min(16, Math.max(1, config.limits.maxToolCallsPerTurn));
+      emit('recovery', { action: 'continue_verified_progress', attempt: 1, failureClass: 'STEP_BUDGET', advice: [] });
+      record('budget.continue', { goalId: goal.id, rounds, toolCallsUsed, roundLimit, toolLimit });
+      return true;
+    };
 
     try {
       if (!continuation) {
@@ -891,7 +905,7 @@ export function createAgent({
       }
       goals.save(goal);
 
-      while (continuation || rounds < config.limits.maxModelRounds) {
+      while (continuation || rounds < roundLimit || maybeExtend()) {
         let response, toolMessages = [], startAt = 0;
         if (continuation) {
           response = continuation.response;
@@ -903,7 +917,7 @@ export function createAgent({
           if (signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
 
           emit('state', { state: 'thinking', round: rounds });
-          const budgetNote = `\nExecution budget for this response: ${config.limits.maxModelRounds - rounds + 1} model responses including this one, ${config.limits.maxToolCallsPerTurn - toolCallsUsed} tool calls left. Batch independent, already-grounded actions when useful; tools execute in order. Re-observe after actions that change control identities. Correct named schema arguments before retrying. Reserve a response to verify and report the actual outcome. Never repeat an irreversible action merely because verification failed.`;
+          const budgetNote = `\nExecution budget for this response: ${roundLimit - rounds + 1} model responses including this one, ${toolLimit - toolCallsUsed} tool calls left. Batch independent, already-grounded actions when useful; tools execute in order. Re-observe after actions that change control identities. Correct named schema arguments before retrying. Reserve a response to verify and report the actual outcome. Never repeat an irreversible action merely because verification failed.`;
           const requestMessages = modelMessages.map((message, index) => index === 0 && message.role === 'system'
             ? { ...message, content: message.content + budgetNote } : message);
           response = await model.chat({
@@ -935,8 +949,11 @@ export function createAgent({
 
           if (!response.toolCalls?.length) { finishedReasoning = true; break; }
         }
-        if (toolCallsUsed + response.toolCalls.length - startAt > config.limits.maxToolCallsPerTurn) {
-          throw Object.assign(new Error(`tool budget exceeded (${config.limits.maxToolCallsPerTurn})`), { code: 'TOOL_BUDGET' });
+        if (toolCallsUsed + response.toolCalls.length - startAt > toolLimit && !maybeExtend()) {
+          throw Object.assign(new Error(`tool budget exceeded (${toolLimit})`), { code: 'TOOL_BUDGET' });
+        }
+        if (toolCallsUsed + response.toolCalls.length - startAt > toolLimit) {
+          throw Object.assign(new Error(`tool budget exceeded (${toolLimit})`), { code: 'TOOL_BUDGET' });
         }
         for (const [index, call] of response.toolCalls.entries()) {
           if (index < startAt) continue;
@@ -999,8 +1016,8 @@ export function createAgent({
         // own reads like a defect rather than a limit.
         throw Object.assign(
           new Error(
-            `The step budget for one turn (${config.limits.maxModelRounds} model rounds, `
-            + `${config.limits.maxToolCallsPerTurn} tool calls) ran out before the task finished. `
+            `The bounded execution budget (${roundLimit} model rounds, `
+            + `${toolLimit} tool calls) ran out before the task finished. `
             + 'Nothing was reported as done that was not verified. Retry with a narrower goal, or raise '
             + 'MAJIN_V4_MAX_MODEL_ROUNDS / MAJIN_V4_MAX_TOOL_CALLS on the host.',
           ),
