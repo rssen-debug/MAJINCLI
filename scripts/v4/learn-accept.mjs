@@ -39,8 +39,16 @@ const log = (line = '') => { if (!json) process.stdout.write(`${line}\n`); };
 
 /* A safe, unfamiliar task that needs no external service and cannot submit
  * anything anywhere: find a note by name in a folder the owner granted. */
-const TASK_A = 'Hitta anteckningen om projektet i min mapp och läs den.';
-const TASK_B = 'Läs den andra anteckningen som ligger i samma mapp.';
+/**
+ * Task A deliberately contains a slightly wrong file name — the way a real
+ * person writes one. The file on disk is `CV_Anders_2026.txt`; the request says
+ * `CV Anders 2026.txt`. A real model tries the path it was given, hits a genuine
+ * failure, and only then searches. That is the A -> B -> C pattern the gate is
+ * required to demonstrate, and it is not a scripted obstacle: it is the normal
+ * case of a user misremembering a file name.
+ */
+const TASK_A = (folder) => `Läs filen ${path.join(folder, 'CV Anders 2026.txt')} och berätta vad som står.`;
+const TASK_B = 'Läs den andra filen som ligger i samma mapp.';
 
 function stamp() {
   return new Date().toISOString().replace(/[:.]/g, '-');
@@ -152,7 +160,8 @@ function summarizeCost(log) {
 function grantedFolder(home) {
   const dir = path.join(home, 'Documents');
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'anteckning.txt'), 'PROJEKTANTECKNING: läget är grönt.');
+  // Underscores on disk, spaces in the request: the mismatch is the obstacle.
+  fs.writeFileSync(path.join(dir, 'CV_Anders_2026.txt'), 'CURRICULUM VITAE: Anders, 2026.');
   fs.writeFileSync(path.join(dir, 'andra.txt'), 'ANDRA ANTECKNINGEN: ekonomin är grön.');
   return dir;
 }
@@ -210,7 +219,7 @@ async function main() {
   log(`  provider: ${configured[0].provider || configured[0].id} · ${configured[0].model || ''}`);
   if (dryRun) {
     log('');
-    log(`  would run: "${TASK_A}" then "${TASK_B}" against a granted Documents folder,`);
+    log(`  would run: "${TASK_A('/…/Documents')}" then "${TASK_B}" against a granted Documents folder,`);
     log('  restart the host in between, and write the evidence file. Nothing was changed.');
     return;
   }
@@ -259,7 +268,7 @@ async function main() {
       if (res?.usage) usageLog.push({ model: res.model || process.env.MAJIN_V4_MODEL, usage: res.usage });
       return res;
     };
-    const turnA = await sse(`${first.base}/api/chat`, { cookie, body: { text: TASK_A, requestId: 'learn-a' } });
+    const turnA = await sse(`${first.base}/api/chat`, { cookie, body: { text: TASK_A(documents), requestId: 'learn-a' } });
     const doneA = turnA.events.find((e) => e.type === 'done')?.data;
     const errorA = turnA.events.find((e) => e.type === 'error')?.data;
     const toolsA = turnA.events.filter((e) => e.type === 'tool_result').map((e) => e.data);
@@ -330,7 +339,7 @@ async function main() {
         provider: { id: configured[0].id, model: configured[0].model || null },
         node: process.versions.node,
         platform: process.platform,
-        tasks: { a: TASK_A, b: TASK_B },
+        tasks: { a: TASK_A(documents), b: TASK_B },
         results,
         turnA: { done: doneA, tools: toolsA },
         turnB: { done: doneB, tools: toolsB },
