@@ -88,3 +88,7 @@ skill workflow (including actual test-host restart and changed related task), th
 the other original gates. See FORM_AND_LEARNING_ACCEPTANCE.md for the complete
 requirements; signing, native deployment, mobile voice/push, parity and safe
 backup/reset/update remain mandatory and have not been removed.
+
+## Immediate owner-requested handover
+
+Read HANDOVER_NOW_20261024.md first. Final real Go attempt4 again passes all three new safe forms and the original regression; evidence/form-autonomy-audit-attempt-4.json rechecks server/artifact/source/token evidence. The follow-up fixes CI prompt-size overflow; local memory/cancellation9/9. Previous1b2fc85 CI failed prompt size plus a Linux browser-startup flake; new exact-head CI must be checked before merge. New local installer rebuild failed spawn UNKNOWN; the older delivered473eb45 EXE is not this code. Mandatory learned-skill acquisition is NOT implemented/verified; every original deployment, parity, physical and signing gate remains. Owner requested transfer to another developer; freeze new engineering work and use the concise handover.
