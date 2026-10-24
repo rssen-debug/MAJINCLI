@@ -56,7 +56,7 @@ const LOCALIZATION = [/src[\\/]v4[\\/]ui[\\/]strings\.js$/];
 // assistant understands the language users actually type.
 // Acceptance checks send Swedish input text for the same reason benchmarks do:
 // they prove the assistant handles what users actually type.
-const BENCHMARK_INPUT = /scripts[\\/]v4[\\/](benchmark|accept|learn-accept)\.mjs$/;
+const BENCHMARK_INPUT = /scripts[\\/]v4[\\/](benchmark|accept|learn-accept|setup|approvals)\.mjs$/;
 
 const TARGETS = [];
 for (const root of ['src', 'scripts']) if (fs.existsSync(root)) for (const f of walk(root)) if (/\.(js|mjs|cjs)$/.test(f)) TARGETS.push(f);
