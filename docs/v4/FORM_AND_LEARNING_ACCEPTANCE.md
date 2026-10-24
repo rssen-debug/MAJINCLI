@@ -33,10 +33,30 @@ observations. Product code may not contain fixture-specific selectors or recipes
 
 ## Learned operational skills — IMPLEMENTED, awaiting the real-provider run
 
-**Status 2026-10-24:** the engine is built, integrated and proven end to end in
-this repository. The mandatory real-Go acceptance is the one step that cannot run
-here (no provider key), so it stays unverified until `npm run v4:learn-accept`
-is run on the host. That is the only open item in this section.
+**Status 2026-10-24 (updated):** the engine is built, integrated, and the whole
+A–H chain now runs **14/14 against an OpenAI-compatible endpoint** (simulated
+OpenCode Go wire format) including cost accounting and a real process restart.
+The one remaining step is the same run against the real Go provider, which needs
+the owner's key.
+
+That step no longer needs a key to be pasted anywhere: the repository already
+holds an `OPENCODE_API_KEY` secret, and `.github/workflows/v4-learn-accept.yml`
+runs the gate with it on demand:
+
+```
+gh workflow run v4-learn-accept.yml --ref v4/main
+```
+
+It refuses to pass without a key (a missing secret is a hard error, not a green
+run), it is bounded to a handful of cheap calls, and it uploads
+`docs/v4/evidence/learned-skills-*.json` as an artifact. The key is never printed.
+
+What the simulated run proved, per step: A a real failed first attempt, B a
+changed strategy, C an independently verified outcome (a read is now verified by
+re-statting the file — previously only writes were), D a stored skill with the
+avoid list, E survival across a real process restart, F a related task, G the
+learned section and the skill reaching the prompt, H the failed action not
+repeated. Tool calls, attempts, tokens and USD cost were recorded.
 
 Implemented in `src/v4/learning.js`, integrated into the existing agent, skill
 loader, memory and API — no second engine, no second store:

@@ -93,6 +93,29 @@ Rules:
 - Return 3-12 lines: what you found, the exact values/paths, and what you could not determine.
 - You cannot ask the owner questions and you cannot delegate further.`;
 
+/** Classes where an identical retry is legitimate: the tool was not the problem. */
+const TRANSIENT_CLASSES = /TIMEOUT|NETWORK_FAILURE|MODEL_RATE_LIMIT|MODEL_FAILURE|STALE_STATE|MODEL_CONTEXT_LIMIT/;
+
+/**
+ * Is a failure class worth retrying identically? Exported so the rule can be
+ * tested directly: an end-to-end run would need an approval-gated lane, which
+ * would test the approval policy rather than this decision.
+ */
+export function isTransientFailureClass(cls) {
+  return TRANSIENT_CLASSES.test(String(cls || ''));
+}
+
+/**
+ * Remember an identical failure for the rest of this turn.
+ * The argument values are hashed and discarded; only the verdict is kept.
+ */
+function markFailure(turn, toolName, args, cls) {
+  if (!turn) return;
+  turn.failures = turn.failures || new Map();
+  const key = `${toolName}:${crypto.createHash('sha256').update(safeJson(args)).digest('hex').slice(0, 12)}`;
+  turn.failures.set(key, { cls, transient: isTransientFailureClass(cls), at: Date.now() });
+}
+
 function createBus() {
   const handlers = new Set();
   return {
@@ -412,6 +435,45 @@ export function createAgent({
     const traceStep = { name: toolName, argsShape, ok: false, cls: null, verified: false, at: Date.now() };
     if (turn?.trace) turn.trace.push(traceStep);
 
+    /**
+     * No identical unsuccessful action twice.
+     *
+     * The brief says: "Diagnose failed steps and avoid repeating identical
+     * unsuccessful actions", and "never run unlimited retries". A retry from the
+     * recovery advisor is legitimate (it is attempt > 1 and bounded by the
+     * advisor's own budget), but a model re-issuing the exact same call after it
+     * already failed with a non-transient class is not a new attempt — it is the
+     * same dead end. It is refused here, with the failure it is repeating, so the
+     * model is forced to change strategy instead of burning the turn.
+     *
+     * The key includes a hash of the argument VALUES. It is never stored: it
+     * exists only in this turn's memory.
+     */
+    if (attempt === 1 && turn?.failures) {
+      const key = `${toolName}:${crypto.createHash('sha256').update(safeJson(args)).digest('hex').slice(0, 12)}`;
+      const prior = turn.failures.get(key);
+      if (prior && !prior.transient) {
+        traceStep.ok = false;
+        traceStep.cls = 'NO_PROGRESS';
+        emit('tool_result', {
+          id: call.id,
+          name: toolName,
+          ok: false,
+          verified: false,
+          summary: 'NO_PROGRESS',
+          error: `identical call already failed with ${prior.cls}`,
+        });
+        record('task.result', { action: `tool:${toolName}`, taskId: goal.id, result: 'failure', errorCls: 'NO_PROGRESS' });
+        return {
+          ok: false,
+          error: `This exact call already failed with ${prior.cls} earlier in this turn. Repeating it cannot succeed: `
+            + 'change the approach (different tool, different arguments, or ask the owner) or stop and report what failed.',
+          code: 'NO_PROGRESS',
+          name: toolName,
+        };
+      }
+    }
+
     // A strategy this MAJIN already proved wrong must not be repeated blindly.
     // Only exact (tool + argument-Names) matches recorded from a verified run
     // are refused, and only when a relevant skill was retrieved for this turn.
@@ -464,6 +526,7 @@ export function createAgent({
       const cls = err?.cls || 'UNKNOWN';
       traceStep.ok = false;
       traceStep.cls = cls;
+      markFailure(turn, toolName, args, cls);
       if (!nested) goal.transition(STATES.RUNNING, `tool ${toolName} threw ${cls}`);
       goal.addReceipt({
         action: `tool:${toolName}`,
@@ -493,6 +556,7 @@ export function createAgent({
       const cls = result.error?.cls || 'TOOL_FAILURE';
       traceStep.ok = false;
       traceStep.cls = cls;
+      markFailure(turn, toolName, args, cls);
       goal.addReceipt({ action: `tool:${toolName}`, target: args.fileName || null, result: 'failure', errorClass: cls });
       emit('tool_result', { id: call.id, name: toolName, ok: false, verified: false, summary: cls });
       return { ok: false, error: result.error || 'tool failed', code: cls, name: toolName };
@@ -550,6 +614,36 @@ export function createAgent({
           errorClass: verification.error?.cls || 'VERIFICATION_FAILURE',
           acceptanceId: `artifact:${data.fileName}`,
         });
+      }
+    } else if (toolName === 'fs_read' && data?.meta && typeof args?.path === 'string') {
+      /**
+       * A read is an outcome too.
+       *
+       * Until now only writes were verified, so a read-only task completed with
+       * no independent check at all — and the learned-skill gate (which requires
+       * a verified receipt) could never accept one. The check is a fresh stat of
+       * the file AFTER the tool ran: it proves the file the model was told about
+       * really exists on disk with the size the tool reported.
+       */
+      const reported = Number(data.meta.size);
+      if (Number.isFinite(reported) && reported > 0) {
+        const check = await runVerifier('file', { path: args.path, minBytes: reported });
+        if (check.verified) {
+          goal.verifyReceipt(receipt.id, {
+            ...check.evidence,
+            verifier: 'v2.file',
+            kindOfRead: true,
+            reportedBytes: reported,
+          });
+          verified = true;
+        } else {
+          goal.addReceipt({
+            action: 'verification.read',
+            target: args.path,
+            result: 'failure',
+            errorClass: check.error?.cls || 'VERIFICATION_FAILURE',
+          });
+        }
       }
     } else if (toolName === 'workspace_read' && data?.content != null) {
       // Verify a read against the file itself: same size, same bytes.
@@ -718,6 +812,7 @@ export function createAgent({
       // argument NAMES only. It is the raw material for learning and contains
       // no values, so nothing sensitive can leak into a stored skill.
       trace: [],
+      failures: new Map(),
       learned: learnedForTurn,
     };
     const packed = historyFor(conversations.get(conversation.id), message, learnedForTurn);
@@ -1213,7 +1308,20 @@ export function createAgent({
     const saved = pending.continuation;
     const exposure = createToolExposure({ registry: tools.registry, maxVisible: config.limits.maxVisibleTools || 64 });
     exposure.activate(saved.exposed || []);
-    const turn = { exposure, depth: 0, goal, conversationId, emit, signal, model };
+    const turn = {
+      exposure,
+      depth: 0,
+      goal,
+      conversationId,
+      emit,
+      signal,
+      model,
+      trace: [],
+      // A continuation keeps the guard: this is the same turn, so a call that
+      // already failed must still not be repeated.
+      failures: saved.failures instanceof Map ? saved.failures : new Map(),
+      learned: [],
+    };
     return executeModelLoop({ conversation, goal, exposure, turn, modelMessages: saved.modelMessages, signal, emit,
       turnStartedAt: saved.turnStartedAt, requestId: saved.requestId, continuation: saved });
   }

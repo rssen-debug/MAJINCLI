@@ -165,6 +165,44 @@ loopen: felet attribueras till ett steg, och skillen blir `STALE` först när sa
 steg fallerar upprepat. Bevisat i `test/v4/learning.test.js` (17 tester), inklusive
 en riktig omstart mellan de två misslyckade varven.
 
+## 2026-10-24 (forts. 2) — bundna försök, kostnadsmätning och ett knapptryck för Go-körningen
+
+Tre saker som specifikt saknades är nu byggda:
+
+**1. Inga identiska misslyckade anrop två gånger.** Specen kräver bundna försök och
+"never run unlimited retries". Guarden jämför en hash av verktyg + argumentvärden
+(hashen lagras aldrig) och nekar en upprepning av exakt samma anrop som redan
+misslyckats med en icke-övergående klass. Övergående fel (TIMEOUT, NETWORK_FAILURE,
+rate limit) får fortfarande köras om — det var aldrig verktyget det var fel på.
+Bevisat i `test/v4/no-progress.test.js` (3 tester).
+
+**2. Läsningar verifieras nu oberoende.** Tidigare verifierades bara skrivningar, så
+en ren läsuppgift blev aldrig "independently verified" — och kunde därför aldrig
+godkännas av inlärningsgrinden. Nu stat:as filen om efter att verktyget läst den och
+storleken jämförs med vad verktyget rapporterade.
+
+**3. Kostnaden mäts.** Token räknas från providerns eget `usage`-fält och prissätts
+med publicerad taxa; okända modeller rapporteras som `null` i stället för en påhittad
+siffra. Den simulerade körningen: **4 modellanrop, 4800 in / 720 ut, $0,00108**.
+
+### Go-körningen behöver ingen inklistrad nyckel längre
+
+Repot har redan en `OPENCODE_API_KEY`-secret. Nytt arbetsflöde kör grinden med den:
+
+```
+gh workflow run v4-learn-accept.yml --ref v4/main
+```
+
+Det vägrar passera utan nyckel (saknad secret är hårt fel, inte grön körning), är
+bundet till ett fåtal billiga anrop och laddar upp bevisfilen som artifact. Nyckeln
+skrivs aldrig ut.
+
+### Status på A–H
+
+Med en simulerad OpenCode Go-endpoint (samma trådformat): **14/14**. Hela kedjan
+A→H, inklusive riktig processomstart, hämtning och att det misslyckade anropet inte
+upprepas. Kvar: samma körning mot **riktig** Go-inferens.
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är

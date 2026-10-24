@@ -1,0 +1,86 @@
+name: MAJIN V4 learned-skill acceptance (real Go)
+
+# The mandatory A-H gate from the self-improving-skill brief, run against the
+# real provider. It uses the repository's existing OPENCODE_API_KEY secret, so
+# the owner never has to paste a key anywhere and none is ever printed.
+#
+# Manual only, on purpose: this spends real provider quota. It is bounded to a
+# handful of cheap calls and it refuses to run at all without a key.
+#
+#   gh workflow run v4-learn-accept.yml --ref v4/main
+#   gh run list --workflow v4-learn-accept.yml
+#   gh run view <id> --log        (or download the evidence artifact)
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'Model id (default: the cheap allowlisted one)'
+        required: false
+        default: 'glm-5.3-flash'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v4-learn-accept
+  cancel-in-progress: false
+
+jobs:
+  learned-skills:
+    name: A-H on the real provider
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      MAJIN_V4_MODEL: ${{ inputs.model }}
+      MAJIN_LLM_TIMEOUT: '120000'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Check that a key exists, without exposing it
+        id: access
+        shell: bash
+        run: |
+          if [ -z "${OPENCODE_API_KEY:-}" ]; then
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            echo 'NOT VERIFIED: OPENCODE_API_KEY is not configured for this repository. The gate did not run.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+            echo 'A provider key is configured. Running the bounded A-H gate; the key is never printed.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Refuse silently passing without a key
+        if: steps.access.outputs.available != 'true'
+        shell: bash
+        run: |
+          echo "::error title=Learned-skill gate not run::OPENCODE_API_KEY is not configured, so the real-inference A-H gate cannot run."
+          exit 1
+
+      - name: A-H against the real provider (bounded, evidence written)
+        if: steps.access.outputs.available == 'true'
+        shell: bash
+        run: |
+          node scripts/v4/learn-accept.mjs | tee learn-accept.out
+          code=${PIPESTATUS[0]}
+          {
+            echo '### Learned-skill acceptance (A-H)'
+            echo '```'
+            grep -E 'PASS|FAIL|checks passed|provider:' learn-accept.out || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $code
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: learned-skills-evidence
+          path: |
+            docs/v4/evidence/learned-skills-*.json
+            learn-accept.out
+          if-no-files-found: warn
+          retention-days: 30

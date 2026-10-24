@@ -70,6 +70,34 @@ async function startHost(config, home, { provider = 'live' } = {}) {
   }
 }
 
+/**
+ * Cost accounting.
+ *
+ * The brief requires the evidence to record costs. Token counts come from the
+ * provider's own usage field; the price per token is a published rate, not a
+ * guess. Anything unknown is reported as `null` — an invented number in a cost
+ * report is worse than an honest gap.
+ */
+const PRICES = {
+  // OpenCode Go lists glm-5.3-flash at $0.15 / M input and $0.50 / M output.
+  'glm-5.3-flash': { inputPerMillion: 0.15, outputPerMillion: 0.50 },
+};
+
+function costOf({ model, usage }) {
+  const price = PRICES[model] || null;
+  const input = Number(usage?.input || 0);
+  const output = Number(usage?.output || 0);
+  if (!price) return { model, inputTokens: input, outputTokens: output, usd: null, note: 'no published rate on record for this model' };
+  return {
+    model,
+    inputTokens: input,
+    outputTokens: output,
+    reported: usage?.reported !== false,
+    usd: Math.round(((input / 1e6) * price.inputPerMillion + (output / 1e6) * price.outputPerMillion) * 1e6) / 1e6,
+    rates: price,
+  };
+}
+
 async function sse(url, { cookie, body }) {
   const res = await fetch(url, {
     method: 'POST',
@@ -88,6 +116,37 @@ async function sse(url, { cookie, body }) {
     if (type) events.push({ type, data: data ? JSON.parse(data) : null });
   }
   return { status: res.status, events };
+}
+
+function summarizeCost(log) {
+  const perModel = new Map();
+  for (const item of log) {
+    const c = costOf({ model: item.model, usage: item.usage });
+    const prev = perModel.get(c.model) || { inputTokens: 0, outputTokens: 0, usd: 0, priced: true };
+    prev.inputTokens += c.inputTokens;
+    prev.outputTokens += c.outputTokens;
+    if (c.usd == null) prev.priced = false;
+    else prev.usd += c.usd;
+    perModel.set(c.model, prev);
+  }
+  const calls = log.length;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let usd = 0;
+  let priced = true;
+  for (const v of perModel.values()) {
+    inputTokens += v.inputTokens;
+    outputTokens += v.outputTokens;
+    usd += v.usd;
+    if (!v.priced) priced = false;
+  }
+  return {
+    calls,
+    inputTokens,
+    outputTokens,
+    usd: priced ? Math.round(usd * 1e6) / 1e6 : null,
+    perModel: Object.fromEntries([...perModel.entries()]),
+  };
 }
 
 function grantedFolder(home) {
@@ -109,6 +168,23 @@ async function main() {
   log('');
   log('MAJIN V4 — learned-skill acceptance (A–H)');
   log('='.repeat(66));
+
+  /**
+   * Use the repository's existing OpenCode Go convention when it is present, so
+   * this gate can run in CI with the already-configured OPENCODE_API_KEY and the
+   * key never has to be pasted anywhere. An explicitly configured MAJIN provider
+   * still wins.
+   */
+  const goKey = String(process.env.OPENCODE_API_KEY || '').trim();
+  const useGo = Boolean(goKey) && !process.env.MAJIN_V4_BASE_URL;
+  if (useGo) {
+    process.env.MAJIN_V4_PROVIDER = process.env.MAJIN_V4_PROVIDER || 'openai';
+    process.env.MAJIN_V4_BASE_URL = 'https://opencode.ai/zen/go/v1';
+    process.env.MAJIN_V4_API_KEY = goKey;
+    process.env.MAJIN_V4_MODEL = process.env.MAJIN_V4_MODEL || 'glm-5.3-flash';
+    process.env.MAJIN_V4_PROVIDER_NAME = 'opencode-go';
+    process.env.MAJIN_V4_PROVIDER_LABEL = 'OpenCode Go';
+  }
 
   // Refuse to pretend: this gate is about real inference.
   const catalogue = discoverModels({ home: loadConfig({ argv: [] }).paths.home, env: process.env });
@@ -166,6 +242,14 @@ async function main() {
     const cookie = (pairRes.headers.get('set-cookie') || '').split(';')[0];
     record('auth.paired', pairRes.status === 200 && cookie.length > 10, `pair -> ${pairRes.status}`);
 
+    // Count real model calls so the cost report is grounded in what happened.
+    const usageLog = [];
+    const realChat = first.context.model.chat.bind(first.context.model);
+    first.context.model.chat = async (opts) => {
+      const res = await realChat(opts);
+      if (res?.usage) usageLog.push({ model: res.model || process.env.MAJIN_V4_MODEL, usage: res.usage });
+      return res;
+    };
     const turnA = await sse(`${first.base}/api/chat`, { cookie, body: { text: TASK_A, requestId: 'learn-a' } });
     const doneA = turnA.events.find((e) => e.type === 'done')?.data;
     const toolsA = turnA.events.filter((e) => e.type === 'tool_result').map((e) => e.data);
@@ -185,6 +269,11 @@ async function main() {
       record('D.avoid_recorded', (manifest.learned?.avoid || []).length > 0,
         (manifest.learned?.avoid || []).map((a) => a.action).join(', ') || 'none');
     }
+
+    const costA = summarizeCost(usageLog);
+    record('turn.A.cost', costA.calls > 0,
+      `${costA.calls} model call(s), ${costA.inputTokens} in / ${costA.outputTokens} out`
+      + (costA.usd == null ? ', cost not priced' : `, $${costA.usd}`));
 
     // ---- E: a real restart ------------------------------------------------
     await new Promise((resolve) => first.server.close(resolve));
@@ -224,6 +313,7 @@ async function main() {
       const file = path.join(EVIDENCE_DIR, `learned-skills-${stamp()}.json`);
       fs.writeFileSync(file, `${JSON.stringify({
         at: new Date().toISOString(),
+        cost: summarizeCost(usageLog),
         provider: { id: configured[0].id, model: configured[0].model || null },
         node: process.versions.node,
         platform: process.platform,
