@@ -19,5 +19,5 @@ test('live activity, evidence and supported previews remain in same work row',()
  const src=fs.readFileSync(new URL('../src/v4/ui/app.js',import.meta.url),'utf8');
  assert.match(src,/progressCard\.detail : els\.thread\)\.append\(node\)/);
  assert.match(src,/Klart.*Problem.*toolLabel\(data\.name\)/);
- assert.match(src,/\.\(html\?\|htm\)\$/i);
+ assert.ok(src.includes('if (!/\\.(html?|htm)$/i.test(name))'));
 });
