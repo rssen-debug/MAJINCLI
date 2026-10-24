@@ -208,6 +208,14 @@ export function cdpRpc(ws) {
 /* --------------------------- browser session ----------------------------- */
 
 const sess = new Map(); // sessionId (agent session) → live browser, own window + own profile
+const launches = new Map(); // single-flight per session: concurrent calls share one startup
+const failedLaunches = new Map(); // short circuit breaker: stop Chrome spawn storms
+const BROWSER_START_COOLDOWN_MS = 60_000;
+export function browserLaunchState(session) {
+  const key = String(session || 'default');
+  return { active: sess.has(key), launching: launches.has(key),
+    retryAfterMs: Math.max(0, (failedLaunches.get(key) || 0) - Date.now()) };
+}
 
 function profileFor(session) {
   return path.join(dirs.cache, 'browser-' + String(session).replace(/[^\w.-]/g, '_'));
@@ -245,6 +253,34 @@ export async function waitForNavigation(navigation, read, { attempts = 150, dela
 
 /** Launch (or reuse) the browser for ONE agent session and navigate it. */
 export async function openFor({ session, url = null, headless = true, cfgGet = null, pool = null, exe = null, wsFactory = null, signal = null } = {}) {
+  session = String(session || 'default');
+  const pending = launches.get(session);
+  if (pending) {
+    const browser = await pending;
+    if (url && url !== 'about:blank' && await browser.eval('location.href', { signal }) !== String(url))
+      await browser.goto(url, { signal });
+    return browser;
+  }
+  const delay = (failedLaunches.get(session) || 0) - Date.now();
+  if (delay > 0 && !sess.has(session))
+    throw new Error('Chrome startup failed recently; retry in ' + Math.ceil(delay / 1000)
+      + ' seconds. MAJIN will not spawn more Chrome windows during the cooldown.');
+  const launching = (async () => {
+    try {
+      const browser = await openForOnce({ session, url, headless, cfgGet, pool, exe, wsFactory, signal });
+      failedLaunches.delete(session);
+      return browser;
+    } catch (error) {
+      if (!signal?.aborted) failedLaunches.set(session, Date.now() + BROWSER_START_COOLDOWN_MS);
+      throw error;
+    }
+  })();
+  launches.set(session, launching);
+  try { return await launching; }
+  finally { if (launches.get(session) === launching) launches.delete(session); }
+}
+
+async function openForOnce({ session, url = null, headless = true, cfgGet = null, pool = null, exe = null, wsFactory = null, signal = null } = {}) {
   signal?.throwIfAborted();
   session = String(session || 'default');
   const existing = sess.get(session);
@@ -283,8 +319,11 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     thePool.release(session);
     throw new Error('found no Chrome or Edge on this machine — install one of them and MAJIN can drive it');
   }
-  const profile = profileFor(`${session}-s${slot}`);
-  fs.mkdirSync(profile, { recursive: true });
+  // Every fresh launch needs an exclusive profile. Reusing a stale directory
+  // owned by a zombie Chrome triggers Windows single-instance handoff instead
+  // of starting a new CDP port. In-memory sessions still reuse their tab.
+  fs.mkdirSync(dirs.cache, { recursive: true });
+  const profile = fs.mkdtempSync(path.join(dirs.cache, 'browser-run-'));
   let version = null;
   let lastErr = null;
   /* Del 5ABE flake-hardening (CI evidence: runs 39261715303 + 39265517682):
@@ -374,6 +413,12 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
       try { await cdp('Browser.close', {}, { timeoutMs: 3000 }); } catch { /* already gone */ }
       try { ws.close(); } catch { /* gone */ }
       try { if (!proc.killed) proc.kill(); } catch { /* gone */ }
+      // Best effort, after owned process has exited. Never delete a live or
+      // unrelated Chrome profile just to make cleanup appear successful.
+      try {
+        if (proc.exitCode !== null || proc.signalCode !== null)
+          fs.rmSync(profile, { recursive: true, force: true });
+      } catch { /* Windows may still hold files */ }
     })();
     return b.closed;
   };
@@ -447,6 +492,10 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     try { if (proc && !proc.killed) proc.kill(); } catch { /* gone */ }
     thePool.release(session);
     sess.delete(session);
+    try {
+      if (proc?.exitCode !== null || proc?.signalCode !== null)
+        fs.rmSync(profile, { recursive: true, force: true });
+    } catch { /* Windows process still owns files */ }
     throw e;
   } finally { signal?.removeEventListener('abort',onAbort); }
 }
@@ -471,5 +520,7 @@ export function closeFor(session, { wait = false, headlessOnly = false } = {}) {
 export function _resetBrowser() {
   for (const b of sess.values()) { try { b.close?.(); } catch { /* gone */ } }
   sess.clear();
+  launches.clear();
+  failedLaunches.clear();
   journal.bySession.clear();
 }
