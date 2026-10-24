@@ -279,7 +279,8 @@ export function createToolRegistry({ workspaceDir, memoryDir, allowedRoots = () 
     }),
     outputSchema: z.object({ saved: z.literal(true), key: z.string() }),
     execute: async ({ key, text, tags = [] }) => {
-      memory.put('preference', { key, text, tags, importance: 0.8 });
+      const saved=memory.put('preference', { key, text, tags, importance: 0.8 });
+      if(!saved||memory.get('preference',key)?.text!==text)throw new WorkspaceError('INVALID_INPUT','Memory entry was not retained: the namespace is full of higher-priority entries.');
       return { saved: true, key };
     },
   });

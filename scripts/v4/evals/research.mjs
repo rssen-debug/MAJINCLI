@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {evaluationClient} from './live-client.mjs';
 import {existingLocalOwnerCookie} from './local-owner.mjs';
 
-export async function runResearchEvaluation({base,cookie,workspace,output,sourceDirectory,onEvent=()=>{}}){
+export async function runResearchEvaluation({base,cookie,workspace,output,sourceDirectory,reviewFeedback='',onEvent=()=>{}}){
   if(fs.existsSync(output))throw Error('Use a new evidence filename');
   const client=evaluationClient({base,cookie}),before=(await client.get('/api/state')).model;
   const catalogue=await client.get('/api/models');
@@ -16,7 +16,7 @@ export async function runResearchEvaluation({base,cookie,workspace,output,source
   const fileName=`genesis-research-${crypto.randomBytes(5).toString('hex')}.md`,calls=new Map(),reads=[];
   let result,failure=null,conversationId;const started=Date.now();
   try{
-    result=await client.run({task:`Research the difference between message retention in RFC 8030 and content encryption in RFC 8291. Use the real web tools to locate and read the relevant primary RFC text on rfc-editor.org. Explain what each mechanism guarantees, what it does not guarantee, and how they relate to an offline mobile device. Include the actual source URLs and section numbers. Do not infer that a server's accepted push proves that a physical phone received it. Save a concise source-backed comparison in workspace file ${fileName} and read it back. Do not send notifications, run code, change settings or access unrelated files.`,
+    result=await client.run({task:`Research the difference between message retention in RFC 8030 and content encryption in RFC 8291. Use the real web tools to locate and read the relevant primary RFC text on rfc-editor.org. Explain what each mechanism guarantees, what it does not guarantee, and how they relate to an offline mobile device. Include the actual source URLs and section numbers. Do not infer that a server's accepted push proves that a physical phone received it. Save a concise source-backed comparison in workspace file ${fileName} and read it back. Do not send notifications, run code, change settings or access unrelated files.${reviewFeedback?'\nIndependent review of a prior attempt follows. Check its claims against the primary documents and address supported corrections in your new report:\n'+String(reviewFeedback).slice(0,6000):''}`,
       onEvent:e=>{conversationId=e.data?.conversationId||conversationId;if(e.event==='tool_start')calls.set(e.data.id,{name:e.data.name,input:e.data.input});if(e.event==='tool_result'&&e.data.ok){const call=calls.get(e.data.id);if(call?.name==='web_fetch'&&typeof call.input?.url==='string')reads.push(call.input.url);}onEvent(e);},
       approve:async pending=>{
         const p=pending.input||{};
@@ -46,6 +46,6 @@ export async function runResearchEvaluation({base,cookie,workspace,output,source
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const args=process.argv.slice(2),get=name=>{const i=args.indexOf(name);if(i<0||!args[i+1])throw Error(`Missing ${name}`);return args[i+1];};
   const base=get('--host'),cookie=existingLocalOwnerCookie({base,home:get('--local-owner-home')});
-  const e=await runResearchEvaluation({base,cookie,workspace:get('--workspace'),output:get('--out'),sourceDirectory:get('--source-dir'),onEvent:e=>{if(e.event==='tool_start')process.stderr.write(`tool ${e.data.name}\n`);}});
+  const e=await runResearchEvaluation({base,cookie,workspace:get('--workspace'),output:get('--out'),sourceDirectory:get('--source-dir'),reviewFeedback:args.includes('--review')?fs.readFileSync(get('--review'),'utf8'):'',onEvent:e=>{if(e.event==='tool_start')process.stderr.write(`tool ${e.data.name}\n`);}});
   console.log(JSON.stringify(e));if(!e.passed)process.exitCode=1;
 }

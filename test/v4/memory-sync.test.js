@@ -13,6 +13,18 @@ import {tempHome} from './helpers.mjs';
 const files=dir=>fs.existsSync(dir)?Object.fromEntries(fs.readdirSync(dir).sort().filter(n=>fs.statSync(path.join(dir,n)).isFile()).map(n=>[n,fs.readFileSync(path.join(dir,n),'utf8')])):null;
 const setup=()=>{const home=tempHome();return {home,a:new MemoryStore(path.join(home,'a')),b:new MemoryStore(path.join(home,'b'))};};
 
+test('memory_save never acknowledges saved when retention drops the new entry',async()=>{
+  const home=tempHome();
+  try{
+    const tools=createToolRegistry({workspaceDir:path.join(home,'workspace'),memoryDir:path.join(home,'memory')});
+    tools.memory.maxEntriesPerNs=1;
+    tools.memory.put('preference',{key:'important',text:'keep this',importance:1});
+    await assert.rejects(runTool({tool:'memory_save',input:{key:'dropped',text:'must not claim saved'}},{registry:tools.registry,approvals:{check:()=>({decision:'allow'})}}),/not retained/);
+    assert.equal(tools.memory.get('preference','important').text,'keep this');
+    assert.equal(tools.memory.get('preference','dropped'),null);
+  }finally{fs.rmSync(home,{recursive:true,force:true});}
+});
+
 test('empty-store directory aliases are refused before minting an identity or writing data',()=>{
   const {home,a}=setup();
   try{

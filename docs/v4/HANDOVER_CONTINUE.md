@@ -972,3 +972,24 @@ original gates. Newly noticed follow-up: memory_save currently acknowledges save
 even if low-importance retention drops the new entry; require an actual retained
 entry before returning saved=true. Do not label ordinary Ghost memory-sync active
 or physically accepted merely because the isolated test passed.
+
+### Memory acknowledgment and research follow-up — 24 October
+
+Memory milestone bfc0e25359705b136e58534bf3c7ae2d2ee3effb pushed and cleanly
+pulled into the installed checkout; ordinary runtime still last activatede45640a.
+V4 CI40045968416 and runner40045968498 SUCCESS; Windows40045968524 in progress at
+last observation. New memory_save guard now reads back the actual retained entry
+before acknowledging saved=true. A full namespace of higher-priority entries can
+drop a new entry under the existing retention policy; that case now fails honestly
+instead of reporting a saved memory. Final canonical/memory/context tests26/0/0
+(canonical file now11 cases). No broader suite was unnecessarily repeated for
+this small follow-up; exact follow-up CI must be observed separately.
+
+Research harness now accepts optional --review feedback and the actual Go model
+reread both primary RFCs and produced a new artifact. Attempt2 structurally PASS
+and corrected both supplied findings, but independent primary-text review found
+a new inaccurate key-agreement/TTL explanation. Scenario C remains PARTIAL;
+genesis-research-attempt-2-review.json records the exact finding. Do not turn the
+structural passed flag into factual acceptance. Next engineering work remains
+typed V4 self-config/reset, durable graph resume/replan and token/currency budgets;
+then remaining real scenarios and original physical/production acceptance gates.
