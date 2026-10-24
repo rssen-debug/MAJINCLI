@@ -132,7 +132,7 @@ V2 adjustments cover doctor compatibility, shell-free quoted STT execution, Wind
 | Legacy capability | Current V4 position | Required resolution |
 |---|---|---|
 | Outbound Discord/Slack/Matrix/email/webhook channels | V1 channels.js is excluded; a PWA is not equivalent to those integrations | Adapt owner-configured channels to V4 sessions/tasks and external-action approvals; validate with the relevant accounts; assess separate inbound Telegram/WhatsApp modules independently |
-| Proactive heartbeat/event digests | V1 heartbeat.js is excluded; process supervision does not deliver event digests | Reuse the event digest engine with V4 events and an owner-selected delivery route |
+| Proactive heartbeat/event digests | PARTIAL: original Heartbeat now bound to actual V4 completion/approval events and shared conversation history; durable queue/dedup/rate state, three-failure pause and opt-in registered-device push | Controlled real HTTP/restart and mobile-browser controls pass. Source Ghost activation and actual physical/owner-configured outbound delivery remain unverified |
 | Two-store memory delta synchronization | V1 memory-sync.js excluded; canonical single-host memory covers clients, not separate-store exchange | Add an explicit approved cross-store import/sync workflow with tombstone handling, or obtain an explicit scope decision |
 | Agent self-configuration | V1 majin.js edits V1 config; V4 setup/owner mode cover only part of it | Implement typed V4 configuration changes with validation/approval; never point old tools at the wrong runtime |
 | V1 reset/cleanup actions | Old runtime-wide reset excluded | Provide a V4 preview/backup/confirmed-reset flow for the corresponding persisted state |

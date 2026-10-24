@@ -58,6 +58,7 @@ import { createBackgroundTasks } from './background-tasks.js';
 import { createPushService } from './push.js';
 import { runTool } from '../v2/tools/runner.js';
 import { createV4Audit } from './audit.js';
+import { createV4Heartbeat } from './heartbeat.js';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui');
 
@@ -558,12 +559,13 @@ export function createV4Server({ config }) {
       voiceTurn,
       requestId,
       signal: controller.signal,
-      emit: (type, data) => journal.append(turn, type, data),
+      emit: (type, data) => {journal.append(turn,type,data);heartbeat.observe(type,data,conversationId);},
     }).then((result) => {
       journal.finish(turn, result?.status || 'completed');
       return result;
     }).catch((err) => {
       journal.append(turn, 'error', { message: err?.message || 'turn failed' });
+      heartbeat.observe('done',{status:'failed',conversationId});
       journal.finish(turn, 'failed');
       return { status: 'failed' };
     }).finally(() => {
@@ -582,8 +584,15 @@ export function createV4Server({ config }) {
     return JSON.parse(text.slice(text.indexOf('\n\n')+2));
   }});
   for(const tool of backgroundTasks.tools)tools.registry.define(tool);
+  const heartbeat=createV4Heartbeat({root:paths.root,conversations,notifications,audit});
 
   const routes = {
+    'GET /api/heartbeat':async(req,res)=>{requireSession(req);sendJson(res,200,{ok:true,...heartbeat.view()});},
+    'POST /api/heartbeat':async(req,res)=>{
+      requireSession(req);assertCsrfHeader(req);limiter.take('general',clientKey(req,config));
+      const body=await readJsonBody(req,4096);
+      try{sendJson(res,200,{ok:true,result:await heartbeat.manage(body)});}catch(error){throw new HttpError(400,'HEARTBEAT_ACTION',error.message);}
+    },
     'GET /api/audit':async(req,res)=>{requireSession(req);sendJson(res,200,audit.status());},
     'POST /api/audit':async(req,res)=>{
       requireSession(req);assertCsrfHeader(req);limiter.take('general',clientKey(req,config));
@@ -1002,7 +1011,7 @@ export function createV4Server({ config }) {
         const result = await agent.resumeGoal({
           goalId,
           conversationId,
-          emit: (type, data) => sse.send(type, data),
+          emit: (type, data) => {sse.send(type,data);heartbeat.observe(type,data,conversationId);},
         });
         sse.send('resume_result', { status: result.status, missing: result.missing || [], results: result.results });
       } catch (err) {
@@ -1023,7 +1032,7 @@ export function createV4Server({ config }) {
           conversationId,
           owner: session.id,
           approve: body.approve === true,
-          emit: (type, data) => sse.send(type, data),
+          emit: (type, data) => {sse.send(type,data);heartbeat.observe(type,data,conversationId);},
         });
       } catch (err) {
         sse.send('error', { message: err.message || 'approval failed' });
@@ -1288,6 +1297,7 @@ export function createV4Server({ config }) {
   // Workers are killed when the listener closes, so a stopped host leaves no
   // orphaned plugin processes behind.
   server.on('close', () => {
+    heartbeat.stop();
     notifications.stop();
     backgroundTasks.stop();
     kernel.shutdownWorkers();
@@ -1295,11 +1305,11 @@ export function createV4Server({ config }) {
     for (const entry of mcpState.connected) entry.server.stop();
     mcpState.connected = [];
   });
-  server.once('listening',()=>{notifications.start();void Promise.all([hostReady,kernelReady]).then(()=>backgroundTasks.start()).catch(()=>backgroundTasks.stop());});
+  server.once('listening',()=>{notifications.start();heartbeat.start();void Promise.all([hostReady,kernelReady]).then(()=>backgroundTasks.start()).catch(()=>backgroundTasks.stop());});
 
   return {
     server,
-    context: { config, sessions, conversations, goals, tools, model, agent, kernel, kernelReady, reconciled, pairingFresh, backgroundTasks, audit },
+    context: { config, sessions, conversations, goals, tools, model, agent, kernel, kernelReady, reconciled, pairingFresh, backgroundTasks, audit, heartbeat },
   };
 }
 

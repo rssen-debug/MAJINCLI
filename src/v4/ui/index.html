@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="MAJIN" />
-  <link rel="stylesheet" href="/app.css?v=13" />
+  <link rel="stylesheet" href="/app.css?v=14" />
 </head>
 <body>
   <div class="aurora" aria-hidden="true"></div>
@@ -156,6 +156,9 @@
       <button type="button" class="btn ghost wide" id="push-test" hidden>Send a test notification</button>
       <button type="button" class="btn ghost wide" id="push-disable" hidden>Disable notifications on this device</button>
       <p class="sheet-note" id="push-status"></p>
+      <label class="row"><span>Notify about stalled tasks</span><input type="checkbox" id="heartbeat-notify" /></label>
+      <p class="sheet-note" id="heartbeat-status"></p>
+      <button type="button" class="btn ghost wide" id="heartbeat-resume" hidden>Resume background updates</button>
     </div>
 
     <div class="sheet-section">
@@ -269,6 +272,6 @@
     </details>
   </template>
 
-  <script type="module" src="/app.js?v=13"></script>
+  <script type="module" src="/app.js?v=14"></script>
 </body>
 </html>

@@ -808,3 +808,44 @@ failures still stop execution; unavailable statistics alone do not. Existing
 fixture is extended to assert the actual audit chain still contains goal.finish.
 New-head focused results/CI must be observed separately. Runtime remains e45640a,
 prepared checkout e3d458f until this follow-up is pulled; activation remains unproven.
+
+### Existing Heartbeat integration — 24 October, PARTIAL
+
+Exact ee80d8596fdecb7db381d08e31acc5ddfce1e614 CI all THREE SUCCESS:
+V4 run40041368486, Windows desktop40041368481, runner40041368503. Hosted Windows
+packaging/smoke does not establish Ghost native installation or production trust.
+
+Reused core/heartbeat.js; fixed rate-held event loss, non-durable queue/dedup,
+clock-zero dedup, internal-wildcard patterns, dry-run consumption and concurrent
+send races. Queue IDs/seen/last delivery/failure state are atomically checkpointed
+with fsync/private ACLs; corrupt state is retained and refused. A process-exit
+regression proves actual reload. New events survive a digest already in flight.
+Three failed deliveries pause further attempts until explicit resume. Legacy
+heartbeat control is external-tier (it can send configured channels), not read.
+Its optional event/action schema is corrected; synthetic previews no longer
+insert test events into the real queue or trigger later background notifications.
+
+V4 lifecycle now feeds only actual failed turns and durable pending approvals
+into this engine. Resolved approvals are removed even while collection is paused,
+so a resumed watcher cannot issue stale warnings. Default delivery is an existing
+shared ConversationStore transcript. Push requires explicit notify setting and
+registered devices; stable outbox IDs deduplicate recovery and notification links
+open the ACTUAL pending task. No model calls are used for digest aggregation.
+Authenticated /api/heartbeat exposes counts/state, preview/flush/configure/pause/
+resume with CSRF; internal event details and raw task text do not leak in status.
+Existing menu adds opt-in and a conditional Resume control; shell14. No hero
+suggestions or extra agent engine/store were added.
+
+Controlled core+V4 heartbeat tests14/0/0. Actual Chrome mobile UI control1/0/0,
+and existing Chrome mobile-touch plus Chrome/WebKit model selector3/0/0 (no skips).
+Agent failure + turn journal27/0/0 before later control refinements. Latest V4
+heartbeat3/0/0 after paused-resolution repair. i18n0 in332 shipped files. These
+are overlapping controlled suites, not physical iPhone or live Ghost acceptance.
+
+Current Ghost process last activated e45640a; installed checkout prepared ee80d85.
+Audit API still404 at last probe, so new modules were NOT claimed active. Earlier
+restart test was blocked by automatic review ('blocked by policy'); no alternate
+stop/restart API used. Pulling this code prepares future startup, not activation.
+All other original parity/real-model/model billing/voice/native release gates
+remain in force. Next: owner-configured outbound channels, memory sync, typed
+self-configuration/reset and graph/team budgets, plus remaining real scenarios.
