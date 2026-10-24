@@ -36,6 +36,7 @@ import { publicGoal, newId } from './store.js';
 import { explainModelError } from './model.js';
 import { t } from './ui/strings.js';
 import { hasApprovalContinuation } from './approval-continuation.js';
+import { superviseFailure, supervisorInstruction } from './autonomous-diagnosis.js';
 import { checkpointForFailure, shouldResume, resumeGuidance } from './goal-supervisor.js';
 
 const SYSTEM_PROMPT = `You are MAJIN, a private assistant running on the owner's own Windows machine.
@@ -61,6 +62,7 @@ Choosing tools:
 - For ambiguous browser controls: re-observe the DOM and choose a grounded unique
   target using its label, container or stable attributes. Never blindly retry the
   same ambiguous click and never submit external forms with guessed values.
+- If any registered tool repeatedly fails, diagnose the subsystem rather than repeating identical calls. Discover available diagnostic tools, inspect source/logs and use an alternate approach; when a verified MAJIN code defect is found, prepare a tested isolated PR only with granted permissions. Do not auto-merge, deploy, install untrusted code or restart the active host.
 - When reaching execution limits, preserve completed receipts and useful artifacts.
   Report a concrete next step, not a false success; do not restart finished work.
 - Forms: browser_form, browser_form_fill, browser_form_submit. Observe changes,
@@ -908,6 +910,7 @@ export function createAgent({
     let lastRefusal = null;
     let finishedReasoning = false;
     let automaticReplanUsed = false;
+    const failedToolCounts = new Map();
     // A bounded continuation is permitted only after a successful tool outcome.
     // A stuck agent must not burn unlimited provider calls on repeated failures.
     let roundLimit = config.limits.maxModelRounds;
@@ -1011,6 +1014,23 @@ export function createAgent({
           emit('goal', publicGoal(goal));
 
           lastOutcome = outcome;
+          if (outcome.ok) failedToolCounts.delete(call.name);
+          if (!outcome.ok && !outcome.waiting) {
+            const n = (failedToolCounts.get(call.name) || 0) + 1;
+            failedToolCounts.set(call.name, n);
+            const diagnostics = superviseFailure({
+              tool: call.name, code: outcome.code || 'UNKNOWN', repeats: n - 1,
+              available: exposure.schemas().map(schema => schema.name),
+            });
+            const guidance = supervisorInstruction(diagnostics);
+            // Attach the diagnosis to the normal tool result for the model;
+            // no extra model call and no secrets in the persistent checkpoint.
+            outcome.supervisorGuidance = guidance;
+            if (diagnostics.repairCode) emit('recovery', {
+              action: 'diagnose_subsystem', attempt: n,
+              failureClass: diagnostics.code, advice: [],
+            });
+          }
           if (outcome.ok && (call.name === 'tools_activate' || call.name === 'tools_search' || call.name === 'agent_delegate')) {
             emit('tool_note', {
               tool: call.name,
@@ -1049,7 +1069,10 @@ export function createAgent({
           toolMessages.push({
             role: 'tool',
             tool_call_id: call.id,
-            content: safeJson(outcome.ok ? { ok: true, data: outcome.data } : { ok: false, error: outcome.error }),
+            content: safeJson(outcome.ok ? { ok: true, data: outcome.data } : {
+              ok: false, error: outcome.error,
+              supervisor: outcome.supervisorGuidance || '',
+            }),
           });
         }
 
