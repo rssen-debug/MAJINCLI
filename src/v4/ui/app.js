@@ -564,12 +564,41 @@ function endAssistantBubble(meta = '') {
 
 function toolLabel(name) {
   return {
-    workspace_write: t('tool.workspace_write'),
-    workspace_read: t('tool.workspace_read'),
-    workspace_list: t('tool.workspace_list'),
-    memory_save: t('tool.memory_save'),
-    memory_search: t('tool.memory_search'),
-  }[name] || name;
+    workspace_write: 'Skapar en fil',
+    workspace_read: 'Läser en fil',
+    workspace_list: 'Letar bland filer',
+    document_read: 'Läser dokument',
+    fs_find: 'Letar efter en fil',
+    fs_read: 'Läser filens innehåll',
+    fs_list: 'Utforskar mappar',
+    memory_save: 'Sparar ett minne',
+    memory_search: 'Söker i minnet',
+    browser_open: 'Öppnar webbsida',
+    browser_read: 'Läser webbsida',
+    browser_elements: 'Undersöker formulär',
+    browser_click: 'Klickar på webbsida',
+    browser_form: 'Undersöker formulär',
+    browser_form_fill: 'Fyller i formulär',
+    browser_form_submit: 'Skickar formulär',
+    browser_screenshot: 'Tar skärmbild',
+    browser_snapshot: 'Undersöker webbsidan',
+    exec_start: 'Kör kommando',
+    exec_wait: 'Kontrollerar kommandot',
+    tools_search: 'Söker efter verktyg',
+    tools_activate: 'Aktiverar verktyg',
+    agent_delegate: 'Delegerar deluppgift',
+    agent_graph: 'Samordnar deluppgifter',
+  }[name] || String(name || 'Arbetar').replaceAll('_', ' ');
+}
+
+/** Only show a short, non-secret hint from the server's redacted input. */
+function activityHint(input) {
+  if (!input || typeof input !== 'object') return '';
+  const value = input.fileName || input.filename || input.name || input.url || input.path;
+  if (typeof value !== 'string') return '';
+  const clean = value.replace(/[\r\n\t]/g, ' ').trim();
+  if (!clean || /(?:token|secret|password|api[_-]?key|bearer)=/i.test(clean)) return '';
+  return clean.length > 72 ? clean.slice(0, 69) + '…' : clean;
 }
 
 function addToolCard(name, input) {
@@ -624,9 +653,11 @@ function updateProgress(label, { failed = false, complete = false, step = false 
   if (step) progressCount += 1;
   const elapsed = Math.max(0, Math.round((Date.now() - progressStart) / 1000));
   progressCard.node.dataset.state = complete ? (progressErrors ? 'failed' : 'verified') : 'running';
+  const activity = progressCard.node.querySelector('.tool-name');
+  if (activity) activity.textContent = complete ? 'Arbetade' : (label || 'Arbetar');
   progressCard.sum.textContent = complete
-    ? `Arbetade i ${elapsed} s · ${progressCount} steg${progressErrors ? ` · ${progressErrors} fel` : ''}`
-    : `${label} · ${progressCount} steg`;
+    ? `${elapsed} s · ${progressCount} steg${progressErrors ? ` · ${progressErrors} fel` : ''}`
+    : `${progressCount} steg · detaljer`;
   if (label && step) {
     const line = document.createElement('div');
     line.textContent = `${progressCount}. ${label}${failed ? ' · misslyckades' : ''}`;
@@ -1254,9 +1285,9 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'state':
-      if (data.state === 'thinking') { spirit.set('thinking'); updateProgress('Tänker…'); }
-      else if (data.state === 'working') { spirit.set('working'); updateProgress('Arbetar…'); }
-      else if (data.state === 'verifying') { spirit.set('working'); updateProgress('Verifierar…'); }
+      if (data.state === 'thinking') { spirit.set('thinking'); updateProgress('Tänker på nästa steg…'); }
+      else if (data.state === 'working') { spirit.set('working'); if (!progressCount) updateProgress('Förbereder uppgiften…'); }
+      else if (data.state === 'verifying') { spirit.set('working'); updateProgress('Verifierar resultatet…'); }
       break;
 
     case 'delta':
@@ -1265,7 +1296,8 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'tool_start': {
-      updateProgress(`Gör: ${toolLabel(data.name)}`, { step: true });
+      const hint = activityHint(data.input);
+      updateProgress(`${toolLabel(data.name)}${hint ? ' · ' + hint : '…'}`, { step: true });
       spirit.set('working');
       break;
     }
@@ -1296,6 +1328,7 @@ function viewIntents(event, data, intents) {
     case 'recovery': {
       // The host is retrying on its own; say so instead of looking frozen.
       spirit.set('working');
+      updateProgress('Försöker lösa ett problem…');
       const reason = data.failureClass || t('common.unknownError');
       if (data.action && data.action !== 'none') {
         els.hint.textContent = t('state.recovering', { attempt: data.attempt || 1, reason });
