@@ -903,6 +903,7 @@ export function createAgent({
     let lastOutcome = null;
     let lastRefusal = null;
     let finishedReasoning = false;
+    let automaticReplanUsed = false;
     // A bounded continuation is permitted only after a successful tool outcome.
     // A stuck agent must not burn unlimited provider calls on repeated failures.
     let roundLimit = config.limits.maxModelRounds;
@@ -967,7 +968,29 @@ export function createAgent({
           if (response.text) finalText += response.text;
           if (response.refused) lastRefusal = response.refused;
 
-          if (!response.toolCalls?.length) { finishedReasoning = true; break; }
+          if (!response.toolCalls?.length) {
+            // A model sometimes stops and declares defeat after a recoverable
+            // tool failure. Give it ONE automatic diagnostic/replan opportunity
+            // rather than forcing the owner to type "lös det" again.
+            // No failed tool is replayed by this supervisor.
+            if (lastOutcome && !lastOutcome.ok && !lastOutcome.waiting
+                && !automaticReplanUsed && !signal?.aborted
+                && (rounds < roundLimit || maybeExtend())) {
+              automaticReplanUsed = true;
+              const failureClass = String(lastOutcome.code || 'TOOL_FAILURE').slice(0, 100);
+              emit('recovery', { action: 'autonomous_replan', attempt: 1, failureClass, advice: [] });
+              modelMessages.push({ role: 'assistant', content: response.text || 'Previous attempt was blocked.' });
+              modelMessages.push({ role: 'user', content:
+                'SUPERVISOR: Your previous step failed (' + failureClass + '). The user goal is still unfinished. '
+                + 'Diagnose the actual failure with the available tools, find a DIFFERENT safe strategy, '
+                + 'inspect live state first, and continue toward the original goal without asking the user '
+                + 'to repeat the instruction. Never repeat an external submission or destructive action. '
+                + 'If no grounded alternative exists, state the blocker precisely.' });
+              continue;
+            }
+            finishedReasoning = true;
+            break;
+          }
         }
         if (toolCallsUsed + response.toolCalls.length - startAt > toolLimit && !maybeExtend()) {
           throw Object.assign(new Error(`tool budget exceeded (${toolLimit})`), { code: 'TOOL_BUDGET' });
