@@ -136,6 +136,15 @@ The workflow also runs on a deliberate edit of `.github/learn-accept-trigger`, w
 is how it was dispatched while `workflow_dispatch` was not yet available on this
 branch. It fails hard if no key is configured instead of passing silently.
 
+### The safety boundary, asserted
+
+The brief says learning must not "autonomously modify production code or security
+rules". That is a design property — learned skills are prompt text in a data
+directory — but a property nobody tests is a hope. A test now records every file
+the store writes and asserts three things: every write lands inside the
+learned-skills directory, a sample installation file is byte-identical afterwards,
+and the only files produced are `skill.json` and `SKILL.md` (nothing executable).
+
 ### What this does NOT prove
 
 One narrow task, one model, one environment. Per the brief, a single success is
