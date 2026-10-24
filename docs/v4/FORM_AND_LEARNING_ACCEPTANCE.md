@@ -33,7 +33,22 @@ observations. Product code may not contain fixture-specific selectors or recipes
 
 ## Learned operational skills — IMPLEMENTED, awaiting the real-provider run
 
-**Status 2026-10-24: PASSED — 14/14 against the real OpenCode Go provider.**
+**Status 2026-10-24: PASSED — 19/19 against the real OpenCode Go provider, and the
+promotion ladder reached REUSABLE.**
+
+The gate now runs three varied scenarios and reports whatever state the store
+actually reached:
+
+```
+  PASS  promotion.state                learn-files-5d9a03: REUSABLE (3 success(es), 3 scenario(s))
+  19/19 checks passed
+```
+
+One verified success to EXPERIMENTAL, two to VERIFIED, three across distinct
+scenarios to REUSABLE. That is the brief's own ladder, reached by evidence rather
+than by declaration.
+
+**Previous status: 14/14 on the single-scenario gate.**
 
 The mandatory A–H gate ran on GitHub Actions against the real provider (model
 `glm-5.3-flash`, OpenCode Go), using the repository's existing `OPENCODE_API_KEY`

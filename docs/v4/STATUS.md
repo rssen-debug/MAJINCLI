@@ -244,6 +244,49 @@ EXPERIMENTAL — bredare tillförlitlighet kräver upprepade verifierade körnin
 varierade uppgifter, och det är precis vad befordringsreglerna kräver. Det säger
 inget om Windows-värden, telefonen eller browser-lanen.
 
+## 2026-10-24 (forts. 4) — steg 1 komplett och befordringsstegen bevisad
+
+Två luckor återstod mot specen. Båda är stängda och bevisade med riktig Go.
+
+### 1. "Search existing verified skills AND previous task experiences"
+
+MAJIN sökte bara i inlärda skills. Materialet för det andra låg redan på disk —
+V2-målen med objective, sluttillstånd och kvitton — så `recallExperiences()` läser
+det i stället för att införa ännu ett lager. Agenten renderar nu en
+"**What happened last time you did something similar**"-sektion före de inlärda
+skillarna: vilket utfall uppgiften fick, vilka verktyg som fungerade och vad som
+misslyckades. Saniterad som alla andra promptsektioner — inga sökvägar, namn eller
+adresser.
+
+### 2. "Broader reliability requires repeated evaluations across varied unseen tasks"
+
+Befordringsstegen hade aldrig körts med riktiga bevis. Grinden kör nu tre varierade
+scenarier och rapporterar vilket tillstånd lagret **faktiskt** nådde:
+
+```
+PASS  promotion.state   learn-files-5d9a03: REUSABLE (3 success(es), 3 scenario(s))
+19/19 checks passed
+```
+
+Ett verifierat lyckande → EXPERIMENTAL, två → VERIFIED, tre över distinkta scenarier
+→ REUSABLE. Specens egen stege, nådd genom bevis.
+
+### Fragmenteringen som den riktiga modellen avslöjade
+
+Första fleromgångskörningen skapade **två** skills för samma slags jobb: modellen
+tog `fs_find>fs_read` ena gången och `fs_find>fs_list>fs_read` nästa, bara för att
+den tittade runt först. Två skills, ett jobb, ingen kunde befordras. Nu är
+identiteten verktygs**mängden** (ordningsoberoende), och ett lyckande vars
+verktygsmängd överlappar starkt med en befintlig skill i samma kategori fogas in i
+den i stället för att förgrena. En genuint annan strategi förblir separat.
+
+### Vad det fortfarande inte bevisar
+
+En uppgiftsfamilj (läs ett dokument i en godkänd mapp), en modell, en miljö.
+REUSABLE gäller den proceduren i den miljön — inte Windows-värden, telefonen eller
+browser-lanen, och inte formulär eller webbinteraktion, som specen också listar som
+förbättringsområden.
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är
