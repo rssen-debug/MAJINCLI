@@ -24,7 +24,7 @@ import { nextRecoveryStep, recoveryPlan } from '../v2/recover/advisor.js';
 import { buildMessages } from './context.js';
 import { memoryForPrompt } from './memory.js';
 import { renderSkills } from './skills.js';
-import { renderLearned, renderExperiences } from './learning.js';
+import { renderLearned, renderExperiences, externalOrigins } from './learning.js';
 import { TOOL_SCHEMAS, safeFileName, schemasFromRegistry } from './tools.js';
 import { createToolExposure } from './tool-exposure.js';
 import { createTeamTools } from './teams.js';
@@ -450,6 +450,18 @@ export function createAgent({
     const traceStep = { name: toolName, argsShape, ok: false, cls: null, verified: false, at: Date.now() };
     if (turn?.trace) turn.trace.push(traceStep);
 
+    // Which external origins this turn depended on. Only the origin is kept —
+    // never the path or query, which routinely carry ids and personal data — so a
+    // learned procedure can be revalidated when a site changes without storing
+    // where on the site the owner was.
+    if (turn) {
+      const origins = externalOrigins(args);
+      if (origins.length) {
+        turn.external = turn.external || new Set();
+        for (const origin of origins) turn.external.add(origin);
+      }
+    }
+
     /**
      * No identical unsuccessful action twice.
      *
@@ -828,6 +840,7 @@ export function createAgent({
       // no values, so nothing sensitive can leak into a stored skill.
       trace: [],
       failures: new Map(),
+      external: new Set(),
       learned: learnedForTurn,
     };
     const packed = historyFor(conversations.get(conversation.id), message, learnedForTurn);
@@ -1030,9 +1043,10 @@ export function createAgent({
        */
       let learned = null;
       try {
-        learned = learning?.observe?.({
+        learned = await learning?.observe?.({
           goal,
           trace: turn.trace || [],
+          external: [...(turn.external || [])],
           // The goal carries the objective; the transcript is not needed to
           // learn a procedure, and not copying it keeps the store free of text.
           conversationId: conversation.id,

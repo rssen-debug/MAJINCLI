@@ -325,6 +325,28 @@ Omstarten var testad; nu även att en telefon lär och en dator ser skillen i
 varv och effektivitetsjämförelse. Beviset ligger i
 `docs/v4/evidence/learned-skills-real-go.txt`.
 
+## 2026-10-24 (forts. 6) — punkt 10: revalidering när en webbplats ändras
+
+Specens punkt 10 säger *"revalidate the skill when a **website, API** or environment
+changes"*. Miljödelen fanns från början (plattform, Node, lanes, verktyg). Den andra
+halvan saknades helt: ingenting representerade de sajter en procedur byggde på, så
+en procedur lärd mot en omdesignad sida fortsatte se frisk ut.
+
+Nu registrerar agenten **origin** för varje URL ett varv använde — `https://host`,
+aldrig sökväg eller query, eftersom de rutinmässigt bär id:n, namn och sökord.
+Skillen sparar varje origin med det fingeravtryck den levererade vid valideringen,
+och `POST /api/learning/revalidate` kontrollerar dem:
+
+| Utfall | Följd |
+|---|---|
+| oförändrat innehåll | skillen lämnas som den är |
+| ändrat innehåll | **STALE**, med orsaken i `staleReason` |
+| onåbar origin | **inte** STALE — ett nätavbrott är inte bevis på att sajten ändrats |
+| omfattning | max 3 origins per skill, en förfrågan var, inga omförsök |
+
+Bevisat mot en **riktig lokal HTTP-server** som byter innehåll mellan körningarna
+(`test/v4/revalidate-external.test.js`, 6 tester), inklusive att bara origin lagras.
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är

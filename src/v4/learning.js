@@ -620,6 +620,102 @@ export function renderExperiences(entries = []) {
   ].join('\n');
 }
 
+/* --------------------------- external resources (website/API changes) ----- */
+
+/**
+ * "Revalidate the skill when a website, API or environment changes."
+ *
+ * The environment half is the fingerprint (platform, lanes, tools). The other
+ * half — a site or API the procedure depended on — was not represented at all, so
+ * a learned procedure against a page that has since been redesigned would keep
+ * looking healthy.
+ *
+ * What is recorded is the ORIGIN only (`https://host`): never the path, never the
+ * query string, because those routinely carry ids, names and search terms. An
+ * origin is what "the site changed" is measured against.
+ */
+export function externalOrigins(args = {}) {
+  const out = new Set();
+  const consider = (value) => {
+    if (typeof value !== 'string' || !value) return;
+    try {
+      const url = new URL(value);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+      // Loopback servers are the owner's own test targets; recording them is
+      // harmless and useful, but they cannot be revalidated from elsewhere.
+      out.add(`${url.protocol}//${url.host}`);
+    } catch {
+      /* not a URL: nothing to record */
+    }
+  };
+  for (const key of ['url', 'href', 'endpoint', 'pages', 'urls']) {
+    const value = args[key];
+    if (Array.isArray(value)) value.forEach(consider);
+    else consider(value);
+  }
+  return [...out];
+}
+
+/** Bounded fingerprint of what an origin currently serves. */
+export async function originFingerprint(origin, { fetcher = globalThis.fetch, timeoutMs = 5000 } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetcher(origin, {
+      method: 'GET',
+      headers: { 'user-agent': 'majin-skill-revalidation/1', accept: 'text/html,*/*' },
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    const body = await res.text();
+    // One request per origin, bounded, no retries: the brief forbids unlimited
+    // retries against real services.
+    return {
+      origin,
+      status: res.status,
+      etag: res.headers.get('etag') || null,
+      lastModified: res.headers.get('last-modified') || null,
+      length: body.length,
+      hash: shortHash(body.slice(0, 20000), 12),
+    };
+  } catch (err) {
+    return { origin, error: String(err?.name === 'AbortError' ? 'timeout' : (err?.message || err)).slice(0, 120) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Revalidate a skill's external dependencies.
+ *
+ * A changed fingerprint on an origin the procedure relied on turns the skill
+ * STALE — the procedure may still be right, so it is kept and marked, never
+ * deleted. An unreachable origin does NOT mark it stale: a network blip is not
+ * evidence that a site changed.
+ */
+export async function revalidateExternal(skills = [], { fetcher = globalThis.fetch, timeoutMs = 5000, maxOrigins = 3 } = {}) {
+  const transitions = [];
+  for (const skill of skills) {
+    const external = skill?.learned?.external;
+    if (!external || !Array.isArray(external.origins) || !external.origins.length) continue;
+    let changed = null;
+    let checked = 0;
+    for (const origin of external.origins.slice(0, maxOrigins)) {
+      const before = (external.checks || []).find((c) => c.origin === origin);
+      const now = await originFingerprint(origin, { fetcher, timeoutMs });
+      checked += 1;
+      if (!before || before.error || now.error) continue; // unknown stays unknown
+      if (before.hash !== now.hash || before.status !== now.status) changed = origin;
+    }
+    if (!changed) {
+      transitions.push({ name: skill.name, state: skill.learned.state, checked, changed: false });
+      continue;
+    }
+    transitions.push({ name: skill.name, state: SKILL_STATES.STALE, checked, changed: true, origin: changed });
+  }
+  return transitions;
+}
+
 /* ------------------------------------------ integrity (skill-provenance) --- */
 
 /** A tiny bundle hash so an out-of-band edit of a learned skill is visible. */
@@ -696,7 +792,16 @@ export class LearnedSkillStore {
    * Returns a structured outcome so the caller can emit it, log it and prove it
    * in a test — never a boolean that hides what happened.
    */
-  observe({ goal, trace = [], registry = null, grantedLanes = [], laneFor = null, now = () => new Date().toISOString() } = {}) {
+  observe({
+    goal,
+    trace = [],
+    registry = null,
+    grantedLanes = [],
+    laneFor = null,
+    external = [],
+    externalChecks = [],
+    now = () => new Date().toISOString(),
+  } = {}) {
     const result = { action: 'none', name: null, state: null, reason: null, learning: false };
 
     if (goal?.state !== 'COMPLETED') {
@@ -712,6 +817,15 @@ export class LearnedSkillStore {
     }
 
     const extracted = extractCandidate({ goal, trace, registry, grantedLanes, laneFor, fingerprint: this.fingerprint, now });
+    if (extracted.ok && Array.isArray(external) && external.length) {
+      // Origins the successful path depended on, with the fingerprint they served
+      // at validation time. This is what makes "the site changed" observable.
+      extracted.candidate.learned.external = {
+        origins: [...new Set(external)].slice(0, 3),
+        checks: externalChecks.slice(0, 3),
+        capturedAt: now(),
+      };
+    }
     if (!extracted.ok) {
       result.reason = extracted.reason;
       return result;
@@ -839,6 +953,14 @@ export class LearnedSkillStore {
       });
     }
     return out;
+  }
+
+  /** Persist an externally-updated skill object (used by revalidation). */
+  persist(skill) {
+    if (!skill) return null;
+    skill.learned.integrity = skillIntegrity(skill);
+    skill.experimental = skill.learned.state === SKILL_STATES.EXPERIMENTAL;
+    return this.#write(skill, readBody(skill));
   }
 
   /** Record that a retrieved skill did not work this time. */

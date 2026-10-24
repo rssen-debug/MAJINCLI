@@ -53,7 +53,7 @@ import { planV1Import, applyV1Import } from './import-history.js';
 import { discoverSkills, usableSkills, describeSkills } from './skills.js';
 import {
   LearnedSkillStore, environmentFingerprint, rankSkills, describeLearned, LEARNING_SCHEMA,
-  SKILL_STATES, recallExperiences,
+  SKILL_STATES, recallExperiences, originFingerprint, revalidateExternal,
 } from './learning.js';
 import { parseMcpConfig, connectServers } from './mcp.js';
 import { registerMcpTools } from './mcp-tools.js';
@@ -273,7 +273,15 @@ export function createV4Server({ config }) {
         return [];
       }
     },
-    observe({ goal, trace, conversationId, message }) {
+    async observe({ goal, trace, conversationId, message, external = [] }) {
+      // Fingerprint the origins this turn used, once each and bounded, so a later
+      // revalidation can tell whether the site still serves what it did. Awaited
+      // on purpose: a stored skill must carry the check it was validated against,
+      // not a race that may or may not have finished.
+      const externalChecks = [];
+      for (const origin of (Array.isArray(external) ? external : []).slice(0, 3)) {
+        externalChecks.push(await originFingerprint(origin));
+      }
       const before = new Set(learnedStore.list().map((s) => `${s.name}:${s.learned.state}`));
       const result = learnedStore.observe({
         goal,
@@ -282,14 +290,12 @@ export function createV4Server({ config }) {
         // The lane map lives on the host registration, not on the V2 definition.
         laneFor: (name) => hostTools.registered.find((r) => r.name === name)?.lane || null,
         grantedLanes: ownerMode.activeLanes(),
+        external,
+        externalChecks,
       });
       if (result.learning) {
         const after = learnedStore.list().find((s) => s.name === result.name);
-        // Persist the transition so a restart cannot forget it.
         if (after) result.state = after.learned.state;
-        // The V2 ledger has a fixed, privacy-preserving event schema and refuses
-        // unknown event names — by design. A learning transition is recorded
-        // through the existing `task.result` shape instead of widening V2.
         try {
           telemetry.append('task.result', {
             action: `learning:${result.action}`,
@@ -318,6 +324,23 @@ export function createV4Server({ config }) {
     },
     revalidate() {
       return learnedStore.revalidate();
+    },
+    /**
+     * Re-check the sites and APIs the learned procedures depend on.
+     * Bounded: at most three origins per skill, one request each, no retries.
+     */
+    async revalidateExternal() {
+      const transitions = await revalidateExternal(learnedStore.list());
+      for (const t of transitions) {
+        if (!t.changed) continue;
+        const skill = learnedStore.get(t.name);
+        if (!skill) continue;
+        skill.learned.state = SKILL_STATES.STALE;
+        skill.learned.staleReason = `external resource changed: ${t.origin}`;
+        skill.learned.staleSince = new Date().toISOString();
+        learnedStore.persist(skill);
+      }
+      return transitions;
     },
     store: learnedStore,
   };
@@ -967,6 +990,18 @@ export function createV4Server({ config }) {
         })),
         note: 'A skill is only created from a goal that completed with an independently verified receipt.',
       });
+    },
+
+    /**
+     * Re-check the sites and APIs learned procedures depend on.
+     * Explicit POST: it makes bounded outbound requests, so it is never a side
+     * effect of a GET.
+     */
+    'POST /api/learning/revalidate': async (req, res) => {
+      requireSession(req);
+      assertCsrfHeader(req);
+      const transitions = await learningBridge.revalidateExternal();
+      sendJson(res, 200, { ok: true, checked: transitions.length, transitions });
     },
 
     'GET /api/skills': async (req, res) => {

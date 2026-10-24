@@ -136,6 +136,28 @@ The workflow also runs on a deliberate edit of `.github/learn-accept-trigger`, w
 is how it was dispatched while `workflow_dispatch` was not yet available on this
 branch. It fails hard if no key is configured instead of passing silently.
 
+### Revalidating against a changed website or API
+
+Point 10 of the workflow says "revalidate the skill when a website, API or
+environment changes". The environment half existed from the start (platform, Node,
+lanes, tools). The other half did not: nothing represented the sites a procedure
+depended on, so a procedure learned against a redesigned page kept looking healthy.
+
+Now the agent records the ORIGIN of every URL a turn used — `https://host`, never
+the path or query, which routinely carry ids, names and search terms. The skill
+stores each origin with the fingerprint it served at validation time, and
+`POST /api/learning/revalidate` re-checks them:
+
+- unchanged content leaves the skill as it was;
+- changed content marks it **STALE**, with the origin in `staleReason`;
+- an unreachable origin does **not** — a network blip is not evidence that a site
+  changed;
+- at most three origins per skill, one request each, no retries.
+
+Proven against a real local HTTP server that changes what it serves
+(`test/v4/revalidate-external.test.js`, 6 tests), including that only the origin is
+stored.
+
 ### The safety boundary, asserted
 
 The brief says learning must not "autonomously modify production code or security
