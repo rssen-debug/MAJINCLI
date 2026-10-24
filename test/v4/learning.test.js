@@ -940,3 +940,52 @@ test('learning: the same job with different scaffolding stays ONE skill', async 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('learning: a skill learned on one device is visible on another, without a restart', async () => {
+  // The brief says "persist learning across host restarts AND client sessions".
+  // The restart is covered above; this covers two live devices on one host.
+  const home = tempHome();
+  const documents = path.join(home, 'Documents');
+  fs.mkdirSync(documents, { recursive: true });
+  fs.writeFileSync(path.join(documents, 'anteckning.txt'), 'X');
+  grantLanes(home, ['files']);
+  const ownerFile = path.join(home, 'v4', 'owner-mode.json');
+  const owner = JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
+  owner.folders = [documents];
+  fs.writeFileSync(ownerFile, JSON.stringify(owner));
+
+  const provider = await startFakeProvider((body) => {
+    if (isChild(body)) return { text: 'x' };
+    const last = lastToolMessage(body);
+    if (!last) return { toolCalls: [{ name: 'fs_read', args: { path: path.join(documents, 'anteckning.txt') } }] };
+    return { text: 'klart' };
+  });
+
+  const s = await startTestServer({ home, env: env(provider) });
+  try {
+    // Two independent devices: "phone" pairs, "desktop" is an existing session.
+    const phone = (await s.pair()).cookie;
+    const desktop = s.existingSession();
+    assert.notEqual(phone, desktop, 'the two devices must be distinct sessions');
+
+    // The desktop asks first: nothing learned yet.
+    const before = await (await fetch(`${s.base}/api/learning`, { headers: { cookie: desktop } })).json();
+    assert.equal(before.skills.length, 0);
+
+    // The phone does the work that becomes a procedure.
+    const turn = await readSse(await postChat(s.base, phone, { text: 'Läs anteckningen i mappen.', requestId: 'dev-1' }));
+    const done = turn.find((e) => e.type === 'done')?.data;
+    assert.equal(done?.status, 'completed');
+    assert.ok(done.learned?.name, 'the phone turn produced no learned skill');
+
+    // The desktop sees it immediately — no restart, no re-pair.
+    const after = await (await fetch(`${s.base}/api/learning`, { headers: { cookie: desktop } })).json();
+    assert.ok(after.skills.some((x) => x.name === done.learned.name),
+      'the second device cannot see what the first one learned');
+    assert.equal(after.skills.find((x) => x.name === done.learned.name).state, SKILL_STATES.EXPERIMENTAL);
+  } finally {
+    await s.close();
+    await provider.close();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});

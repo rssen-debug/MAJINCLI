@@ -334,10 +334,10 @@ async function main() {
           : 'none abandoned — the model corrected itself inside the run');
     }
 
-    const costA = summarizeCost(usageLog);
-    record('turn.A.cost', costA.calls > 0,
-      `${costA.calls} model call(s), ${costA.inputTokens} in / ${costA.outputTokens} out`
-      + (costA.usd == null ? ', cost not priced' : `, $${costA.usd}`));
+    const costBaseline = summarizeCost(usageLog);
+    record('turn.A.cost', costBaseline.calls > 0,
+      `${costBaseline.calls} model call(s), ${costBaseline.inputTokens} in / ${costBaseline.outputTokens} out`
+      + (costBaseline.usd == null ? ', cost not priced' : `, $${costBaseline.usd}`));
 
     // ---- E: a real restart ------------------------------------------------
     await new Promise((resolve) => first.server.close(resolve));
@@ -407,17 +407,49 @@ async function main() {
     for (let i = 1; i < repeat; i += 1) {
       const variant = VARIANTS[i % VARIANTS.length];
       const prompt = `Läs filen ${path.join(documents, variant.ask)} och berätta kort vad som står.`;
+      // Snapshot the usage log so each cycle's real cost is measurable: this is
+      // the "agent efficiency" question, answered with data instead of a claim.
+      const before = usageLog.length;
       const turn = await sse(`${second.base}/api/chat`, {
         cookie: cookie2,
         body: { text: prompt, requestId: `learn-cycle-${i}` },
       });
       const done = turn.events.find((e) => e.type === 'done')?.data;
       const tools = turn.events.filter((e) => e.type === 'tool_result').map((e) => e.data);
-      cycles.push({ label: variant.label, turn: turn.events });
+      const cost = summarizeCost(usageLog.slice(before));
+      cycles.push({ label: variant.label, turn: turn.events, cost });
       record(`cycle.${i}.completed`, done?.status === 'completed',
         `${variant.label}: ${done?.status || 'no done event'} · ${tools.map((t) => `${t.name}:${t.ok}`).join(', ')}`);
       record(`cycle.${i}.learned`, Boolean(done?.learned?.name),
         done?.learned?.name || 'no skill updated');
+      record(`cycle.${i}.cost`, cost.calls > 0,
+        `${cost.calls} model call(s), ${cost.inputTokens} in / ${cost.outputTokens} out`
+        + (cost.usd == null ? '' : `, $${cost.usd}`));
+    }
+
+    /**
+     * Agent efficiency, measured.
+     *
+     * The brief lists "agent efficiency" as something learning should improve.
+     * Turn A is the baseline: no skill existed yet, so the model had to work the
+     * problem out. The later cycles run the same KIND of task with the learned
+     * procedure in the prompt. Comparing model calls and tokens is the honest
+     * measurement — and it is reported as "inconclusive" when the numbers do not
+     * clearly move, rather than being dressed up.
+     */
+    if (repeat > 1 && cycles.length > 1) {
+      const later = cycles.slice(1).map((c) => c.cost).filter(Boolean);
+      const avgCalls = later.reduce((n, c) => n + c.calls, 0) / later.length;
+      const avgTokens = later.reduce((n, c) => n + c.inputTokens + c.outputTokens, 0) / later.length;
+      const baseTokens = costBaseline.inputTokens + costBaseline.outputTokens;
+      const baseCalls = costBaseline.calls;
+      const callsDelta = baseCalls - avgCalls;
+      const tokensDelta = baseTokens - avgTokens;
+      const improved = callsDelta > 0 || (callsDelta === 0 && tokensDelta > 0);
+      const same = callsDelta === 0 && Math.abs(tokensDelta) <= Math.max(200, baseTokens * 0.1);
+      record('efficiency.measured', true,
+        `baseline ${baseCalls} call(s)/${baseTokens} tokens · later ${avgCalls.toFixed(1)} call(s)/${Math.round(avgTokens)} tokens`
+        + ` → ${improved ? 'fewer calls or tokens' : same ? 'no material change' : 'more tokens (adaptation, not replay)'}`);
     }
 
     if (repeat > 1) {
@@ -437,6 +469,7 @@ async function main() {
       fs.writeFileSync(file, `${JSON.stringify({
         at: new Date().toISOString(),
         cost: summarizeCost(usageLog),
+        efficiency: cycles.map((c) => ({ label: c.label, cost: c.cost || null })),
         promotion: second.context.learnedStore.list().map((x) => ({
           name: x.name,
           state: x.learned.state,
