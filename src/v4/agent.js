@@ -548,13 +548,20 @@ export function createAgent({
     if (!nested) goal.transition(STATES.WAITING_FOR_TOOL, `tool ${toolName}`);
     let result;
     try {
+      // Chrome launch has TWO bounded startup attempts (up to 10s + 15s
+      // plus retry delay/CDP setup). A 20s generic tool timeout aborts the
+      // recovery mid-start and leaves blank Chrome windows on Windows.
+      // Scope the longer deadline to browser_open, never every tool.
+      const toolTimeoutMs = toolName === 'browser_open'
+        ? Math.max(config.limits.toolTimeoutMs, 45_000)
+        : config.limits.toolTimeoutMs;
       const runOnce = () => runTool(
         { tool: toolName, input: args, callId: call.id },
         {
-          registry: registryForCall(signal, config.limits.toolTimeoutMs),
+          registry: registryForCall(signal, toolTimeoutMs),
           approvals,
           mode: 'balanced',
-          timeoutMs: config.limits.toolTimeoutMs,
+          timeoutMs: toolTimeoutMs,
           events: bus,
         },
       );
