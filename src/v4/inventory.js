@@ -319,6 +319,10 @@ function capabilityDomains(inv) {
     skills: {
       shipped: inv.v4.skills,
       mechanism: 'src/v4/skills.js — declared required/preferred tools decide visibility, not app code',
+      learned: 'src/v4/learning.js — procedures extracted from goals that completed with an independently '
+        + 'verified receipt; stored in the same skills directory with a `learned` block, so one loader '
+        + 'serves both. States: EXPERIMENTAL, VERIFIED, REUSABLE, STALE, FAILED.',
+      learnedAcceptance: 'npm run v4:learn-accept — the mandatory A–H gate against the real provider',
     },
     mcp: {
       state: inv.v4.mcp,

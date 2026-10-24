@@ -306,3 +306,31 @@ same tick both pass. Measured on this code: `teamStepCap: 1`, `spent: 2`,
 `await` and releases the unused part afterwards, so the sum of in-flight
 reservations cannot exceed the cap. The V1 check remains as the outer guard; no
 V1 file was changed.
+
+
+## 8. Learned skills — 2026-10-24
+
+```
+$ node --test --test-concurrency=1 test/v4/learning.test.js
+# tests 15
+# pass 15
+# fail 0
+```
+
+| Assertion | Evidence |
+|---|---|
+| Sanitising removes secrets, personal paths and CSS selectors | a string with a provider key, a GitHub token, a bearer token, `C:\Users\…`, an e-mail, `#id .class > div:nth-child(2)` |
+| No extraction without independent verification | `FAILED` goal, empty receipts and a tool-less turn all refused with a reason |
+| Procedures store argument names, never values | the serialised skill contains no absolute path and no file name |
+| Promotion is evidence-driven | 1 success → EXPERIMENTAL, 2 → VERIFIED, 3 across 2 scenarios → REUSABLE, failures lead → FAILED |
+| Retrieval matches a related goal | "Hitta ett dokument som liknar mitt CV" ranks the CV procedure and excludes an unrelated and a FAILED one |
+| **A–H** | real host: `workspace_read` fails → `fs_find` in the granted folder → `fs_read` → skill stored on disk → **host restarted with `keep`** → related task → the learned section and the skill name are in the system prompt → `fs_find` followed → the failed action is not executed again |
+| The avoid guard refuses, and explains | a seeded skill's `avoid` entry blocks `fs_grep` locally with `LEARNED_AVOID` and a `learning` SSE event |
+| Environment change makes it STALE, not trusted | a stored foreign fingerprint flips the state; the prompt says "revalidate" |
+| Learning cannot claim an ungranted lane | a workspace-only environment yields `requires` that a granted-lane check accepts |
+
+### Not executed here
+
+The mandatory real-provider (Go) A–H run. `npm run v4:learn-accept` refuses to
+start without a configured provider instead of falling back to the demo brain,
+and writes `docs/v4/evidence/learned-skills-<stamp>.json` when it does run.

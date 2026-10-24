@@ -51,6 +51,9 @@ import { UploadStore, UploadError, serveHeadersFor, typeForName, MAX_UPLOAD_BYTE
 import { OwnerMode, OwnerModeError, GRANTABLE_LANES } from './owner-mode.js';
 import { planV1Import, applyV1Import } from './import-history.js';
 import { discoverSkills, usableSkills, describeSkills } from './skills.js';
+import {
+  LearnedSkillStore, environmentFingerprint, rankSkills, describeLearned, LEARNING_SCHEMA,
+} from './learning.js';
 import { parseMcpConfig, connectServers } from './mcp.js';
 import { registerMcpTools } from './mcp-tools.js';
 import { TelemetryLedger,telemetryRow } from '../v2/telemetry/ledger.js';
@@ -194,17 +197,104 @@ export function createV4Server({ config }) {
   // so the set is recomputed on every turn rather than cached at boot.
   const skillsDir = config.platform?.skillsDir || path.join(paths.root, 'skills');
   const shippedSkillsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'skills');
+  // Learned skills are data, not code: they live beside the other V4 data and
+  // are loaded by the same loader as hand-written ones.
+  const learnedDir = path.join(paths.root, 'learned-skills');
+
+  /** The environment a skill was validated in, recomputed per call. */
+  function fingerprintNow() {
+    return environmentFingerprint({
+      platform: process.platform,
+      arch: process.arch,
+      node: process.versions.node,
+      lanes: ownerMode.activeLanes(),
+      tools: tools.registry.list().map((t) => t.name),
+    });
+  }
+
+  const learnedStore = new LearnedSkillStore({ dir: learnedDir, fingerprint: fingerprintNow() });
+
+  /** Is this learned skill's required lane/tool set available right now? */
+  function usableNow(skill) {
+    const granted = new Set(ownerMode.activeLanes());
+    const names = new Set(tools.registry.list().map((t) => t.name));
+    const lanesOk = (skill.requires || []).every((lane) => granted.has(lane) || lane === 'workspace');
+    const toolsOk = (skill.tools || []).every((tool) => names.has(tool));
+    return lanesOk && toolsOk;
+  }
+
   function skillsNow() {
     const shipped = discoverSkills(shippedSkillsDir);
     const custom = discoverSkills(skillsDir);
-    const all = [...shipped.skills, ...custom.skills];
-    const errors = [...shipped.errors, ...custom.errors];
+    const learned = discoverSkills(learnedDir);
+    const handWritten = [...shipped.skills, ...custom.skills];
+    const all = [...handWritten, ...learned.skills];
+    const errors = [...shipped.errors, ...custom.errors, ...learned.errors];
     const grantedLanes = ownerMode.activeLanes();
     const availableTools = tools.registry.list().map((t) => t.name);
-    const picked = usableSkills({ skills: all, grantedLanes, availableTools });
-    return { all, errors, grantedLanes, availableTools, ...picked };
+    // Learned procedures are filtered by the same rules as hand-written ones:
+    // a skill whose required lane was revoked is not offered.
+    const picked = usableSkills({ skills: handWritten, grantedLanes, availableTools });
+    const learnedUsable = usableSkills({
+      skills: learned.skills,
+      grantedLanes,
+      availableTools,
+      limit: 50,
+      // Their own state is rendered to the model, so EXPERIMENTAL is offered
+      // with the caveat instead of being silently dropped.
+      includeExperimental: true,
+    }).usable;
+    return { all, handWritten, learned: learned.skills, learnedUsable, errors, grantedLanes, availableTools, ...picked };
   }
   const skillsBridge = { usable: () => skillsNow().usable };
+
+  /**
+   * The learning bridge the agent talks to.
+   *
+   * `retrieve` is the only read path, and it is availability-filtered: a learned
+   * skill that needs a lane the owner has not granted is not offered, exactly
+   * like a hand-written one.
+   */
+  const learningBridge = {
+    retrieve(query) {
+      const view = skillsNow();
+      return rankSkills(view.learnedUsable, { goalText: String(query || ''), limit: 4 });
+    },
+    observe({ goal, trace, conversationId, message }) {
+      const before = new Set(learnedStore.list().map((s) => `${s.name}:${s.learned.state}`));
+      const result = learnedStore.observe({
+        goal,
+        trace,
+        registry: tools.registry,
+        // The lane map lives on the host registration, not on the V2 definition.
+        laneFor: (name) => hostTools.registered.find((r) => r.name === name)?.lane || null,
+        grantedLanes: ownerMode.activeLanes(),
+      });
+      if (result.learning) {
+        const after = learnedStore.list().find((s) => s.name === result.name);
+        // Persist the transition so a restart cannot forget it.
+        if (after) result.state = after.learned.state;
+        // The V2 ledger has a fixed, privacy-preserving event schema and refuses
+        // unknown event names — by design. A learning transition is recorded
+        // through the existing `task.result` shape instead of widening V2.
+        try {
+          telemetry.append('task.result', {
+            action: `learning:${result.action}`,
+            taskId: result.name,
+            result: 'success',
+          });
+        } catch { /* telemetry must never fail a turn */ }
+        void before;
+      }
+      void conversationId;
+      void message;
+      return result;
+    },
+    revalidate() {
+      return learnedStore.revalidate();
+    },
+    store: learnedStore,
+  };
 
   const agent = createAgent({
     config,
@@ -215,6 +305,7 @@ export function createV4Server({ config }) {
     telemetry,
     audit,
     skills: skillsBridge,
+    learning: learningBridge,
     // The model is told where it may look. Without this it only ever tried the
     // workspace, which is why a granted folder was never searched.
     access: () => ({
@@ -823,6 +914,35 @@ export function createV4Server({ config }) {
       }
     },
 
+    /**
+     * What MAJIN has learned, with the evidence behind each procedure.
+     * Read-only: promotion happens in the agent, from verified execution.
+     */
+    'GET /api/learning': async (req, res, url) => {
+      requireSession(req);
+      // The host registers its lanes asynchronously; asking before that finishes
+      // would report every learned skill as "unavailable".
+      await hostReady;
+      // Comparison with the current environment is cheap and makes STALE visible
+      // immediately after a tool or lane change.
+      const transitions = url.searchParams.get('revalidate') === '1' ? learnedStore.revalidate() : [];
+      const skills = learnedStore.list();
+      sendJson(res, 200, {
+        ok: true,
+        schema: LEARNING_SCHEMA,
+        environment: fingerprintNow(),
+        transitions,
+        skills: describeLearned(skills.filter((s) => usableNow(s))),
+        // Skills that exist but are not offered, with the reason.
+        withheld: skills.filter((s) => !usableNow(s)).map((s) => ({
+          name: s.name,
+          state: s.learned.state,
+          reason: 'its required lanes or tools are not available right now',
+        })),
+        note: 'A skill is only created from a goal that completed with an independently verified receipt.',
+      });
+    },
+
     'GET /api/skills': async (req, res) => {
       requireSession(req);
       const view = skillsNow();
@@ -1310,7 +1430,15 @@ export function createV4Server({ config }) {
 
   return {
     server,
-    context: { config, sessions, conversations, goals, tools, model, agent, kernel, kernelReady, reconciled, pairingFresh, backgroundTasks, audit, heartbeat },
+    context: {
+      config, sessions, conversations, goals, tools, model, agent, kernel, kernelReady, reconciled,
+      pairingFresh, backgroundTasks, audit, heartbeat,
+      // Exposed so a test (and the phone) can inspect what was learned without
+      // going through the model.
+      learning: learningBridge,
+      learnedStore,
+      ownerMode,
+    },
   };
 }
 

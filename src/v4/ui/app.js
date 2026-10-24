@@ -83,6 +83,8 @@ const els = {
   historyTabActive: $('#history-tab-active'),
   historyTabArchived: $('#history-tab-archived'),
   importHistory: $('#import-history'),
+  learnedList: $('#learned-list'),
+  learnedNote: $('#learned-note'),
   importNote: $('#import-note'),
   dialogBackdrop: $('#dialog-backdrop'),
   renameDialog: $('#rename-dialog'),
@@ -710,6 +712,7 @@ async function loadState() {
   renderFiles(data.workspace?.files || []);
   loadOwnerMode();
   loadSkills();
+  loadLearned();
   renderGoals(data.goals || []);
   refreshConversations({ force: true });
   loadModels();
@@ -1826,6 +1829,51 @@ function startNewChat() {
   setHero(true);
   hideApproval();
   renderHistory();
+}
+
+/**
+ * What MAJIN learned from its own verified work.
+ *
+ * The state is shown verbatim: "experimental" is not the same promise as
+ * "verified", and a stale procedure says so instead of looking trustworthy.
+ */
+async function loadLearned() {
+  if (!els.learnedList) return;
+  try {
+    const res = await api('/api/learning');
+    if (!res.ok) return;
+    const data = await res.json();
+    els.learnedList.textContent = '';
+    const skills = data.skills || [];
+    if (!skills.length) {
+      const li = document.createElement('li');
+      li.className = 'goal-empty';
+      li.textContent = t('learned.empty');
+      els.learnedList.append(li);
+      return;
+    }
+    for (const skill of skills.slice(0, 8)) {
+      const li = document.createElement('li');
+      li.className = 'goal-item';
+      const title = document.createElement('span');
+      title.className = 'goal-title';
+      title.textContent = skill.title;
+      const state = document.createElement('span');
+      state.className = 'goal-state';
+      state.textContent = t(`learned.state.${skill.state}`);
+      li.append(title, state);
+      if (skill.verification) {
+        const note = document.createElement('span');
+        note.className = 'meta';
+        note.textContent = t('learned.meta', {
+          successes: skill.successes,
+          failures: skill.failures,
+        });
+        li.append(note);
+      }
+      els.learnedList.append(li);
+    }
+  } catch { /* the learning list is informational */ }
 }
 
 async function refreshSidebar() {

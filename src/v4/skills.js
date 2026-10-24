@@ -80,6 +80,10 @@ export function loadSkill(dir) {
       tools: Array.isArray(manifest.tools) ? manifest.tools.filter((t) => typeof t === 'string') : null,
       prefers: Array.isArray(manifest.prefers) ? manifest.prefers.filter((t) => typeof t === 'string') : [],
       experimental: manifest.experimental === true,
+      // A learned skill carries its provenance, state and `avoid` list in the
+      // same manifest. One loader serves both kinds; nothing here special-cases
+      // them beyond passing the block through.
+      learned: manifest.learned && typeof manifest.learned === 'object' ? manifest.learned : null,
       body: truncated ? `${body.slice(0, MAX_SKILL_CHARS)}\n[truncated]` : body,
       dir,
       truncated,
@@ -114,14 +118,25 @@ export function discoverSkills(rootDir) {
  * @param {string[]} [o.availableTools] tool names actually registered
  * @param {number} [o.limit]
  */
-export function usableSkills({ skills = [], grantedLanes = [], availableTools = null, limit = MAX_SKILLS_IN_PROMPT } = {}) {
+export function usableSkills({
+  skills = [],
+  grantedLanes = [],
+  availableTools = null,
+  limit = MAX_SKILLS_IN_PROMPT,
+  // A hand-written skill marked `experimental` is withheld on purpose: the owner
+  // has not vouched for it. A LEARNED skill instead carries an explicit state
+  // (EXPERIMENTAL / VERIFIED / REUSABLE / STALE), and that state is rendered to
+  // the model verbatim, so it is offered with its trust level stated rather than
+  // hidden. Nothing about the hand-written rule changes.
+  includeExperimental = false,
+} = {}) {
   const granted = new Set(grantedLanes);
   const tools = availableTools ? new Set(availableTools) : null;
   const usable = [];
   const withheld = [];
 
   for (const skill of skills) {
-    if (skill.experimental) {
+    if (skill.experimental && !(includeExperimental && skill.learned)) {
       withheld.push({ name: skill.name, reason: 'experimental' });
       continue;
     }

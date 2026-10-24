@@ -243,6 +243,30 @@ with the cursor returned as `serverTime` and reload the open conversation when i
 through the same `ConversationStore` every device already reads. It is read-only on the source,
 dry-run by default in the API and the UI, and idempotent through `sourceId = "v1:<chat>"`.
 
+## 5.7 Learned skills
+
+```
+goal COMPLETED + independently verified receipt
+        │
+        ▼
+extractCandidate()  ── trace → tool names + argument NAMES only
+        │              sanitise: secrets · personal paths · selectors
+        ├── requires = granted lanes ∩ lanes actually used   (never widens)
+        ▼
+LearnedSkillStore  ── same skills directory, `learned` block in skill.json
+        │              EXPERIMENTAL → VERIFIED → REUSABLE
+        │              STALE when the environment fingerprint changes
+        │              FAILED when failures lead
+        ▼
+turn N+1: rankSkills(goal) → renderLearned() in the system prompt
+        │   states the trust level and the "do not repeat" list
+        └─► an avoided action is refused with an explanation (LEARNED_AVOID)
+```
+
+One loader (`discoverSkills`) serves hand-written and learned skills; the only
+rule that differs is that a hand-written `experimental` flag withholds a skill,
+while a learned skill shows its explicit state instead of disappearing.
+
 ## 6. Platform kernel
 
 `kernel.js` defines `KERNEL_API_VERSION = 1` and a frozen capability contract

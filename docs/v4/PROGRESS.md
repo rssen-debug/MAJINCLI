@@ -661,3 +661,30 @@ not replaced, only approximated, and the inventory counted tool lanes only. Both
 
 Still not equivalent, and not claimed: V2's orchestrator/compiler/supervisor (they plan for a loop
 V4 does not run), and real-device verification of voice, Windows tools and mobile access.
+
+
+## Self-improving skill acquisition — 2026-10-24
+
+The owner's rule: teach MAJIN with goals, never with a new master prompt. Built
+in `src/v4/learning.js` and wired into the existing agent, skill loader and API.
+
+| Requirement | Where it is enforced |
+|---|---|
+| Only verified outcomes become skills | `extractCandidate` refuses anything but `COMPLETED` + a verified receipt |
+| No secrets, personal data or brittle selectors | `sanitizeInstruction` + procedures store argument NAMES only |
+| Never widen permission | `requires` = granted lanes ∩ lanes the path used |
+| Distinct states, no silent promotion | `promote()` from evidence only; `revalidate()` marks STALE |
+| Retrieval for a related task | `rankSkills` over topic keywords + state + confidence |
+| Do not repeat a failed strategy | `avoid` list, surfaced in the prompt and refused at call time |
+| Persistence across restart and clients | same on-disk skill format, proven through a real restart |
+
+Executed evidence in this repository: `test/v4/learning.test.js` — 15 tests,
+including the full A–H flow (fails → diagnoses → adapts → verifies → stores →
+restarts → retrieves → does not repeat) and the avoid guard.
+
+**Open, and reported as open:** the mandatory real-Go run
+(`npm run v4:learn-accept`). It refuses to run without a provider rather than
+pretending, and it is the only step of this gate that cannot be executed here.
+
+Inventory after this pass: 9 built-in tools, 114 registered on this host, every
+V1/V2/V3 component still carries a decision.

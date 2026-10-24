@@ -24,6 +24,7 @@ import { nextRecoveryStep, recoveryPlan } from '../v2/recover/advisor.js';
 import { buildMessages } from './context.js';
 import { memoryForPrompt } from './memory.js';
 import { renderSkills } from './skills.js';
+import { renderLearned } from './learning.js';
 import { TOOL_SCHEMAS, safeFileName, schemasFromRegistry } from './tools.js';
 import { createToolExposure } from './tool-exposure.js';
 import { createTeamTools } from './teams.js';
@@ -162,6 +163,7 @@ export function createAgent({
   audit = null,
   skills = null,
   access = null,
+  learning = null,
 }) {
   const record = (event, payload) => {
     if (!telemetry) return;
@@ -197,7 +199,7 @@ export function createAgent({
    * fixed message count. Error notices are excluded: they are UI copy, not
    * something the model should learn from.
    */
-  function historyFor(conv, currentMessage = '') {
+  function historyFor(conv, currentMessage = '', learned = []) {
     const all = conv.messages
       .filter((m) => (m.role === 'user' || m.role === 'assistant') && !m.meta?.error)
       .map((m) => ({ role: m.role, content: m.content }));
@@ -241,15 +243,23 @@ export function createAgent({
     // available right now. A skill the agent cannot execute is not mentioned.
     let skillSection = '';
     try {
-      if (skills?.usable) skillSection = renderSkills(skills.usable());
+      if (skills?.usable) skillSection = renderSkills(skills.usable(learned));
     } catch {
       skillSection = '';
+    }
+    // Procedures this MAJIN learned from its own verified work, ranked for THIS
+    // request so a related (not identical) task finds them.
+    let learnedSection = '';
+    try {
+      learnedSection = renderLearned(learned);
+    } catch {
+      learnedSection = '';
     }
 
     const delegationNote = tools.registry.get('agent_delegate')
       ? ''
       : 'Delegation is not granted on this host. Do the work yourself with the tools that are listed.';
-    const system = [SYSTEM_PROMPT, delegationNote, accessSection, memorySection, skillSection]
+    const system = [SYSTEM_PROMPT, delegationNote, accessSection, learnedSection, memorySection, skillSection]
       .filter(Boolean)
       .join('\n\n');
 
@@ -393,6 +403,44 @@ export function createAgent({
     }
     emit('tool_start', { id: call.id, name: toolName, input: redactInput(toolName, args) });
 
+    /**
+     * The trace entry records which tool ran with which argument NAMES — never
+     * the values. That is what makes it safe to persist as a learned procedure:
+     * no paths, keys, e-mail addresses or selectors can ride along.
+     */
+    const argsShape = Object.keys(args || {}).sort().join(',');
+    const traceStep = { name: toolName, argsShape, ok: false, cls: null, verified: false, at: Date.now() };
+    if (turn?.trace) turn.trace.push(traceStep);
+
+    // A strategy this MAJIN already proved wrong must not be repeated blindly.
+    // Only exact (tool + argument-Names) matches recorded from a verified run
+    // are refused, and only when a relevant skill was retrieved for this turn.
+    const avoided = (turn?.learned || []).flatMap((skill) => (skill.learned?.avoid || [])
+      .filter((a) => a.action === `${toolName}${argsShape ? `(${argsShape})` : ''}` || a.action === toolName)
+      .map((a) => ({ ...a, skill: skill.name })));
+    if (avoided.length && !turn?.allowAvoided) {
+      const first = avoided[0];
+      traceStep.ok = false;
+      traceStep.cls = 'LEARNED_AVOID';
+      emit('tool_result', {
+        id: call.id,
+        name: toolName,
+        ok: false,
+        verified: false,
+        summary: 'LEARNED_AVOID',
+        error: `not repeated: ${first.action} failed with ${first.failedWith} in a verified run`,
+      });
+      emit('learning', { event: 'avoided', tool: toolName, skill: first.skill, failedWith: first.failedWith });
+      record('task.result', { action: `learning:avoided:${toolName}`, taskId: first.skill, result: 'success' });
+      return {
+        ok: false,
+        error: `This approach is recorded as failed (${first.failedWith}) for a related task in skill "${first.skill}". `
+          + 'Do not repeat it: follow the procedure that worked, or choose a different tool.',
+        code: 'LEARNED_AVOID',
+        name: toolName,
+      };
+    }
+
     if (!nested) goal.transition(STATES.WAITING_FOR_TOOL, `tool ${toolName}`);
     let result;
     try {
@@ -414,6 +462,8 @@ export function createAgent({
       // timeout, executor crash). The goal must leave WAITING_FOR_TOOL, record
       // the failure and keep the turn honest — never stay mid-flight.
       const cls = err?.cls || 'UNKNOWN';
+      traceStep.ok = false;
+      traceStep.cls = cls;
       if (!nested) goal.transition(STATES.RUNNING, `tool ${toolName} threw ${cls}`);
       goal.addReceipt({
         action: `tool:${toolName}`,
@@ -427,6 +477,7 @@ export function createAgent({
     }
 
     if (!result.ok && result.decision === 'waiting') {
+      traceStep.cls = 'WAITING_FOR_APPROVAL';
       // WAITING_FOR_TOOL can only go back to RUNNING; the approval wait is
       // entered from RUNNING. Skipping the hop left the goal stuck.
       if (!nested) {
@@ -440,6 +491,8 @@ export function createAgent({
 
     if (!result.ok) {
       const cls = result.error?.cls || 'TOOL_FAILURE';
+      traceStep.ok = false;
+      traceStep.cls = cls;
       goal.addReceipt({ action: `tool:${toolName}`, target: args.fileName || null, result: 'failure', errorClass: cls });
       emit('tool_result', { id: call.id, name: toolName, ok: false, verified: false, summary: cls });
       return { ok: false, error: result.error || 'tool failed', code: cls, name: toolName };
@@ -531,6 +584,9 @@ export function createAgent({
       verified = false;
     }
 
+    traceStep.ok = true;
+    traceStep.verified = Boolean(verified);
+    traceStep.cls = null;
     record('task.result', { action: `tool:${toolName}`, result: 'success', attempt: attempt || 1 });
     if (verified) record('verification', { goalId: goal.id, kind: 'file', verified: true });
     emit('tool_result', {
@@ -641,8 +697,30 @@ export function createAgent({
       registry: tools.registry,
       maxVisible: config.limits.maxVisibleTools || 64,
     });
-    const turn = { exposure, depth: 0, goal, conversationId: conversation.id, emit, signal, model };
-    const packed = historyFor(conversations.get(conversation.id), message);
+    // Retrieval happens once per turn: the same ranked list is used for the
+    // prompt and for the "do not repeat" guard, so what the model is told and
+    // what it is held to cannot drift apart.
+    let learnedForTurn = [];
+    try {
+      learnedForTurn = learning?.retrieve?.(message) || [];
+    } catch {
+      learnedForTurn = [];
+    }
+    const turn = {
+      exposure,
+      depth: 0,
+      goal,
+      conversationId: conversation.id,
+      emit,
+      signal,
+      model,
+      // The tool trace of this turn: what was attempted, in order, with the
+      // argument NAMES only. It is the raw material for learning and contains
+      // no values, so nothing sensitive can leak into a stored skill.
+      trace: [],
+      learned: learnedForTurn,
+    };
+    const packed = historyFor(conversations.get(conversation.id), message, learnedForTurn);
     const modelMessages = packed.messages;
     if (voiceTurn && modelMessages[0]?.role === 'system') {
       modelMessages[0].content += '\nThis is a spoken conversation. Reply in the language the user just spoke. Usually use one short natural sentence, around 20 words, unless the task needs detail. Do not recite capabilities or menus. Keep all tool and verification rules.';
@@ -831,6 +909,30 @@ export function createAgent({
 
       goal.complete();
       goals.save(goal);
+
+      /**
+       * EXTRACT SKILL → STORE.
+       *
+       * Runs only after this turn reached COMPLETED with an independently
+       * verified receipt, so a model's own claim can never become a skill. The
+       * store decides the state; a failure here must never fail a turn that
+       * already succeeded.
+       */
+      let learned = null;
+      try {
+        learned = learning?.observe?.({
+          goal,
+          trace: turn.trace || [],
+          // The goal carries the objective; the transcript is not needed to
+          // learn a procedure, and not copying it keeps the store free of text.
+          conversationId: conversation.id,
+        }) || null;
+        if (learned) emit('learning', { event: 'observed', ...learned });
+      } catch (err) {
+        learned = { action: 'error', reason: String(err?.message || err) };
+        record('learning.error', { message: String(err?.message || err).slice(0, 120) });
+      }
+
       conversations.rememberRequest(conversation.id, requestId, {
         status: 'completed',
         messageId: stored.id,
@@ -861,8 +963,15 @@ export function createAgent({
         messageId: stored.id,
         goalId: goal.id,
         demo: model.info.demo,
+        ...(learned?.learning ? { learned: { action: learned.action, name: learned.name, state: learned.state } } : {}),
       });
-      return { status: 'completed', conversationId: conversation.id, messageId: stored.id, goalId: goal.id };
+      return {
+        status: 'completed',
+        conversationId: conversation.id,
+        messageId: stored.id,
+        goalId: goal.id,
+        ...(learned?.learning ? { learned } : {}),
+      };
     } catch (err) {
       const aborted = err?.code === 'ABORTED' || err?.name === 'AbortError' || signal?.aborted;
       const reason = aborted ? 'cancelled by the user' : explainModelError(err);

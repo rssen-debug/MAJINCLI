@@ -1,30 +1,30 @@
 # MAJIN capability inventory (generated)
 
-Generated 2026-10-23T19:31:45.103Z on win32. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
+Generated 2026-10-24T08:45:52.465Z on linux. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
 
 ## Totals
 
 | Version | Unit | Count |
 | --- | --- | --- |
 | V1 | tool modules | 26 |
-| V1 | tools | 141 |
-| V1 | integrated into V4 lanes | 111 |
-| V1 | excluded with a recorded reason | 30 |
-| V2 | components reused | 22/52 |
+| V1 | tools | 144 |
+| V1 | integrated into V4 lanes | 115 |
+| V1 | excluded with a recorded reason | 29 |
+| V2 | components reused | 29/52 |
 | V3 | components reused | 0/4 |
-| V4 | built-in tools | 8 |
-| V4 | tools registered on this host | 119 |
+| V4 | built-in tools | 9 |
+| V4 | tools registered on this host | 114 |
 
 ## Capability domains
 
 | Domain | What exists |
 | --- | --- |
-| tools | builtin: 8; v1Integrated: 111; registeredOnHost: 119 |
-| skills | shipped: ["fix-code","job-search"]; mechanism: src/v4/skills.js — declared required/preferred tools decide visibility, not app code |
+| tools | builtin: 9; v1Integrated: 115; registeredOnHost: 114 |
+| skills | shipped: ["fix-code","job-search"]; mechanism: src/v4/skills.js — declared required/preferred tools decide visibility, not app code; learned: src/v4/learning.js — procedures extracted from goals that completed with an independently verified receipt; stored in the same skills directory with a `learned` block, so one loader serves both. States: EXPERIMENTAL, VERIFIED, REUSABLE, STALE, FAILED.; learnedAcceptance: npm run v4:learn-accept — the mandatory A–H gate against the real provider |
 | mcp | state: configured by the owner in <data>/v4/mcp.json; mechanism: src/v4/mcp.js + mcp-tools.js — stdio JSON-RPC, scrubbed env, tools at process tier |
 | agentFunctions | turnEngine: src/v4/agent.js — goal, rounds, receipts, verification, recovery advisor; discovery: tools_search + tools_activate (src/v4/tool-exposure.js); delegation: agent_delegate — bounded subagent, owner-gated; resume: resumeGoal — re-verifies every artifact against the recorded SHA-256 |
-| computerControl | lanes: [{"lane":"desktop","available":true,"tools":5,"reason":null},{"lane":"computer","available":true,"tools":2,"reason":null},{"lane":"screen","available":true,"tools":3,"reason":null}]; mechanism: V1 wincontrol.js / computer.js through the V1 lane adapter; Windows interactive session only |
-| browser | lane: web; tools: ["browser.open","browser.read","browser.click","browser.fill","browser.shot","browser.upload","browser.verify","browser.elements","browser.clear_marks","browser.close"]; runtime: {"available":true,"reason":null,"binary":"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"} |
+| computerControl | lanes: [{"lane":"desktop","available":false,"tools":0,"reason":"Windows-only (this host is linux)"},{"lane":"computer","available":false,"tools":0,"reason":"Windows-only (this host is linux)"},{"lane":"screen","available":false,"tools":0,"reason":"Windows-only (this host is linux)"}]; mechanism: V1 wincontrol.js / computer.js through the V1 lane adapter; Windows interactive session only |
+| browser | lane: web; tools: ["browser.open","browser.read","browser.click","browser.form","browser.form_fill","browser.form_submit","browser.fill","browser.shot","browser.upload","browser.verify","browser.elements","browser.clear_marks","browser.close"]; runtime: {"available":false,"reason":"no browser binary found (npx playwright install chromium)"} |
 | terminal | lanes: [{"lane":"shell","available":true,"tools":5},{"lane":"shelltools","available":true,"tools":5}]; mechanism: V1 exec.js (managed jobs) and shell.js (command/background) through the V2 runner and approvals |
 | memory | tools: ["memory_save","memory_search"]; store: src/v2/memory/store.js (used directly); promptInjection: src/v4/memory.js memoryForPrompt — retrieval, not just writes |
 | voice | server: src/v2/voice/{speak,listen,tts,stt}.js imported by src/v4/voice.js; client: browser-native speech + text fallback (src/v4/ui/voice.js); measured: false |
@@ -37,18 +37,18 @@ Generated 2026-10-23T19:31:45.103Z on win32. Every row is computed from the code
 | --- | --- | --- | --- | --- |
 | `agent.js` | 4 | — | replaced | V1 agent.plan/delegate/moa/approve are bound to V1's own loop, registry and guard. V4 provides the same capability natively (agent_delegate) with its own approval policy; running V1's second agent runtime inside V4 would duplicate state and bypass receipts. |
 | `audit.js` | 1 | audit | lane | reused through audit |
-| `channels.js` | 1 | — | excluded | Needs V1 channel credentials (Telegram/WhatsApp/webhook) that V4 does not use. A tool that is registered but always reports "not configured" is the lie this project exists to avoid. |
+| `channels.js` | 1 | channels | lane | reused through channels |
 | `computer.js` | 2 | computer | lane | reused through computer |
 | `exec.js` | 5 | shell | lane | reused through shell |
 | `files.js` | 13 | files | lane | reused through files |
 | `flows.js` | 6 | flows | lane | reused through flows |
 | `github.js` | 2 | github | lane | reused through github |
-| `heartbeat.js` | 1 | — | excluded | V1 heartbeat is driven by V1's journal and scheduler. V4 runs a supervisor and a Windows scheduled task; two heartbeat owners would fight. |
+| `heartbeat.js` | 1 | — | replaced | The existing core Heartbeat engine is reused by src/v4/heartbeat.js with actual V4 goal/approval events, durable queue and shared-history/opt-in push delivery. The old tool wrapper uses V1 journal events and is not a second V4 heartbeat owner. |
 | `jobs.js` | 9 | jobs | lane | reused through jobs |
 | `learn.js` | 3 | learn | lane | reused through learn |
 | `majin.js` | 18 | — | excluded | Self-configuration writes V1's config.json and restarts V1's agent. V4 has its own setup, doctor, owner-mode and updater. Adapting these would let the model edit the wrong configuration while appearing to manage MAJIN. |
 | `marketing.js` | 4 | marketing | lane | reused through marketing |
-| `memory-sync.js` | 1 | — | excluded | Operates on V1's Memory store. V4's durable memory is V2's MemoryStore and its backup/restore path; syncing a second store into it would fork the source of truth. |
+| `memory-sync.js` | 1 | — | replaced | The existing core memory-sync entry point now supports canonical V2 namespaced records. V4 memory_sync uses that engine and MemoryStore with approval, folder checks and tombstones. The old wrapper assumes V1 text facts and is not used to create a shadow V4 store. |
 | `meta.js` | 1 | — | replaced | tools.search needs V1's registry.search. V4 ships tools_search/tools_activate over the live V4 registry, which also makes discovered tools callable in the next round. |
 | `net.js` | 8 | screen, net | lane | reused through screen, net |
 | `power.js` | 3 | power | lane | reused through power |
@@ -59,7 +59,7 @@ Generated 2026-10-23T19:31:45.103Z on win32. Every row is computed from the code
 | `sys.js` | 6 | sys | lane | reused through sys |
 | `teams.js` | 2 | — | replaced | The V1 tool wrapper binds team.run to V1's loop and registry. Its ENGINE (src/core/teams.js: TeamStore, runTeam) and the scheduler behind it (src/core/swarm.js) are reused verbatim by V4's team_run, with V4 subagents as the worker. |
 | `trading.js` | 2 | trading | lane | reused through trading |
-| `web.js` | 13 | web | lane | reused through web |
+| `web.js` | 16 | web | lane | reused through web |
 | `wincontrol.js` | 5 | desktop | lane | reused through desktop |
 
 ## V1 tools
@@ -71,7 +71,7 @@ Generated 2026-10-23T19:31:45.103Z on win32. Every row is computed from the code
 | `agent.moa` | read | excluded | — | — |
 | `agent.approve` | read | excluded | — | — |
 | `majin.self_audit` | read | integrated | audit | — |
-| `channel.send` | exec | excluded | — | — |
+| `channel.send` | exec | integrated | channels | — |
 | `computer.use` | exec | integrated | computer | windows interactive session |
 | `cursor.overlay` | exec | integrated | computer | windows interactive session |
 | `exec.backends` | read | integrated | shell | — |
@@ -100,7 +100,7 @@ Generated 2026-10-23T19:31:45.103Z on win32. Every row is computed from the code
 | `flows.webhook.recorded` | write | integrated | flows | — |
 | `github.verify` | exec | integrated | github | — |
 | `github.research` | read | integrated | github | — |
-| `majin.heartbeat` | read | excluded | — | — |
+| `majin.heartbeat` | net | excluded | — | — |
 | `jobs.search` | read | integrated | jobs | — |
 | `jobs.match` | read | integrated | jobs | — |
 | `jobs.list` | read | integrated | jobs | — |
@@ -139,7 +139,7 @@ Generated 2026-10-23T19:31:45.103Z on win32. Every row is computed from the code
 | `tools.search` | read | excluded | — | — |
 | `net.dns` | read | integrated | net | — |
 | `net.tcp` | read | integrated | net | — |
-| `net.http` | read | integrated | net | — |
+| `net.http` | net | integrated | net | — |
 | `net.serve` | exec | integrated | net | — |
 | `net.serve_stop` | exec | integrated | net | — |
 | `screen.capture` | read | integrated | screen | windows interactive session |
@@ -195,6 +195,9 @@ Generated 2026-10-23T19:31:45.103Z on win32. Every row is computed from the code
 | `browser.open` | exec | integrated | web | browser runtime |
 | `browser.read` | read | integrated | web | browser runtime |
 | `browser.click` | exec | integrated | web | browser runtime |
+| `browser.form` | read | integrated | web | browser runtime |
+| `browser.form_fill` | exec | integrated | web | browser runtime |
+| `browser.form_submit` | exec | integrated | web | browser runtime |
 | `browser.fill` | exec | integrated | web | browser runtime |
 | `browser.shot` | read | integrated | web | browser runtime |
 | `browser.upload` | exec | integrated | web | browser runtime |
@@ -212,19 +215,24 @@ Generated 2026-10-23T19:31:45.103Z on win32. Every row is computed from the code
 
 | Engine | Status | Imported by |
 | --- | --- | --- |
+| `src/core/browser.js` | reused | src/v4/agent.js |
+| `src/core/heartbeat.js` | reused | src/v4/heartbeat.js |
+| `src/core/memory-sync.js` | reused | src/v4/tools/memory-sync.js |
+| `src/core/presets.js` | reused | src/v4/models.js |
+| `src/core/schedule.js` | reused | src/v4/background-tasks.js |
 | `src/core/teams.js` | reused | src/v4/server.js, src/v4/teams.js |
 
 ## V2 components
 
 | Component | Status | Reason |
 | --- | --- | --- |
-| `src/v2/audit/anchor.js` | not-used | RFC 3161 anchoring for the V2 audit chain; no V4 caller. |
-| `src/v2/audit/bind.js` | not-used | Binds the V2 audit chain to an operator identity; V4 sessions are their own identity model. |
-| `src/v2/audit/chain.js` | not-used | V2 hash-chained audit log; only the V2 audit bundle uses it. |
-| `src/v2/audit/export.js` | not-used | V2 audit bundle format is reused as a format and documented in SOURCE_AUDIT, not imported; V4 backup has its own manifest + verify path. |
-| `src/v2/audit/index.js` | not-used | V2 cryptographic audit chain (hash chain, anchors). V4's audit trail is goal receipts + the V2 telemetry ledger. |
-| `src/v2/audit/permissions.js` | reused | imported by src/v2/audit/anchor.js, src/v2/audit/chain.js, src/v4/server.js |
-| `src/v2/audit/timestamp.js` | not-used | Timestamp helpers for the V2 audit chain; no V4 caller. |
+| `src/v2/audit/anchor.js` | reused | imported by src/v2/audit/export.js, src/v2/audit/index.js, src/v4/audit.js |
+| `src/v2/audit/bind.js` | reused | imported by src/v2/audit/index.js |
+| `src/v2/audit/chain.js` | reused | imported by src/v2/audit/anchor.js, src/v2/audit/export.js, src/v2/audit/index.js, src/v2/studio/server.js |
+| `src/v2/audit/export.js` | reused | imported by src/v2/studio/server.js, src/v4/audit.js |
+| `src/v2/audit/index.js` | reused | imported by src/v4/audit.js |
+| `src/v2/audit/permissions.js` | reused | imported by src/v2/audit/anchor.js, src/v2/audit/chain.js, src/v4/push.js, src/v4/server.js |
+| `src/v2/audit/timestamp.js` | reused | imported by src/v2/audit/export.js |
 | `src/v2/compiler/goal-compiler.js` | not-used | Compiles natural language into V2 task graphs; V4 plans inside the conversation turn. |
 | `src/v2/compiler/router.js` | not-used | V2 intent compiler targets V2 tool vocabulary and orchestration. |
 | `src/v2/config/config.js` | not-used | Trust-gated V2 config loader. V4's configuration is explicit and env-overridable. |
@@ -235,7 +243,7 @@ Generated 2026-10-23T19:31:45.103Z on win32. Every row is computed from the code
 | `src/v2/gauntlet/gauntlet.js` | not-used | V2 test gauntlet, not a runtime capability. |
 | `src/v2/gauntlet/scenarios-objectives.js` | not-used | V2 test scenarios, not a runtime capability. |
 | `src/v2/gauntlet/scenarios.js` | not-used | V2 test scenarios, not a runtime capability. |
-| `src/v2/memory/store.js` | reused | imported by src/v4/backup.js, src/v4/memory.js, src/v4/tools.js |
+| `src/v2/memory/store.js` | reused | imported by src/v4/backup.js, src/v4/memory.js, src/v4/tools.js, src/v4/tools/memory-sync.js |
 | `src/v2/model/profiles.js` | not-used | V2 model profiles; V4 resolves models from V1's provider catalog. |
 | `src/v2/model/provider.js` | reused | imported by src/v2/compiler/router.js, src/v2/model/profiles.js, src/v2/model/registry-refresh.js, src/v2/model/registry.js, src/v2/supervisor/roles.js, src/v2/voice/stt.js, src/v2/voice/tts.js |
 | `src/v2/model/registry-refresh.js` | not-used | Refreshes the V2 model registry; V4 caches the V1 catalog instead. |
@@ -245,7 +253,7 @@ Generated 2026-10-23T19:31:45.103Z on win32. Every row is computed from the code
 | `src/v2/recover/outer-loop.js` | not-used | Drives V2's runObjective; V4 runs its own loop and reuses only recover/advisor.js. |
 | `src/v2/runtime/dag.js` | reused | imported by src/v2/gauntlet/scenarios-objectives.js, src/v2/gauntlet/scenarios.js, src/v2/runtime/scheduler.js, src/v2/supervisor/plan-with-model.js, src/v2/supervisor/supervisor.js, src/v4/graph.js |
 | `src/v2/runtime/errors.js` | reused | imported by src/v2/runtime/scheduler.js |
-| `src/v2/runtime/events.js` | not-used | V2 studio event bus; V4 streams SSE from the agent. |
+| `src/v2/runtime/events.js` | reused | imported by src/v2/audit/bind.js, src/v2/studio/server.js |
 | `src/v2/runtime/goal.js` | reused | imported by src/v2/gauntlet/gauntlet.js, src/v2/runtime/orchestrator.js, src/v3/runtime/file-deliverable.js, src/v4/agent.js, src/v4/graph.js, src/v4/store.js |
 | `src/v2/runtime/orchestrator.js` | not-used | Drives V2's compile→plan→schedule→verify pipeline. V4's agent loop owns planning and verification; running it would be a second orchestrator. |
 | `src/v2/runtime/receipts.js` | reused | imported by src/v2/runtime/goal.js |
@@ -265,7 +273,7 @@ Generated 2026-10-23T19:31:45.103Z on win32. Every row is computed from the code
 | `src/v2/telemetry/ledger.js` | reused | imported by src/v2/studio/server.js, src/v4/server.js |
 | `src/v2/tools/builtins.js` | not-used | V2's read_file/write_file/verify_now demo tools; V4 defines its own workspace tools on the same V2 contract. |
 | `src/v2/tools/registry.js` | reused | imported by src/v2/tools/runner.js, src/v4/tools.js |
-| `src/v2/tools/runner.js` | reused | imported by src/v4/agent.js, src/v4/tools.js, src/v4/tools/host.js |
+| `src/v2/tools/runner.js` | reused | imported by src/v4/agent.js, src/v4/server.js, src/v4/tools.js, src/v4/tools/host.js |
 | `src/v2/voice/listen.js` | reused | imported by src/v2/studio/server.js, src/v4/voice.js |
 | `src/v2/voice/speak.js` | reused | imported by src/v2/studio/server.js, src/v4/voice.js |
 | `src/v2/voice/stt.js` | reused | imported by src/v4/voice.js |
@@ -284,20 +292,21 @@ Generated 2026-10-23T19:31:45.103Z on win32. Every row is computed from the code
 
 | Lane | Available | Tools | Reason |
 | --- | --- | --- | --- |
-| desktop | yes | 5 |  |
-| computer | yes | 2 |  |
-| screen | yes | 3 |  |
+| desktop | no | 0 | Windows-only (this host is linux) |
+| computer | no | 0 | Windows-only (this host is linux) |
+| screen | no | 0 | Windows-only (this host is linux) |
 | net | yes | 5 |  |
 | files | yes | 13 |  |
 | shell | yes | 5 |  |
 | shelltools | yes | 5 |  |
 | sys | yes | 6 |  |
 | power | yes | 3 |  |
-| web | yes | 13 |  |
+| web | yes | 16 |  |
 | research | yes | 1 |  |
 | jobs | yes | 9 |  |
 | flows | yes | 6 |  |
 | github | yes | 2 |  |
+| channels | yes | 1 |  |
 | audit | yes | 1 |  |
 | learn | yes | 3 |  |
 | marketing | yes | 4 |  |

@@ -46,6 +46,7 @@ const ALLOW = [
   'svlex(',               // job-matcher input vocabulary (CV/job ad words, never shown)
   'path.join(homedir, ',  // desktop folder names we look for, not messages (Skrivbord)
   'const STOPWORDS = new Set(',  // retrieval stopwords: input vocabulary, never rendered
+  '// input vocabulary, never rendered',  // explicit per-line marker for language data
 ];
 
 // Localization resources hold the product copy by design; they are data, not
@@ -55,7 +56,7 @@ const LOCALIZATION = [/src[\\/]v4[\\/]ui[\\/]strings\.js$/];
 // assistant understands the language users actually type.
 // Acceptance checks send Swedish input text for the same reason benchmarks do:
 // they prove the assistant handles what users actually type.
-const BENCHMARK_INPUT = /scripts[\\/]v4[\\/](benchmark|accept)\.mjs$/;
+const BENCHMARK_INPUT = /scripts[\\/]v4[\\/](benchmark|accept|learn-accept)\.mjs$/;
 
 const TARGETS = [];
 for (const root of ['src', 'scripts']) if (fs.existsSync(root)) for (const f of walk(root)) if (/\.(js|mjs|cjs)$/.test(f)) TARGETS.push(f);

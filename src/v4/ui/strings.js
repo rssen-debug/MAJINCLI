@@ -209,6 +209,14 @@ export const SV = {
 
   'cli.pairExists': 'En parkod finns redan. Kör med --rotate för att ersätta den.',
   'common.cancel': 'Avbryt',
+
+  'learned.empty': 'Inget inlärt ännu. MAJIN lär sig av uppgifter som verifierats.',
+  'learned.meta': '{successes} verifierade · {failures} misslyckade',
+  'learned.state.EXPERIMENTAL': 'experimentell',
+  'learned.state.VERIFIED': 'verifierad här',
+  'learned.state.REUSABLE': 'återanvändbar',
+  'learned.state.STALE': 'inaktuell',
+  'learned.state.FAILED': 'misslyckad',
   'common.delete': 'Radera',
 
   'history.empty': 'Inga samtal ännu. Skriv ett meddelande så skapas det första.',

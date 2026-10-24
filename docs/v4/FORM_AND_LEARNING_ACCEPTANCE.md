@@ -31,7 +31,37 @@ bounded alternative strategy; native/server errors, grounded submit buttons,
 multi-step navigation, exact file bytes, auth/CAPTCHA/approval handoff and compact
 observations. Product code may not contain fixture-specific selectors or recipes.
 
-## Learned operational skills — mandatory, currently NOT VERIFIED
+## Learned operational skills — IMPLEMENTED, awaiting the real-provider run
+
+**Status 2026-10-24:** the engine is built, integrated and proven end to end in
+this repository. The mandatory real-Go acceptance is the one step that cannot run
+here (no provider key), so it stays unverified until `npm run v4:learn-accept`
+is run on the host. That is the only open item in this section.
+
+Implemented in `src/v4/learning.js`, integrated into the existing agent, skill
+loader, memory and API — no second engine, no second store:
+
+- extraction only from a goal that reached `COMPLETED` **and** carries an
+  independently verified receipt; a model's own claim is never evidence;
+- the stored procedure records tool names and **argument names only**, never
+  values; secrets, personal paths, e-mail addresses and CSS selectors are
+  stripped before anything is written;
+- `requires` is the intersection of the lanes that were granted and the lanes
+  the successful path used, so learning can never widen permission;
+- states EXPERIMENTAL → VERIFIED → REUSABLE, with STALE when the environment
+  fingerprint changes and FAILED when failures lead; never silently promoted;
+- retrieval is relevance-ranked, so a *related but changed* task finds the
+  procedure; the prompt states the trust level and the "do not repeat" list;
+- a recorded failed strategy is refused with an explanation instead of being
+  executed again (`LEARNED_AVOID`);
+- `GET /api/learning` exposes state, confidence, evidence and the avoid list.
+
+Proven here (`test/v4/learning.test.js`, 15 tests): sanitising, extraction
+refusal, argument-name-only storage, promotion, diagnosis, retrieval, the full
+A–H flow with a real restart, the avoid guard, STALE on environment change, and
+that a learned skill cannot claim an ungranted lane.
+
+### The original text of this gate (unchanged)
 
 Workflow: goal → execute → observe → diagnose → adapt → independently verify →
 extract → store → retrieve/adapt → revalidate. Goals teach MAJIN; no new owner

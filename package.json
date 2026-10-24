@@ -63,7 +63,8 @@
     "v4:setup": "node ./scripts/v4/setup.mjs",
     "v4:update": "node ./scripts/v4/update.mjs",
     "v4:release": "node ./scripts/v4/release.mjs",
-    "v4:inventory": "node ./scripts/v4/inventory.mjs"
+    "v4:inventory": "node ./scripts/v4/inventory.mjs",
+    "v4:learn-accept": "node ./scripts/v4/learn-accept.mjs"
   },
   "optionalDependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",

@@ -102,6 +102,37 @@ riktiga beroenden. Alla tre följer `agent`-lanen och försvinner direkt vid åt
 - **Röst och Windows/mobil-verifiering.** Koden finns och är testad; riktig enhetsverifiering kan
   inte göras härifrån och står kvar som BLOCKERAT.
 
+## 2026-10-24 — MAJIN lär sig av verifierat arbete
+
+Ägaren ska lära MAJIN genom att ge **mål**, inte genom att skriva nya masterprompts. Det kräver att en
+verifierad körning kan bli en återanvändbar procedur — och att en overifierad aldrig kan låtsas vara det.
+
+Byggt i `src/v4/learning.js`, inkopplat i befintlig agent, befintlig skill-laddare och befintligt minne.
+Ingen andra motor, inget andra lager.
+
+| Krav | Hur det är löst |
+|---|---|
+| Extrahera bara det som bevisats | endast mål som nått `COMPLETED` **och** har ett oberoende verifierat kvitto; modellens eget påstående är aldrig bevis |
+| Inga hemligheter, personuppgifter eller sköra selektorer | proceduren sparar **verktygsnamn och argumentnamn**, aldrig värden; nycklar, sökvägar, e-post och CSS-selektorer strippas före skrivning |
+| Får aldrig utöka behörighet | `requires` = snittet av beviljade lanes och de lanes som faktiskt användes |
+| Tillstånd | EXPERIMENTAL → VERIFIED → REUSABLE, `STALE` när miljöns fingeravtryck ändras, `FAILED` när fel överväger. Ingen tyst befordran |
+| Återanvändning | relevansrankad hämtning, så en **besläktad men ändrad** uppgift hittar proceduren; prompten anger tillitsnivå och "upprepa inte"-listan |
+| Inte upprepa misslyckat | en inspelad misslyckad strategi nekas med förklaring (`LEARNED_AVOID`) i stället för att köras igen |
+| Insyn | `GET /api/learning` visar tillstånd, konfidens, bevis och undvik-listan; panelen **Inlärt** i appen |
+
+Bevisat här (`test/v4/learning.test.js`, 15 tester): sanitering, att extrahering nekas utan verifiering,
+att bara argumentnamn lagras, befordran, diagnos, hämtning, **hela A–H-flödet med en riktig omstart**,
+avoid-guarden, STALE vid miljöbyte, och att ett inlärt recept inte kan kräva en icke-beviljad lane.
+
+**Det som återstår är ett enda steg: den riktiga Go-körningen.** Den kan inte göras härifrån (ingen
+provider-nyckel), så den står kvar som oavklarad:
+
+```powershell
+npm run v4:learn-accept
+```
+
+Skriptet vägrar köra i demo-läge och skriver bevisen till `docs/v4/evidence/learned-skills-*.json`.
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är
