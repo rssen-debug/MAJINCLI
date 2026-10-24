@@ -502,7 +502,10 @@ function renderPreview(name) {
   frame.src = url;
 
   node.append(head, frame);
-  els.thread.append(node);
+  // Keep preview inside the same expandable work row while the task runs.
+  // Only actual verified HTML artifacts are previewable here; do not invent
+  // screenshots or expose hidden model reasoning.
+  (progressCard && !progressTerminal ? progressCard.detail : els.thread).append(node);
   setHero(false);
   scrollDown(true);
 }
@@ -1309,6 +1312,8 @@ function viewIntents(event, data, intents) {
         if (fileName) offerPreview(fileName);
       }
       if (progressCard) {
+        const activity = progressCard.node.querySelector('.tool-name');
+        if (activity) activity.textContent = `${data.ok ? 'Klart' : 'Problem'} · ${toolLabel(data.name)}`;
         const line = document.createElement('div');
         line.textContent = `${toolLabel(data.name)} · ${data.ok ? (data.verified ? t('state.verified') : t('state.done')) : t('state.failed')}`
           + (data.summary ? ` · ${data.summary}` : '')

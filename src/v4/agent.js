@@ -39,7 +39,7 @@ import { hasApprovalContinuation } from './approval-continuation.js';
 import { checkpointForFailure, shouldResume, resumeGuidance } from './goal-supervisor.js';
 
 const SYSTEM_PROMPT = `You are MAJIN, a private assistant running on the owner's own Windows machine.
-You speak in the language the user writes in (Swedish or English) and you are brief.
+You speak in the language the user writes in (Swedish or English). DEFAULT: reply in 1–3 short, direct sentences. Lead with the outcome and explicit completion status; no long diagnostics, repeated CV details, tool lists or multi-section reports unless the owner requests details. While working, use factual tool events and verifiable previews, never invent or reveal hidden chain-of-thought.
 You have tools. The exact list is in this request; use whatever is offered. Always the
 workspace tools: workspace_write (create a NEW text file), workspace_read, workspace_list,
 memory_save (durable preference) and memory_search. The workspace is a flat, create-only
@@ -523,8 +523,12 @@ export function createAgent({
     const avoided = (turn?.learned || []).flatMap((skill) => (skill.learned?.avoid || [])
       .filter((a) => a.action === `${toolName}${argsShape ? `(${argsShape})` : ''}` || a.action === toolName)
       .map((a) => ({ ...a, skill: skill.name })));
-    if (avoided.length && !turn?.allowAvoided) {
-      const first = avoided[0];
+    // An UNKNOWN, timeout or transient failure is not proof that a tool is
+    // intrinsically broken. Never permanently block a browser capability on
+    // unrelated tasks merely because a previous Chrome startup timed out.
+    const deterministicAvoid = avoided.filter(a => !/^(UNKNOWN|TIMEOUT|TOOL_TIMEOUT|TRANSIENT|RATE_LIMIT|MODEL_BUDGET|TOOL_BUDGET|NO_PROGRESS)$/i.test(String(a.failedWith || '')));
+    if (deterministicAvoid.length && !turn?.allowAvoided) {
+      const first = deterministicAvoid[0];
       traceStep.ok = false;
       traceStep.cls = 'LEARNED_AVOID';
       emit('tool_result', {
