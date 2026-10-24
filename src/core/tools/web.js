@@ -249,10 +249,10 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     name: 'browser.open',
     group: 'web',
     risk: 'exec',
-    desc: 'Open a URL in a browser window MAJIN drives (Chrome or Edge on this machine). For forms, use browser.form then browser.form_fill with exact observed labels. Use browser.read/click for other pages.',
-    params: { url: 'string: http(s) address', headless: 'boolean: no visible window (default: true)' },
+    desc: 'Open a URL in a MAJIN-controlled Chrome/Edge window, visible by default so the owner sees work. For forms use browser.form and browser.form_fill. NEVER invoke --remote-debugging-port or other Chrome switches as standalone commands: browser.open owns browser startup and CDP. Diagnose actual browser.open failures; do not ask the owner to start Chrome manually.',
+    params: { url: 'string: http(s) address', headless: 'boolean: no visible window (default: false)' },
     examples: ['browser.open({url:"https://example.com"})'],
-    async run({ url, headless = true }, ctx) {
+    async run({ url, headless = false }, ctx) {
       const session = ctx.session || 'default';
       journal.guard(session, `browser.open:${url}`);
       try {
