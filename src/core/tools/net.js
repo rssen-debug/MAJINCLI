@@ -246,8 +246,26 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
       fsSync.renameSync(tmp, out.abs); /* atomic on same volume: no half frames, no stale receipts */
       const size = fsSync.statSync(out.abs).size;
       if (then === 'describe') {
-        const d = await analyzeImage({ cfg: ctx.cfg, imagePath: out.abs, question: 'What is on screen? Describe windows, text, errors and what may need fixing.' });
-        return { ok: true, result: `${out.abs} (${size} byte)\n\n${d}`, meta: { path: out.abs, validatedPng: true, bytes: size }, summary: 'screenshot + description' };
+        // V4 passes a minimal read-only config facade that may not have a
+        // vision-model resolver. A valid screenshot must not turn into a tool
+        // failure just because optional image understanding isn't configured.
+        if (typeof ctx.cfg?.resolveModel !== 'function') {
+          return {
+            ok: true, result: `${out.abs} (${size} byte) — screenshot captured; image description unavailable (no configured vision model resolver)`,
+            meta: { path: out.abs, validatedPng: true, bytes: size, described: false },
+            summary: 'screenshot saved (visual interpretation unavailable)',
+          };
+        }
+        try {
+          const d = await analyzeImage({ cfg: ctx.cfg, imagePath: out.abs, question: 'What is on screen? Describe windows, text, errors and what may need fixing.' });
+          return { ok: true, result: `${out.abs} (${size} byte)\n\n${d}`, meta: { path: out.abs, validatedPng: true, bytes: size, described: true }, summary: 'screenshot + description' };
+        } catch (error) {
+          return {
+            ok: true, result: `${out.abs} (${size} byte) — screenshot captured; vision analysis failed: ${String(error?.message || error).slice(0,160)}`,
+            meta: { path: out.abs, validatedPng: true, bytes: size, described: false },
+            summary: 'screenshot saved (vision analysis failed)',
+          };
+        }
       }
       return { ok: true, result: `${out.abs} (${size} byte)`, meta: { path: out.abs, validatedPng: true, bytes: size }, summary: `screenshot ${(size / 1024) | 0} kB` };
     },
