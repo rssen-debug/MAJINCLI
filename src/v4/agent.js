@@ -36,6 +36,7 @@ import { publicGoal, newId } from './store.js';
 import { explainModelError } from './model.js';
 import { t } from './ui/strings.js';
 import { hasApprovalContinuation } from './approval-continuation.js';
+import { checkpointForFailure, shouldResume, resumeGuidance } from './goal-supervisor.js';
 
 const SYSTEM_PROMPT = `You are MAJIN, a private assistant running on the owner's own Windows machine.
 You speak in the language the user writes in (Swedish or English) and you are brief.
@@ -806,6 +807,12 @@ export function createAgent({
       return replayOf(conversation.id, prior.messageId, found);
     }
 
+    const resumedCheckpoint = shouldResume(message, conversation.supervisorCheckpoint)
+      ? conversation.supervisorCheckpoint : null;
+    if (!resumedCheckpoint && conversation.supervisorCheckpoint) {
+      conversation.supervisorCheckpoint = null;
+      conversations.save(conversation);
+    }
     conversations.appendMessage(conversation.id, { role: 'user', content: message });
     emit('user', { content: message });
 
@@ -814,12 +821,14 @@ export function createAgent({
     // as a revision of it so history shows one thread instead of orphans.
     const priorGoalId = lastGoal.get(conversation.id) || null;
     const priorGoal = priorGoalId ? goals.get(priorGoalId) : null;
-    const lineage = priorGoal && looksLikeCorrection(message, priorGoal)
-      ? { revisionOf: priorGoal.id, revision: (priorGoal.revision || 0) + 1 }
-      : null;
+    const lineage = resumedCheckpoint
+      ? { revisionOf: resumedCheckpoint.goalId, revision: 1 }
+      : priorGoal && looksLikeCorrection(message, priorGoal)
+        ? { revisionOf: priorGoal.id, revision: (priorGoal.revision || 0) + 1 }
+        : null;
 
     const goal = goals.track(new Goal({
-      objective: message.slice(0, 500),
+      objective: (resumedCheckpoint?.originalObjective || message).slice(0, 500),
       acceptance: [],
       risk: 'low',
       permissions: ['workspace.file:create', 'workspace.file:read', 'memory.preference:write'],
@@ -867,6 +876,10 @@ export function createAgent({
     };
     const packed = historyFor(conversations.get(conversation.id), message, learnedForTurn);
     const modelMessages = packed.messages;
+    if (resumedCheckpoint && modelMessages[0]?.role === 'system') {
+      modelMessages[0].content += '\n\n' + resumeGuidance(resumedCheckpoint);
+      emit('recovery', { action: 'resume_saved_goal', attempt: 1, failureClass: resumedCheckpoint.failureClass, advice: [] });
+    }
     if (voiceTurn && modelMessages[0]?.role === 'system') {
       modelMessages[0].content += '\nThis is a spoken conversation. Reply in the language the user just spoke. Usually use one short natural sentence, around 20 words, unless the task needs detail. Do not recite capabilities or menus. Keep all tool and verification rules.';
     }
@@ -1084,6 +1097,10 @@ export function createAgent({
 
       goal.complete();
       goals.save(goal);
+      if (conversation.supervisorCheckpoint) {
+        conversation.supervisorCheckpoint = null;
+        conversations.save(conversation);
+      }
 
       /**
        * EXTRACT SKILL → STORE.
@@ -1183,6 +1200,14 @@ export function createAgent({
         record('task.result', { action: 'learning:failure-error', result: 'failure', errorCls: 'UNKNOWN', taskId: String(err?.message || err).slice(0, 60) });
       }
 
+      if (!aborted) {
+        conversation.supervisorCheckpoint = checkpointForFailure({
+          objective: goal.objective, goalId: goal.id, trace: turn?.trace || [],
+          code: err?.cls || err?.code || 'UNKNOWN',
+        });
+        conversations.save(conversation);
+        emit('recovery', { action: 'checkpoint_saved', failureClass: conversation.supervisorCheckpoint.failureClass, attempt: 1, advice: [] });
+      }
       const note = aborted
         ? t('msg.cancelled')
         : t('agent.failed', { reason });
