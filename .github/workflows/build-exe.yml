@@ -23,6 +23,12 @@ on:
         type: boolean
         default: true
 
+# A newer push to the same branch supersedes an older build instead of queueing
+# behind it. Present on main, missing from v4/main; the V1 test asserts it.
+concurrency:
+  group: build-exe-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: write
   issues: write
