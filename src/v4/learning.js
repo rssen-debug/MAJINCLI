@@ -105,12 +105,29 @@ const PERSONAL_PATHS = [
   /\/home\/[^/\s]+\/[^\s]*/g,
 ];
 
+/**
+ * A URL in free text carries the whole path and query — account ids, names,
+ * search terms, document numbers. The origin is stored deliberately in the
+ * skill's `external` block; the rest must not become prose in a universal
+ * instruction.
+ */
+const URL_IN_TEXT = /\bhttps?:\/\/[^\s)>"']+/g;
+
 /** CSS/framework selectors are exactly the kind of brittle detail we refuse. */
 const SELECTOR_PATTERNS = [
   /#[\w-]+(?:\s*[>+~]?\s*\.[\w-]+)+/g,
   /(?:\.[\w-]+){2,}\s*>\s*[^\s,;]+/g,
   /:nth-(?:child|of-type)\([^)]*\)/g,
-  /\b(?:div|span|section|article|form|input|button|a)(?:\.[\w-]+|#[\w-]+)+(?:\s*>\s*[^\s,;]+)*/g,
+  /\b(?:div|span|section|article|form|input|button|select|textarea|label|a)(?:\.[\w-]+|#[\w-]+)+(?:\s*>\s*[^\s,;]+)*/g,
+  // A bare id or class is just as fragile as a compound one, and the first
+  // version only caught selectors that had a second part. Kept narrow so ordinary
+  // prose survives: an id needs two characters and a word boundary, which leaves
+  // "C#", "#1" and "t.ex." alone.
+  /(?<![\w#])(?:#[A-Za-z][\w-]{1,})(?![\w-])/g,
+  /(?<![\w.])(?:\.[A-Za-z][\w-]*[A-Za-z0-9])(?=[\s,.;:]|$)/g,
+  // An attribute selector carries the field name, which is often the data itself
+  // (input[name="personnummer"]).
+  /\b[A-Za-z][\w-]*\[[^\]\n]{0,80}\]/g,
 ];
 
 /**
@@ -122,24 +139,29 @@ const SELECTOR_PATTERNS = [
 export function sanitizeInstruction(text, { maxChars = 600 } = {}) {
   let out = String(text ?? '');
   const redactions = [];
-  for (const p of SECRET_PATTERNS) {
-    out = out.replace(p, () => {
-      redactions.push('secret');
-      return '[redacted]';
-    });
-  }
-  for (const p of PERSONAL_PATHS) {
-    out = out.replace(p, () => {
-      redactions.push('personal-path');
-      return '[path]';
-    });
-  }
-  for (const p of SELECTOR_PATTERNS) {
-    out = out.replace(p, () => {
-      redactions.push('selector');
-      return '[element by role/label]';
-    });
-  }
+
+  /**
+   * Each match is swapped for an inert token before the next pattern runs.
+   *
+   * The first version replaced matches with prose ("[element by role/label]"),
+   * and a later pattern then matched parts of that replacement — producing
+   * "…[element by role/label] by role/label]" from one selector. The token
+   * contains no characters any pattern can match, so the passes cannot interfere.
+   */
+  const TOKEN = '\u0001';
+  const slots = [];
+  const stash = (kind, replacement) => {
+    redactions.push(kind);
+    slots.push(replacement);
+    return `${TOKEN}${slots.length - 1}${TOKEN}`;
+  };
+
+  for (const p of SECRET_PATTERNS) out = out.replace(p, () => stash('secret', '[redacted]'));
+  for (const p of PERSONAL_PATHS) out = out.replace(p, () => stash('personal-path', '[path]'));
+  out = out.replace(URL_IN_TEXT, () => stash('url', '[url]'));
+  for (const p of SELECTOR_PATTERNS) out = out.replace(p, () => stash('selector', '[element by role/label]'));
+
+  out = out.replace(new RegExp(`${TOKEN}(\\d+)${TOKEN}`, 'g'), (_, i) => slots[Number(i)] ?? '');
   out = out.replace(/\s+/g, ' ').trim().slice(0, maxChars);
   return { text: out, redactions: [...new Set(redactions)] };
 }
@@ -369,13 +391,26 @@ export function extractCandidate({
   }));
 
   const verificationMethod = describeVerification(verified);
-  const title = sanitizeInstruction(String(goal.objective || '').slice(0, 70)).text || 'Learned procedure';
+
+  /**
+   * The title and the stored example describe the SHAPE of the work, not the
+   * owner's sentence.
+   *
+   * The first version stored a truncated quote of the goal. A test with a form
+   * goal showed what that meant: "Fyll i formuläret på https://…/ansokan med
+   * Anders" became a permanent, prompt-injected record of a person and a page.
+   * A regex cannot tell that "Anders" is a name, so the principled fix is not a
+   * better regex — it is to stop storing prose that came from the owner at all.
+   * The keywords remain, because they are the retrieval index and are never
+   * rendered; everything the model reads is structural.
+   */
+  const title = describeShape({ category: lanes[0] || 'task', tools, verified: verified.length });
 
   const candidate = {
       schema: SKILL_SCHEMA,
       name,
       title,
-      summary: sanitizeInstruction(String(goal.objective || '').slice(0, 160)).text,
+      summary: title,
       requires,
       tools,
       prefers: [],
@@ -393,7 +428,9 @@ export function extractCandidate({
         ],
         procedure,
         example: {
-          goal: sanitizeInstruction(goal.objective).text,
+          // Structure only: which tools ran, with which argument names. The
+          // owner's sentence is not stored anywhere the model can read.
+          goal: `A ${category} task completed with ${verified.length} verified receipt(s).`,
           steps: successful.slice(0, limits.maxProcedureSteps).map((s) => ({
             tool: s.name,
             args: s.argsShape || null,
@@ -423,6 +460,13 @@ export function extractCandidate({
   candidate.learned.revisions = [];
   candidate.learned.integrity = skillIntegrity(candidate);
   return { ok: true, candidate };
+}
+
+/** A legible, structure-derived name for a procedure. No owner text. */
+export function describeShape({ category = 'task', tools = [], verified = 0 } = {}) {
+  const shape = tools.slice(0, 3).join(' → ');
+  const more = tools.length > 3 ? ` +${tools.length - 3}` : '';
+  return `${category}: ${shape}${more}${verified ? ` · ${verified} verified` : ''}`.slice(0, 80);
 }
 
 function describeVerification(verified) {

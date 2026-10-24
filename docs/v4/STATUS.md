@@ -347,6 +347,39 @@ och `POST /api/learning/revalidate` kontrollerar dem:
 Bevisat mot en **riktig lokal HTTP-server** som byter innehåll mellan körningarna
 (`test/v4/revalidate-external.test.js`, 6 tester), inklusive att bara origin lagras.
 
+## 2026-10-24 (forts. 7) — inlärning från browser och formulär, och tre riktiga hål
+
+Specen listar *"Browser interaction strategies"* och *"Form handling"* bland det
+självförbättringen ska täcka. Ingenting testade det — den enda browser-relaterade
+kontrollen var att saniteringen rensar en selektor ur lös text. Nu finns
+`test/v4/learning-browser.test.js` (6 tester) som kör inlärningsmotorn på en
+realistisk formulärtransaktion.
+
+**Tre riktiga fel som det avslöjade:**
+
+1. **Ägarens mening lagrades ordagrant.** `title`, `summary` och `example.goal`
+   innehöll hela goal-texten. Med ett formulärmål blev det en permanent,
+   prompt-injicerad post av en namngiven person och en sidsökväg
+   (*"Fyll i formuläret på /ansokan med Anders"*). Ett regex kan inte avgöra att
+   "Anders" är ett namn, så rätt fix är inte ett bättre regex — det är att sluta
+   lagra ägarens prosa i det modellen läser. Titlar härleds nu ur struktur
+   (`web: browser_open → browser_form_fill · 1 verified`), URL:er i text blir
+   `[url]`, och exemplet beskriver formen, inte meningen.
+
+2. **Ensam `#submit` överlevde.** Selektormönstren krävde en andra del
+   (`.klass` efter `#id`), så en naken id eller klass — precis en skör selektor —
+   gick igenom. Tillagt, medvetet smalt: `C#`, `3.5`, `t.ex.` och `rapport.txt`
+   lämnas i fred.
+
+3. **Ersättningstexten bearbetades igen.** `form.ansokan > div:nth-child(3)`
+   blev `[element by role/label] by role/label]` eftersom ett senare mönster
+   matchade den text det första mönstret just skrivit. Saniteringen är nu en säker
+   enkelpassning via en inert token.
+
+**Gränsen, uttalad:** sökindexet (`keywords`) behåller ämnets ord — det är vad som
+gör att en besläktad framtida uppgift hittar proceduren — men det renderas aldrig
+till modellen. Ingenting modellen läser bär ägarens text.
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är
