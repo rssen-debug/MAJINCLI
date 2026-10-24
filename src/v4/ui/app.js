@@ -78,6 +78,7 @@ const els = {
   newChat: $('#new-chat'),
   logout: $('#logout'),
   historyBtn: $('#history-btn'),
+  historySettings: $('#history-settings'),
   history: $('#history'),
   historyBackdrop: $('#history-backdrop'),
   historyClose: $('#history-close'),
@@ -2021,6 +2022,12 @@ function bindEvents() {
     els.input.focus();
   });
   els.historyBtn.addEventListener('click', openHistory);
+  els.historySettings.addEventListener('click', () => {
+    closeHistory();
+    openSheet();
+    els.approvalAuto.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    els.approvalAuto.focus({ preventScroll: true });
+  });
   els.historyClose.addEventListener('click', closeHistory);
   els.historyBackdrop.addEventListener('click', closeHistory);
   els.historyTabActive.addEventListener('click', () => {
