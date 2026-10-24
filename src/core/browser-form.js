@@ -12,15 +12,19 @@ export const FORM_SNAPSHOT_JS = String.raw`(() => {
   if(fields.length+buttons.length>=100)break;
   const type=String(el.type||el.getAttribute('role')||el.tagName).toLowerCase();
   if(type==='hidden'||el.disabled||el.readOnly)continue;
-  if(!visible(el)&&!(type==='file'&&Array.from(el.labels||[]).some(visible)))continue;
+  const labelTarget=['file','radio','checkbox'].includes(type)?Array.from(el.labels||[]).find(visible):null;
+  if(!visible(el)&&!labelTarget)continue;
   let ref=el.getAttribute('data-majin-form-ref');if(!/^f[1-9][0-9]*$/.test(ref||'')){ref='f'+(++next);el.setAttribute('data-majin-form-ref',ref)}
   const selector='[data-majin-form-ref="'+ref+'"]';
+  if(labelTarget)labelTarget.setAttribute('data-majin-form-click-ref',ref);
+  const clickSelector=!visible(el)&&labelTarget?'[data-majin-form-click-ref="'+ref+'"]':selector;
   if(el.tagName==='BUTTON'||['submit','button','reset'].includes(type)||el.getAttribute('role')==='button'){
    buttons.push({ref,selector,label:norm(el.innerText||el.getAttribute('aria-label')||el.value),type,submit:type==='submit',form:el.form?.id||''});continue;
   }
   const v=el.validity;
   fields.push({ref,selector,label:label(el),type,tag:el.tagName.toLowerCase(),name:norm(el.name),form:el.form?.id||'',
-   ...(type==='radio'?{option:norm(el.closest('label')?.textContent)||norm(el.value),group:norm(el.name),value:norm(el.value)}:{}),
+   ...(type==='radio'?{option:norm(el.closest('label')?.textContent)||norm(labelTarget?.textContent)||norm(el.value),group:norm(el.name),value:norm(el.value)}:{}),
+   ...(['radio','checkbox'].includes(type)?{clickSelector}:{}),
    required:Boolean(el.required),filled:type==='file'?Boolean(el.files?.length):['checkbox','radio'].includes(type)?Boolean(el.checked):Boolean(el.value),
    problems:v?['valueMissing','typeMismatch','patternMismatch','rangeUnderflow','rangeOverflow','stepMismatch','badInput','customError','tooShort','tooLong'].filter(k=>v[k]):[],
    ...(el.tagName==='SELECT'?{options:Array.from(el.options).filter(o=>!o.disabled&&!o.parentElement?.disabled).slice(0,30).map(o=>norm(o.label))}:{}),
@@ -89,7 +93,7 @@ export async function fillForm({browser,session,values,run,signal}){
    const desired=radioGroup||value===true||value==='true';
    if(f.type==='radio'&&!desired)return fail('radio_value','Select the desired radio option; do not clear a radio directly.');
    if(f.filled===desired)outcome={ok:true};
-   else outcome=await run('browser.click',{selector:f.selector});
+   else outcome=await run('browser.click',{selector:f.clickSelector||f.selector});
    if(outcome.ok){const checked=await browser.eval(`Boolean(document.querySelector(${JSON.stringify(f.selector)})?.checked)`);if(checked!==desired)outcome={ok:false,error:{code:'checked_reverted',message:'Checked state did not persist; re-observe.'}};}
   }else if(f.type==='file')outcome=await run('browser.upload',{selector:f.selector,path:String(value)});
   else{
