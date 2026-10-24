@@ -314,7 +314,19 @@ async function openForOnce({ session, url = null, headless = true, cfgGet = null
   signal?.addEventListener('abort',onAbort,{once:true});
   try {
   signal?.throwIfAborted();
-  const bin = exe || findBrowser();
+  // If the preferred browser is blocked by policy, try a DISTINCT installed
+  // browser (Edge vs Chrome) once. Never retry the same visible executable
+  // repeatedly: this caused the reported blank-tab storms.
+  const candidates = exe ? [exe] : browserCandidates().filter(candidate => fs.existsSync(candidate));
+  // Different install locations of msedge.exe are not separate fallbacks.
+  const families = new Set();
+  const binaries = candidates.filter(candidate => {
+    const family = path.basename(candidate).toLowerCase();
+    if (families.has(family)) return false;
+    families.add(family);
+    return true;
+  });
+  const bin = binaries[0] || null;
   if (!bin) {
     thePool.release(session);
     throw new Error('found no Chrome or Edge on this machine — install one of them and MAJIN can drive it');
@@ -323,7 +335,7 @@ async function openForOnce({ session, url = null, headless = true, cfgGet = null
   // owned by a zombie Chrome triggers Windows single-instance handoff instead
   // of starting a new CDP port. In-memory sessions still reuse their tab.
   fs.mkdirSync(dirs.cache, { recursive: true });
-  const profile = fs.mkdtempSync(path.join(dirs.cache, 'browser-run-'));
+  let profile = fs.mkdtempSync(path.join(dirs.cache, 'browser-run-'));
   let version = null;
   let lastErr = null;
   /* Del 5ABE flake-hardening (CI evidence: runs 39261715303 + 39265517682):
@@ -335,10 +347,14 @@ async function openForOnce({ session, url = null, headless = true, cfgGet = null
   // the command to that process and exit. Retrying spawns blank tabs in the
   // existing window instead of creating a CDP endpoint. Only headless CI
   // launches may take the second bounded startup attempt.
-  const maxLaunchAttempts = headless === false ? 1 : 2;
+  const maxLaunchAttempts = binaries.length > 1 ? 2 : headless === false ? 1 : 2;
   for (let attempt = 1; attempt <= maxLaunchAttempts && !version; attempt++) {
     signal?.throwIfAborted();
     if (proc && !proc.killed) { try { proc.kill(); } catch { /* gone */ } }
+    if (attempt > 1) {
+      // Never attach a second browser binary to the prior process's profile.
+      profile = fs.mkdtempSync(path.join(dirs.cache, 'browser-run-'));
+    }
     const port = randomPort();
     const args = [
       `--remote-debugging-port=${port}`,
@@ -349,7 +365,8 @@ async function openForOnce({ session, url = null, headless = true, cfgGet = null
     // Never pass about:blank as a launch URL. With a locked/active Chrome
     // profile Windows forwards that argument to the existing instance,
     // creating one extra blank tab on EVERY failed attempt.
-    proc = spawn(bin, args, { detached: false, stdio: 'ignore' });
+    const launchBin = binaries[Math.min(attempt - 1, binaries.length - 1)];
+    proc = spawn(launchBin, args, { detached: false, stdio: 'ignore' });
     let spawnError = null;
     proc.once('error',error=>{spawnError=error;});
     const base = `http://127.0.0.1:${port}`;
@@ -361,7 +378,10 @@ async function openForOnce({ session, url = null, headless = true, cfgGet = null
       // the child (single-instance handoff). Do not launch again against the
       // same profile; the original instance is not ours to kill.
       if (proc.exitCode !== null || proc.signalCode !== null) {
-        throw new Error('Chrome exited before opening its debugging port. The MAJIN browser profile may already be in use. Close MAJIN-owned Chrome windows and retry; your normal Chrome is untouched.');
+        // A real process failure is evidence to try the OTHER browser, not
+        // evidence that the user needs to open Chrome or enter CLI flags.
+        if (attempt < maxLaunchAttempts) break;
+        throw new Error('Chrome/Edge exited before CDP was available; both available launch strategies failed.');
       }
       try {
         version = await httpJson(`${base}/json/version`, { timeoutMs: 1200, signal });

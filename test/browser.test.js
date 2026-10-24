@@ -303,7 +303,7 @@ test('V4 Chrome launch gets its own bounded startup timeout, ordinary tools unch
 test('visible Chrome startup cannot forward about:blank into an existing profile repeatedly', async () => {
   const src = (await import('node:fs')).readFileSync(new URL('../src/core/browser.js', import.meta.url), 'utf8');
   assert.doesNotMatch(src, /args\.push\('about:blank'\)/, 'explicit blank URL creates tabs through Chrome single-instance handoff');
-  assert.match(src, /maxLaunchAttempts = headless === false \? 1 : 2/, 'visible browser gets one attempt only');
+  assert.match(src, /maxLaunchAttempts = binaries.length > 1 \? 2 : headless === false \? 1 : 2/, 'visible browser tries only distinct installed browser families');
   assert.match(src, /proc\.exitCode !== null \|\| proc\.signalCode !== null/, 'detect early child exit rather than retrying a locked profile');
   assert.match(src, /profile may already be in use/, 'explain profile lock, never blame the form');
   assert.match(src, /--remote-debugging-port=\$\{port\}/, 'retain MAJIN-owned CDP control');
@@ -330,4 +330,15 @@ test('MAJIN Chrome browser requires exclusive ephemeral profile and single-fligh
  assert.match(src,/launches\.set\(session, launching\)/);
  assert.match(src,/failedLaunches\.set\(session, Date\.now\(\) \+ BROWSER_START_COOLDOWN_MS\)/);
  assert.doesNotMatch(src,/const profile = profileFor\(\x60\$\{session\}-s\$\{slot\}\x60\)/);
+});
+
+test('visible browser is the default and Chrome flags are never exposed as shell instructions', async () => {
+ const fs = await import('node:fs');
+ const web = fs.readFileSync(new URL('../src/core/tools/web.js', import.meta.url), 'utf8');
+ const browser = fs.readFileSync(new URL('../src/core/browser.js', import.meta.url), 'utf8');
+ assert.match(web, /async run\(\{ url, headless = false \}, ctx\)/);
+ assert.match(web, /NEVER invoke --remote-debugging-port/);
+ assert.match(browser, /const families = new Set\(\)/);
+ assert.match(browser, /profile = fs\.mkdtempSync/);
+ assert.match(browser, /const launchBin = binaries\[Math\.min\(attempt - 1, binaries\.length - 1\)\]/);
 });
