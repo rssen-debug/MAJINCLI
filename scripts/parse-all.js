@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const only = process.argv[2] ? path.resolve(root, process.argv[2]) : root;
-const skip = new Set(['node_modules', '.git', '.majin', 'data', 'dist', 'build', 'coverage', '.cache']);
+const skip = new Set(['node_modules', '.git', '.majin', 'data', 'dist', 'build', 'coverage', '.cache', 'stage']);
 
 const files = [];
 walk(only);

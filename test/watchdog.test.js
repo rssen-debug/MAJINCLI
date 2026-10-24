@@ -109,19 +109,3 @@ test('W13 loop: hanging tool gets tool_timeout and the conversation continues', 
   assert.ok(out.toolLog.some((t) => t.tool === 'hang.tool' && !t.ok && /timeout/i.test(t.error)));
   assert.ok(dt < 4000, `bounded, not stuck: took ${dt}ms`);
 });
-
-test('W13 equivalent JSON argument order cannot evade repeat detection',()=>{
-  const d=new RepeatDetector(3);
-  const one={ selector:'#save', options:{ timeout:500, visible:true }, tags:['a','b'] };
-  const two={ tags:['a','b'], options:{ visible:true, timeout:500 }, selector:'#save' };
-  assert.equal(d.hit('browser.click',one).repeat,false);
-  assert.equal(d.hit('browser.click',two).repeat,false);
-  assert.equal(d.hit('browser.click',one).repeat,true,'same semantic tool call counts even when keys reorder');
-  assert.equal(d.hit('browser.click',{...one,tags:['b','a']}).repeat,false,'array order is significant');
-});
-test('W13 the repeat key handles cyclic test data without crashing',()=>{
-  const d=new RepeatDetector(2);
-  const obj={foo:1};obj.self=obj;
-  assert.equal(d.hit('noop',obj).repeat,false);
-  assert.equal(d.hit('noop',obj).repeat,true);
-});

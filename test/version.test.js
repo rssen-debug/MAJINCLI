@@ -18,7 +18,11 @@ const pkg = JSON.parse(read('package.json'));
 
 test('one version literal, and package.json agrees with it', () => {
   assert.equal(VERSION, pkg.version, 'src/core/version.js and package.json must say the same thing');
-  assert.match(VERSION, /^\d+\.\d+\.\d+$/, 'plain semver, because the updater compares these as numbers');
+  // V2 channel policy: stable releases stay plain x.y.z; prerelease builds identify as
+  // x.y.z-alpha / -beta / -rc / -nightly (optionally .N). The updater compares these
+  // prerelease-aware via update.js compareVersions(), so praise-catching regex must allow the suffix.
+  assert.match(VERSION, /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc|nightly)(?:\.\d+)?)?$/,
+    'semver optional V2 channel suffix, as compareVersions() understands it');
   const src = read('src/core/version.js');
   assert.match(src, new RegExp("export const VERSION = '" + VERSION + "'"), 'the literal lives in exactly one file');
   // and nowhere else as a hardcoded string
@@ -27,7 +31,7 @@ test('one version literal, and package.json agrees with it', () => {
     for (const ent of fs.readdirSync(path.join(root, dir), { recursive: true, encoding: 'utf8' })) {
       if (!/\.(js|mjs)$/.test(ent) || ent.includes('node_modules') || ent.replace(/\\/g, '/') === 'core/version.js') continue;
       const body = read(dir, ent);
-      if (/VERSION\s*=\s*['"]\d+\.\d+\.\d+['"]/.test(body) || /version:\s*['"]\d+\.\d+\.\d+['"]/.test(body)) hardcoded.push(ent);
+      if (/VERSION\s*=\s*['"]\d+\.\d+\.\d+(?:-[\w.]+)?['"]/.test(body) || /version:\s*['"]\d+\.\d+\.\d+(?:-[\w.]+)?['"]/.test(body)) hardcoded.push(ent);
     }
   }
   assert.deepEqual(hardcoded, [], 'these files invent their own version instead of importing it: ' + hardcoded.join(', '));
@@ -48,9 +52,17 @@ test('a freshly installed MAJIN never reports an update', () => {
   assert.equal(U.notice({ latest: VERSION }, VERSION), '', 'the version it shipped as is not an update');
   assert.equal(U.notice({ latest: 'v' + VERSION }, VERSION), '', 'with or without the tag prefix');
   const pub = read('scripts', 'publish.ps1');
-  const dv = pub.match(/\[string\]\$Version\s*=\s*'([\d.]+)'/);
+  const dv = pub.match(/\[string\]\$Version\s*=\s*'([\w.-]+)'/);
   assert.ok(dv, 'publish.ps1 has a default version');
   assert.equal(dv[1], VERSION, 'and publishing that default does not put the app behind its own release');
+  // V2 channel ordering pinned (release gates depend on it): alpha < beta < rc < stable
+  assert.ok(U.compareVersions('2.0.0-alpha', '2.0.0-beta') < 0);
+  assert.ok(U.compareVersions('2.0.0-beta', '2.0.0-rc.1') < 0);
+  assert.ok(U.compareVersions('2.0.0-rc.1', '2.0.0') < 0);
+  assert.ok(U.compareVersions('2.0.0-alpha', '2.0.0-alpha') === 0);
+  assert.ok(U.compareVersions('2.0.0', '2.0.1-beta') < 0);
+  // and a V2 prerelease must NEVER prompt a downgrade to the latest V1 stable
+  assert.equal(U.notice({ latest: 'v1.0.9' }, VERSION), '', 'V1 tags are older than 2.0.0-alpha, never an update');
 });
 
 test('majin --version answers with it', () => {

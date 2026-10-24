@@ -18,6 +18,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { bus as globalBus } from './log.js';
 import { CHANNELS_OUT } from './channels/send.js';
+import { protectAuditFile } from '../v2/audit/permissions.js';
 
 export const VERSION = 'majin-heartbeat/1';
 
@@ -38,21 +39,33 @@ export class Heartbeat {
     cap = 50,
     now = () => Date.now(),
     quietPatterns = DEFAULT_WATCH,
+    deliverFn = null,
   } = {}) {
     this.ws = workspaceDir;
     this.cfg = cfg;
     this.bus = bus;
     this.fetchFn = fetchFn;
+    this.deliverFn = deliverFn;
     this.tickMs = tickMs;
     this.minGapMs = minGapMs;
     this.cap = cap;
     this.now = now;
     this.queue = [];           /* pending event digests */
     this.seen = new Map();     /* dedupe: key -> at */
-    this.lastSentAt = 0;
+    this.lastSentAt = null;
     this.off = [];
     this.timer = null;
     this._patterns = quietPatterns;
+    this.lastError=null;this.deliveryFailures=0;this.deliveryPaused=false;this.busy=false;
+    try{
+      const state=JSON.parse(fs.readFileSync(this.statePath(),'utf8'));
+      if(state.queue!==undefined){
+        if(!Array.isArray(state.queue)||state.queue.length>cap||!Array.isArray(state.seen)||state.seen.length>500||!state.queue.every(e=>typeof e.id==='string'&&typeof e.event==='string')||!state.seen.every(e=>Array.isArray(e)&&typeof e[0]==='string'&&Number.isFinite(e[1])))throw Error('Invalid durable heartbeat state');
+        this.queue=state.queue;this.seen=new Map(state.seen);
+        if(state.lastSentAt!==null&&!Number.isFinite(state.lastSentAt))throw Error('Invalid heartbeat delivery clock');
+        this.lastSentAt=state.lastSentAt;this.deliveryFailures=Number(state.deliveryFailures)||0;this.deliveryPaused=state.deliveryPaused===true;
+      }
+    }catch(error){if(error.code!=='ENOENT')throw error;}
   }
 
   dir() { return path.join(this.ws, 'heartbeats'); }
@@ -61,8 +74,8 @@ export class Heartbeat {
 
   matches(pattern, event) {
     if (!pattern) return false;
-    if (pattern.endsWith('*')) return event.startsWith(pattern.slice(0, -1));
-    return event === pattern;
+    const escaped=String(pattern).split('*').map(part=>part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('.*');
+    return new RegExp('^'+escaped+'$').test(event);
   }
 
   start() {
@@ -101,14 +114,17 @@ export class Heartbeat {
       delete stable.ts;
       delete stable.timestamp;
     }
-    const key = `${pattern}:${JSON.stringify(stable ?? {}).slice(0, 160)}`;
+    if(stable&&typeof stable==='object'){if(typeof stable.seq==='number'&&stable.id===stable.seq)delete stable.id;delete stable.seq;}
+    const detail=stable&&typeof stable==='object'?Object.fromEntries(Object.entries(stable).sort(([a],[b])=>a.localeCompare(b)).slice(0,20).map(([k,v])=>[k,typeof v==='string'?v.slice(0,512):typeof v==='number'||typeof v==='boolean'||v===null?v:'[structured detail omitted]'])):String(stable??'').slice(0,512);
+    const key = `${pattern}:${JSON.stringify(detail)}`;
     const hash = crypto.createHash('sha256').update(key).digest('hex').slice(0, 16);
-    const prevAt = this.seen.get(hash) || 0;
-    if (prevAt !== 0 && this.now() - prevAt < this.minGapMs) return false; /* prevAt===0 = never seen before — first sighting always counts */
+    const prevAt = this.seen.get(hash);
+    if (prevAt !== undefined && this.now() - prevAt < this.minGapMs) return false;
     this.seen.set(hash, this.now());
     if (this.seen.size > 500) { const first = this.seen.keys().next().value; if (first) this.seen.delete(first); }
-    this.queue.push({ at: new Date(this.now()).toISOString(), event: pattern, detail: ev ?? {} });
+    this.queue.push({id:crypto.randomUUID(),at:new Date(this.now()).toISOString(),event:String(pattern).slice(0,120),detail});
     if (this.queue.length > this.cap) this.queue = this.queue.slice(-this.cap);
+    this.saveState();
     return true;
   }
 
@@ -123,7 +139,7 @@ export class Heartbeat {
     return `MAJIN heartbeat: ${entries.length} notable event(s) since last check-in\n${lines.join('\n')}${more}`;
   }
 
-  async deliver(text, { dryRun = false } = {}) {
+  async deliver(text, { dryRun = false, digestId = null, entries = [] } = {}) {
     const targets = (() => {
       const out = [];
       const outPref = this.cfg?.get?.('heartbeat.channels');
@@ -133,6 +149,7 @@ export class Heartbeat {
       return out;
     })();
     if (dryRun) return { ok: true, dryRun: true, targets, text: String(text).slice(0, 600) };
+    if(this.deliverFn)return this.deliverFn(text,{digestId,entries});
     if (!targets.length) {
       /* Honest: no channel configured = desktop-only via bus stream. */
       this.bus.info('heartbeat.alert', { channels: 'desktop-only', textLength: String(text).length });
@@ -153,29 +170,54 @@ export class Heartbeat {
 
   persist(entry) {
     try {
-      fs.mkdirSync(this.dir(), { recursive: true });
-      fs.appendFileSync(this.logPath(), JSON.stringify(entry) + '\n');
-      fs.writeFileSync(this.statePath(), JSON.stringify({ lastAt: entry.at, queued: this.queue.length, version: VERSION }, null, 2));
-    } catch { /* filesystem hiccup never crashes the watcher */ }
+      this.saveState(entry.at);
+      fs.appendFileSync(this.logPath(),JSON.stringify(entry)+'\n',{mode:0o600});
+    }catch(error){this.lastError='Heartbeat persistence failed; queued state may be incomplete.';throw error;}
+  }
+
+  saveState(lastAt=new Date(this.now()).toISOString()){
+    const temporary=this.statePath()+'.'+crypto.randomUUID()+'.tmp';
+    try{
+      fs.mkdirSync(this.dir(),{recursive:true,mode:0o700});
+      if(!this.privateReady){protectAuditFile(this.dir());this.privateReady=true;}
+      const fd=fs.openSync(temporary,'wx',0o600);
+      try{fs.writeFileSync(fd,JSON.stringify({version:VERSION,lastAt,queue:this.queue,queued:this.queue.length,seen:[...this.seen],lastSentAt:this.lastSentAt,deliveryFailures:this.deliveryFailures,deliveryPaused:this.deliveryPaused}));fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+      fs.renameSync(temporary,this.statePath());this.lastError=null;
+    }catch(error){this.lastError='Heartbeat persistence failed; queued state may be incomplete.';throw error;}
+    finally{try{fs.unlinkSync(temporary);}catch(error){if(error.code!=='ENOENT')this.lastError='Heartbeat temporary-state cleanup failed.';}}
+  }
+
+  resume(){this.deliveryPaused=false;this.deliveryFailures=0;this.saveState();return this.start();}
+  discard(predicate){const kept=this.queue.filter(entry=>!predicate(entry));if(kept.length!==this.queue.length){this.queue=kept;this.saveState();}}
+
+  async tick(options={}){
+    if(this.busy)return {ok:true,sent:false,reason:'digest delivery already running'};
+    this.busy=true;
+    try{return await this.tickOnce(options);}finally{this.busy=false;}
   }
 
   /* One tick = check rate + newer entries; send if anything real accumulated. */
-  async tick({ force = false, dryRun = false } = {}) {
-    const since = this.queue;
-    this.queue = [];
+  async tickOnce({ force = false, dryRun = false } = {}) {
+    const since = [...this.queue];
+    if(dryRun){const text=this.digestText(since);return {ok:true,sent:false,dryRun:true,text,count:since.length,delivery:await this.deliver(text,{dryRun:true})};}
+    if(this.deliveryPaused)return {ok:false,sent:false,reason:'delivery paused after three failures; explicit resume required',held:since.length};
     if (!since.length) {
       const quiet = { ok: true, sent: false, reason: 'nothing real accumulated — silence is the default' };
       this.persist({ at: new Date(this.now()).toISOString(), tick: true, sent: false });
       return quiet;
     }
-    const gap = this.now() - this.lastSentAt;
-    if (!force && gap < this.minGapMs) {
+    const gap = this.now() - (this.lastSentAt??0);
+    if (!force && this.lastSentAt!==null && gap < this.minGapMs) {
       const held = { ok: true, sent: false, reason: `rate-limited, ${Math.round((this.minGapMs - gap) / 1000)}s left of the mandatory quiet`, held: since.length };
       this.persist({ at: new Date(this.now()).toISOString(), tick: true, sent: false, held: since.length });
       return held;
     }
     const text = this.digestText(since);
-    const delivery = await this.deliver(text, { dryRun });
+    const digestId=crypto.createHash('sha256').update(JSON.stringify(since)).digest('hex');
+    let delivery;
+    try{delivery=await this.deliver(text,{digestId,entries:since});}catch{delivery={ok:false,channels:'failed'};}
+    if(!delivery?.ok){this.deliveryFailures++;if(this.deliveryFailures>=3)this.deliveryPaused=true;this.persist({at:new Date(this.now()).toISOString(),tick:true,sent:false,count:since.length,delivery:{ok:false}});return {ok:false,sent:false,text,delivery,count:since.length};}
+    const delivered=new Set(since.map(e=>e.id));this.queue=this.queue.filter(e=>!delivered.has(e.id));this.deliveryFailures=0;
     this.lastSentAt = this.now();
     this.persist({ at: new Date(this.now()).toISOString(), tick: true, sent: true, count: since.length, delivery: { ok: delivery.ok, channels: delivery.channels } });
     return { ok: true, sent: true, text, delivery, count: since.length };
@@ -193,6 +235,7 @@ export class Heartbeat {
       watch: this._patterns,
       persisted: state,
       version: VERSION,
+      deliveryPaused:this.deliveryPaused,deliveryFailures:this.deliveryFailures,lastError:this.lastError,
     };
   }
 }

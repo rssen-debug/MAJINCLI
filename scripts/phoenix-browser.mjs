@@ -28,7 +28,7 @@ try {
   // Regression for the real Windows titlebar/taskbar icon mismatch: Chromium
   // --app uses the page favicon, not the icon embedded in MAJIN-Setup.exe.
   const iconUrl = await page.locator('link[rel="icon"]').getAttribute('href');
-  assert.match(iconUrl, /^\/logo\.png\?v=\d+\.\d+\.\d+$/, 'versioned favicon defeats stale Edge taskbar cache');
+  assert.match(iconUrl, /^\/logo\.png\?v=\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, 'versioned favicon defeats stale Edge taskbar cache');
   const logoResponse = await page.request.get(`http://127.0.0.1:${port}/logo.png?t=${token}`);
   assert.equal(logoResponse.status(), 200, 'pink MAJIN logo served to the app window');
   assert.equal(logoResponse.headers()['content-type'], 'image/png');

@@ -38,9 +38,9 @@ Say "MAJIN live acceptance run $stamp on $env:COMPUTERNAME"
 $nodeOk = $false
 try {
   $nv = (node --version).TrimStart('v') -split '\.' 2>$null
-  $nodeOk = ($null -ne $nv) -and ($nv.Count -gt 0) -and ([int]$nv[0] -ge 20)
+  $nodeOk = ($null -ne $nv) -and ($nv.Count -gt 0) -and ([int]$nv[0] -ge 22)
 } catch { $nodeOk = $false }
-if (-not $nodeOk) { Say "FATAL: Node 20+ required (found node? $($null -ne (Get-Command node -ErrorAction SilentlyContinue)))"; Pop-Location; exit 1 }
+if (-not $nodeOk) { Say "FATAL: Node 22+ required (found node? $($null -ne (Get-Command node -ErrorAction SilentlyContinue)))"; Pop-Location; exit 1 }
 if (-not (Test-Path 'package.json')) { Say "FATAL: run from the repository root (package.json not found)"; exit 1 }
 if (-not (Test-Path 'node_modules')) { Say "node_modules missing — running npm ci first..."; npm ci --silent }
 

@@ -11,7 +11,7 @@ test('browser.fill accepts grounded ref and checks element identity before mutat
   assert.match(fill,/recallRef\(session,ref\)/);
   assert.match(fill,/code:'ref_unknown'/);
   assert.match(fill,/blocked:'ref_stale'/);
-  assert.match(fill,/nodes\[0\]\.value === \$\{val\}/);
+  assert.match(fill,/nodes\[0\]\.value === \$\{JSON\.stringify\(r\.targetValue\)\}/);
   assert.match(fill,/Boolean\(selector\) === Boolean\(ref\)/);
   assert.match(fill,/valueHidden: true/);
 });

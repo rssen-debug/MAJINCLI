@@ -36,7 +36,7 @@ test('"majin -h" and "majin --version" answer instead of serving', () => {
   assert.equal(run(['-h']).status, 0, '-h must not serve either');
   const v = run(['--version']);
   assert.equal(v.status, 0, `exit ${v.status}: ${v.stderr}`);
-  assert.match(v.stdout, /^majin \d+\.\d+\.\d+ · node /, 'a version line: ' + v.stdout.trim());
+  assert.match(v.stdout, /^majin \d+\.\d+\.\d+(?:-[\w.]+)? · node /, 'a version line (optional V2 channel suffix): ' + v.stdout.trim());
   assert.equal(run(['-v']).status, 0);
   assert.doesNotMatch(v.stdout, /listening on/);
 });

@@ -197,6 +197,7 @@ export async function runTeam({
   cfg, registry, store, team, cap = 4, goals,
   resumeId = null, runId = null, emit = null, memory = null, job = 'tasks',
   teamStepCap = TEAM_DEFAULTS.teamStepCap,
+  signal = null,
   makeWorker = null, // injicerbart för tester: (...) => workerFn; default subagentWorker
 } = {}) {
   if (!store || !(store instanceof TeamStore)) throw new TeamInputError('runTeam: store (TeamStore) is required');
@@ -208,10 +209,12 @@ export async function runTeam({
   const byMember = new Map(roster.members.map((m) => [m.id, m]));
   const rid = resumeId || runId || `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
   const resumedCp = resumeId ? store.loadCheckpoint(team, resumeId) : null;
-  const priorDone = new Map(Object.entries((resumedCp && resumedCp.done) || {}));
+  // Older checkpoints could contain failed worker values. Never upgrade those
+  // to successful resume skips merely because an entry exists on disk.
+  const priorDone = new Map(Object.entries((resumedCp && resumedCp.done) || {}).filter(([, value]) => value?.ok !== false));
   /** vilka noder som faktiskt hoppades över av resume (fryst vid laddning —
       priorDone växer under körning och får inte tala om det som "resumed") */
-  const resumeSkips = new Set(Object.keys((resumedCp && resumedCp.done) || {}));
+  const resumeSkips = new Set(priorDone.keys());
   if (resumeId && !resumedCp) throw new TeamInputError(`resume: no checkpoint "${resumeId}" for team "${team}"`);
 
   /* Budget-ockurence: globalt räknar REALA steg från worker-resultat
@@ -253,7 +256,7 @@ export async function runTeam({
         /* EN enda save, INNAN runSwarm får veta att noden är klar:
            crash efter save = resume-skip (exactly-once); crash före save =
            omkörning (at-least-once) — det är hela garantin. */
-        priorDone.set(node.id, value);
+        if (value?.ok !== false && !signal?.aborted) priorDone.set(node.id, value);
         store.saveCheckpoint(team, rid, {
           status: 'running', runId: rid, goals: goals.map((x) => x.id), cap: capN, spent,
           done: Object.fromEntries(priorDone),
@@ -263,7 +266,7 @@ export async function runTeam({
     };
   });
 
-  const out = await runSwarm({ nodes, cap, timeoutMs: 0, signal: null, onEvent: (e) => emit?.({ team, runId: rid, ...e }) });
+  const out = await runSwarm({ nodes, cap, timeoutMs: 0, signal, onEvent: (e) => emit?.({ team, runId: rid, ...e }) });
 
   const st = out.blockedCount === 0 && out.failCount === 0 ? 'complete' : 'partial';
   store.saveCheckpoint(team, rid, {

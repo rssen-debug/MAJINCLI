@@ -12,7 +12,7 @@
 #>
 param(
   [string]$Target = $PSScriptRoot,
-  [string]$NodeUrl = 'https://nodejs.org/dist/v22.14.0/node-v22.14.0-win-x64.zip',
+  [string]$NodeUrl = 'https://nodejs.org/dist/v22.23.2/node-v22.23.2-win-x64.zip',
   [switch]$NoStart,
   [switch]$NoPath,
   [switch]$NoShortcut,
@@ -50,8 +50,8 @@ else {
   $cmd = Get-Command node -ErrorAction SilentlyContinue
   if ($cmd) {
     $ver = [version]((& $cmd.Source --version).TrimStart('v').Split('-')[0])
-    if ($ver.Major -gt 20 -or ($ver.Major -eq 20 -and $ver.Minor -ge 11)) { $Node = $cmd.Source }
-    else { Warn "node $ver is too old (need >= 20.11) -- will use its own copy" }
+    if ($ver.Major -ge 22) { $Node = $cmd.Source }
+    else { Warn "node $ver is too old (need >= 22.0) -- will use its own copy" }
   }
 }
 if (-not $Node) {

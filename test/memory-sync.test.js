@@ -3,12 +3,27 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import { Memory } from '../src/core/memory.js';
 import { syncPair, spawnId, exportBundle, applyBundle, VERSION } from '../src/core/memory-sync.js';
 
 function mkTemp() { return fs.mkdtempSync(path.join(os.tmpdir(), 'majin-ms')); }
 const cfgFor = (dir) => ({ get: (k) => (k === 'memory.dir' ? dir : undefined) });
 function memIn(dir) { return new Memory(cfgFor(dir)); }
+
+test('W9 paginated export never acknowledges revisions beyond its actual 500-delta page',()=>{
+  const A=mkTemp(),B=mkTemp();
+  const cfg=dir=>({get:k=>k==='memory.dir'?dir:k==='memory.maxNotes'?1000:undefined});
+  const a=new Memory(cfg(A)),b=new Memory(cfg(B));
+  try{
+    for(let i=0;i<501;i++)a.remember(crypto.randomUUID());
+    assert.equal(a.rev(),501);
+    const first=exportBundle(a);assert.equal(first.deltas.length,500);assert.equal(first.toRev,500);
+    applyBundle(b,first);assert.equal(b.facts().length,500);
+    const second=exportBundle(a,{fromRev:first.toRev});assert.equal(second.deltas.length,1);assert.equal(second.toRev,501);
+    applyBundle(b,second);assert.equal(b.facts().length,501);
+  }finally{fs.rmSync(A,{recursive:true,force:true});fs.rmSync(B,{recursive:true,force:true});}
+});
 
 test('W9 two stores converge after EXACTLY one sync', () => {
   const A = mkTemp(), B = mkTemp();

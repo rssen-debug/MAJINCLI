@@ -7,7 +7,7 @@
 .DESCRIPTION
   What it does, in order, and stops at the first failure with the log it captured:
 
-    1. preflight      node >= 20.11 (or the winget line to fix it), npm, git
+    1. preflight      node >= 22.0 (or the winget line to fix it), npm, git
     2. npm install    devDependencies only: esbuild, @yao-pkg/pkg, resedit
     3. build the app  dist/majin-win-x64.exe  (bundle -> pkg -> M icon embedded)
     4. build installer  dist/installer/MAJIN-Setup.exe  (Inno Setup, installed if missing)
@@ -106,8 +106,8 @@ if (-not $node) {
 } else {
   $nv = (Ver 'node') -replace '^v', ''
   $parts = $nv.Split('-')[0].Split('.')
-  if ([int]$parts[0] -lt 20 -or (([int]$parts[0] -eq 20) -and ([int]$parts[1] -lt 11))) {
-    Fail "node $nv is too old for MAJIN (need >= 20.11):  winget install -e --id OpenJS.NodeJS.LTS"
+  if ([int]$parts[0] -lt 22) {
+    Fail "node $nv is too old for MAJIN (need >= 22.0):  winget install -e --id OpenJS.NodeJS.LTS"
   } else { Ok "node $nv" }
 }
 foreach ($tool in @(@{ n = 'npm'; i = 'bundled with node' }, @{ n = 'tar'; i = 'ships with Windows 10/11' })) {

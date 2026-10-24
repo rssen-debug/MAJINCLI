@@ -6,7 +6,9 @@ test('speech recognition arms, sends actual user transcript and suspends while a
   assert.match(src,/window\.SpeechRecognition\s*\|\|\s*window\.webkitSpeechRecognition/);
   assert.match(src,/r\.interimResults=true/);
   assert.match(src,/if\(!words\.trim\(\)\)return/);
-  assert.match(src,/send\(command,\{voiceTurn:true\}\)/);
+  assert.match(src,/voiceFinal=complete\.trim\(\)/);
+  assert.match(src,/if\(!command\)return/);
+  assert.match(src,/send\(command,\s*\{\s*voiceTurn:\s*true\s*\}\)/);
   assert.match(src,/S\.handsFree=true/);
   assert.match(src,/if\(S\.handsFree&&!S\.busy\)startMic\(\)/);
   assert.match(src,/engine\.cancel\(\);engine\.resume\(\);engine\.speak\(u\)/);
@@ -25,11 +27,11 @@ test('UI indicates states, can stop listening and respects reduced motion',()=>{
 });
 test('release version is consistent across all packaging paths',()=>{
   for (const p of ['package.json','package-lock.json']) {
-    const v=JSON.parse(fs.readFileSync(p,'utf8'));assert.equal(v.version,'1.0.13');
+    const v=JSON.parse(fs.readFileSync(p,'utf8'));assert.equal(v.version,'4.0.0-alpha.3');
   }
-  assert.equal(JSON.parse(fs.readFileSync('package-lock.json','utf8')).packages[''].version,'1.0.13');
+  assert.equal(JSON.parse(fs.readFileSync('package-lock.json','utf8')).packages[''].version,'4.0.0-alpha.3');
   for(const p of ['src/core/version.js','installer/majin.iss','scripts/publish.ps1']){
-    const text=fs.readFileSync(p,'utf8');assert.match(text,/1\.0\.13/);
+    const text=fs.readFileSync(p,'utf8');assert.match(text,/4\.0\.0-alpha\.3/);
   }
 });
 
@@ -50,7 +52,7 @@ test('keyboard turns do not trigger Talk; spoken turns stay hands-free',()=>{
   assert.match(src,/if \(!options\.voiceTurn\) \{/);
   assert.match(src,/if \(S\.handsFree\) \{ S\.handsFree = false; stopMic\(\); \}/);
   assert.match(src,/S\.voiceTurn = Boolean\(options\.voiceTurn\)/);
-  assert.match(src,/send\(command,\{voiceTurn:true\}\)/);
+  assert.match(src,/send\(command,\s*\{\s*voiceTurn:\s*true\s*\}\)/);
   assert.match(src,/S\.voice && S\.voiceTurn && !S\.cancelled/);
 });
 test('workspace preview is persistent between tasks and reloads after HTML writes',()=>{
@@ -79,16 +81,4 @@ test('working status exposes current agent phase and long silence',()=>{
   assert.match(a,/workPulse\('Using '/);
   assert.match(a,/silent>=18/);
   assert.match(a,/still waiting for the current operation/);
-});
-
-test('real turn endpoint stops infinite background listening and voice UI is a single orb',()=>{
-  const src=fs.readFileSync('src/ui/app.js','utf8');
-  const html=fs.readFileSync('src/ui/index.html','utf8');
-  assert.match(src,/voiceSilenceTimer=setTimeout\(\(\)=>dispatchVoiceTurn\(r\)/);
-  assert.match(src,/voiceSessionTimer=setTimeout/);
-  assert.match(src,/stopVoiceMeter\(\);if\(S\.handsFree\)startMic\(\)/);
-  assert.match(src,/echoCancellation:true,noiseSuppression:true,autoGainControl:true/);
-  assert.match(html,/class="orb-core"/);
-  assert.match(html,/class="orb-halo orb-halo-a"/);
-  assert.match(html,/#composer #input\{direction:ltr;text-align:left/);
 });

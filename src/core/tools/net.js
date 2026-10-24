@@ -72,7 +72,11 @@ export const netTools = [
     desc: 'Look up a domain (A/AAAA/TXT/CNAME/NS/MX). Used to follow IOCs found in a binary.',
     params: { host: 'string: domain or IP', type: 'string: A | AAAA | TXT | CNAME | NS | MX | ANY [A|AAAA|TXT|CNAME|NS|MX|ANY] (optional)' },
     async run({ host, type = 'A' }) {
-      const dns = await import('node:dns').then((m) => m.default);
+      // The callback API (node:dns) throws ERR_INVALID_ARG_TYPE when it is
+      // called without a callback — which is how this tool used it. Every DNS
+      // lookup therefore failed, in V1 too. The promises API is the same
+      // resolver with an awaitable surface.
+      const dns = await import('node:dns/promises').then((m) => m.default || m);
       const fn = { A: 'resolve4', AAAA: 'resolve6', TXT: 'resolveTxt', CNAME: 'resolveCname', NS: 'resolveNs', MX: 'resolveMx', ANY: 'resolveAny' }[type] || 'resolve4';
       try {
         const res = await dns[fn](String(host).replace(/^https?:\/\//, '').replace(/\/.*$/, ''));
@@ -113,13 +117,24 @@ export const netTools = [
   def({
     name: 'net.http',
     group: 'network',
-    risk: 'read',
+    // 'net' is not a V1 risk level, so the guard could not classify this tool at
+    // all: no-dead-tools and the capability map both rejected it. It can issue
+    // any method against any URL, so the honest level is the one that asks -
+    // 'exec' - rather than 'read', which would auto-approve a POST.
+    risk: 'exec',
     desc: 'Raw HTTP request (method, headers, body). Use for your own APIs and for testing a local web service.',
     params: { url: 'string: address', method: 'string: GET | POST | PUT | DELETE | HEAD | OPTIONS. optional (default: GET) [GET|POST|PUT|DELETE|HEAD|OPTIONS]', headers: 'object: extra headers (optional)', body: 'string: body (optional)', maxChars: 'number: response cap (default: 8000)' },
         required: ['url'],
 async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
       const t0 = Date.now();
-      const res = await fetch(url, { method: String(method).toUpperCase(), headers, body: body || undefined, redirect: 'follow' });
+      let res;
+      try {
+        res = await fetch(url, { method: String(method).toUpperCase(), headers, body: body || undefined, redirect: 'follow' });
+      } catch (err) {
+        // An unreachable host is a network failure the scheduler can classify
+        // and retry, not an UNKNOWN crash.
+        return { ok: false, error: { code: 'network_failure', message: `${new URL(String(url)).host}: ${err.code || err.message}` } };
+      }
       const text = await res.text();
       return {
         result: `${res.status} ${res.statusText} · ${Date.now() - t0}ms\n${[...res.headers].map(([k, v]) => `${k}: ${v}`).join('\n')}\n\n${text.slice(0, maxChars)}${text.length > maxChars ? `\n…[${text.length - maxChars} tecken klippt]` : ''}`,
@@ -232,9 +247,9 @@ async run({ url, method = 'GET', headers = {}, body, maxChars = 8000 }) {
       const size = fsSync.statSync(out.abs).size;
       if (then === 'describe') {
         const d = await analyzeImage({ cfg: ctx.cfg, imagePath: out.abs, question: 'What is on screen? Describe windows, text, errors and what may need fixing.' });
-        return { result: `${out.abs} (${size} byte)\n\n${d}`, meta: { path: out.abs, validatedPng: true, bytes: size }, summary: 'screenshot + description' };
+        return { ok: true, result: `${out.abs} (${size} byte)\n\n${d}`, meta: { path: out.abs, validatedPng: true, bytes: size }, summary: 'screenshot + description' };
       }
-      return { result: `${out.abs} (${size} byte)`, meta: { path: out.abs, validatedPng: true, bytes: size }, summary: `screenshot ${(size / 1024) | 0} kB` };
+      return { ok: true, result: `${out.abs} (${size} byte)`, meta: { path: out.abs, validatedPng: true, bytes: size }, summary: `screenshot ${(size / 1024) | 0} kB` };
     },
   }),
 

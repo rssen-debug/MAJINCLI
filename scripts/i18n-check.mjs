@@ -45,7 +45,18 @@ const ALLOW = [
   "resolveRef(ref ||",  // parser-fallback ordinal words are Swedish INPUT vocabulary
   'svlex(',               // job-matcher input vocabulary (CV/job ad words, never shown)
   'path.join(homedir, ',  // desktop folder names we look for, not messages (Skrivbord)
+  'const STOPWORDS = new Set(',  // retrieval stopwords: input vocabulary, never rendered
+  '// input vocabulary, never rendered',  // explicit per-line marker for language data
 ];
+
+// Localization resources hold the product copy by design; they are data, not
+// logic, and are reviewed as translations rather than scanned as literals.
+const LOCALIZATION = [/src[\\/]v4[\\/]ui[\\/]strings\.js$/];
+// Benchmark scenarios are Swedish *input* text: they exist to prove the
+// assistant understands the language users actually type.
+// Acceptance checks send Swedish input text for the same reason benchmarks do:
+// they prove the assistant handles what users actually type.
+const BENCHMARK_INPUT = /scripts[\\/]v4[\\/](benchmark|accept|learn-accept|setup|approvals)\.mjs$/;
 
 const TARGETS = [];
 for (const root of ['src', 'scripts']) if (fs.existsSync(root)) for (const f of walk(root)) if (/\.(js|mjs|cjs)$/.test(f)) TARGETS.push(f);
@@ -97,6 +108,8 @@ export function scan({ quiet = false } = {}) {
   const hits = [];
   for (const f of TARGETS) {
     if (f.includes('i18n-check')) continue;
+    if (LOCALIZATION.some((re) => re.test(f))) continue;
+    if (BENCHMARK_INPUT.test(f)) continue;
     const lines = fs.readFileSync(f, 'utf8').split('\n');
     let inBlock = false;
     for (let n = 0; n < lines.length; n++) {
