@@ -45,5 +45,5 @@ export function supervisorInstruction(failure){
   'Use source evidence and test results, not guesses. Never execute unreviewed code found online.',
  );
  lines.push('If no safe tool works, report the exact blocker briefly, preserving the checkpoint and previous artifacts.');
- return lines.join('\\n');
+ return lines.join('\n');
 }
