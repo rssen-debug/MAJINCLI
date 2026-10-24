@@ -324,6 +324,7 @@ export function zodFromV1Params(params = {}, required = []) {
     // V1's `def()` already derives required parameters from the run signature.
     // Dropping that made a missing argument reach the tool as a confusing
     // ENOENT instead of a schema error the model can correct.
+    field=field.describe(String(spec).replace(/^[^:]*:\s*/,''));
     shape[key] = must.has(key) ? field : field.optional();
   }
   return z.object(shape);
@@ -474,7 +475,7 @@ export function adaptV1Tool(v1tool, { lane, ctx = null }) {
         ok: true,
         result: typeof result.result === 'string' ? result.result : (result.result ?? null),
         meta: result.meta ?? null,
-        summary: result.summary ?? null,
+        ...(result.summary != null ? {summary:String(result.summary)} : {}),
         ...(result.hint ? { hint: String(result.hint) } : {}),
       };
     },

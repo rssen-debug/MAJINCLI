@@ -18,6 +18,7 @@ import { compactBrowserText } from '../browser-compact.js';
 import { SEMANTIC_SNAPSHOT_JS, formatSemanticSnapshot } from '../browser-semantic.js';
 import { VERIFY_JS, verificationCriteria, verifyObserved, browserRecoveryAdvice,FORM_STATE_JS,formatFormState } from '../browser-evidence.js';
 import { browserActionReceipt } from '../browser-action-receipt.js';
+import { observeForm, describeForm, fillForm, submitForm, clearForm } from '../browser-form.js';
 
 const followedSafe = (fol) => (fol && fol.followed === true ? true : false);
 // Only the latest per-session screenshot digest; prevents duplicate evidence files.
@@ -248,7 +249,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
     name: 'browser.open',
     group: 'web',
     risk: 'exec',
-    desc: 'Open a URL in a browser window MAJIN drives (Chrome or Edge on this machine). One window per task; capped fleet. Use browser.read/click/fill/shot next.',
+    desc: 'Open a URL in a browser window MAJIN drives (Chrome or Edge on this machine). For forms, use browser.form then browser.form_fill with exact observed labels. Use browser.read/click for other pages.',
     params: { url: 'string: http(s) address', headless: 'boolean: no visible window (default: true)' },
     examples: ['browser.open({url:"https://example.com"})'],
     async run({ url, headless = true }, ctx) {
@@ -258,9 +259,10 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
         const b = await openFor({ session, url: String(url), headless, cfgGet: (k) => ctx.cfg.get(k), signal:ctx.signal });
         const meta = await b.eval('(() => ({ url: location.href, title: document.title }))()');
         const controls = await b.eval(VISIBLE_CONTROLS_JS).catch(() => []);
+        const form=await observeForm(b,session).catch(()=>null);
         return {
           ok: true,
-          result: `opened — page says: "${meta.title}" at ${meta.url}` + formatControlHints(controls),
+          result: `opened — page says: "${meta.title}" at ${meta.url}` + (form?.fields.length?'\nLive form: '+describeForm(form):formatControlHints(controls)),
           meta: { url: meta.url, title: meta.title },
           summary: `opened ${meta.title || meta.url}`,
         };
@@ -538,6 +540,39 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
   }),
 
   def({
+    name: 'browser.form', group: 'web', risk: 'read',
+    desc: 'Observe current form fields by live accessible labels/types, dropdown options, required/native validation, alert errors and submit/next buttons. Values stay hidden. Use before browser.form_fill and after navigation or server validation.',
+    params: {},
+    async run({},ctx){
+      const session=ctx.session||'default';
+      if(!isOpen(session))return {ok:false,error:{code:'browser_closed',message:'Open a browser first.'}};
+      const b=await openFor({session,cfgGet:k=>ctx.cfg.get(k),signal:ctx.signal});
+      return {ok:true,result:describeForm(await observeForm(b,session))};
+    },
+  }),
+  def({
+    name: 'browser.form_fill', group: 'web', risk: 'exec',
+    desc: 'Set 1–12 previously observed form fields in order using exact labels or f-refs as keys in values. Text/select values are strings; checkboxes use true/false; file fields use workspace file paths. Reobserves/semantically regrounds rerenders, verifies retention, stops on failure. Never submits. Observe new conditional fields with browser.form.',
+    params:{values:'object: map exact observed labels or f-refs to text strings, option labels, checkbox booleans, or workspace file paths'},
+    async run({values},ctx){
+      const session=ctx.session||'default';
+      if(!isOpen(session))return {ok:false,error:{code:'browser_closed',message:'Open a browser first.'}};
+      const b=await openFor({session,cfgGet:k=>ctx.cfg.get(k),signal:ctx.signal});
+      return fillForm({browser:b,session,values,signal:ctx.signal,run:(name,input)=>webTools.find(t=>t.name===name).run(input,ctx)});
+    },
+  }),
+  def({
+    name:'browser.form_submit',group:'web',risk:'exec',
+    desc:'Click ONE previously observed next/review/submit button by its exact label or f-ref. Regrounds changed DOM, never automatically repeats submission. Returns current form, native/server errors and visible page text. Server confirmation must still be verified before saving a receipt.',
+    params:{button:'string: exact observed button label or f-ref from browser.form'},
+    async run({button},ctx){
+      const session=ctx.session||'default';
+      if(!isOpen(session))return {ok:false,error:{code:'browser_closed',message:'Open a browser first.'}};
+      const b=await openFor({session,cfgGet:k=>ctx.cfg.get(k),signal:ctx.signal});
+      return submitForm({browser:b,session,button,run:(name,input)=>webTools.find(t=>t.name===name).run(input,ctx)});
+    },
+  }),
+  def({
     name: 'browser.fill',
     group: 'web',
     risk: 'exec',
@@ -689,6 +724,8 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const { abs } = resolveIn(ctx, p);
       const st = await fs.stat(abs).catch(() => null);
       if (!st || !st.isFile()) return { ok: false, error: { code: 'no_file', message: `no such file: ${abs}` } };
+      if(st.size>32*1024*1024)return {ok:false,error:{code:'upload_size',message:'Exact-byte verified uploads are limited to 32 MiB.'}};
+      const expectedHash=createHash('sha256').update(await fs.readFile(abs)).digest('hex');
       const b = await openFor({ session, cfgGet: (k) => ctx.cfg.get(k), signal:ctx.signal });
       const sel = JSON.stringify(target);
       const checked = await b.eval(`(() => {
@@ -709,13 +746,15 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       ctx.signal?.throwIfAborted();
       await b.send('DOM.setFileInputFiles', { files: [abs], nodeId }, {signal:ctx.signal});
       await new Promise(resolve => setTimeout(resolve, 120));
-      const confirm = await b.eval(`(() => {
+      const confirm = await b.eval(`(async () => {
         const el = document.querySelector(${sel});
         const f = el && el.files && el.files[0];
-        return f ? { ok: true, name: f.name, size: f.size } : { ok: false };
+        if(!f||!globalThis.crypto?.subtle)return {ok:false};
+        const digest=await crypto.subtle.digest('SHA-256',await f.arrayBuffer());
+        return {ok:true,name:f.name,size:f.size,sha256:Array.from(new Uint8Array(digest),n=>n.toString(16).padStart(2,'0')).join('')};
       })()`, {signal:ctx.signal});
-      if (!confirm.ok || confirm.name !== path.basename(abs) || confirm.size !== st.size) return { ok: false, error: { code: 'no_upload', message: 'the input did not retain the requested file name and size', hint: 're-observe the current page and check validation or a custom uploader before retrying' } };
-      return { ok: true, result: `uploaded — page now holds "${confirm.name}" (${confirm.size} bytes)`, meta: { name: confirm.name, size: confirm.size, path: abs }, summary: `uploaded ${confirm.name}` };
+      if (!confirm.ok || confirm.name !== path.basename(abs) || confirm.size !== st.size || confirm.sha256!==expectedHash) return { ok: false, error: { code: 'no_upload', message: 'the input did not retain the requested exact file bytes', hint: 're-observe the current page and check validation or a custom uploader before retrying' } };
+      return { ok: true, result: `uploaded — page now holds "${confirm.name}" (${confirm.size} bytes), SHA-256 ${confirm.sha256}; server acceptance unproven`, meta: { name: confirm.name, size: confirm.size, path: abs,sha256:confirm.sha256 }, summary: `uploaded ${confirm.name}, exact bytes verified` };
     },
   }),
 
@@ -855,6 +894,7 @@ def({
     params: {},
     async run(_, ctx) {
       recentShot.delete(ctx.session || 'default');
+      clearForm(ctx.session || 'default');
       const closed = await closeFor(ctx.session || 'default', { wait: true });
       clearBrowserStagnation(ctx.session || 'default');
       return { ok: true, result: closed ? 'browser closed, slot released' : 'no browser was open for this task', meta: { closed }, summary: closed ? 'closed' : 'nothing open' };

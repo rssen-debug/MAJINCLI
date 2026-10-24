@@ -187,3 +187,7 @@ and locked-iPhone Web Push remain FAIL; all other original gaps remain unchanged
 ### Latest execution checkpoint — NOT READY
 
 See [FINAL_EXECUTION_20261024.md](FINAL_EXECUTION_20261024.md) for current tests, real Go form failures, Windows CI failure/root fix and the complete remaining gates. Earlier aggregate claims do not supersede this checkpoint. No original requirement is waived.
+
+## Current round 2 form gate (24 October)
+
+PR401 is merged at704de63. Follow-up branch codex/v4-form-autonomy-20261024 now independently passes three distinct real Go safe forms plus the unchanged original failure fixture. Actual server acceptance, requested values, exact file hashes, saved receipts, model rounds, token telemetry and source hashes are preserved in FORM_AUTONOMY_ROUND2.md and evidence/form-autonomy-audit-attempt-3.json. Earlier failed attempts remain. This is a scoped controlled form gate, not universal browser or release READY. Ordinary Ghost activation remains unproven. Mandatory self-improving skill acquisition, host restart/retrieval/adaptation evidence and every original parity/release gate remain in FORM_AND_LEARNING_ACCEPTANCE.md.
