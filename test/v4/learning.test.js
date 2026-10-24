@@ -19,6 +19,7 @@
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { startTestServer, postChat, readSse, tempHome } from './helpers.mjs';
@@ -510,6 +511,234 @@ test('learning: a learned skill cannot require a lane the owner never granted', 
     }
   } finally {
     await s.close();
+    await provider.close();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+/* ------------------------------------- self-improvement (research-derived) -- */
+
+test('learning: a procedure becomes a template with bindable slots (AWM)', async () => {
+  const { induceSlots, renderProcedure } = await import('../../src/v4/learning.js');
+  const steps = [
+    { tool: 'fs_find', args: 'name,path' },
+    { tool: 'fs_read', args: 'path' },
+  ];
+  const slots = induceSlots(steps);
+  assert.equal(slots.length, 3);
+  assert.deepEqual(slots.map((s) => `${s.tool}.${s.argument}`), ['fs_find.name', 'fs_find.path', 'fs_read.path']);
+  assert.ok(slots.every((s) => s.bind === 'from-goal'), 'a slot must be bound from the request, never stored');
+
+  // The rendered procedure must tell the model what to supply, not what was used.
+  const rendered = renderProcedure(['Call fs_find with name,path.'], slots);
+  assert.match(rendered[0], /\$name1/);
+  assert.match(rendered[0], /from this request/);
+
+  // A stored candidate carries them, and no values leak.
+  const goal = {
+    id: 'g', objective: 'Hitta CV:t i mappen', state: 'COMPLETED',
+    receipts: [{ id: 'r1', action: 'tool:fs_read', target: 'cv.pdf', result: 'success', verified: true, evidence: { verifier: 'v2.file' } }],
+  };
+  const trace = [
+    { name: 'fs_find', argsShape: 'name,path', ok: true },
+    { name: 'fs_read', argsShape: 'path', ok: true, verified: true },
+  ];
+  const out = extractCandidate({ goal, trace, grantedLanes: ['files'], fingerprint: 'fp' });
+  assert.equal(out.ok, true, out.reason);
+  assert.equal(out.candidate.learned.slots.length, 3);
+  assert.ok(!JSON.stringify(out.candidate).includes('cv.pdf'), 'a value leaked through the slots');
+  assert.ok(out.candidate.learned.integrity, 'no integrity hash');
+});
+
+test('learning: a failure is attributed to one step and marks the skill STALE', async () => {
+  const { LearnedSkillStore, attributeFailure, SKILL_STATES: STATES } = await import('../../src/v4/learning.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-ls-'));
+  try {
+    const store = new LearnedSkillStore({ dir, fingerprint: 'fp' });
+    const skillDir = path.join(dir, 'learn-files-abc');
+    fs.mkdirSync(skillDir, { recursive: true });
+    const base = {
+      schema: 'majin.v4.skill/v1',
+      name: 'learn-files-abc',
+      title: 'Hitta och läs en anteckning',
+      summary: '',
+      requires: ['files'],
+      tools: ['fs_find', 'fs_read'],
+      prefers: [],
+      experimental: false,
+      learned: {
+        schema: LEARNING_SCHEMA,
+        state: STATES.VERIFIED,
+        category: 'files',
+        categories: ['files'],
+        keywords: ['hitta'],
+        procedure: ['Call fs_find with name,path.', 'Call fs_read with path.'],
+        avoid: [],
+        slots: [],
+        stepFailures: {},
+        revisions: [],
+        verification: { method: 'v2.file' },
+        environment: { fingerprint: 'fp' },
+        confidence: 0.8,
+        successes: 3,
+        failures: 0,
+        scenarios: ['a', 'b'],
+        lastValidatedAt: new Date().toISOString(),
+      },
+    };
+    fs.writeFileSync(path.join(skillDir, 'skill.json'), JSON.stringify(base, null, 2));
+    fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '# proc\n');
+
+    // Step 2 is where it breaks; step 1 is untouched.
+    const attr = attributeFailure({
+      skill: store.get('learn-files-abc'),
+      trace: [{ name: 'fs_find', argsShape: 'name,path', ok: true }, { name: 'fs_read', argsShape: 'path', ok: false, cls: 'DEPENDENCY_MISSING' }],
+    });
+    assert.equal(attr.attributable, true);
+    assert.equal(attr.stepIndex, 1);
+    assert.equal(attr.transient, false);
+
+    const first = store.observeFailure({ skills: [{ name: 'learn-files-abc' }], trace: [{ name: 'fs_read', argsShape: 'path', ok: false, cls: 'DEPENDENCY_MISSING' }] });
+    assert.equal(first.length, 1);
+    assert.equal(first[0].state, STATES.VERIFIED, 'one failure must not mark a proven skill stale');
+
+    // A second failure on the same step is a pattern: STALE, with a revision note.
+    const second = store.observeFailure({ skills: [{ name: 'learn-files-abc' }], trace: [{ name: 'fs_read', argsShape: 'path', ok: false, cls: 'DEPENDENCY_MISSING' }] });
+    assert.equal(second[0].state, STATES.STALE);
+    assert.equal(second[0].attribution.proposal.kind, 'revalidate-step');
+
+    const written = JSON.parse(fs.readFileSync(path.join(skillDir, 'skill.json'), 'utf8'));
+    assert.equal(written.learned.state, STATES.STALE);
+    assert.equal(written.learned.stepFailures['1'], 2);
+    assert.equal(written.learned.revisions.length, 2);
+    // The newest revision is the escalation; the first one was only a note.
+    assert.equal(written.learned.revisions[0].proposal.kind, 'note-step');
+    assert.equal(written.learned.revisions.at(-1).proposal.kind, 'revalidate-step');
+    assert.match(written.learned.revisions.at(-1).proposal.detail, /revalidate/i);
+    // The steps themselves are preserved: a stale skill is still readable as evidence.
+    assert.equal(written.learned.procedure.length, 2);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('learning: a transient failure never becomes a permanent verdict', async () => {
+  const { attributeFailure } = await import('../../src/v4/learning.js');
+  const skill = { learned: { procedure: ['Call web_fetch with url.'], stepFailures: {} } };
+  const attr = attributeFailure({ skill, trace: [{ name: 'web_fetch', argsShape: 'url', ok: false, cls: 'TIMEOUT' }] });
+  assert.equal(attr.transient, true);
+  assert.equal(attr.attributable, false, 'a timeout must not mark a step as broken');
+});
+
+test('learning: a context-dependent failure is not turned into a blanket avoid (ExpeL)', async () => {
+  const { contrastiveInsight } = await import('../../src/v4/learning.js');
+  const success = [{ name: 'fs_find', argsShape: 'name,path', ok: true }];
+  const failure = [{ name: 'fs_find', argsShape: 'name,path', ok: false, cls: 'DEPENDENCY_MISSING' }];
+  const insight = contrastiveInsight({ successTrace: success, failureTrace: failure });
+  assert.ok(insight);
+  assert.equal(insight.kind, 'context-dependent');
+  assert.match(insight.detail, /input or the environment/);
+
+  // A different action that never worked anywhere is not a contrast — the
+  // ordinary `avoid` path already covers it.
+  assert.equal(contrastiveInsight({
+    successTrace: success,
+    failureTrace: [{ name: 'fs_grep', argsShape: 'pattern,path', ok: false, cls: 'DEPENDENCY_MISSING' }],
+  }), null);
+});
+
+test('learning: an out-of-band edit of a skill is visible in its integrity hash', async () => {
+  const { skillIntegrity } = await import('../../src/v4/learning.js');
+  const skill = {
+    name: 'x',
+    tools: ['fs_read'],
+    learned: { procedure: ['Call fs_read with path.'], avoid: [], state: 'VERIFIED' },
+  };
+  const before = skillIntegrity(skill);
+  assert.equal(before, skillIntegrity(skill), 'the hash must be stable');
+  skill.learned.procedure.push('Call fs_delete with path.');
+  assert.notEqual(before, skillIntegrity(skill), 'a changed procedure must change the hash');
+});
+
+test('learning: a broken environment turns a verified skill STALE after repeated step failure', async () => {
+  const home = tempHome();
+  const documents = path.join(home, 'Documents');
+  fs.mkdirSync(documents, { recursive: true });
+  const note = path.join(documents, 'anteckning.txt');
+  fs.writeFileSync(note, 'X');
+  grantLanes(home, ['files']);
+  const ownerFile = path.join(home, 'v4', 'owner-mode.json');
+  const owner = JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
+  owner.folders = [documents];
+  fs.writeFileSync(ownerFile, JSON.stringify(owner));
+
+  // A procedure that used to work. Then the file disappears — the environment
+  // changed, which is exactly what revalidation exists for.
+  const learnedDir = path.join(home, 'v4', 'learned-skills', 'learn-files-seed');
+  fs.mkdirSync(learnedDir, { recursive: true });
+  fs.writeFileSync(path.join(learnedDir, 'skill.json'), JSON.stringify({
+    schema: 'majin.v4.skill/v1',
+    name: 'learn-files-seed',
+    title: 'Hitta och läs en anteckning',
+    summary: '',
+    requires: ['files'],
+    tools: ['fs_find', 'fs_read'],
+    prefers: [],
+    experimental: false,
+    learned: {
+      schema: LEARNING_SCHEMA,
+      state: SKILL_STATES.VERIFIED,
+      category: 'files',
+      categories: ['files'],
+      keywords: ['hitta', 'anteckningen', 'mappen', 'läs'],
+      procedure: ['Call fs_find with name,path.', 'Call fs_read with path.'],
+      avoid: [], slots: [], stepFailures: {}, revisions: [],
+      verification: { method: 'v2.file' },
+      environment: { fingerprint: 'seeded' },
+      confidence: 0.8, successes: 3, failures: 0, scenarios: ['a', 'b'],
+      lastValidatedAt: new Date().toISOString(),
+    },
+  }, null, 2));
+  fs.writeFileSync(path.join(learnedDir, 'SKILL.md'), '# proc\n');
+  fs.unlinkSync(note);
+
+  const provider = await startFakeProvider((body) => {
+    if (isChild(body)) return { text: 'x' };
+    return lastToolMessage(body) ? { text: 'kunde inte läsa' } : { toolCalls: [{ name: 'fs_read', args: { path: note } }] };
+  });
+  const env2 = { ...env(provider), MAJIN_V4_MAX_MODEL_ROUNDS: '4' };
+
+  let first = null;
+  let second = null;
+  try {
+    first = await startTestServer({ home, env: env2 });
+    const cookie = (await first.pair()).cookie;
+    const turn1 = await readSse(await postChat(first.base, cookie, { text: 'Hitta anteckningen i mappen och läs den.', requestId: 'stale-1' }));
+    const learned1 = turn1.find((e) => e.type === 'learning' && e.data?.event === 'failure-observed');
+    assert.ok(learned1, 'a failed turn that used a skill produced no learning event');
+    assert.equal(learned1.data.skills[0].attribution.stepIndex, 1, 'the wrong step was blamed');
+    assert.equal(learned1.data.skills[0].state, SKILL_STATES.VERIFIED, 'one failure must not condemn a proven skill');
+    await first.close({ keep: true });
+    first = null;
+
+    second = await startTestServer({ home, env: env2 });
+    const session = second.existingSession();
+    await readSse(await postChat(second.base, session, { text: 'Läs anteckningen i mappen igen.', requestId: 'stale-2' }));
+
+    const written = JSON.parse(fs.readFileSync(path.join(learnedDir, 'skill.json'), 'utf8'));
+    assert.equal(written.learned.state, SKILL_STATES.STALE, 'a repeated step failure did not mark the skill stale');
+    assert.equal(written.learned.stepFailures['1'], 2);
+    assert.ok(written.learned.revisions.length >= 2);
+    assert.match(written.learned.revisions.at(-1).proposal.detail, /revalidate/i);
+    // It is still offered — as STALE, which the prompt states — never silently deleted.
+    const listed = await (await fetch(`${second.base}/api/learning`, { headers: { cookie: session } })).json();
+    const shown = listed.skills.find((x) => x.name === 'learn-files-seed');
+    assert.ok(shown, 'a stale skill disappeared instead of being marked stale');
+    assert.equal(shown.state, SKILL_STATES.STALE);
+    assert.ok(shown.revisions >= 2);
+  } finally {
+    if (first) await first.close();
+    if (second) await second.close();
     await provider.close();
     fs.rmSync(home, { recursive: true, force: true });
   }

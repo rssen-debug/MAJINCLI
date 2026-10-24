@@ -985,6 +985,28 @@ export function createAgent({
         }
       }
 
+      /**
+       * LEARN FROM THE FAILURE.
+       *
+       * A failed turn used to leave no trace in the skill store, so a procedure
+       * that a changed website broke kept looking healthy. The failure is now
+       * attributed to the step that failed and recorded; a step that keeps
+       * failing marks the skill STALE rather than silently deleting it.
+       */
+      let failedLearning = null;
+      try {
+        const retrieved = turn?.learned || [];
+        if (!aborted && retrieved.length && typeof learning?.observeFailure === 'function') {
+          failedLearning = learning.observeFailure({
+            skills: retrieved,
+            trace: turn?.trace || [],
+          });
+          emit('learning', { event: 'failure-observed', skills: failedLearning });
+        }
+      } catch (err) {
+        record('task.result', { action: 'learning:failure-error', result: 'failure', errorCls: 'UNKNOWN', taskId: String(err?.message || err).slice(0, 60) });
+      }
+
       const note = aborted
         ? t('msg.cancelled')
         : t('agent.failed', { reason });

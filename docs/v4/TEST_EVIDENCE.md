@@ -334,3 +334,19 @@ $ node --test --test-concurrency=1 test/v4/learning.test.js
 The mandatory real-provider (Go) A–H run. `npm run v4:learn-accept` refuses to
 start without a configured provider instead of falling back to the demo brain,
 and writes `docs/v4/evidence/learned-skills-<stamp>.json` when it does run.
+
+
+## 9. Self-improvement additions — 2026-10-24
+
+`test/v4/learning.test.js` grew from 15 to 17 tests. The new ones cover the
+pieces the external-repo survey showed were missing:
+
+| Assertion | Evidence |
+|---|---|
+| A procedure is a template with bindable slots (AWM) | `induceSlots` yields `fs_find.name`, `fs_find.path`, `fs_read.path`; the rendered prompt names what to supply; no value is stored |
+| A failure is attributed to ONE step (SkillAdaptor) | step index 1 is blamed, step 0 untouched; the procedure is preserved |
+| Repeated step failure escalates to STALE | first failure → still VERIFIED, second → STALE with a `revalidate-step` revision |
+| A transient failure never becomes permanent | a TIMEOUT is marked transient and not attributable |
+| A context-dependent failure is not a blanket avoid (ExpeL) | the same action succeeding elsewhere yields a contextual note, not an `avoid` entry |
+| An out-of-band edit is visible | changing the stored procedure changes the integrity hash |
+| The failure path is wired end to end | a real host whose granted file was deleted: turn 1 records `failure-observed` (VERIFIED), a real restart, turn 2 → STALE on disk and in `GET /api/learning` |

@@ -53,6 +53,7 @@ import { planV1Import, applyV1Import } from './import-history.js';
 import { discoverSkills, usableSkills, describeSkills } from './skills.js';
 import {
   LearnedSkillStore, environmentFingerprint, rankSkills, describeLearned, LEARNING_SCHEMA,
+  SKILL_STATES,
 } from './learning.js';
 import { parseMcpConfig, connectServers } from './mcp.js';
 import { registerMcpTools } from './mcp-tools.js';
@@ -289,6 +290,19 @@ export function createV4Server({ config }) {
       void conversationId;
       void message;
       return result;
+    },
+    observeFailure({ skills, trace }) {
+      const out = learnedStore.observeFailure({ skills, trace });
+      for (const item of out) {
+        try {
+          telemetry.append('task.result', {
+            action: `learning:${item.state === SKILL_STATES.STALE ? 'stale' : 'failure'}`,
+            taskId: item.name,
+            result: 'success',
+          });
+        } catch { /* telemetry must never fail a turn */ }
+      }
+      return out;
     },
     revalidate() {
       return learnedStore.revalidate();

@@ -336,9 +336,7 @@ export function extractCandidate({
   const verificationMethod = describeVerification(verified);
   const title = sanitizeInstruction(String(goal.objective || '').slice(0, 70)).text || 'Learned procedure';
 
-  return {
-    ok: true,
-    candidate: {
+  const candidate = {
       schema: SKILL_SCHEMA,
       name,
       title,
@@ -382,8 +380,14 @@ export function extractCandidate({
         source: 'verified-goal',
       },
       body: renderBody({ title, procedure, avoid, failurePatterns, verificationMethod }),
-    },
-  };
+    };
+  // Slots, per-step failure counts and an integrity hash are what make the
+  // procedure reusable and auditable rather than a transcript of one run.
+  candidate.learned.slots = induceSlots(candidate.learned.example.steps);
+  candidate.learned.stepFailures = {};
+  candidate.learned.revisions = [];
+  candidate.learned.integrity = skillIntegrity(candidate);
+  return { ok: true, candidate };
 }
 
 function describeVerification(verified) {
@@ -412,6 +416,119 @@ function renderBody({ title, procedure, avoid, failurePatterns, verificationMeth
     for (const p of failurePatterns) lines.push(`- ${p.symptom}: ${p.recovery}`);
   }
   return lines.join('\n').slice(0, LEARNING_LIMITS.maxBodyChars);
+}
+
+/* ------------------------------------------------- parameter slots (AWM) -- */
+
+/**
+ * AWM (zorazrw/agent-workflow-memory, Apache-2.0, ICML 2025) induces reusable
+ * workflows with *variable slots* rather than a fixed narration of one run. That
+ * is the difference between "call fs_find with path,name" and a template a later,
+ * different task can fill in.
+ *
+ * A slot is a named hole with the tool and argument it feeds. The procedure keeps
+ * only structure; values are bound per use, so nothing personal is ever stored
+ * and one procedure serves many files, folders and pages.
+ */
+export function induceSlots(exampleSteps = [], { maxSlots = 8 } = {}) {
+  const slots = [];
+  const seen = new Set();
+  for (const step of exampleSteps) {
+    for (const arg of String(step.args || '').split(',').map((a) => a.trim()).filter(Boolean)) {
+      const key = `${step.tool}.${arg}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (slots.length >= maxSlots) break;
+      slots.push({ name: `$${arg}${slots.length + 1}`, tool: step.tool, argument: arg, bind: 'from-goal' });
+    }
+  }
+  return slots;
+}
+
+/** Render a slot-aware procedure: structure plus what must be supplied. */
+export function renderProcedure(procedure = [], slots = []) {
+  if (!slots.length) return procedure;
+  return procedure.map((step) => {
+    const relevant = slots.filter((slot) => step.includes(slot.tool));
+    if (!relevant.length) return step;
+    return `${step.replace(/\.$/, '')} — fill ${relevant.map((s) => `${s.name} (${s.argument})`).join(', ')} from this request.`;
+  });
+}
+
+/* ------------------------------------ step-level attribution (SkillAdaptor) -- */
+
+/**
+ * SkillAdaptor (zjunlp/SkillAdaptor, MIT) showed that revising a whole skill
+ * from a failed session is coarse: the failure belongs to ONE step. Attributing
+ * it there keeps the rest of a working procedure intact and produces an
+ * auditable revision instead of silently degrading the whole skill.
+ */
+export function attributeFailure({ skill, trace = [], maxStepFailures = 2 }) {
+  const learned = skill?.learned || {};
+  const procedure = learned.procedure || [];
+  const failed = trace.filter((step) => step.ok === false);
+  if (!failed.length) return { attributable: false, reason: 'the turn recorded no failed step' };
+
+  const first = failed[0];
+  const stepIndex = procedure.findIndex((line) => line.includes(first.name));
+  const transient = TRANSIENT.test(first.cls || '');
+  const nextCount = stepIndex >= 0 ? Number((learned.stepFailures || {})[stepIndex] || 0) + 1 : 0;
+
+  return {
+    attributable: stepIndex >= 0 && !transient,
+    tool: first.name,
+    failureClass: first.cls || 'UNKNOWN',
+    stepIndex,
+    step: stepIndex >= 0 ? procedure[stepIndex] : null,
+    transient,
+    occurrences: nextCount,
+    proposal: stepIndex < 0
+      ? { kind: 'unlisted-step', detail: `${first.name} is not part of the stored procedure; the task may have changed shape.` }
+      : nextCount >= maxStepFailures
+        ? { kind: 'revalidate-step', detail: `step ${stepIndex + 1} (${first.name}) failed ${nextCount} time(s); revalidate it before relying on it.` }
+        : { kind: 'note-step', detail: `step ${stepIndex + 1} (${first.name}) failed once with ${first.cls}.` },
+  };
+}
+
+/* ------------------------------------- contrastive insight (ExpeL) --------- */
+
+/**
+ * ExpeL (LeapLabTHU/ExpeL, Apache-2.0, AAAI 2024) extracts insights by comparing
+ * a successful and a failed attempt at the same kind of task rather than reading
+ * one trace in isolation.
+ *
+ * When the same action succeeded elsewhere and failed here, the action is not
+ * universally wrong — the CONTEXT differs. Recording it as a blanket "avoid"
+ * would be exactly the hardcoded special case the brief warns against, so this
+ * returns a contextual note instead.
+ */
+export function contrastiveInsight({ successTrace = [], failureTrace = [] } = {}) {
+  const worked = new Set();
+  for (const step of successTrace) if (step.ok && step.name) worked.add(`${step.name}(${step.argsShape || ''})`);
+  const failedFirst = failureTrace.find((step) => step.ok === false && !TRANSIENT.test(step.cls || ''));
+  if (!failedFirst) return null;
+  const key = `${failedFirst.name}(${failedFirst.argsShape || ''})`;
+  if (!worked.has(key)) return null;
+  return {
+    kind: 'context-dependent',
+    action: key,
+    failedWith: failedFirst.cls || 'UNKNOWN',
+    detail: `${key} succeeded in a verified run but failed with ${failedFirst.cls} here; the difference is in the input or the environment, not the tool.`,
+  };
+}
+
+/* ------------------------------------------ integrity (skill-provenance) --- */
+
+/** A tiny bundle hash so an out-of-band edit of a learned skill is visible. */
+export function skillIntegrity(skill) {
+  const payload = JSON.stringify({
+    name: skill?.name || '',
+    procedure: skill?.learned?.procedure || [],
+    avoid: (skill?.learned?.avoid || []).map((a) => a.action),
+    state: skill?.learned?.state || '',
+    tools: skill?.tools || [],
+  });
+  return crypto.createHash('sha256').update(payload).digest('hex').slice(0, 16);
 }
 
 /* -------------------------------------------------------------- the store -- */
@@ -544,6 +661,62 @@ export class LearnedSkillStore {
     result.stateChanged = stateChanged;
     result.learning = true;
     return result;
+  }
+
+  /**
+   * Learn from a FAILED turn that had retrieved one or more skills.
+   *
+   * This is the half that was missing: a failure only ever incremented a counter
+   * (and nothing even called it). Now the failure is attributed to a specific
+   * step, the rest of the procedure is left alone, and a bounded revision is
+   * written down — so "the website/API/environment changed" becomes a concrete
+   * statement about one step instead of the whole skill quietly rotting.
+   */
+  observeFailure({ skills = [], trace = [], now = () => new Date().toISOString() } = {}) {
+    const out = [];
+    for (const retrieved of skills) {
+      const skill = this.get(retrieved.name || retrieved);
+      if (!skill) continue;
+      const attribution = attributeFailure({ skill, trace });
+      const learned = skill.learned;
+      learned.failures = Number(learned.failures || 0) + 1;
+      learned.lastFailureAt = now();
+      learned.lastFailureReason = sanitizeInstruction(String(attribution.failureClass || 'not verified'), { maxChars: 80 }).text;
+
+      if (attribution.attributable) {
+        learned.stepFailures = learned.stepFailures || {};
+        learned.stepFailures[attribution.stepIndex] = attribution.occurrences;
+        if (attribution.proposal?.kind === 'revalidate-step') {
+          // A step that keeps failing makes the skill STALE: still readable, not
+          // trusted. Never a silent deletion of the procedure.
+          learned.state = SKILL_STATES.STALE;
+          learned.staleSince = now();
+        }
+        learned.revisions = [...(learned.revisions || []), {
+          at: now(),
+          step: attribution.stepIndex + 1,
+          tool: attribution.tool,
+          failedWith: attribution.failureClass,
+          proposal: attribution.proposal,
+        }].slice(-10);
+      }
+
+      if (learned.failures - Number(learned.successes || 0) >= LEARNING_LIMITS.failedMargin) {
+        learned.state = SKILL_STATES.FAILED;
+      }
+      learned.confidence = confidenceOf(learned);
+      skill.experimental = learned.state === SKILL_STATES.EXPERIMENTAL;
+      skill.integrityChanged = skill.learned.integrity !== skillIntegrity(skill);
+      learned.integrity = skillIntegrity(skill);
+      this.#write(skill, readBody(skill));
+      out.push({
+        name: skill.name,
+        state: learned.state,
+        attribution,
+        failures: learned.failures,
+      });
+    }
+    return out;
   }
 
   /** Record that a retrieved skill did not work this time. */
@@ -702,7 +875,13 @@ export function renderLearned(ranked = []) {
     const avoid = (learned.avoid || []).length
       ? `\nDo not repeat (these failed in the verified run): ${learned.avoid.map((a) => `${a.action} → ${a.failedWith}`).join('; ')}.`
       : '';
-    return `#### ${skill.title} (${skill.name})\n${stateLine}\n${String(skill.body || '').trim().slice(0, 1200)}${avoid}`;
+    // A procedure with slots is a template: state what must be supplied for
+    // THIS request, which is what makes one skill serve many similar tasks.
+    const slots = learned.slots || [];
+    const slotLine = slots.length
+      ? `\nFill these from the current request before calling: ${slots.map((x) => `${x.name}→${x.tool}.${x.argument}`).join(', ')}.`
+      : '';
+    return `#### ${skill.title} (${skill.name})\n${stateLine}${slotLine}\n${String(skill.body || '').trim().slice(0, 1200)}${avoid}`;
   });
   return [
     '## Skills learned from verified work',
@@ -728,5 +907,8 @@ export function describeLearned(skills = []) {
     lastValidatedAt: s.learned.lastValidatedAt || null,
     verification: s.learned.verification?.method || null,
     avoid: (s.learned.avoid || []).map((a) => a.action),
+    slots: (s.learned.slots || []).map((x) => `${x.name}→${x.tool}.${x.argument}`),
+    revisions: (s.learned.revisions || []).length,
+    integrity: s.learned.integrity || null,
   }));
 }

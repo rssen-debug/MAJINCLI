@@ -688,3 +688,25 @@ pretending, and it is the only step of this gate that cannot be executed here.
 
 Inventory after this pass: 9 built-in tools, 114 registered on this host, every
 V1/V2/V3 component still carries a decision.
+
+
+## Self-improvement pass — 2026-10-24
+
+The owner asked whether finished repos exist to reuse. Five were checked via the
+GitHub API; none is droppable (all are Python research harnesses or a Minecraft
+JS library). The designs were reused instead — see `SOURCE_AUDIT.md` §8.
+
+| Addition | Why it matters | Test |
+|---|---|---|
+| Parameter slots (AWM) | one procedure now serves many files/folders/pages instead of narrating one run | "a procedure becomes a template with bindable slots" |
+| Step-level failure attribution (SkillAdaptor) | a changed environment breaks ONE step, not the whole skill | "a failure is attributed to one step" |
+| Repeated-failure escalation | the skill becomes STALE only when the same step keeps failing | "turns a verified skill STALE" (real restart) |
+| Transient exclusion | a timeout never becomes a permanent verdict | "a transient failure never becomes a permanent verdict" |
+| Contrastive insight (ExpeL) | the same action failing in one context is a note, not a blanket ban | "a context-dependent failure is not turned into a blanket avoid" |
+| Integrity hash | an out-of-band edit of a skill is visible | "an out-of-band edit … integrity hash" |
+
+**Defect found in our own engine:** `penalise()` existed but was never called, so
+a failed turn that had used a learned skill left no trace. `observeFailure` is now
+wired into the agent's failure path and proven end to end.
+
+Learning tests: 17 (was 15).

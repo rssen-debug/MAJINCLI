@@ -324,3 +324,42 @@ cap. The V1 check stays as the outer guard; no V1 file was modified.
 - **Voice and Windows/mobile verification.** Code exists and is tested; real
   device behaviour cannot be verified from this environment and is reported as
   BLOCKED rather than assumed.
+
+
+## 8. External repositories for skill learning — evaluated 2026-10-24
+
+The owner asked whether finished GitHub repos exist that can be reused. Five were
+checked against the real API (language, licence, activity) before any decision.
+
+| Repo | Language | Licence | Verdict |
+|---|---|---|---|
+| `zorazrw/agent-workflow-memory` (AWM, ICML 2025) | Python | Apache-2.0 | **design reused** — a Python research harness for mind2web/webarena; cannot be imported into Node |
+| `LeapLabTHU/ExpeL` (AAAI 2024) | Python | Apache-2.0 | **design reused** — Python, ALFWorld/WebShop harness |
+| `zjunlp/SkillAdaptor` | Python | MIT | **design reused** — Python; step-level attribution is the valuable part |
+| `MineDojo/Voyager` | JavaScript | MIT | **rejected as code** — the JavaScript is a Minecraft skill library (mineflayer APIs); none of it addresses Windows tools, files or browsers |
+| `OpenLAIR/OpenSkill` | PDDL | Apache-2.0 | **rejected** — "code coming soon"; nothing executable exists |
+
+Conclusion, stated plainly: **there is no drop-in repository.** Every real
+implementation of "learn a skill from a verified execution" is Python research
+code bound to its own benchmark harness, and MAJIN is a Node.js agent whose
+contracts (V2 `ToolDefinition`, zod schemas, approvals, receipts) none of them
+speak. Vendoring one would mean a second agent engine — exactly what the
+integration rule forbids.
+
+What was reused is the *design*, implemented against MAJIN's own store:
+
+| Idea | Source | Implemented in |
+|---|---|---|
+| Parameter slots so one workflow serves many tasks | AWM | `induceSlots`, `renderProcedure`, rendered into the prompt |
+| Attribute a failure to one step, revise only that step | SkillAdaptor | `attributeFailure`, `LearnedSkillStore.observeFailure` |
+| Compare a success against a failure instead of reading one trace | ExpeL | `contrastiveInsight` |
+| Verify before commit, bounded rounds | Voyager | already present: the verified-receipt gate |
+| Bundle integrity so an out-of-band edit is visible | `snapsynapse/skill-provenance` (MIT) | `skillIntegrity`, hashed on every write |
+
+### A defect this pass found in our own engine
+
+`penalise()` existed but **nothing ever called it**, so a failed turn that had
+used a learned skill left no trace at all: a procedure broken by a changed
+environment would keep looking healthy forever. That is now closed —
+`observeFailure` is wired into the agent's failure path, attributes the failure
+to a step, and escalates to `STALE` only when the same step fails repeatedly.

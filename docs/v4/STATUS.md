@@ -133,6 +133,38 @@ npm run v4:learn-accept
 
 Skriptet vägrar köra i demo-läge och skriver bevisen till `docs/v4/evidence/learned-skills-*.json`.
 
+## 2026-10-24 (forts.) — självförbättring: det som saknades
+
+Frågan var om det finns färdiga GitHub-repos att återanvända. **Svar: nej, inget
+som går att droppa in.** Fem kontrollerades via GitHub API:
+
+| Repo | Språk | Licens | Bedömning |
+|---|---|---|---|
+| `zorazrw/agent-workflow-memory` (AWM) | Python | Apache-2.0 | design återanvänd |
+| `LeapLabTHU/ExpeL` | Python | Apache-2.0 | design återanvänd |
+| `zjunlp/SkillAdaptor` | Python | MIT | design återanvänd |
+| `MineDojo/Voyager` | JavaScript | MIT | **avvisad** — JavaScriptet är ett Minecraft-bibliotek (mineflayer) |
+| `OpenLAIR/OpenSkill` | PDDL | Apache-2.0 | **avvisad** — "code coming soon", inget körbart |
+
+Alla är Python-forskningskod bundna till sin egen benchmark (mind2web, WebShop,
+ALFWorld, Minecraft). Att bak:a in en hade gett en andra agent-motor — precis det
+integrationsregeln förbjuder. Det som återanvänts är **designen**, implementerad
+mot MAJIN:s eget lager:
+
+| Idé | Källa | Nu i |
+|---|---|---|
+| Parameterplatser så en procedur tjänar många uppgifter | AWM | `induceSlots`, `renderProcedure`, visas i prompten |
+| Attribuera felet till **ett** steg och revidera bara det | SkillAdaptor | `attributeFailure`, `observeFailure` |
+| Jämför successtransaktion mot misslyckad, inte en i taget | ExpeL | `contrastiveInsight` |
+| Integritetshash så en redigering utanför systemet syns | skill-provenance | `skillIntegrity` |
+
+**Och en bugg i vår egen motor:** `penalise()` fanns men **anropades aldrig**. Ett
+misslyckat varv som använt en inlärd skill lämnade alltså inget spår — en procedur
+som gått sönder av en ändrad miljö hade fortsatt se frisk ut för alltid. Nu stängs
+loopen: felet attribueras till ett steg, och skillen blir `STALE` först när samma
+steg fallerar upprepat. Bevisat i `test/v4/learning.test.js` (17 tester), inklusive
+en riktig omstart mellan de två misslyckade varven.
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är
