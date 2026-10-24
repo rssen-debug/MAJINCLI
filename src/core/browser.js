@@ -224,7 +224,9 @@ async function httpJson(url, { timeoutMs = 5000, signal = null } = {}) {
 // Browser-owned sign-in/sync pages may appear after startup. A new page alone
 // is not evidence that the user's click opened it: require the current opener.
 export function isChildTarget(target, browser) {
-  return target.type === 'page' && target.openerId === browser.targetId && target.targetId !== browser.targetId && !target.attached && !browser.knownTabs.has(target.targetId);
+  return target.type === 'page' && target.url !== 'about:blank'
+    && target.openerId === browser.targetId && target.targetId !== browser.targetId
+    && !target.attached && !browser.knownTabs.has(target.targetId);
 }
 
 export async function waitForNavigation(navigation, read, { attempts = 150, delayMs = 100, wait = ms => new Promise(resolve => setTimeout(resolve, ms)), signal = null } = {}) {
@@ -297,7 +299,7 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     const args = [
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${profile}`,
-      '--no-first-run', '--no-default-browser-check', '--disable-popup-blocking',
+      '--no-first-run', '--no-default-browser-check', '--disable-session-crashed-bubble',
     ];
     if (headless !== false) args.push('--headless=new');
     args.push('about:blank');
@@ -339,8 +341,10 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
   // about:blank tab/window. A fallback target is needed for locked-down
   // policies and mocked browsers without an initial page.
   const { targetInfos: initialTabs = [] } = await cdp('Target.getTargets');
+  // Reuse an existing populated page in this agent-owned profile first.
+  const existingPage = initialTabs.find(t => t.type === 'page' && t.url && t.url !== 'about:blank' && !t.attached);
   const startupTab = initialTabs.find(t => t.type === 'page' && t.url === 'about:blank' && !t.attached);
-  const targetId = startupTab?.targetId ||
+  const targetId = existingPage?.targetId || startupTab?.targetId ||
     (await cdp('Target.createTarget', { url: 'about:blank' })).targetId;
   const { sessionId } = await cdp('Target.attachToTarget', { targetId, flatten: true });
   // Keep the original tab IDs pinned so followNewTarget never switches back
@@ -381,9 +385,22 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     if (r.exceptionDetails) throw new Error(String(r.exceptionDetails.text || 'evaluate threw'));
     return r.result ? r.result.value : undefined;
   };
-  await b.goto(url, {signal});
+  // Attaching without a URL must not erase an in-progress application.
+  if (url && url !== 'about:blank') {
+    const currentUrl = await b.eval('location.href', {signal}).catch(() => null);
+    if (currentUrl !== String(url)) await b.goto(url, {signal});
+  }
   signal?.throwIfAborted();
   sess.set(session, b);
+  // Chrome may restore surplus blank tabs in MAJIN's dedicated profile.
+  // Never close populated pages, or the active target.
+  try {
+    const { targetInfos: tabs = [] } = await cdp('Target.getTargets');
+    for (const tab of tabs) {
+      if (tab.type !== 'page' || tab.targetId === b.targetId || tab.url !== 'about:blank') continue;
+      await cdp('Target.closeTarget', { targetId: tab.targetId }, { timeoutMs: 1500 });
+    }
+  } catch { /* best-effort cleanup */ }
 
   /* smarttab: a click that opens a NEW page target must not strand the agent
      in the old, empty tab. 1.5 s window to catch the spawn, then re-attach. */
