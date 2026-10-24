@@ -484,6 +484,28 @@ höjer den.
 vad du faktiskt kan göra: *"MAJIN provade en metod som inte fungerade och behöver
 välja en annan — skriv gärna hur du vill att den ska göra."*
 
+## 2026-10-24 (forts. 12) — full behörighet från terminalen, utan omstart
+
+Ägarens skärmbild visade att godkännandekortet fortfarande frågade. Två orsaker:
+appen körde en version före `full behörighet`-committen, och växeln låg bara i
+panelen — svårt att hitta på en telefon.
+
+**Nytt kommando:**
+
+```
+npm run v4:approvals            visa läget
+npm run v4:approvals -- auto    full behörighet, frågar aldrig
+npm run v4:approvals -- ask     fråga igen
+```
+
+Samma sparade beslut som panelens kryssruta skriver, så de kan aldrig gå isär.
+
+**Och en riktig bugg som testet avslöjade:** servern cachade policyn vid start, så
+en ändring gjord av ett annat process (CLI:t) slog inte igenom förrän vid omstart.
+Första fixen jämförde filens mtime — otillräckligt, eftersom två skrivningar kan
+hamna i samma millisekund. Nu läses filen vid varje hållet anrop (några hundra
+byte, och bara för verktyg som ändå hålls): **ingen omstart behövs**.
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är

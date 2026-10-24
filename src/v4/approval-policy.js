@@ -85,24 +85,34 @@ export function writeApprovalPolicy(file, policy, { now = () => new Date().toISO
  * pass straight through, so the existing approval-continuation flow is untouched.
  */
 export function createPolicyAwareApprovals({ approvals, policyFile, onAutoApprove = null, fallback = APPROVAL_POLICIES.ASK }) {
-  // A cached decision, refreshed on every change so a toggle from the phone takes
-  // effect on the NEXT call rather than at the next boot.
   let policy = readApprovalPolicy(policyFile, { fallback });
+
+  /**
+   * The file can be changed by another process — the CLI, or a second app window.
+   * A cached value would let the server keep asking after the owner said "never
+   * ask", so every held call reads the file. It is a few hundred bytes and only
+   * consulted for held tools, which is already the slow path; a modification-time
+   * check is not enough because two writes can land in the same millisecond.
+   */
+  function sync() {
+    policy = readApprovalPolicy(policyFile, { fallback });
+    return policy;
+  }
 
   const facade = {
     get policy() {
-      return policy;
+      return sync();
     },
-    /** Re-read from disk. Called by the API after a change. */
+    /** Re-read from disk now. */
     refresh() {
-      policy = readApprovalPolicy(policyFile, { fallback });
-      return policy;
+      return sync();
     },
     set(policyName) {
       writeApprovalPolicy(policyFile, policyName);
       return facade.refresh();
     },
     check(scope, detail = {}) {
+      sync();
       if (policy === APPROVAL_POLICIES.AUTO) {
         // Recorded, never silent. The caller decides where the record goes.
         try {
@@ -121,6 +131,7 @@ export function createPolicyAwareApprovals({ approvals, policyFile, onAutoApprov
       return approvals.revoke(scope);
     },
     status(scope) {
+      sync();
       if (policy === APPROVAL_POLICIES.AUTO) {
         return Object.freeze({ scope, granted: true, mode: 'auto', user: 'owner', policy });
       }

@@ -226,3 +226,31 @@ test('approvals: full trust does not widen which tools exist', async () => {
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('approvals: a change made by another process is picked up without a restart', async () => {
+  /**
+   * The CLI writes the same file the app writes. A server that cached the policy
+   * at boot would keep asking after the owner said "never ask" — the exact
+   * confusion this feature exists to remove. The facade re-reads on modification
+   * time, so a held call after the change already sees the new policy.
+   */
+  const home = tempHome();
+  const file = path.join(home, 'approvals.json');
+  try {
+    const layer = createPolicyAwareApprovals({
+      approvals: new Approvals(noopBus),
+      policyFile: file,
+    });
+    assert.equal(layer.check('tool:fs_write').decision, 'waiting');
+
+    // Another process (the CLI) writes the decision.
+    writeApprovalPolicy(file, APPROVAL_POLICIES.AUTO);
+    assert.equal(layer.policy, APPROVAL_POLICIES.AUTO, 'the running layer did not notice the change');
+    assert.equal(layer.check('tool:fs_write').decision, 'allow');
+
+    writeApprovalPolicy(file, APPROVAL_POLICIES.ASK);
+    assert.equal(layer.check('tool:fs_write').decision, 'waiting', 'turning it off did not take effect');
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
