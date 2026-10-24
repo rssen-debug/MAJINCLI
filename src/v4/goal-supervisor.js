@@ -1,5 +1,5 @@
 /** Durable evidence-only continuation for MAJIN V4 unfinished user goals. */
-const CONTINUE = /^(?:(?:ja|okej|ok|yes)[,! .]*)?(?:fortsätt|continue|resume|försök igen|testa igen|kör igen|igen sök|lös(?: det)?(?: nu)?|fixa(?: det)?|kör vidare|gör klart|slutför|retry)[\\s.!?…]*$/iu;
+const CONTINUE = /^(?:(?:ja|okej|ok|yes)[,! .]*)?(?:fortsätt|continue|resume|försök igen|testa igen|kör igen|igen sök|lös(?: det)?(?: nu)?|fixa(?: det)?|kör vidare|gör klart|slutför|retry)[\s.!?…]*$/iu;
 export function isResumeRequest(message) { return CONTINUE.test(String(message || '').trim()); }
 export function checkpointForFailure({objective, goalId, trace = [], code = ''} = {}) {
   // Argument SHAPES only: never persist form values, selectors, paths or tokens.
@@ -30,5 +30,5 @@ export function resumeGuidance(checkpoint) {
     'Never automatically repeat a possible external submission, payment or destructive operation.',
     'On failures choose a DIFFERENT grounded approach; discover tools or delegate diagnostics if needed.',
     'Continue the original objective; independently verify success. If blocked, save a new checkpoint.',
-  ].join('\\n');
+  ].join('\n');
 }
