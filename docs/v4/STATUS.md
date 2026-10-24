@@ -405,6 +405,28 @@ Detta är den mest centrala regeln i hela uppdraget, och den var fel i några ti
 Att den hittades beror på att jag läste specen igen i stället för att lita på att
 tidigare tester var gröna.
 
+## 2026-10-24 (forts. 9) — inlärningen stör inte det som redan fungerade
+
+Specen säger: *"Keep all previously required universal autonomy, **voice, mobile,
+scheduling, model-selection** and release requirements."* Varje sådan förmåga
+byggdes innan inlärningen fanns, och en ny motor som tyst bryter en av dem är en
+regression även om dess egna tester är gröna.
+
+Ingenting testade den samexistensen. Nu finns `test/v4/learning-coexistence.test.js`
+(4 tester) som slår på inlärning och kräver att de andra kraven håller:
+
+| Krav | Vad som bevisas |
+|---|---|
+| Röst | ett talat varv behåller sin korthetsinstruktion **och** lär fortfarande |
+| Schemaläggning | heartbeat observerar varvet utan fel, även med de nya `learning`-händelserna |
+| Modellval | canonical-valet fungerar oförändrat och varvet lär vid sidan om |
+| Mobil | inlärningen blockerar inte SSE-strömmen; resultatet följer med `done`-händelsen så telefonen slipper en extra förfrågan |
+
+Modellvalstestet avslöjade ett API-kontrakt jag inte kände till: `/api/model`
+använder **optimistisk låsning** med `expectedVersion` och svarar 409 om en annan
+enhet flyttat valet. Det är en skyddsmekanism, inte en bugg — testet talar nu det
+riktiga kontraktet i stället för att anta att en naken skrivning accepteras.
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är
