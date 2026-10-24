@@ -151,6 +151,11 @@ test('V4 sync is approval-held and enforces live folder grants before any target
     assert.equal(new MemoryStore(target).get('preference','owner').text,'private controlled memory');
     const before=files(target);folders=[];
     await assert.rejects(call({check:()=>({decision:'allow'})}),e=>e.cls==='PERMISSION_DENIED');assert.deepEqual(files(target),before);
-    folders=[home];await assert.rejects(runTool({tool:'memory_sync',input:{target:tools.memory.dir,dryRun:false}},{registry:tools.registry,approvals:{check:()=>({decision:'allow'})}}),/non-overlapping/);
+    folders=[home];
+    const sourceBefore=files(tools.memory.dir);
+    for(const overlap of [tools.memory.dir,path.join(tools.memory.dir,'nested'),home]){
+      await assert.rejects(runTool({tool:'memory_sync',input:{target:overlap,dryRun:false}},{registry:tools.registry,approvals:{check:()=>({decision:'allow'})}}),e=>e.cls==='PERMISSION_DENIED'&&/non-overlapping/.test(e.message));
+    }
+    assert.deepEqual(files(tools.memory.dir),sourceBefore);assert.equal(fs.existsSync(path.join(tools.memory.dir,'nested')),false);
   }finally{fs.rmSync(home,{recursive:true,force:true});}
 });

@@ -291,3 +291,7 @@ including hosted native/cold-start checks. New memory-sync head needs its own CI
 Original23 checked files and39 restored backup hashes remain unchanged. Production
 signer/activation, physical delivery/voice, remaining real scenarios and all other
 parity gaps remain mandatory. NOT READY; PR401 remains draft and unmerged.
+
+### Latest execution checkpoint — NOT READY
+
+See [FINAL_EXECUTION_20261024.md](FINAL_EXECUTION_20261024.md) for current tests, real Go form failures, Windows CI failure/root fix and the complete remaining gates. Earlier aggregate claims do not supersede this checkpoint. No original requirement is waived.

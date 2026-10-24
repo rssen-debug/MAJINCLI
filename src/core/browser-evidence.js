@@ -3,6 +3,27 @@
  * observe/act/verify separation. Evaluates read-only DOM state, never performs
  * an action or infers "success" from an HTTP 200 / successful click.
  */
+// Read native validity flags without checkValidity/reportValidity (both fire events).
+// Values, password contents, files and validationMessage text are never returned.
+export const FORM_STATE_JS=String.raw`(() => {
+ const out=[];
+ for(const el of Array.from(document.querySelectorAll('input,select,textarea')).slice(0,120)){
+  const rect=el.getBoundingClientRect(),style=getComputedStyle(el);
+  if(!rect.width||!rect.height||style.display==='none'||style.visibility==='hidden'||Number(style.opacity)===0||el.disabled)continue;
+  const v=el.validity;if(!v)continue;
+  const problems=['valueMissing','typeMismatch','patternMismatch','tooLong','tooShort','rangeUnderflow','rangeOverflow','stepMismatch','badInput','customError'].filter(k=>v[k]);
+  out.push({id:String(el.id||'').slice(0,100),name:String(el.name||'').slice(0,100),type:String(el.type||el.tagName).toLowerCase(),filled:el.type==='checkbox'||el.type==='radio'?Boolean(el.checked):Boolean(el.value),required:Boolean(el.required),valid:v.valid,problems});
+ }
+ return out;
+})()`;
+
+export function formatFormState(rows){
+  if(!Array.isArray(rows)||!rows.length)return '';
+  return '\n\nForm field state (values hidden; native browser constraints):\n'+rows.map(r=>
+    '- '+(r.id?'#'+r.id:r.name||r.type)+': '+(r.filled?'filled/selected':'EMPTY/unchecked')+(r.required?' required':'')+(r.valid?' valid':' INVALID '+r.problems.join(', '))
+  ).join('\n');
+}
+
 export const VERIFY_JS = String.raw`((args) => {
   const selector = args.selector || '';
   let el = null, count = 0;

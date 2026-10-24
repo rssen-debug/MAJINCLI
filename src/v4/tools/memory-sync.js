@@ -16,7 +16,9 @@ export function createMemorySyncTool({memory,workspaceDir,folders=()=>[]}){
     execute:async({target,dryRun=true})=>{
       const checked=checkPath(target,{workspace:workspaceDir,folders:folders()});
       if(!checked.allowed||!checked.abs)throw Object.assign(Error('Memory target is outside the current folder grants'),{cls:'PERMISSION_DENIED'});
-      const local=fs.realpathSync(memory.dir),remote=checked.abs;
+      // checkPath uses the native resolver (including Windows 8.3 expansion).
+      // Use that same representation for the canonical source boundary.
+      const local=fs.realpathSync.native?fs.realpathSync.native(memory.dir):fs.realpathSync(memory.dir),remote=checked.abs;
       if(isInside(remote,local)||isInside(local,remote))throw Object.assign(Error('Memory stores must be separate non-overlapping directories'),{cls:'PERMISSION_DENIED'});
       // No mkdir in constructor: BOTH stores must pass strict preflight first.
       const peer=new MemoryStore(path.resolve(remote),{maxEntriesPerNs:memory.maxEntriesPerNs,create:false});

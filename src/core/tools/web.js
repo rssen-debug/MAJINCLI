@@ -16,7 +16,7 @@ import { noteBrowserAction, observeBrowserPage, clearBrowserStagnation } from '.
 import { OUTLINE_JS, formatPageOutline } from '../browser-outline.js';
 import { compactBrowserText } from '../browser-compact.js';
 import { SEMANTIC_SNAPSHOT_JS, formatSemanticSnapshot } from '../browser-semantic.js';
-import { VERIFY_JS, verificationCriteria, verifyObserved, browserRecoveryAdvice } from '../browser-evidence.js';
+import { VERIFY_JS, verificationCriteria, verifyObserved, browserRecoveryAdvice,FORM_STATE_JS,formatFormState } from '../browser-evidence.js';
 import { browserActionReceipt } from '../browser-action-receipt.js';
 
 const followedSafe = (fol) => (fol && fol.followed === true ? true : false);
@@ -284,7 +284,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       if(String(mode).toLowerCase()==='structure'){
         const payload=await b.eval(SEMANTIC_SNAPSHOT_JS).catch(e=>({error:String(e?.message||e)}));
         if(payload?.error)return {ok:false,error:{code:'structure_failed',message:payload.error}};
-        const result=formatSemanticSnapshot(payload);
+        const result=formatSemanticSnapshot(payload)+formatFormState(await b.eval(FORM_STATE_JS).catch(()=>[]));
         journal.guard(session,'browser.read:structure');
         return {ok:true,result,meta:{url:payload.url,title:payload.title,mode:'structure',count:payload.elements?.length||0},summary:'Page structure observed ('+(payload.elements?.length||0)+' elements)'};
       }
@@ -302,7 +302,8 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const progress=observeBrowserPage(session,{url:r.url,title:r.title,text:sourceText,controls});
       const compressed=String(mode).toLowerCase()==='compact' ? compactBrowserText(sourceText) : null;
       const visibleText=compressed?.text || sourceText;
-      return { ok: true, result: visibleText + formatControlHints(controls) + (progress.stagnant?'\n\nMAJIN browser observation: page unchanged after '+progress.unchangedActions+' actions. Inspect current controls and change strategy rather than replaying the same click.':''),
+      const fieldState=await b.eval(FORM_STATE_JS).catch(()=>[]);
+      return { ok: true, result: visibleText + formatControlHints(controls) + formatFormState(fieldState) + (progress.stagnant?'\n\nMAJIN browser observation: page unchanged after '+progress.unchangedActions+' actions. Inspect current controls and change strategy rather than replaying the same click.':''),
         meta: { url: r.url, title: r.title, chars: sourceText.length,
           groundedControls: Array.isArray(controls) ? controls.length : 0, stagnation:progress,
           ...(compressed ? { mode:'compact', visibleChars:compressed.outputChars,
@@ -523,9 +524,10 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           failures:proof.failures
         },meta:{clicked:hit.text,attempts,observed:proof.observed,receipt:browserActionReceipt({dispatched:true,reason:'assertion_failed'})},summary:'click outcome NOT verified'};
       }
+      const formState=await b.eval(FORM_STATE_JS).catch(()=>[]);
       return {
         ok: true,
-        result: `Click dispatched on ${hit.tag} "${hit.text}"${typeof hit.checked === 'boolean' ? (hit.checked ? ' — checkbox CHECKED' : ' — checkbox UNCHECKED') : ''}${fol.followed ? ' (new tab followed)' : ''} — page now: "${after.title}" at ${after.url}${proof?.ok ? ' — EXPECTED OUTCOME VERIFIED' : ' — OUTCOME NOT VERIFIED: call browser.verify before declaring task done'}`,
+        result: `Click dispatched on ${hit.tag} "${hit.text}"${typeof hit.checked === 'boolean' ? (hit.checked ? ' — checkbox CHECKED' : ' — checkbox UNCHECKED') : ''}${fol.followed ? ' (new tab followed)' : ''} — page now: "${after.title}" at ${after.url}${proof?.ok ? ' — EXPECTED OUTCOME VERIFIED' : ' — OUTCOME NOT VERIFIED: call browser.verify before declaring task done'}`+formatFormState(formState),
         meta: { tag: hit.tag, text: hit.text, checked: hit.checked, checkboxChanged: hit.changed,
           urlAfter: after.url, title: after.title, openedNewTab: fol.followed,
           verified: proof?.ok === true, outcomeEvidence: proof?.ok ? 'postcondition' : 'action_only', verificationAttempts: attempts,
@@ -590,6 +592,8 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
             options:available.slice(0,30).map(o=>o.label.trim().slice(0,100))};
           targetValue = matches[0].value;
         }
+        // Re-dispatching a no-op select change can erase dependent form fields.
+        if(el.value===targetValue)return {found:true,stuck:true,targetValue,unchanged:true};
         el.focus();
         const proto = el.tagName === 'SELECT' ? window.HTMLSelectElement.prototype : (el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype);
         const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;

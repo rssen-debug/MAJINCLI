@@ -183,3 +183,7 @@ Linux/Windows/runner CI passed. The next browser isolation/resource-cleanup and
 reusable live-evaluation follow-up has deterministic and actual local-process
 fixtures; real Go unknown-form acceptance is still pending. Persistent monitoring
 and locked-iPhone Web Push remain FAIL; all other original gaps remain unchanged.
+
+### Latest execution checkpoint — NOT READY
+
+See [FINAL_EXECUTION_20261024.md](FINAL_EXECUTION_20261024.md) for current tests, real Go form failures, Windows CI failure/root fix and the complete remaining gates. Earlier aggregate claims do not supersede this checkpoint. No original requirement is waived.

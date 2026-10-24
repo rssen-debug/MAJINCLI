@@ -993,3 +993,7 @@ genesis-research-attempt-2-review.json records the exact finding. Do not turn th
 structural passed flag into factual acceptance. Next engineering work remains
 typed V4 self-config/reset, durable graph resume/replan and token/currency budgets;
 then remaining real scenarios and original physical/production acceptance gates.
+
+### Latest execution checkpoint — NOT READY
+
+See [FINAL_EXECUTION_20261024.md](FINAL_EXECUTION_20261024.md) for current tests, real Go form failures, Windows CI failure/root fix and the complete remaining gates. Earlier aggregate claims do not supersede this checkpoint. No original requirement is waived.
