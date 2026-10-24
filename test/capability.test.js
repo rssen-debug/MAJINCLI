@@ -48,7 +48,12 @@ test('search hittar rätt verktyg utan en enda modell', () => {
   assert.ok(hit2.some((h) => h.id === 'fs.write'), `fs.write inom topp-3: fick [${hit2.map((h) => h.id)}]`);
 
   const hit3 = reg.search('fill a form in the browser', { limit: 2 });
-  assert.equal(hit3[0].id, 'browser.fill', `browser.fill topp: fick [${hit3.map((h) => h.id)}]`);
+  // v4/main added browser.form_fill, which covers all three query terms and is
+  // the more specific answer to "fill a form". The intent of this assertion is
+  // that the search finds the tool that fills forms, not that one exact name
+  // wins after a better tool exists.
+  assert.ok(['browser.fill', 'browser.form_fill'].includes(hit3[0].id),
+    `en formfyllare ska vara topp: fick [${hit3.map((h) => h.id)}]`);
 
   const hit4 = reg.search('ads analytics report', { limit: 5 });
   assert.ok(hit4.some((h) => h.id === 'marketing.analyze'), 'marketing.analyze i topp: ' + hit4.map((h) => h.id));

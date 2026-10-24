@@ -117,7 +117,11 @@ export const netTools = [
   def({
     name: 'net.http',
     group: 'network',
-    risk: 'net',
+    // 'net' is not a V1 risk level, so the guard could not classify this tool at
+    // all: no-dead-tools and the capability map both rejected it. It can issue
+    // any method against any URL, so the honest level is the one that asks -
+    // 'exec' - rather than 'read', which would auto-approve a POST.
+    risk: 'exec',
     desc: 'Raw HTTP request (method, headers, body). Use for your own APIs and for testing a local web service.',
     params: { url: 'string: address', method: 'string: GET | POST | PUT | DELETE | HEAD | OPTIONS. optional (default: GET) [GET|POST|PUT|DELETE|HEAD|OPTIONS]', headers: 'object: extra headers (optional)', body: 'string: body (optional)', maxChars: 'number: response cap (default: 8000)' },
         required: ['url'],
