@@ -272,3 +272,22 @@ scenarios are still open. Running Ghost modules remaine45640a, prepared checkout
 88bde65 before this follow-up; no restart bypass after policy denial. Production
 signer/channel, native update/rollback/login and full physical voice/push acceptance
 remain outstanding. No original requirement is removed and PR401 stays draft.
+
+### Canonical memory-sync milestone — still NOT READY
+
+Existing core sync now supports canonical V2 namespaced stores, atomic deletion/
+version metadata, explicit approval/live folder checks and a byte-inert preview.
+Original V1 text sync remains distinct; no silent lossy conversion. Strict corrupt,
+clone/alias and capacity refusal preserves data. Real Go selected preview, actual
+sync and search on an isolated Ghost test host. Attempt2 independently verifies
+both directions, full project metadata/text and actual search retrieval in8.1s;
+source hashes and pre-commit checkout status are preserved in its receipt. This
+does not prove the ordinary Ghost process has loaded the new module.
+
+Local full V4 milestone571/0/0 before the final alias guard; final canonical/legacy/
+context24/0/0 after it, canonical cases10. Parse655/655 before that small guard;
+i18n0/335. Exact a0d59ea all three CI workflows subsequently observed SUCCESS,
+including hosted native/cold-start checks. New memory-sync head needs its own CI.
+Original23 checked files and39 restored backup hashes remain unchanged. Production
+signer/activation, physical delivery/voice, remaining real scenarios and all other
+parity gaps remain mandatory. NOT READY; PR401 remains draft and unmerged.

@@ -912,3 +912,63 @@ delegation, universal tools, failure and cancellation24/0/0. These are controlle
 provider tests, not a second real eligible Go model or complete budget parity.
 Token/currency caps and durable graph restart/replanning remain open. Node syntax
 checks and i18n0/333 passed. All earlier external and original parity gates remain.
+
+### Canonical separate-store memory synchronization — 24 October, PARTIAL
+
+Exact a0d59eaf97a71166be8e21f61d27cc63791d3a05 CI all THREE SUCCESS observed:
+V4 run40044176481, Windows desktop40044176476, runner40044176512. Hosted packaging/
+native/cold-start still does not prove production trust or Ghost installation.
+
+Extended the EXISTING src/core/memory-sync.js entry point for V2 MemoryStore
+records; no shadow fact store, new scheduler or duplicate agent. Canonical
+namespace JSON holds full entries and atomic version/tombstone metadata. All
+eight namespaces, keys, full text, tags, importance, at/id and meta are preserved.
+Lamport counters provide deterministic conflict resolution: counter, equal-counter
+deletion, actor. A re-add after observing a deletion advances beyond its tombstone.
+This is not a global wall-clock last-write guarantee. Each store has one writer;
+the two-store operation is not a distributed transaction. Interrupted copying
+converges on retry without re-versioning imported entries. Retention and clear
+emit tombstones. Existing readers refresh atomically replaced files.
+
+New V4 memory_sync reuses MemoryStore and syncPair, defaults to preview, requires
+external-tier approval, checks current folder grants and forbids overlapping
+stores. Both stores pass strict schema/capacity checks before data writes; corrupt,
+cloned and V1 text stores are refused and retained. V1-to-V2 conversion is never
+implicit. Namespace files use fsync+atomic rename; tombstones are retained rather
+than silently expired. Size/capacity limits fail without discarding entries.
+Preview creates neither files, identities nor a missing target directory.
+
+Also repaired the old text protocol's preview identity writes and 500-delta page
+acknowledgment bug. Its export now acknowledges only the emitted page, and refuses
+missing retained history instead of silently skipping it. Genuine 501-delta/file
+regression and legacy memory/context suites21/0/0. Canonical/tool/process/recovery
+focused tests9/0/0 before final review refinements; i18n0/335.
+
+Real Go glm-5.3-flash independently chose memory_sync preview, memory_sync actual,
+then memory_search; two scoped approvals. Independent files prove bidirectional
+preferences, unchanged preview and full project metadata/text. Attempt1 PASS in
+genesis-memory-sync-attempt-1.json (12.4 seconds). Test used an isolated host/data
+directory on actual Ghost with the EXISTING Go route; no provider or billing
+selection change, production process restart or original memory mutation. Receipt
+records pre-commit checkout head/dirty flag plus actual tested source hashes;
+it deliberately does NOT claim ordinary Ghost runtime activation or phone proof.
+Reusable harness scripts/v4/evals/memory-sync.mjs reads owner credentials in memory,
+never records them, and closes only its isolated test listener.
+
+Full local V4 regression FINISHED571/0/0 (482 seconds, actual Chrome, no skips),
+before the final empty-directory alias identity guard. The guard now canonicalizes
+preview paths and rechecks actual identities; a real directory-junction regression
+refuses both preview and actual sync before minting IDs. Final focused canonical/
+legacy/context24/0/0; canonical suite now10 tests. Real Go attempt2 re-verifies the
+final tested source hashes: preview/sync/search PASS, two approvals, 8.1 seconds.
+Attempt1 is retained. Full parse655/655 before the tiny guard; final focused run
+loads that guard. Original23 source files and all39 restore hashes still match at
+00:37Z; no private keys recorded. i18n0/335.
+
+Next: commit/push source+tests+receipts, pull clean installed checkout without
+attempting the policy-blocked ordinary host restart, inspect exact-head CI and
+continue typed self-config/reset, graph durability/team token-currency limits and
+original gates. Newly noticed follow-up: memory_save currently acknowledges saved
+even if low-importance retention drops the new entry; require an actual retained
+entry before returning saved=true. Do not label ordinary Ghost memory-sync active
+or physically accepted merely because the isolated test passed.

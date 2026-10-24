@@ -19,6 +19,7 @@ import { jsonSchemaFor } from './schema.js';
 import { createToolExposure, searchRegistry } from './tool-exposure.js';
 import { turnState } from './turn-state.js';
 import { checkPath } from './path-access.js';
+import {createMemorySyncTool} from './tools/memory-sync.js';
 
 export const MAX_FILE_BYTES = 1_000_000;
 export const MAX_READ_BYTES = 200_000;
@@ -99,6 +100,7 @@ export function createToolRegistry({ workspaceDir, memoryDir, allowedRoots = () 
       return [];
     }
   };
+  registry.define(createMemorySyncTool({memory,workspaceDir:root,folders:grantedFolders}));
 
   registry.define({
     name: 'workspace_write',

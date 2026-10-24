@@ -53,9 +53,10 @@ export const V1_MODULE_DECISIONS = Object.freeze({
       + 'wrapper uses V1 journal events and is not a second V4 heartbeat owner.',
   },
   'memory-sync.js': {
-    status: 'excluded',
-    reason: 'Operates on V1\'s Memory store. V4\'s durable memory is V2\'s MemoryStore and its '
-      + 'backup/restore path; syncing a second store into it would fork the source of truth.',
+    status: 'replaced',
+    reason: 'The existing core memory-sync entry point now supports canonical V2 namespaced records. '
+      + 'V4 memory_sync uses that engine and MemoryStore with approval, folder checks and tombstones. '
+      + 'The old wrapper assumes V1 text facts and is not used to create a shadow V4 store.',
   },
   'reset.js': {
     status: 'excluded',

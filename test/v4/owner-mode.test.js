@@ -251,7 +251,7 @@ test('owner-mode/api: a revoke removes the tools immediately, not at next boot',
     await readSse(await postChat(s.base, cookie, { text: 'Hej', requestId: 'om1' }));
     const names = seen[0].map((t) => t.name);
     assert.deepEqual(names.sort(), [
-      'document_read', 'memory_save', 'memory_search', 'task_list', 'task_manage', 'tools_activate', 'tools_search',
+      'document_read', 'memory_save', 'memory_search', 'memory_sync', 'task_list', 'task_manage', 'tools_activate', 'tools_search',
       'workspace_list', 'workspace_read', 'workspace_write',
     ]);
   } finally {
