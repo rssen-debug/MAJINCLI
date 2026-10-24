@@ -153,6 +153,7 @@ export function createGraphTool({ runSubtask }) {
           if (out.answer) answers.set(task.id, out.answer);
           for (const artifact of out.artifacts || []) artifacts.push(artifact);
           if (out.failure) {
+            task.error = String(out.failure).slice(0, 2000);
             return { result: 'failure', error: { message: out.failure, cls: 'TOOL_FAILURE' } };
           }
           return {

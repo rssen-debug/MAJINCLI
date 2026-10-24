@@ -891,3 +891,24 @@ memory-sync, typed self-config/reset, graph resume/replan and token/currency tea
 budgets, remaining real scenarios, billing/model eligibility, physical voice/push,
 and production-signed host/native update/rollback/login. Five old form FAILs are
 unchanged. Original scope and NOT READY retained; do not merge PR401.
+
+### Bounded worker completion correction — 24 October, PARTIAL
+
+a698481b7e4260dfb404b8e78d9b20246e6c6c6f pushed and cleanly pulled into the
+Ghost installed checkout. V4 CI40043745540 and runner40043745560 SUCCESS at last
+observation; Windows desktop40043745578 still in progress. Runtime remains
+last activatede45640a; no restart/activation bypass was attempted.
+
+Inspection of the original team/graph parity found another false-success path:
+runSubtask exhausted its final allowed model round while the model still asked
+for tools, then returned failure=null and a configured rather than actual round
+count. It now marks the work incomplete and reports actual rounds. The existing
+graph scheduler consequently fails the node and blocks dependents; graph results
+preserve the actual worker failure reason instead of only a generic class.
+Controlled real HTTP-provider graph regression repeatedly requests a harmless
+read, proves exactly three child requests and zero dependent requests, and
+asserts failed1/blocked1/done0. Orchestration/recovery8/0/0; broader actual transport
+delegation, universal tools, failure and cancellation24/0/0. These are controlled
+provider tests, not a second real eligible Go model or complete budget parity.
+Token/currency caps and durable graph restart/replanning remain open. Node syntax
+checks and i18n0/333 passed. All earlier external and original parity gates remain.

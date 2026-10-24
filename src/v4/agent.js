@@ -1152,6 +1152,8 @@ export function createAgent({
     let text = '';
     let calls = 0;
     let failure = null;
+    let usedRounds = 0;
+    let finished = false;
     const rounds = Math.max(1, Math.min(5, Number(maxRounds) || 3));
     for (let round = 1; round <= rounds; round += 1) {
       if (turn?.signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
@@ -1162,8 +1164,9 @@ export function createAgent({
         modelId: null,
         onEvent: () => {},
       });
+      usedRounds = round;
       if (res.text) text += res.text;
-      if (!res.toolCalls?.length) break;
+      if (!res.toolCalls?.length) { finished = true; break; }
       const toolMessages = [];
       for (const call of res.toolCalls) {
         if (calls >= Math.max(1, Math.min(6, Number(maxCalls) || 6))) {
@@ -1195,6 +1198,7 @@ export function createAgent({
       messages.push(...toolMessages);
       if (failure) break;
     }
+    if (!finished && !failure) failure = `subagent model round budget exhausted (${rounds}); task is incomplete`;
     const artifacts = subGoal.receipts
       .filter((r) => r.verified && r.acceptanceId && r.evidence)
       .map((r) => ({
@@ -1202,7 +1206,7 @@ export function createAgent({
         acceptanceId: r.acceptanceId,
         evidence: r.evidence,
       }));
-    return { answer: text.trim(), tools: [...new Set(used)], calls, rounds, failure, artifacts };
+    return { answer: text.trim(), tools: [...new Set(used)], calls, rounds: usedRounds, failure, artifacts };
   }
 
   /**

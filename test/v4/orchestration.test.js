@@ -48,6 +48,31 @@ const env = (provider) => ({
 const isChild = (body) => (body.messages || [])
   .some((m) => m.role === 'system' && /MAJIN subagent/.test(String(m.content)));
 
+test('graph: exhausted child reasoning budget is incomplete and blocks dependents despite successful tool reads',async()=>{
+  const home=tempHome();grantAgentLane(home);let parentCalls=0,childCalls=0,observedGraph;
+  const provider=await startFakeProvider(body=>{
+    if(isChild(body)){childCalls++;return {text:'Still checking.',toolCalls:[{name:'workspace_list',args:{}}]};}
+    if(parentCalls++===0)return {toolCalls:[{name:'agent_graph',args:{steps:[
+      {id:'a',task:'Keep researching until independently finished.'},
+      {id:'b',task:'Publish the completed research.',deps:['a']},
+    ]}}]};
+    const result=lastToolMessage(body)?.data;
+    observedGraph=result;
+    assert.equal(result?.ok,false);assert.equal(result.failed,1);assert.equal(result.blocked,1);
+    assert.match(result.results.find(r=>r.id==='a').error,/model round budget exhausted/);
+    return {text:'The research is incomplete: the bounded worker exhausted its model rounds. Publication did not run.'};
+  });
+  const s=await startTestServer({home,env:env(provider)});
+  try{
+    const {cookie}=await s.pair();
+    const events=await readSse(await postChat(s.base,cookie,{text:'Run bounded research graph.',requestId:'graph-round-budget'}));
+    const result=observedGraph;
+    assert.equal(result?.ok,false);assert.equal(result.done,0);assert.equal(result.failed,1);assert.equal(result.blocked,1);
+    assert.equal(childCalls,3,'no fourth model call and no dependent worker');assert.equal(parentCalls,2);
+    assert.equal(JSON.stringify(events).includes('FAKE_PROVIDER_ERROR'),false);
+  }finally{await s.close();await provider.close();}
+});
+
 test('graph: dependencies are respected, results flow forward, artifacts are verified', async () => {
   const home = tempHome();
   grantAgentLane(home);
