@@ -25,6 +25,6 @@ test('desktop: only loopback HTTP or HTTPS origins, without embedded credentials
 
 test('desktop: monitor removal cannot strand the restored window off screen', () => {
   const displays = [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }];
-  assert.deepEqual(restoreBounds({ x: 2400, y: 20, width: 800, height: 600 }, displays), { width: 1100, height: 800 });
+  assert.deepEqual(restoreBounds({ x: 2400, y: 20, width: 800, height: 600 }, displays), { width: 520, height: 860 });
   assert.deepEqual(restoreBounds({ x: 30, y: 20, width: 800, height: 600 }, displays), { x: 30, y: 20, width: 800, height: 600 });
 });

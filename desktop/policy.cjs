@@ -16,7 +16,9 @@ function sameOrigin(raw, origin) {
 }
 
 function restoreBounds(saved, displays) {
-  const fallback = { width: 1100, height: 800 };
+  // Start with the shared mobile layout in a desktop app window. Resizing and
+  // previously saved bounds still work; there is no separate desktop UI.
+  const fallback = { width: 520, height: 860 };
   if (!saved || !['x', 'y', 'width', 'height'].every((k) => Number.isFinite(saved[k]))) return fallback;
   const width = Math.max(400, Math.min(3840, saved.width));
   const height = Math.max(400, Math.min(2160, saved.height));
