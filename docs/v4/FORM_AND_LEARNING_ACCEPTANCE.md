@@ -33,80 +33,78 @@ observations. Product code may not contain fixture-specific selectors or recipes
 
 ## Learned operational skills — IMPLEMENTED, awaiting the real-provider run
 
-**Status 2026-10-24 (updated):** the engine is built, integrated, and the whole
-A–H chain now runs **14/14 against an OpenAI-compatible endpoint** (simulated
-OpenCode Go wire format) including cost accounting and a real process restart.
-The one remaining step is the same run against the real Go provider, which needs
-the owner's key.
+**Status 2026-10-24: PASSED — 14/14 against the real OpenCode Go provider.**
 
-That step no longer needs a key to be pasted anywhere: the repository already
-holds an `OPENCODE_API_KEY` secret, and `.github/workflows/v4-learn-accept.yml`
-runs the gate with it on demand:
+The mandatory A–H gate ran on GitHub Actions against the real provider (model
+`glm-5.3-flash`, OpenCode Go), using the repository's existing `OPENCODE_API_KEY`
+secret. No key was pasted, printed or stored anywhere.
 
 ```
+  provider: env · glm-5.3-flash
+  PASS  auth.paired                    pair -> 200
+  PASS  turn.A.completed               completed
+  PASS  turn.A.tool_calls              3 call(s): fs_read:not found: <dir>/CV Anders 2026.txt | fs_find:ok | fs_read:ok
+  PASS  turn.A.failed_first_attempt    a real failure was observed
+  PASS  turn.A.independent_verification at least one receipt was verified
+  PASS  D.skill_stored                 learn-files-955cc0
+  PASS  D.skill_manifest               state EXPERIMENTAL, 2 step(s)
+  PASS  D.avoid_correct                none abandoned — the model corrected itself inside the run
+  PASS  turn.A.cost                    4 model call(s), 16796 in / 309 out, $0.002674
+  PASS  E.skill_survives_restart       1 learned skill(s) after restart
+  PASS  F.turn.completed               completed
+  PASS  G.skill_retrieved              the learned section and the skill name reached the prompt
+  PASS  G.skill_used_or_adapted        memory_search:true, fs_list:true, fs_read:true · learned tools: fs_find,fs_read
+  PASS  H.failed_strategy_not_repeated the failed action was not executed again
+  14/14 checks passed
+```
+
+Copied verbatim to `docs/v4/evidence/learned-skills-real-go.txt`.
+
+### What the real run demonstrated, step by step
+
+| Step | What actually happened |
+|---|---|
+| A | The request named `CV Anders 2026.txt`; disk held `CV_Anders_2026.txt`. The model tried the given path and got a genuine `not found`. |
+| B | It changed strategy to `fs_find`, which located the file. |
+| C | `fs_read` succeeded and the receipt was independently verified (a read is verified by re-statting the file). |
+| D | A skill was extracted and stored: `learn-files-955cc0`, EXPERIMENTAL, 2 steps, with an avoid list that is correct in both directions. |
+| E | The host was stopped and started again on the same data dir; the skill was still there. |
+| F | A related but different task was given. |
+| G | The system prompt the host actually sent contained the learned section and the skill's name — direct evidence, not a proxy — and the model used a learned tool to complete the task. |
+| H | The action that had failed was not executed again. |
+
+Cost of the whole gate: **$0.002674** (4 model calls). Bounded by design; no external
+service was retried without limit.
+
+### A defect the real model exposed
+
+`extractCandidate` marked an action as "abandoned" whenever more than one tool had
+succeeded, even if the same tool had later succeeded in the same run. With the real
+model that meant `fs_read` was listed as "do not repeat" after it failed once on a
+wrong path and then worked on the right one — the skill was actively discouraging the
+correct step. Fixed: an action is abandoned only when it never worked later in the
+run and the work moved to a different tool (`test/v4/learning.test.js`).
+
+### How it is run
+
+```
+# on demand, with the existing repository secret (no key handling)
 gh workflow run v4-learn-accept.yml --ref v4/main
+
+# or on the host, with a provider configured
+npm run v4:learn-accept
 ```
 
-It refuses to pass without a key (a missing secret is a hard error, not a green
-run), it is bounded to a handful of cheap calls, and it uploads
-`docs/v4/evidence/learned-skills-*.json` as an artifact. The key is never printed.
+The workflow also runs on a deliberate edit of `.github/learn-accept-trigger`, which
+is how it was dispatched while `workflow_dispatch` was not yet available on this
+branch. It fails hard if no key is configured instead of passing silently.
 
-What the simulated run proved, per step: A a real failed first attempt, B a
-changed strategy, C an independently verified outcome (a read is now verified by
-re-statting the file — previously only writes were), D a stored skill with the
-avoid list, E survival across a real process restart, F a related task, G the
-learned section and the skill reaching the prompt, H the failed action not
-repeated. Tool calls, attempts, tokens and USD cost were recorded.
+### What this does NOT prove
 
-Implemented in `src/v4/learning.js`, integrated into the existing agent, skill
-loader, memory and API — no second engine, no second store:
-
-- extraction only from a goal that reached `COMPLETED` **and** carries an
-  independently verified receipt; a model's own claim is never evidence;
-- the stored procedure records tool names and **argument names only**, never
-  values; secrets, personal paths, e-mail addresses and CSS selectors are
-  stripped before anything is written;
-- `requires` is the intersection of the lanes that were granted and the lanes
-  the successful path used, so learning can never widen permission;
-- states EXPERIMENTAL → VERIFIED → REUSABLE, with STALE when the environment
-  fingerprint changes and FAILED when failures lead; never silently promoted;
-- retrieval is relevance-ranked, so a *related but changed* task finds the
-  procedure; the prompt states the trust level and the "do not repeat" list;
-- a recorded failed strategy is refused with an explanation instead of being
-  executed again (`LEARNED_AVOID`);
-- `GET /api/learning` exposes state, confidence, evidence and the avoid list.
-
-Proven here (`test/v4/learning.test.js`, 15 tests): sanitising, extraction
-refusal, argument-name-only storage, promotion, diagnosis, retrieval, the full
-A–H flow with a real restart, the avoid guard, STALE on environment change, and
-that a learned skill cannot claim an ungranted lane.
-
-### The original text of this gate (unchanged)
-
-Workflow: goal → execute → observe → diagnose → adapt → independently verify →
-extract → store → retrieve/adapt → revalidate. Goals teach MAJIN; no new owner
-master prompts should be necessary. Reuse the existing skills, execution journal
-and canonical memory; persistence must survive a host restart and client sessions.
-
-Each learned skill must retain: name/purpose/categories; tools and permissions;
-preconditions; generalized procedure and successful example; failure/recovery
-patterns; independent outcome-verification method; version/environment; evidence;
-confidence/last successful validation; bounded retry/cost limits. No credentials,
-personal data or brittle selectors may become universal instructions.
-
-Statuses are distinct: EXPERIMENTAL, VERIFIED FOR THIS ENVIRONMENT, REUSABLE /
-MULTI-SCENARIO VERIFIED, STALE, FAILED. ACHIEVED requires actual execution and
-independent verification; a model-authored plan or assertion cannot promote it.
-One narrow success cannot prove broad reliability. Changed environments require
-revalidation. Failed/stale strategies must not be silently trusted or repeated.
-
-Mandatory real Go acceptance: unfamiliar safe task fails; model diagnoses and
-changes strategy; later outcome independently passes; model stores the resulting
-skill; test host actually restarts; changed related task retrieves/adapts it;
-independent verification passes and old failed strategy is not blindly replayed.
-Preserve calls, attempts, costs/unknowns, artifacts, evidence and retrieval proof.
-No autonomous production-code/security-rule changes outside a separately tested
-and authorized deployment workflow.
+One narrow task, one model, one environment. Per the brief, a single success is
+EXPERIMENTAL; broader reliability requires repeated verified runs across varied
+tasks, and that is exactly what the promotion rules enforce. It says nothing about
+the Windows host, the phone, or a browser lane.
 
 ## Other mandatory gates remain
 

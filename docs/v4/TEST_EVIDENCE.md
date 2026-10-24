@@ -350,3 +350,47 @@ pieces the external-repo survey showed were missing:
 | A context-dependent failure is not a blanket avoid (ExpeL) | the same action succeeding elsewhere yields a contextual note, not an `avoid` entry |
 | An out-of-band edit is visible | changing the stored procedure changes the integrity hash |
 | The failure path is wired end to end | a real host whose granted file was deleted: turn 1 records `failure-observed` (VERIFIED), a real restart, turn 2 → STALE on disk and in `GET /api/learning` |
+
+
+## 10. Learned-skill A–H against the REAL provider — 2026-10-24
+
+Run on GitHub Actions with the repository's existing `OPENCODE_API_KEY` secret,
+model `glm-5.3-flash` (OpenCode Go). Verbatim output:
+`docs/v4/evidence/learned-skills-real-go.txt`.
+
+```
+14/14 checks passed
+  PASS  turn.A.failed_first_attempt    a real failure was observed
+  PASS  turn.A.independent_verification at least one receipt was verified
+  PASS  D.skill_stored                 learn-files-955cc0
+  PASS  turn.A.cost                    4 model call(s), 16796 in / 309 out, $0.002674
+  PASS  E.skill_survives_restart       1 learned skill(s) after restart
+  PASS  G.skill_retrieved              the learned section and the skill name reached the prompt
+  PASS  H.failed_strategy_not_repeated the failed action was not executed again
+```
+
+The first three attempts failed, and each failure was a real defect rather than a
+flaky test:
+
+1. **Zero model calls.** The V4 env route had no way to send extra headers, and
+   OpenCode Go rejects a request that does not identify as its own client. Added
+   `MAJIN_V4_EXTRA_HEADERS` (validated JSON, never logged).
+2. **`400 Request is missing x-opencode-session`.** The provider requires a session
+   identifier on every request; the repository's existing Go smoke test sends one.
+3. **12/14, then 13/14.** The real model solved the task on its first strategy, so
+   the mandatory "initially fails" step never happened, and the retrieval check was
+   a tool-name proxy. The task now names the file the way a person writes it, and
+   retrieval is measured from the system prompt the host actually sent.
+
+### A defect the real model exposed in the learning engine
+
+An action was recorded as "abandoned" whenever more than one tool succeeded, even if
+that same tool later succeeded in the run. With the real model this put `fs_read` in
+the "do not repeat" list after it failed once on a wrong path and then worked — the
+skill discouraged the correct step. Fixed and pinned by a test.
+
+### Honest scope
+
+One task, one model, one environment. The skill it produced is EXPERIMENTAL by the
+engine's own rule; broader reliability needs repeated verified runs across varied
+tasks. Nothing here proves the Windows host, the phone, or a browser lane.

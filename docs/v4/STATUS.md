@@ -203,6 +203,47 @@ Med en simulerad OpenCode Go-endpoint (samma trådformat): **14/14**. Hela kedja
 A→H, inklusive riktig processomstart, hämtning och att det misslyckade anropet inte
 upprepas. Kvar: samma körning mot **riktig** Go-inferens.
 
+## 2026-10-24 (forts. 3) — A–H GRÖNT MED RIKTIG OPENCODE GO
+
+Den obligatoriska grinden är körd mot **riktig** provider (glm-5.3-flash via
+OpenCode Go), i GitHub Actions med repots befintliga `OPENCODE_API_KEY`. Ingen
+nyckel har klistrats in, skrivits ut eller lagrats.
+
+```
+PASS  turn.A.failed_first_attempt    a real failure was observed
+PASS  turn.A.independent_verification at least one receipt was verified
+PASS  D.skill_stored                 learn-files-955cc0
+PASS  turn.A.cost                    4 model call(s), 16796 in / 309 out, $0.002674
+PASS  E.skill_survives_restart       1 learned skill(s) after restart
+PASS  G.skill_retrieved              the learned section and the skill name reached the prompt
+PASS  H.failed_strategy_not_repeated the failed action was not executed again
+14/14 checks passed
+```
+
+Vad som hände på riktigt: uppgiften angav `CV Anders 2026.txt`, filen på disk heter
+`CV_Anders_2026.txt`. Modellen försökte den angivna sökvägen, fick ett **äkta**
+`not found` (A), bytte strategi till `fs_find` (B), läste filen med verifierat
+kvitto (C), och en skill sparades (D). Värden startades om (E), en besläktad uppgift
+gavs (F), den inlärda sektionen och skill-namnet fanns **i den faktiska prompten**
+(G, direkt bevis i stället för en proxy), och det misslyckade anropet upprepades
+inte (H). Kostnad för hela grinden: **$0,002674**.
+
+### Buggen som bara en riktig modell kunde avslöja
+
+`extractCandidate` markerade en handling som "övergiven" så snart mer än ett verktyg
+hade lyckats — även när samma verktyg senare lyckades i samma körning. Med den
+riktiga modellen innebar det att `fs_read` hamnade i "upprepa inte"-listan efter att
+ha misslyckats en gång på en fel sökväg och sedan lyckats på rätt. Skillen avrådde
+alltså från det korrekta steget. Rättat: en handling är övergiven bara när den
+aldrig lyckades senare i körningen och arbetet flyttade till ett annat verktyg.
+
+### Vad det inte bevisar
+
+En smal uppgift, en modell, en miljö. Enligt specen är en enstaka framgång
+EXPERIMENTAL — bredare tillförlitlighet kräver upprepade verifierade körningar över
+varierade uppgifter, och det är precis vad befordringsreglerna kräver. Det säger
+inget om Windows-värden, telefonen eller browser-lanen.
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är
