@@ -309,21 +309,44 @@ async function main() {
       `${list.skills.length} learned skill(s) after restart`);
 
     // ---- F–H: a related but changed task ---------------------------------
+    /**
+     * Retrieval evidence, taken from the request the host actually sent.
+     *
+     * Inferring "it used the skill" from the tool names is a proxy; the direct
+     * evidence is the system prompt of the second turn containing the learned
+     * section. That is what this captures.
+     */
+    const prompts = [];
+    const realChatB = second.context.model.chat.bind(second.context.model);
+    second.context.model.chat = async (opts) => {
+      const system = (opts?.messages || []).filter((m) => m.role === 'system').map((m) => String(m.content)).join('\n');
+      prompts.push(system);
+      return realChatB(opts);
+    };
     const turnB = await sse(`${second.base}/api/chat`, { cookie: cookie2, body: { text: TASK_B, requestId: 'learn-b' } });
     const doneB = turnB.events.find((e) => e.type === 'done')?.data;
     const toolsB = turnB.events.filter((e) => e.type === 'tool_result').map((e) => e.data);
     record('F.turn.completed', doneB?.status === 'completed', doneB?.status || 'no done event');
-    record('G.skill_retrieved', Boolean(learnedName) && toolsB.length > 0,
-      `${toolsB.length} call(s): ${toolsB.map((t) => `${t.name}:${t.ok}`).join(', ')}`);
 
-    // The strongest available signal that the learned procedure was used: the
-    // first successful tool matches the learned procedure's first step.
     const manifestB = learnedName
       ? JSON.parse(fs.readFileSync(path.join(home, 'v4', 'learned-skills', learnedName, 'skill.json'), 'utf8'))
       : null;
-    const firstLearnedStep = manifestB?.learned?.procedure?.[0] || '';
-    record('G.procedure_followed', Boolean(firstLearnedStep) && toolsB.some((t) => firstLearnedStep.includes(t.name)),
-      firstLearnedStep || 'no procedure');
+
+    // Direct evidence: the learned section and this skill's name were in the
+    // system prompt the host sent for the related task.
+    const promptText = prompts.join('\n');
+    const inPrompt = /Skills learned from verified work/.test(promptText)
+      && Boolean(learnedName) && promptText.includes(learnedName);
+    record('G.skill_retrieved', inPrompt,
+      inPrompt ? 'the learned section and the skill name reached the prompt' : 'no learned section in the prompt');
+
+    // The model may legitimately adapt (that is the point of a slot-based
+    // procedure), so this asks whether a learned tool was used and the task
+    // completed — not whether it replayed step one verbatim.
+    const learnedTools = new Set(manifestB?.tools || []);
+    const usedLearnedTool = toolsB.some((t) => t.ok && learnedTools.has(t.name));
+    record('G.skill_used_or_adapted', usedLearnedTool && doneB?.status === 'completed',
+      `${toolsB.map((t) => `${t.name}:${t.ok}`).join(', ') || 'no calls'} · learned tools: ${[...learnedTools].join(',')}`);
 
     const repeated = toolsB.filter((t) => (manifestB?.learned?.avoid || []).some((a) => a.action.startsWith(t.name)) && t.ok === true);
     record('H.failed_strategy_not_repeated', repeated.length === 0,
