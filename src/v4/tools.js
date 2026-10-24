@@ -9,6 +9,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { z } from 'zod';
 import { ToolRegistry } from '../v2/tools/registry.js';
 import { runTool } from '../v2/tools/runner.js';
@@ -23,6 +24,42 @@ import {createMemorySyncTool} from './tools/memory-sync.js';
 
 export const MAX_FILE_BYTES = 1_000_000;
 export const MAX_READ_BYTES = 200_000;
+
+/**
+ * A deterministic, bounded alternative for PDFs with custom-encoded fonts.
+ * No pip installs, no shell interpolation, no changes to the source file.
+ * Uses the pdfminer.six that is already installed, if present. The model no
+ * longer has to burn 10+ turns discovering this same recovery every time.
+ */
+export function extractPdfWithInstalledPython(filePath, { runner = spawnSync } = {}) {
+  const program = [
+    'import sys',
+    'from pdfminer.high_level import extract_text',
+    'text = extract_text(sys.argv[1])',
+    'sys.stdout.write(text[:150000])',
+  ].join('\\n');
+  const candidates = process.platform === 'win32'
+    ? [['py', ['-3']], ['python', []]]
+    : [['python3', []], ['python', []]];
+  for (const [bin, prefix] of candidates) {
+    try {
+      const out = runner(bin, [...prefix, '-c', program, filePath], {
+        encoding: 'utf8', timeout: 10000, maxBuffer: 300000,
+        windowsHide: true, shell: false,
+      });
+      if (out.status !== 0 || out.error) continue;
+      const text = String(out.stdout || '').trim();
+      // Reject short/garbled output rather than pretending recovery succeeded.
+      if (text.length < 80 || /[\\uFFFD\\u0000-\\u0008]/.test(text)) continue;
+      const letters = (text.match(/[\\p{L}]/gu) || []).length;
+      if (letters < Math.min(40, text.length * 0.3)) continue;
+      return { kind: 'pdf', text, confidence: 'text',
+        warning: 'Read with installed pdfminer.six fallback after default extraction could not decode fonts.' };
+    } catch { /* Python or pdfminer unavailable; leave normal failure visible. */ }
+  }
+  return null;
+}
+
 
 const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
 const SEPARATORS = /[\\/]/;
@@ -248,11 +285,20 @@ export function createToolRegistry({ workspaceDir, memoryDir, allowedRoots = () 
       }
       if (!stat.isFile()) throw new WorkspaceError('NOT_A_FILE', `"${name}" is not a regular file`);
       let result;
+      let extractFailure = null;
       try {
         result = extractText(fs.readFileSync(target), { fileName: name });
       } catch (err) {
-        if (err instanceof ExtractError) throw new WorkspaceError('EXTRACT_FAILED', `${err.code}: ${err.message}`);
-        throw err;
+        extractFailure = err;
+      }
+      // Other document formats are unaffected; PDFs can transparently use an
+      // installed second engine when the built-in one cannot decode glyphs.
+      if (/\\.pdf$/i.test(name) && (extractFailure || result?.confidence === 'partial')) {
+        result = extractPdfWithInstalledPython(target) || result;
+      }
+      if (!result) {
+        if (extractFailure instanceof ExtractError) throw new WorkspaceError('EXTRACT_FAILED', `${extractFailure.code}: ${extractFailure.message}`);
+        throw extractFailure || new WorkspaceError('EXTRACT_FAILED', 'No working PDF decoder available');
       }
       const truncated = result.text.length > maxChars;
       return {
