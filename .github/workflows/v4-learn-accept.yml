@@ -74,7 +74,7 @@ jobs:
         if: steps.access.outputs.available == 'true'
         shell: bash
         run: |
-          node scripts/v4/learn-accept.mjs | tee learn-accept.out
+          node scripts/v4/learn-accept.mjs 2>&1 | tee learn-accept.out
           code=${PIPESTATUS[0]}
           {
             echo '### Learned-skill acceptance (A-H)'
@@ -82,6 +82,14 @@ jobs:
             grep -E 'PASS|FAIL|checks passed|provider:' learn-accept.out || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -ne 0 ]; then
+            # Artifacts live in blob storage that is not reachable from every
+            # client, so the failing lines are also emitted as annotations, which
+            # are readable through the API without downloading anything.
+            fails=$(grep -E 'FAIL|Error|error:|REFUSED|checks passed' learn-accept.out | head -40 | tr '\n' '|')
+            echo "::error title=Learned-skill gate failed::$fails"
+            tail -60 learn-accept.out
+          fi
           exit $code
 
       - uses: actions/upload-artifact@v4
