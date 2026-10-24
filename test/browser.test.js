@@ -211,3 +211,28 @@ test('semantic form: select one observed radio option by group and verify DOM st
   assert.equal(invalid.ok, false);
   assert.equal(invalid.error.code, 'radio_option_not_grounded');
 });
+
+test('V4 unreadable PDF recovery uses installed alternate extractor without a shell', async () => {
+  const { extractPdfWithInstalledPython } = await import('../src/v4/tools.js');
+  const documentText = ('Kristjan Kristinsson IT consultant Microsoft Intune Entra ID. ').repeat(6);
+  let attempts = 0;
+  const result = extractPdfWithInstalledPython('C:\\CV Test\\cv.pdf', {
+    runner: (_bin, args, opts) => {
+      attempts += 1;
+      assert.equal(opts.shell, false);
+      assert.ok(opts.timeout <= 10000);
+      assert.equal(args.at(-1), 'C:\\CV Test\\cv.pdf');
+      assert.ok(args.includes('-c'));
+      return { status: 0, stdout: documentText };
+    },
+  });
+  assert.equal(attempts, 1);
+  assert.equal(result.confidence, 'text');
+  assert.match(result.text, /Microsoft Intune/);
+  assert.equal(extractPdfWithInstalledPython('/tmp/bad.pdf', {
+    runner: () => ({ status: 0, stdout: '??' }),
+  }), null, 'nonsense text must not be treated as a successful recovery');
+  assert.equal(extractPdfWithInstalledPython('/tmp/no-pdfminer.pdf', {
+    runner: () => ({ status: 1, stdout: '', stderr: 'ImportError' }),
+  }), null, 'missing optional parser must remain a truthful failure');
+});
