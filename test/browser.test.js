@@ -236,3 +236,45 @@ test('V4 unreadable PDF recovery uses installed alternate extractor without a sh
     runner: () => ({ status: 1, stdout: '', stderr: 'ImportError' }),
   }), null, 'missing optional parser must remain a truthful failure');
 });
+
+test('native textarea fallback types in chunks and verifies persisted value', async () => {
+ const { typeWithNativeEvents } = await import('../src/core/browser-form.js');
+ const desired='Verifiable IT experience. '.repeat(30);
+ let value='old draft';
+ const events=[];
+ const browser={
+  eval:async script=>{
+   if(script.includes('el.focus();el.select()'))return true;
+   if(script.includes('?.blur()'))return undefined;
+   return {exists:true,value,disabled:false};
+  },
+  send:async (method,params)=>{
+   events.push([method,params]);
+   if(method==='Input.dispatchKeyEvent' && params.type==='keyDown')value='';
+   if(method==='Input.insertText')value+=params.text;
+  },
+ };
+ const result=await typeWithNativeEvents({browser,selector:'[data-majin-form-ref="f10"]',value:desired,chunkSize:120});
+ assert.equal(result.ok,true);
+ assert.equal(value,desired);
+ assert.ok(events.filter(([type])=>type==='Input.insertText').length>2);
+ assert.ok(events.every(([type,params])=>type!=='Input.insertText'||params.text.length<=120));
+});
+
+test('native textarea fallback stops on reactive framework reverting field value',async()=>{
+ const { typeWithNativeEvents } = await import('../src/core/browser-form.js');
+ let value='',writes=0;
+ const browser={
+  eval:async script=>{
+   if(script.includes('el.focus();el.select()'))return true;
+   return {exists:true,value};
+  },
+  send:async (method,params)=>{
+   if(method==='Input.insertText'){writes++;value='';}
+  },
+ };
+ const result=await typeWithNativeEvents({browser,selector:'textarea',value:'a'.repeat(400)});
+ assert.equal(result.ok,false);
+ assert.equal(result.code,'framework_reverted');
+ assert.equal(writes,1,'do not repeatedly overwrite a reactive field');
+});
