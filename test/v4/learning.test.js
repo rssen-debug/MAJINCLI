@@ -138,8 +138,11 @@ test('learning: an extracted procedure stores argument names, never values', () 
       evidence: { verifier: 'v2.file', sha256: 'abc' },
     }],
   };
+  // `workspace_read` fails and is never used again; the work moves to fs_find +
+  // fs_read, which succeed. That is an abandoned strategy. (A tool that fails and
+  // then succeeds later is NOT one — see the dedicated test below.)
   const trace = [
-    { name: 'fs_find', argsShape: 'name,path', ok: false, cls: 'PERMISSION_DENIED' },
+    { name: 'workspace_read', argsShape: 'fileName', ok: false, cls: 'DEPENDENCY_MISSING' },
     { name: 'fs_find', argsShape: 'name,path', ok: true },
     { name: 'fs_read', argsShape: 'path', ok: true, verified: true },
   ];
@@ -153,7 +156,7 @@ test('learning: an extracted procedure stores argument names, never values', () 
   assert.ok(!serialised.includes('cv.pdf'), 'a personal file name leaked into the skill');
   assert.match(skill.learned.procedure.join(' '), /fs_find with name,path/, 'the procedure must name the arguments');
   assert.equal(skill.learned.state, SKILL_STATES.EXPERIMENTAL);
-  assert.ok(skill.learned.avoid.some((a) => a.failedWith === 'PERMISSION_DENIED'), 'the failed strategy was not recorded');
+  assert.ok(skill.learned.avoid.some((a) => a.action.startsWith('workspace_read')), 'the abandoned strategy was not recorded');
   assert.ok(skill.learned.evidence.length >= 1);
 });
 
@@ -742,4 +745,27 @@ test('learning: a broken environment turns a verified skill STALE after repeated
     await provider.close();
     fs.rmSync(home, { recursive: true, force: true });
   }
+});
+
+test('learning: a tool that fails and then succeeds is never recorded as avoided', async () => {
+  // The real Go run exposed this: fs_read failed on a wrong path, then succeeded
+  // on the right one. Recording it as "do not repeat" told the next turn to skip
+  // the correct step.
+  const goal = {
+    id: 'g',
+    objective: 'Läs filen i mappen',
+    state: 'COMPLETED',
+    receipts: [{ id: 'r1', action: 'tool:fs_read', target: 'a.txt', result: 'success', verified: true, evidence: { verifier: 'v2.file' } }],
+  };
+  const trace = [
+    { name: 'fs_read', argsShape: 'path', ok: false, cls: 'DEPENDENCY_MISSING' },
+    { name: 'fs_find', argsShape: 'name,path', ok: true },
+    { name: 'fs_read', argsShape: 'path', ok: true, verified: true },
+  ];
+  const out = extractCandidate({ goal, trace, grantedLanes: ['files'], fingerprint: 'fp' });
+  assert.equal(out.ok, true, out.reason);
+  assert.deepEqual(out.candidate.learned.avoid, [],
+    'a tool that proved itself later in the same run must not be listed as avoided');
+  // fs_find is still part of the procedure; nothing was dropped.
+  assert.ok(out.candidate.tools.includes('fs_read') && out.candidate.tools.includes('fs_find'));
 });

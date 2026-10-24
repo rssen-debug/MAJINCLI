@@ -219,9 +219,20 @@ export function diagnoseTrace(trace = []) {
   // different action is a strategy that did not work here.
   const replaced = failures.filter((f) => !TRANSIENT.test(f.cls));
   const changed = new Set(trace.filter((s) => s.ok).map((s) => s.name));
+  /**
+   * A failure is an abandoned STRATEGY only when that action never worked later
+   * in the same run and the work moved to a different tool.
+   *
+   * The first version OR-ed a "more than one tool succeeded" clause into this,
+   * which made every failure look abandoned. A real Go run exposed the damage:
+   * `fs_read` failed once with a wrong path, then succeeded with the right one,
+   * and the learned skill still told the next turn "do not repeat fs_read" —
+   * actively discouraging the correct step. A tool that proves itself later in
+   * the same run is not a dead end.
+   */
   const abandoned = replaced.filter((f) => {
     const laterSameToolSucceeded = trace.slice(f.index + 1).some((s) => s.ok && s.name === f.name);
-    return !laterSameToolSucceeded || changed.size > 1;
+    return !laterSameToolSucceeded && changed.size > 1;
   });
   return {
     failures,
