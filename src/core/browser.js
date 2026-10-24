@@ -520,5 +520,7 @@ export function closeFor(session, { wait = false, headlessOnly = false } = {}) {
 export function _resetBrowser() {
   for (const b of sess.values()) { try { b.close?.(); } catch { /* gone */ } }
   sess.clear();
+  launches.clear();
+  failedLaunches.clear();
   journal.bySession.clear();
 }
