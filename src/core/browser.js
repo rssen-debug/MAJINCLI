@@ -292,7 +292,12 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
      Edge for ~10 s — one shot of luck was the difference between green and a
      red suite. Bounded retry: attempt 1 as before, attempt 2 with a fresh
      random port + longer deadline. Honest: the final error text is unchanged. */
-  for (let attempt = 1; attempt <= 2 && !version; attempt++) {
+  // A visible Chrome launch with an already-running user-data-dir can hand
+  // the command to that process and exit. Retrying spawns blank tabs in the
+  // existing window instead of creating a CDP endpoint. Only headless CI
+  // launches may take the second bounded startup attempt.
+  const maxLaunchAttempts = headless === false ? 1 : 2;
+  for (let attempt = 1; attempt <= maxLaunchAttempts && !version; attempt++) {
     signal?.throwIfAborted();
     if (proc && !proc.killed) { try { proc.kill(); } catch { /* gone */ } }
     const port = randomPort();
@@ -302,7 +307,9 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
       '--no-first-run', '--no-default-browser-check', '--disable-session-crashed-bubble',
     ];
     if (headless !== false) args.push('--headless=new');
-    args.push('about:blank');
+    // Never pass about:blank as a launch URL. With a locked/active Chrome
+    // profile Windows forwards that argument to the existing instance,
+    // creating one extra blank tab on EVERY failed attempt.
     proc = spawn(bin, args, { detached: false, stdio: 'ignore' });
     let spawnError = null;
     proc.once('error',error=>{spawnError=error;});
@@ -311,6 +318,12 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     while (Date.now() < deadline) {
       signal?.throwIfAborted();
       if(spawnError)throw spawnError;
+      // Existing Chrome may accept the launch request and immediately exit
+      // the child (single-instance handoff). Do not launch again against the
+      // same profile; the original instance is not ours to kill.
+      if (proc.exitCode !== null || proc.signalCode !== null) {
+        throw new Error('Chrome exited before opening its debugging port. The MAJIN browser profile may already be in use. Close MAJIN-owned Chrome windows and retry; your normal Chrome is untouched.');
+      }
       try {
         version = await httpJson(`${base}/json/version`, { timeoutMs: 1200, signal });
         break;
@@ -322,7 +335,7 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     }
     if (version?.webSocketDebuggerUrl) break;
     version = null;
-    if (attempt < 2) await new Promise((r) => setTimeout(r, 1500));
+    if (attempt < maxLaunchAttempts) await new Promise((r) => setTimeout(r, 1500));
   }
   if (!version || !version.webSocketDebuggerUrl) {
     try { if (proc && !proc.killed) proc.kill(); } catch { /* gone */ }

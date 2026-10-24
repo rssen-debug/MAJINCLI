@@ -299,3 +299,12 @@ test('V4 Chrome launch gets its own bounded startup timeout, ordinary tools unch
  assert.match(src,/registryForCall\(signal, toolTimeoutMs\)/);
  assert.match(src,/timeoutMs: toolTimeoutMs/);
 });
+
+test('visible Chrome startup cannot forward about:blank into an existing profile repeatedly', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../src/core/browser.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /args\.push\('about:blank'\)/, 'explicit blank URL creates tabs through Chrome single-instance handoff');
+  assert.match(src, /maxLaunchAttempts = headless === false \? 1 : 2/, 'visible browser gets one attempt only');
+  assert.match(src, /proc\.exitCode !== null \|\| proc\.signalCode !== null/, 'detect early child exit rather than retrying a locked profile');
+  assert.match(src, /profile may already be in use/, 'explain profile lock, never blame the form');
+  assert.match(src, /--remote-debugging-port=\$\{port\}/, 'retain MAJIN-owned CDP control');
+});
