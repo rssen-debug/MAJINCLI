@@ -28,12 +28,29 @@ async function paintHeader(st) {
     const enabled = configUpdate.check !== false;
     // The CLI and the UI share persisted version metadata, but the old UI
     // ignored this cache until its delayed background check completed.
-    const semver = (value) => /^\d+\.\d+\.\d+$/.test(String(value || '')) ? String(value).split('.').map(Number) : null;
+    const semver = (value) => {
+      const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(String(value || '').replace(/^v/, ''));
+      return match ? { parts: match.slice(1, 4).map(Number), prerelease: match[4] || null } : null;
+    };
     const isNewer = (latest, installed) => {
       const a = semver(latest), b = semver(installed);
       if (!a || !b) return false;
       for (let i = 0; i < 3; i++) {
-        if (a[i] !== b[i]) return a[i] > b[i];
+        if (a.parts[i] !== b.parts[i]) return a.parts[i] > b.parts[i];
+      }
+      // A final release supersedes the corresponding prerelease.
+      if (!a.prerelease) return Boolean(b.prerelease);
+      if (!b.prerelease) return false;
+      const ap = a.prerelease.split('.'), bp = b.prerelease.split('.');
+      for (let i = 0; i < Math.max(ap.length, bp.length); i++) {
+        if (i >= ap.length) return false;
+        if (i >= bp.length) return true;
+        const x = ap[i], y = bp[i];
+        if (x === y) continue;
+        const nx = /^\d+$/.test(x), ny = /^\d+$/.test(y);
+        if (nx && ny) return BigInt(x) > BigInt(y);
+        if (nx !== ny) return !nx;
+        return x > y;
       }
       return false;
     };
