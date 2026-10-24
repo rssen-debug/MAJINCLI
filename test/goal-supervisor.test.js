@@ -41,3 +41,16 @@ test('supervisor trace is bounded, including very long tool names',()=>{
  assert.equal(c.steps[0].tool.length,90);
  assert.equal(c.steps[0].args.length,180);
 });
+
+test('model tool failure has one automatic replan and keeps hard budgets', async()=>{
+ const fs=await import('node:fs');
+ const source=fs.readFileSync(new URL('../src/v4/agent.js',import.meta.url),'utf8');
+ assert.match(source,/let automaticReplanUsed = false/);
+ assert.match(source,/!automaticReplanUsed && !signal\?\.aborted/);
+ assert.match(source,/automaticReplanUsed = true/);
+ assert.match(source,/action: 'autonomous_replan'/);
+ assert.match(source,/rounds < roundLimit \|\| maybeExtend\(\)/);
+ assert.match(source,/conversation\.supervisorCheckpoint = checkpointForFailure/);
+ assert.match(source,/conversation\.supervisorCheckpoint = null/);
+ assert.match(source,/resumeGuidance\(resumedCheckpoint\)/);
+});
