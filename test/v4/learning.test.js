@@ -989,3 +989,75 @@ test('learning: a skill learned on one device is visible on another, without a r
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('learning: the engine cannot modify production code or security rules', async () => {
+  /**
+   * The brief is explicit: "Do not autonomously modify production code or
+   * security rules without a separate tested and authorized deployment workflow."
+   *
+   * That is a property of the design — learned skills are prompt text in a data
+   * directory — but a design property that is not asserted is a hope. This test
+   * pins it: every file the store writes is inside its own directory, and nothing
+   * it produces is executable.
+   */
+  const { LearnedSkillStore } = await import('../../src/v4/learning.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-safe-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-outside-'));
+  try {
+    // Snapshot a fake "installation" that must stay untouched.
+    const installation = path.join(outside, 'src', 'v4');
+    fs.mkdirSync(installation, { recursive: true });
+    const securityFile = path.join(installation, 'security.js');
+    fs.writeFileSync(securityFile, 'export const POLICY = "unchanged";\n');
+    const before = fs.readFileSync(securityFile, 'utf8');
+
+    const written = [];
+    const realWrite = fs.writeFileSync;
+    const realRename = fs.renameSync;
+    fs.writeFileSync = (file, ...rest) => { written.push(String(file)); return realWrite(file, ...rest); };
+    fs.renameSync = (from, to, ...rest) => { written.push(String(to)); return realRename(from, to, ...rest); };
+    try {
+      const store = new LearnedSkillStore({ dir, fingerprint: 'fp' });
+      store.observe({
+        goal: {
+          id: 'g', objective: 'Skriv en fil', state: 'COMPLETED',
+          receipts: [{ id: 'r1', action: 'tool:workspace_write', target: 'a.txt', result: 'success', verified: true, evidence: { verifier: 'v2.file' } }],
+        },
+        trace: [{ name: 'workspace_write', argsShape: 'content,fileName', ok: true, verified: true }],
+        grantedLanes: [],
+      });
+      store.observeFailure({ skills: [{ name: 'learn-workspace-x' }], trace: [{ name: 'workspace_write', argsShape: 'content,fileName', ok: false, cls: 'DEPENDENCY_MISSING' }] });
+    } finally {
+      fs.writeFileSync = realWrite;
+      fs.renameSync = realRename;
+    }
+
+    assert.ok(written.length > 0, 'the store wrote nothing, so this proves nothing');
+    const root = fs.realpathSync(dir);
+    for (const file of written) {
+      const resolved = path.resolve(file);
+      assert.ok(resolved.startsWith(root + path.sep),
+        `the learning engine wrote outside its own directory: ${resolved}`);
+    }
+    // And the "installation" is byte-identical.
+    assert.equal(fs.readFileSync(securityFile, 'utf8'), before,
+      'the learning engine modified a production file');
+
+    // Nothing it produces is executable: no script files, and the manifest is data.
+    const produced = [];
+    const walk = (d) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const full = path.join(d, e.name);
+        if (e.isDirectory()) walk(full);
+        else produced.push(e.name);
+      }
+    };
+    walk(dir);
+    assert.ok(produced.length > 0);
+    assert.ok(produced.every((n) => n === 'skill.json' || n === 'SKILL.md'),
+      `the engine produced an unexpected file type: ${produced.join(', ')}`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
