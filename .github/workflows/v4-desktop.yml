@@ -70,7 +70,13 @@ jobs:
             const fs = require('fs');
             let text = '';
             try { text = fs.readFileSync('test-output.log', 'utf8').slice(-60000); } catch (e) { text = 'no test-output.log: ' + e.message; }
-            const fails = text.split('\n').filter((l) => /^not ok|^# fail|error:|failureType|AssertionError/.test(l)).slice(0, 120).join('\n');
+            // TAP nests failing subtests with indentation, so the filter must not
+            // anchor at line start - that is why an earlier run reported only
+            // "# fail 1" and not which test it was.
+            const fails = text.split('\n')
+              .filter((l) => /(^|\s)not ok\s+\d+|^# fail\s+[1-9]|failureType:|AssertionError|Error:/.test(l))
+              .slice(0, 160)
+              .join('\n');
             await github.rest.checks.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
