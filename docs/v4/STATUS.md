@@ -287,6 +287,44 @@ REUSABLE gäller den proceduren i den miljön — inte Windows-värden, telefone
 browser-lanen, och inte formulär eller webbinteraktion, som specen också listar som
 förbättringsområden.
 
+## 2026-10-24 (forts. 5) — effektivitet mätt, och ett ärligt negativt resultat
+
+Specen listar **"Agent efficiency"** bland det inlärning ska förbättra. Ingenstans
+mättes det. Nu mäts det, utan extra kostnad: acceptanskörningen tar en
+användningsögonblicksbild per varv, så varv A (ingen skill fanns) är en riktig
+baslinje och senare varv (skillen i prompten) är jämförelsen.
+
+**Resultatet är negativt, och det rapporteras som det är:**
+
+```
+baseline 4 call(s)/17151 tokens · later 4.0 call(s)/18398 tokens → no material change
+```
+
+Inlärningen gjorde **inte** uppgiften billigare. Uppgiften lösas redan på fyra
+anrop, så proceduren kan inte ta bort några steg — den lägger till sin egen text
+(cirka 1 200 tokens) och hindrar den första felaktiga strategin från att prövas
+igen. Skillens värde här är **korrekthet vid upprepning**, inte en billigare
+körning. Att påstå en besparing på den här uppgiften hade varit en påhittad
+förbättring.
+
+Mätningen fångade också en riktig bugg i sig själv: första versionen kopplade
+användningsloggen bara till den första värden, medan cyklerna kör mot den
+omstartade. Den rapporterade då 0 anrop och en **falsk** förbättring. Nu täcker
+loggen båda värdsprocesserna, och en omätbar jämförelse rapporteras som
+"could not measure" i stället för som framgång.
+
+### Klient-sessioner
+
+Specen säger "persist learning across host restarts **and client sessions**".
+Omstarten var testad; nu även att en telefon lär och en dator ser skillen i
+`/api/learning` **direkt**, utan omstart och utan att parkoppla om.
+
+### Status
+
+`22/22` med riktig OpenCode Go. Stegen: A–H, tre scenarier, REUSABLE, kostnad per
+varv och effektivitetsjämförelse. Beviset ligger i
+`docs/v4/evidence/learned-skills-real-go.txt`.
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är

@@ -33,8 +33,30 @@ observations. Product code may not contain fixture-specific selectors or recipes
 
 ## Learned operational skills — IMPLEMENTED, awaiting the real-provider run
 
-**Status 2026-10-24: PASSED — 19/19 against the real OpenCode Go provider, and the
-promotion ladder reached REUSABLE.**
+**Status 2026-10-24: PASSED — 22/22 against the real OpenCode Go provider, the
+promotion ladder reached REUSABLE, and agent efficiency measured honestly.**
+
+```
+  PASS  cycle.1.cost                   4 model call(s), 18201 in / 173 out, $0.002817
+  PASS  cycle.2.cost                   4 model call(s), 18234 in / 187 out, $0.002828
+  PASS  efficiency.measured            baseline 4 call(s)/17151 tokens · later 4.0 call(s)/18398 tokens → no material change
+  PASS  promotion.state                learn-files-5d9a03: REUSABLE (4 success(es), 4 scenario(s))
+  22/22 checks passed
+```
+
+### What the efficiency measurement actually says
+
+The brief lists "agent efficiency" as something learning should improve. It is now
+measured rather than assumed, and the honest result on this task is **no material
+change**: 4 model calls and 17 151 tokens before the skill existed, 4 calls and
+18 398 tokens after it.
+
+That is a real finding, not a failure to hide. This task is already solved in four
+calls, so the learned procedure cannot remove steps — it adds its own text to the
+prompt (about 1 200 tokens) and prevents the first wrong strategy from being tried
+again. The value of the skill here is **correctness under repetition**, not a
+cheaper run. A task where the first attempt genuinely wastes calls would show the
+saving; claiming that saving on this one would be a fabricated improvement.
 
 The gate now runs three varied scenarios and reports whatever state the store
 actually reached:
