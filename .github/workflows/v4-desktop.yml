@@ -69,14 +69,16 @@ jobs:
             // every client; a check run's output is plain API data.
             const fs = require('fs');
             let text = '';
-            try { text = fs.readFileSync('test-output.log', 'utf8').slice(-60000); } catch (e) { text = 'no test-output.log: ' + e.message; }
+            try { text = fs.readFileSync('test-output.log', 'utf8'); } catch (e) { text = 'no test-output.log: ' + e.message; }
             // TAP nests failing subtests with indentation, so the filter must not
             // anchor at line start - that is why an earlier run reported only
             // "# fail 1" and not which test it was.
             const fails = text.split('\n')
               .filter((l) => /(^|\s)not ok\s+\d+|^# fail\s+[1-9]|failureType:|AssertionError|Error:/.test(l))
-              .slice(0, 160)
+              .slice(0, 200)
               .join('\n');
+            // Also record which file failed, since a TAP subtest names its parent.
+            const files = [...new Set((text.match(/test[\\/]v4[\\/][\w.-]+\.test\.js/g) || []))].slice(0, 20).join(', ');
             await github.rest.checks.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -86,7 +88,7 @@ jobs:
               conclusion: '${{ job.status }}' === 'success' ? 'success' : 'failure',
               output: {
                 title: 'Windows V4 suite',
-                summary: fails ? `Failing lines:\n\n${fails}` : text.slice(-4000),
+                summary: fails ? `Files: ${files}\n\nFailing lines:\n\n${fails}` : text.slice(-4000),
               },
             });
 
