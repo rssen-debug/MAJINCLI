@@ -1339,7 +1339,7 @@ export function createAgent({
     finally {
       endTurn(key, controller);
       const goal = goalId ? goals.get(goalId) : null;
-      if (goal && goal.state !== STATES.WAITING_FOR_APPROVAL) await closeFor(hostSessionId('v4', { goal }), { wait: true, headlessOnly: true });
+      if (goal && goal.state !== STATES.WAITING_FOR_APPROVAL) await closeFor(hostSessionId('v4', { goal, conversationId }), { wait: true, headlessOnly: true });
     }
   }
 
