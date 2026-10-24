@@ -117,7 +117,9 @@ test('openFor reuse never navigates the page away (the eval-vs-goto coin flip)',
      pin: the reuse branch may only goto for an explicit, non-blank url. */
   const src = (await import('node:fs')).readFileSync(new URL('../src/core/browser.js', import.meta.url), 'utf8');
   const reuse = src.slice(src.indexOf('const existing = sess.get(session)'), src.indexOf('const thePool'));
-  assert.match(reuse, /if \(url && url !== 'about:blank'\)\s+await existing\.goto\(url, \{signal\}\)/, 'reuse navigates ONLY on explicit url and carries cancellation');
+  assert.match(reuse, /url && url !== 'about:blank' && current !== String\(url\)/, 'reuse navigates only on a different explicit URL');
+  assert.match(reuse, /await existing\.goto\(url, \{ signal \}\)/, 'navigation retains cancellation');
+  assert.match(reuse, /existing\.eval\('location\.href'/, 'read live URL before deciding whether to navigate');
   assert.doesNotMatch(reuse, /url = 'about:blank'/, 'no silent default navigation target');
   assert.match(src, /return waitForNavigation\(navigation/, 'goto waits for the new document before asking questions');
 });
@@ -159,4 +161,14 @@ test('visible Edge browser uses the startup blank tab rather than spawning two p
   assert.match(src, /initialTabs\.find\(t => t\.type === 'page' && t\.url === 'about:blank' && !t\.attached\)/);
   assert.match(src, /startupTab\?\.targetId \|\|/);
   assert.match(src, /Target\.createTarget/, 'fallback still works if no startup tab exists');
+});
+
+test('V4 browser session is stable across follow-up turns in one conversation', async () => {
+  const { hostSessionId } = await import('../src/v4/turn-state.js');
+  const first = hostSessionId('v4', { conversationId: 'conversation-A', goal: { id: 'goal-1' } });
+  const next = hostSessionId('v4', { conversationId: 'conversation-A', goal: { id: 'goal-2' } });
+  const other = hostSessionId('v4', { conversationId: 'conversation-B', goal: { id: 'goal-3' } });
+  assert.equal(first, next, 'continuation reuses the same Chrome profile/window');
+  assert.notEqual(first, other, 'distinct conversations do not share browsing state');
+  assert.equal(hostSessionId('v4', { goal: { id: 'solo' } }), 'v4:solo', 'standalone goal fallback remains');
 });

@@ -247,12 +247,22 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
   session = String(session || 'default');
   const existing = sess.get(session);
   if (existing) {
-    /* reuse = obtain the handle, NOT navigate. Ever since f022c04 this
-       defaulted to 'about:blank' and raced the user's page away — tool
-       chaining (open → read → fill → click) lived or died on eval-vs-navigate
-       luck. Pinned by test: no goto here without an explicit url. */
-    if (url && url !== 'about:blank') await existing.goto(url, {signal});
-    return existing;
+    // Reuse the live tab, including a partially completed application form.
+    // Reopening an identical URL destroys field contents and causes repeated
+    // loading spinners on client-rendered sites such as Teamtailor.
+    try {
+      const current = await existing.eval('location.href', { signal });
+      if (url && url !== 'about:blank' && current !== String(url)) {
+        await existing.goto(url, { signal });
+      }
+      return existing;
+    } catch (error) {
+      signal?.throwIfAborted();
+      // Chrome may have been closed manually; never keep an unusable CDP
+      // handle in the pool. A new browser is legitimate only after this.
+      try { await existing.close?.(); } catch { /* already closed */ }
+      sess.delete(session);
+    }
   }
   const thePool = pool || createBrowserPool({ max: Number(cfgGet?.('browser.maxInstances')) || 3 });
   const slot = await thePool.claim(session);
