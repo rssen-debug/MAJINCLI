@@ -291,3 +291,11 @@ test('browser never navigates null/about:blank during attach and cleans only sur
  assert.equal(isChildTarget({type:'page',targetId:'blank',openerId:'job',url:'about:blank'},browser),false);
  assert.equal(isChildTarget({type:'page',targetId:'application',openerId:'job',url:'https://apply.example/'},browser),true);
 });
+
+test('V4 Chrome launch gets its own bounded startup timeout, ordinary tools unchanged',async()=>{
+ const src=(await import('node:fs')).readFileSync(new URL('../src/v4/agent.js',import.meta.url),'utf8');
+ assert.match(src,/toolName === 'browser_open'/);
+ assert.match(src,/Math\.max\(config\.limits\.toolTimeoutMs, 45_000\)/);
+ assert.match(src,/registryForCall\(signal, toolTimeoutMs\)/);
+ assert.match(src,/timeoutMs: toolTimeoutMs/);
+});
