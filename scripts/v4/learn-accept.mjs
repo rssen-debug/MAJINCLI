@@ -288,8 +288,22 @@ async function main() {
       const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'skill.json'), 'utf8'));
       record('D.skill_manifest', manifest.learned?.schema === 'majin.v4.learned-skill/v1',
         `state ${manifest.learned?.state}, ${manifest.learned?.procedure?.length || 0} step(s)`);
-      record('D.avoid_recorded', (manifest.learned?.avoid || []).length > 0,
-        (manifest.learned?.avoid || []).map((a) => a.action).join(', ') || 'none');
+      /**
+       * The avoid list must be exactly right, in both directions:
+       *  - it must not name an action that succeeded later in the same run (that
+       *    is what a real Go run caught: fs_read failed on a wrong path, then
+       *    succeeded on the right one, and the skill told the next turn to skip
+       *    it);
+       *  - it must record an action that was genuinely abandoned.
+       * With a self-correcting model the honest outcome is often an empty list.
+       */
+      const succeededTools = new Set(toolsA.filter((t) => t.ok).map((t) => t.name));
+      const avoid = manifest.learned?.avoid || [];
+      const falseAvoid = avoid.filter((a) => succeededTools.has(String(a.action).split('(')[0]));
+      record('D.avoid_correct', falseAvoid.length === 0,
+        avoid.length
+          ? `recorded: ${avoid.map((a) => `${a.action}→${a.failedWith}`).join(', ')}${falseAvoid.length ? ` · WRONG: ${falseAvoid.map((a) => a.action).join(', ')} succeeded` : ''}`
+          : 'none abandoned — the model corrected itself inside the run');
     }
 
     const costA = summarizeCost(usageLog);
