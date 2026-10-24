@@ -189,6 +189,9 @@ async function main() {
     process.env.MAJIN_V4_EXTRA_HEADERS = process.env.MAJIN_V4_EXTRA_HEADERS || JSON.stringify({
       'user-agent': 'majin-coding-agent/1.0',
       'x-opencode-client': 'majin',
+      // Go requires a session identifier on every request; the existing Go smoke
+      // test sends the same shape. It is an identity for one run, not a secret.
+      'x-opencode-session': `majin-learn-${process.env.GITHUB_RUN_ID || Date.now().toString(36)}`,
     });
   }
 
