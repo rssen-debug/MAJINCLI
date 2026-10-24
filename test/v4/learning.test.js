@@ -519,6 +519,41 @@ test('learning: a learned skill cannot require a lane the owner never granted', 
   }
 });
 
+test('learning: a persisted chat message is not proof that the task succeeded', async () => {
+  /**
+   * The engine requires a COMPLETED goal with an independently verified receipt.
+   * That was not enough: every completed turn verifies its own assistant message
+   * with kind 'persistence', which proves the transcript landed on disk and
+   * nothing about the work. A turn that used one harmless tool and then merely
+   * said "done" passed the check and produced a skill.
+   *
+   * That is exactly what the brief forbids: "Do not treat an unverified
+   * model-generated plan as an achieved skill."
+   */
+  const trace = [{ name: 'memory_search', argsShape: 'query', ok: true }];
+  const onlyPersistence = {
+    id: 'g', objective: 'Hitta och sammanställ allt om projektet', state: 'COMPLETED',
+    receipts: [{ id: 'r1', action: 'chat.reply', target: 'msg_1', result: 'success', verified: true, evidence: { kind: 'persistence', bytes: 12 } }],
+  };
+  const refused = extractCandidate({ goal: onlyPersistence, trace, grantedLanes: [], laneFor: () => null, fingerprint: 'fp' });
+  assert.equal(refused.ok, false, 'a skill was created from a turn that only proved its own message was saved');
+  assert.match(refused.reason, /outcome|verif/i);
+
+  // A real outcome verification still works, on the same trace.
+  const withOutcome = {
+    ...onlyPersistence,
+    receipts: [
+      ...onlyPersistence.receipts,
+      { id: 'r2', action: 'tool:fs_read', target: 'a.txt', result: 'success', verified: true, evidence: { verifier: 'v2.file', bytes: 4, sha256: 'abc' } },
+    ],
+  };
+  const accepted = extractCandidate({ goal: withOutcome, trace, grantedLanes: [], laneFor: () => null, fingerprint: 'fp' });
+  assert.equal(accepted.ok, true, `a real verified outcome was rejected: ${accepted.reason}`);
+  // The persistence receipt must not be used as evidence of the outcome.
+  assert.ok(!accepted.candidate.learned.evidence.some((e) => e.action === 'chat.reply'),
+    'the transcript receipt was recorded as outcome evidence');
+});
+
 /* ------------------------------------- self-improvement (research-derived) -- */
 
 test('learning: a procedure becomes a template with bindable slots (AWM)', async () => {

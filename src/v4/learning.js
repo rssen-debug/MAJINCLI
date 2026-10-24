@@ -326,10 +326,26 @@ export function extractCandidate({
   if (!goal) return { ok: false, reason: 'no goal' };
   if (goal.state !== 'COMPLETED') return { ok: false, reason: `goal is ${goal.state}, not COMPLETED` };
 
-  // Independent verification: a receipt that was re-checked by a V2 verifier.
-  const verified = (goal.receipts || []).filter((r) => r.verified && r.result === 'success');
+  /**
+   * Independent verification — of the OUTCOME, not of the transcript.
+   *
+   * Every completed turn verifies its own assistant message with
+   * kind 'persistence'. That proves the message landed on disk and nothing about
+   * the work, yet it satisfied this check: a turn that used one harmless tool and
+   * then merely said "done" produced a skill. The brief is explicit — "do not
+   * treat an unverified model-generated plan as an achieved skill" — so a receipt
+   * that only attests the model's own output is excluded here.
+   */
+  const TRANSCRIPT_ONLY = /^(chat\.reply|chat\.persist)$/;
+  const verified = (goal.receipts || []).filter((r) => r.verified
+    && r.result === 'success'
+    && !TRANSCRIPT_ONLY.test(String(r.action || ''))
+    && r.evidence?.kind !== 'persistence');
   if (!verified.length) {
-    return { ok: false, reason: 'no independently verified receipt — a model claim is not evidence' };
+    return {
+      ok: false,
+      reason: 'no independently verified outcome — a persisted reply is not evidence that the task succeeded',
+    };
   }
 
   const successful = trace.filter((s) => s.ok && s.name && s.name !== 'skill_note' && s.name !== 'learning_reflect');

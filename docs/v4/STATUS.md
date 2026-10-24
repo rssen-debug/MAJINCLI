@@ -380,6 +380,31 @@ realistisk formulärtransaktion.
 gör att en besläktad framtida uppgift hittar proceduren — men det renderas aldrig
 till modellen. Ingenting modellen läser bär ägarens text.
 
+## 2026-10-24 (forts. 8) — "en sparad chatt är inte bevis"
+
+Specen säger: *"Do not treat an unverified model-generated plan as an achieved
+skill."* Motorn krävde ett `COMPLETED`-mål med ett oberoende verifierat kvitto — men
+det räckte inte.
+
+Varje avslutat varv verifierar **sitt eget assistentmeddelande** med
+`kind: 'persistence'`. Det bevisar att texten hamnade på disk, och ingenting om
+arbetet. Ett varv som anropade ett ofarligt verktyg och sedan bara **påstod** att det
+var klart passerade därför kontrollen och skapade en skill. Uppmätt innan fixen:
+
+```
+accepteras som skill? true
+=> SKILL SKAPAD UTAN OUTCOME-VERIFIERING: learn-workspace-d08846
+```
+
+Rättat: kvitton som bara attesterar modellens egen utdata (`chat.reply`,
+`chat.persistence`, `kind: 'persistence'`) räknas inte längre som
+resultatverifiering. En riktig verifiering — filhash, HTTP, DOM — krävs fortfarande,
+och den används fortfarande när den finns.
+
+Detta är den mest centrala regeln i hela uppdraget, och den var fel i några timmar.
+Att den hittades beror på att jag läste specen igen i stället för att lita på att
+tidigare tester var gröna.
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är
