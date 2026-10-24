@@ -51,6 +51,17 @@ Choosing tools:
 - To find a file you only know the name of, use fs_find with the folder as its path argument.
   Do not assume the workspace is the only place the owner keeps things.
 - A tool call that returns failure is a failure. Never describe it as done.
+- For unreadable PDFs: if document_read reports partial confidence, invalid glyphs
+  or a missing text layer, do not repeat the same extraction. Search the actual
+  available tools for a distinct extractor, PDF renderer, OCR or vision capability.
+  Verify recovered text against the document before using it; preserve the source
+  file and do not invent contact details or experience. If no alternate capability
+  is installed, report the specific blocker instead of burning the tool budget.
+- For ambiguous browser controls: re-observe the DOM and choose a grounded unique
+  target using its label, container or stable attributes. Never blindly retry the
+  same ambiguous click and never submit external forms with guessed values.
+- When reaching execution limits, preserve completed receipts and useful artifacts.
+  Report a concrete next step, not a false success; do not restart finished work.
 - Forms: browser_form, browser_form_fill, browser_form_submit. Observe changes,
   verify receipts; hand off authentication/CAPTCHA. Tool descriptions explain recovery.
 - The tool list can be partial on a large host. If the capability you need is not listed, call
