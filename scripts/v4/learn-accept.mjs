@@ -184,6 +184,12 @@ async function main() {
     process.env.MAJIN_V4_MODEL = process.env.MAJIN_V4_MODEL || 'glm-5.3-flash';
     process.env.MAJIN_V4_PROVIDER_NAME = 'opencode-go';
     process.env.MAJIN_V4_PROVIDER_LABEL = 'OpenCode Go';
+    // Go rejects a request that does not identify as its own client; this mirrors
+    // the headers the repository's existing Go smoke test already uses.
+    process.env.MAJIN_V4_EXTRA_HEADERS = process.env.MAJIN_V4_EXTRA_HEADERS || JSON.stringify({
+      'user-agent': 'majin-coding-agent/1.0',
+      'x-opencode-client': 'majin',
+    });
   }
 
   // Refuse to pretend: this gate is about real inference.
@@ -252,8 +258,12 @@ async function main() {
     };
     const turnA = await sse(`${first.base}/api/chat`, { cookie, body: { text: TASK_A, requestId: 'learn-a' } });
     const doneA = turnA.events.find((e) => e.type === 'done')?.data;
+    const errorA = turnA.events.find((e) => e.type === 'error')?.data;
     const toolsA = turnA.events.filter((e) => e.type === 'tool_result').map((e) => e.data);
-    record('turn.A.completed', doneA?.status === 'completed', doneA?.status || 'no done event');
+    record('turn.A.completed', doneA?.status === 'completed',
+      doneA?.status === 'completed'
+        ? 'completed'
+        : `${doneA?.status || 'no done event'}${errorA?.message ? `: ${String(errorA.message).slice(0, 300)}` : ''}`);
     record('turn.A.tool_calls', toolsA.length > 0,
       `${toolsA.length} call(s): ${toolsA.map((t) => `${t.name}:${t.ok ? 'ok' : (t.error || t.summary || 'failed')}`).join(' | ')}`);
     record('turn.A.failed_first_attempt', toolsA.some((t) => t.ok === false), 'a real failure was observed');

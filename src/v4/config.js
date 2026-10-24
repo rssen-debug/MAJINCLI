@@ -149,6 +149,24 @@ export function resolveModelRoute({ env = process.env, home } = {}) {
   if (explicit === 'demo' || explicit === 'none') return { kind: 'demo', providerName: 'demo', label: 'Demo' };
 
   if (baseUrl && model && (apiKey || explicit === 'openai-local')) {
+    // Some gateways require identifying headers (OpenCode Go refuses a request
+    // that does not look like it comes from its own client). They are supplied as
+    // JSON and are never logged: they are identity headers, not secrets.
+    let extraHeaders = null;
+    if (env.MAJIN_V4_EXTRA_HEADERS) {
+      try {
+        const parsed = JSON.parse(env.MAJIN_V4_EXTRA_HEADERS);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          extraHeaders = Object.fromEntries(
+            Object.entries(parsed)
+              .filter(([k, v]) => typeof k === 'string' && typeof v === 'string')
+              .slice(0, 12),
+          );
+        }
+      } catch {
+        extraHeaders = null; // a malformed value must not silently change routing
+      }
+    }
     return {
       kind: ['anthropic', 'responses'].includes(explicit) ? explicit : 'openai',
       providerName: env.MAJIN_V4_PROVIDER_NAME || explicit || 'custom',
@@ -156,6 +174,7 @@ export function resolveModelRoute({ env = process.env, home } = {}) {
       baseUrl,
       apiKey: apiKey || 'local',
       model,
+      ...(extraHeaders && Object.keys(extraHeaders).length ? { extraHeaders } : {}),
       maxTokens: int(env.MAJIN_V4_MAX_TOKENS, 2048),
       temperature: Number(env.MAJIN_V4_TEMPERATURE ?? 0.4),
       source: 'env:MAJIN_V4_*',
