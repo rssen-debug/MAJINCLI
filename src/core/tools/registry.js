@@ -7,13 +7,19 @@ import { bus } from '../log.js';
 import { check } from '../guard.js';
 import { capText } from '../context.js';
 
-export function def({ name, group, desc, params = {}, risk = 'read', examples = [], required = null, run }) {
+export function def({ name, group, desc, params = {}, risk = 'read', examples = [], required = null, tier = null, run }) {
   const schema = toSchema(params, run);
   if (Array.isArray(required)) {
     schema.required = required.filter((k) => k in params);
     for (const k of Object.keys(params)) if (!schema.required.includes(k)) delete schema.properties[k].const;
   }
-  return { name, group, desc, risk, examples, parameters: schema, raw: params, run };
+  /* `risk` is V1's guard vocabulary (read/write/exec/destructive) and `tier` is
+     V4's approval tier (read/write/process/external/browser). They are two
+     different scales and must not be derived from each other: a tool that sends
+     data off the machine is `exec` for V1's guard AND `external` for V4's
+     approval policy. Declaring both keeps each layer honest instead of relying
+     on an unknown word falling through to a lucky default. */
+  return { name, group, desc, risk, examples, parameters: schema, raw: params, tier: tier || null, run };
 }
 
 /**

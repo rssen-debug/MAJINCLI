@@ -66,8 +66,14 @@ test('schema: gyllene mängder mot det verkliga bältet (d04-sanning nu ägd)', 
   }
 });
 
-test('schema: verktygs-skiktet äga 141 verktyg (5 control + 134 kärna — + power.propose/power.approve/power.apply (W6) tillagda medvetet)', () => {
-  assert.equal(ALL_TOOLS.length, 141, 'reparationer får inte tyst lägga till eller ta bort verktyg');
+/* This is the ONE place the tool count is pinned. It went 140 -> 144 when main's
+   line and v4/main's line were unified: browser.form, browser.form_fill,
+   browser.form_submit (grounded form work, G6/G8) and fs.find (universal file
+   access). All four are deliberate and documented in docs/v4/SOURCE_AUDIT.md.
+   Every other test asserts the relationship (state/prompt/registry all expose
+   the same set) instead of repeating this number. */
+test('schema: verktygs-skiktet äga 144 verktyg (5 control + 139 kärna — inkl. 4 medvetet tillagda i V4: browser.form/form_fill/form_submit, fs.find)', () => {
+  assert.equal(ALL_TOOLS.length, 144, 'reparationer får inte tyst lägga till eller ta bort verktyg (ändra bara med ett dokumenterat skäl)');
   const groups = [...new Set(ALL_TOOLS.map((t) => t.group))];
   assert.ok(groups.includes('control'), 'control-gruppen måste vara shipped');
 });

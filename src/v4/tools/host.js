@@ -434,7 +434,10 @@ export function adaptV1Tool(v1tool, { lane, ctx = null }) {
     sourceName: v1tool.name,
     // V2 requires a description of at least four characters.
     description: `${v1tool.desc || v1tool.name}`.slice(0, 400),
-    tier: RISK_TO_TIER[v1tool.risk] || 'process',
+    // An explicit `tier` on the V1 def wins: the two vocabularies answer
+    // different questions (V1 guard level vs V4 approval tier) and deriving one
+    // from the other silently downgraded outbound tools to 'process'.
+    tier: v1tool.tier || RISK_TO_TIER[v1tool.risk] || 'process',
     inputSchema: zodFromV1Params(v1tool.raw || {}, v1tool.parameters?.required || []).strip(),
     outputSchema: OUTPUT,
     lane,

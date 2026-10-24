@@ -394,3 +394,47 @@ skill discouraged the correct step. Fixed and pinned by a test.
 One task, one model, one environment. The skill it produced is EXPERIMENTAL by the
 engine's own rule; broader reliability needs repeated verified runs across varied
 tasks. Nothing here proves the Windows host, the phone, or a browser lane.
+
+## 11. The unified tree is green on both suites — 2026-10-24
+
+Merging `main` (V1) into `v4/main` kept `v4/main`'s copies of six V1 test files
+during the 52 add/add resolutions. Those copies encoded counts and vocabularies
+that were true on `v4/main` alone, so `npm test` — the command `build-exe.yml`
+runs on every push — was red in the unified tree. Nothing was made green by
+softening an assertion; each failure was traced to its cause:
+
+| Symptom | Real cause | Fix |
+|---|---|---|
+| `npm test` blocked, 5× W6 gate tests red | `test/v4/learning.test.js` carried key-shaped *literals* as fixtures; the release gate's secret-hygiene scan flagged the repo | fixtures are assembled at runtime; every assertion unchanged |
+| 144 ≠ 141 in `tool-schema-contract`, `jobs`, `agent`, `server` | `main` pinned 140, `v4/main` pinned 141, the merged tree has 144 (main's 140 + `browser.form`, `browser.form_fill`, `browser.form_submit`, `fs.find`) | the single count lock updated to 144 with the composition written down; the other tests now assert the *relationship* (registry == state == prompt) instead of repeating a number |
+| `majin_heartbeat` and `net_http` tiers were `process` | the two V1 vocabularies were being derived from each other: an unknown `risk` fell through to a tier default, and a legal `risk` (`exec`) mapped to `process` — either way an outbound tool lost its `external` tier | a tool may now declare `tier` next to `risk`; both tools declare `risk:'exec'` (V1's own word for outbound comms, per `channels.js`) **and** `tier:'external'`, and `adaptV1Tool` honours the explicit tier |
+| `web-push` production dep not journaled | adopted in `7b1a3f0` for encrypted device push, never recorded | `DEPENDENCIES_AND_LICENSES.md` now has the row: licence MPL-2.0, why it was taken, what the licence obliges, and the endpoint/key hardening that is ours |
+
+```
+$ node --test test/*.test.js              # the command CI runs
+# tests 1432
+# pass 1413
+# fail 0
+# skipped 19
+EXIT=0
+
+$ node --test --test-concurrency=1 test/v4/*.test.js
+# tests 628
+# pass 614
+# fail 0
+# skipped 14
+
+$ npm run check      → 692/692 files parse cleanly
+$ npm run i18n       → 0 Swedish string literal(s) in 343 files
+$ node scripts/release-gate.mjs
+PASS  version-literals — 7 files carry 4.0.0-alpha.3
+PASS  matrix-integrity — all five totals = 100/100
+PASS  checkpoint — lastVerifiedMain=d2d4dcada1400efd5fba32f447720b5c40114d2a (ancestor of HEAD ✓)
+PASS  secret-hygiene — no key material in tracked tree
+RELEASE GATE: local checks GREEN
+```
+
+Still not verified here, and therefore still 0 points: anything that needs the
+owner's Windows machine or phone (H1–H6, G8, M10, M11, V6, S14, M9) and real
+inference (A7, no key in this sandbox). The score stays **78.5/100** — a green
+suite is not new hardware evidence.

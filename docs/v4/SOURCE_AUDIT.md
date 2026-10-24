@@ -363,3 +363,29 @@ used a learned skill left no trace at all: a procedure broken by a changed
 environment would keep looking healthy forever. That is now closed —
 `observeFailure` is wired into the agent's failure path, attributes the failure
 to a step, and escalates to `STALE` only when the same step fails repeatedly.
+
+## 9. Reuse decision: two vocabularies, declared instead of derived — 2026-10-24
+
+V1 labels a tool with `risk` (guard vocabulary: `read` / `write` / `exec` /
+`destructive`, enforced by `test/no-dead-tools.test.js`) and V4 labels it with
+`tier` (approval vocabulary: `read` / `write` / `process` / `external` /
+`browser`). The adapter in `src/v4/tools/host.js` used to derive one from the
+other through `RISK_TO_TIER`.
+
+That mapping is lossy in both directions and both losses were real:
+
+- `risk:'net'` (V1's word for outbound, still used by `channels.js`) was not in
+  the V1 enum, so `no-dead-tools` rejected the tool outright — a dead tool by
+  contract.
+- Replacing it with a legal `risk:'exec'` mapped to `tier:'process'`, which
+  **lowered** an outbound tool below `external` and would have let a `POST` or
+  an external digest through the approval gate without the external-tier hold.
+  Two V1 tests (`http-readonly-safety`, `heartbeat-recovery`) caught exactly
+  this, which is why the earlier "fix" to `write` was reverted rather than
+  papered over.
+
+Decision: **reuse V1's `def()` unchanged and extend it with an optional `tier`**,
+and let `adaptV1Tool` prefer the declared tier. `net.http` and `majin.heartbeat`
+now declare `risk:'exec'` *and* `tier:'external'`. Ten lines, no new module, no
+fork of V1's registry, and each layer keeps its own honest vocabulary instead of
+depending on an unknown word landing on a lucky default.

@@ -26,10 +26,13 @@ export const heartbeatTools = [
     name: 'majin.heartbeat',
     group: 'meta',
     // 'net' is not a V1 risk level (the valid set is read/write/exec/destructive),
-    // so the guard could not classify this tool. It changes its own stored
-    // settings and can deliver a digest, so 'write' is the honest level: it runs
-    // without a prompt in the default mode, and strict mode still holds it.
-    risk: 'write',
+    // so the guard could not classify this tool at all. `tick` delivers a digest
+    // to the user's own configured channels, so 'exec' is the honest V1 level:
+    // the pattern channels.js already uses for outbound communication. The V4
+    // approval tier says the same thing in its own vocabulary - 'external' - and
+    // must not be dropped to 'write', which would let a digest leave silently.
+    risk: 'exec',
+    tier: 'external',
     desc: 'W9 heartbeat: status/enable/disable/tick (force a digest of accumulated real events)/test (dry-run the alert text exactly as it would be sent). Only real bus events alert; missing channels never pretend.',
     params: {
       action: 'string: status | enable | disable | tick | test. optional (default: status) [status|enable|disable|tick|test]',
