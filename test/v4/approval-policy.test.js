@@ -59,19 +59,6 @@ function heldLaneEnv(provider) {
   };
 }
 
-function grantShellLane(home) {
-  fs.mkdirSync(path.join(home, 'v4'), { recursive: true });
-  fs.writeFileSync(path.join(home, 'v4', 'owner-mode.json'), JSON.stringify({
-    schema: 'majin.v4.owner-mode/v1',
-    version: 1,
-    lanes: ['shell'],
-    folders: [],
-    grantedAt: new Date().toISOString(),
-    revokedAt: null,
-    history: [],
-  }));
-}
-
 test('approvals: the policy is a stored decision and defaults to asking', () => {
   const home = tempHome();
   try {
@@ -160,33 +147,57 @@ test('approvals: the phone can read and change the policy, and a restart remembe
   }
 });
 
-test('approvals: with full trust a real held tool runs instead of waiting', async () => {
+test('approvals: with full trust a real held tool runs instead of waiting', { timeout: 60_000 }, async () => {
+  /**
+   * `fs_write` is tier `write`, so the runner holds it: it is the cheapest
+   * cross-platform tool that exercises the real approval path.
+   *
+   * The first version used `exec_start`, which spawns a child process. On Windows
+   * that hung until the test timed out — the approval behaviour was never at
+   * fault, the fixture was. A new file in a granted folder proves exactly the same
+   * thing without a shell.
+   */
   const home = tempHome();
-  grantShellLane(home);
-  // exec_start is tier process: held under `ask`.
+  const documents = path.join(home, 'Documents');
+  fs.mkdirSync(documents, { recursive: true });
+  fs.mkdirSync(path.join(home, 'v4'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'v4', 'owner-mode.json'), JSON.stringify({
+    schema: 'majin.v4.owner-mode/v1',
+    version: 1,
+    lanes: ['files'],
+    folders: [documents],
+    grantedAt: new Date().toISOString(),
+    revokedAt: null,
+    history: [],
+  }));
+  const target = path.join(documents, 'full-trust.txt');
+
   const provider = await startFakeProvider((body) => {
     const last = lastToolMessage(body);
     if (last) return { text: 'Klart.' };
-    return { toolCalls: [{ name: 'exec_start', args: { backend: 'local', command: 'echo full-trust' } }] };
+    return { toolCalls: [{ name: 'fs_write', args: { path: target, content: 'skrivet utan att fråga' } }] };
   });
   let s = null;
   try {
     s = await startTestServer({ home, env: heldLaneEnv(provider) });
     const { cookie } = await s.pair();
 
-    // Default: the turn stops and asks.
-    const first = await readSse(await postChat(s.base, cookie, { text: 'Kör echo.', requestId: 'ht-1' }));
+    // Default: the turn stops and asks, and the file is NOT written.
+    const first = await readSse(await postChat(s.base, cookie, { text: 'Skriv filen.', requestId: 'ht-1' }));
     const firstDone = first.find((e) => e.type === 'done')?.data;
     assert.equal(firstDone?.status, 'awaiting_approval',
       `a held tool ran without a policy decision: ${JSON.stringify(firstDone)}`);
+    assert.equal(fs.existsSync(target), false, 'a held tool wrote the file before consent');
 
-    // Full trust: the same call runs.
+    // Full trust: the same call runs and the bytes land on disk.
     await approvalApi(s, cookie, { method: 'POST', body: JSON.stringify({ policy: 'auto' }) });
-    const second = await readSse(await postChat(s.base, cookie, { text: 'Kör echo igen.', requestId: 'ht-2' }));
+    const second = await readSse(await postChat(s.base, cookie, { text: 'Skriv filen igen.', requestId: 'ht-2' }));
     const secondDone = second.find((e) => e.type === 'done')?.data;
     assert.notEqual(secondDone?.status, 'awaiting_approval', 'full trust still asked for approval');
     const results = second.filter((e) => e.type === 'tool_result').map((e) => e.data);
-    assert.ok(results.some((r) => r.name === 'exec_start'), `the tool never ran: ${JSON.stringify(results)}`);
+    assert.ok(results.some((r) => r.name === 'fs_write'), `the tool never ran: ${JSON.stringify(results)}`);
+    assert.equal(fs.readFileSync(target, 'utf8'), 'skrivet utan att fråga',
+      'full trust allowed the call but the file was not written');
   } finally {
     if (s) await s.close();
     await provider.close();
