@@ -317,7 +317,15 @@ async function openForOnce({ session, url = null, headless = true, cfgGet = null
   // If the preferred browser is blocked by policy, try a DISTINCT installed
   // browser (Edge vs Chrome) once. Never retry the same visible executable
   // repeatedly: this caused the reported blank-tab storms.
-  const binaries = exe ? [exe] : browserCandidates().filter(candidate => fs.existsSync(candidate));
+  const candidates = exe ? [exe] : browserCandidates().filter(candidate => fs.existsSync(candidate));
+  // Different install locations of msedge.exe are not separate fallbacks.
+  const families = new Set();
+  const binaries = candidates.filter(candidate => {
+    const family = path.basename(candidate).toLowerCase();
+    if (families.has(family)) return false;
+    families.add(family);
+    return true;
+  });
   const bin = binaries[0] || null;
   if (!bin) {
     thePool.release(session);
@@ -327,7 +335,7 @@ async function openForOnce({ session, url = null, headless = true, cfgGet = null
   // owned by a zombie Chrome triggers Windows single-instance handoff instead
   // of starting a new CDP port. In-memory sessions still reuse their tab.
   fs.mkdirSync(dirs.cache, { recursive: true });
-  const profile = fs.mkdtempSync(path.join(dirs.cache, 'browser-run-'));
+  let profile = fs.mkdtempSync(path.join(dirs.cache, 'browser-run-'));
   let version = null;
   let lastErr = null;
   /* Del 5ABE flake-hardening (CI evidence: runs 39261715303 + 39265517682):
@@ -343,6 +351,10 @@ async function openForOnce({ session, url = null, headless = true, cfgGet = null
   for (let attempt = 1; attempt <= maxLaunchAttempts && !version; attempt++) {
     signal?.throwIfAborted();
     if (proc && !proc.killed) { try { proc.kill(); } catch { /* gone */ } }
+    if (attempt > 1) {
+      // Never attach a second browser binary to the prior process's profile.
+      profile = fs.mkdtempSync(path.join(dirs.cache, 'browser-run-'));
+    }
     const port = randomPort();
     const args = [
       `--remote-debugging-port=${port}`,
