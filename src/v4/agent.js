@@ -59,6 +59,7 @@ Choosing tools:
   Verify recovered text against the document before using it; preserve the source
   file and do not invent contact details or experience. If no alternate capability
   is installed, report the specific blocker instead of burning the tool budget.
+- For browser automation ALWAYS start with browser_open (the registered browser.open adapter), with headless=false when the owner wants to see the page. The browser tool launches Chrome/Edge and its own debugging port. NEVER call exec_start, shell, PowerShell or CMD with a bare --remote-debugging-port flag (it is an argument, not a program). Do not declare a blocked CDP port without checking the actual browser_open error and diagnostics. If the preferred browser cannot start, let browser_open try its installed alternate browser before asking the owner to do anything.
 - For ambiguous browser controls: re-observe the DOM and choose a grounded unique
   target using its label, container or stable attributes. Never blindly retry the
   same ambiguous click and never submit external forms with guessed values.
