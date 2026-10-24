@@ -172,3 +172,42 @@ test('V4 browser session is stable across follow-up turns in one conversation', 
   assert.notEqual(first, other, 'distinct conversations do not share browsing state');
   assert.equal(hostSessionId('v4', { goal: { id: 'solo' } }), 'v4:solo', 'standalone goal fallback remains');
 });
+
+test('semantic form: select one observed radio option by group and verify DOM state', async () => {
+  const { observeForm, describeForm, fillForm } = await import('../src/core/browser-form.js');
+  let selected = '';
+  const fields = [
+    { ref: 'f1', selector: '[data-majin-form-ref="f1"]', label: 'Malmö', type: 'radio', tag: 'input', name: 'city', group: 'city', option: 'Malmö', value: 'malmo', form: '', sensitive: false },
+    { ref: 'f2', selector: '[data-majin-form-ref="f2"]', label: 'Helsingborg', type: 'radio', tag: 'input', name: 'city', group: 'city', option: 'Helsingborg', value: 'helsingborg', form: '', sensitive: false },
+  ];
+  const snapshot = () => ({
+    document: 'doc1', url: 'https://example.test/apply', title: 'Application',
+    fields: fields.map(f => ({ ...f, filled: selected === f.value })),
+    buttons: [], alerts: [], barriers: [],
+  });
+  const browser = {
+    eval: async expression => expression.includes('window.__majinFormDocument')
+      ? snapshot()
+      : expression.includes('?.checked') ? selected === 'helsingborg' : null,
+  };
+  const first = await observeForm(browser, 'radio-test');
+  assert.match(describeForm(first), /"group":"city"/);
+  assert.match(describeForm(first), /Helsingborg/);
+  const applied = await fillForm({
+    browser, session: 'radio-test', values: { city: 'Helsingborg' },
+    run: async (name, input) => {
+      assert.equal(name, 'browser.click');
+      assert.equal(input.selector, '[data-majin-form-ref="f2"]');
+      selected = 'helsingborg';
+      return { ok: true };
+    },
+  });
+  assert.equal(applied.ok, true);
+  assert.equal(selected, 'helsingborg');
+  const invalid = await fillForm({
+    browser, session: 'radio-test', values: { city: 'Uppsala' },
+    run: async () => { throw Error('must not click an unobserved option'); },
+  });
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.error.code, 'radio_option_not_grounded');
+});
