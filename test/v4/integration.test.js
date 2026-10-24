@@ -3,7 +3,7 @@
  *
  * Unit tests pass while the seams leak. These check that state changed in one
  * place is visible in the others: a goal resumed in the agent must appear in the
- * conversation the user reopens, and a model chosen for a conversation must
+ * conversation the user reopens, and the canonical model chosen on one device must
  * survive a reload.
  */
 import assert from 'node:assert/strict';
@@ -113,7 +113,7 @@ test('integration: the goal in the conversation reflects the resumed state, not 
   }
 });
 
-test('integration: a model chosen for a conversation is still chosen after a reload', async () => {
+test('integration: authorized canonical model selection survives host restart and client reload', async () => {
   const home = tempHome();
   fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify({
     providers: {
@@ -122,6 +122,7 @@ test('integration: a model chosen for a conversation is still chosen after a rel
     models: { routes: { chat: 'p/m-one' } },
   }));
   const s = await startTestServer({ home });
+  let after, closed = false;
   try {
     const { cookie } = await s.pair();
     const created = await fetch(`${s.base}/api/conversations`, {
@@ -133,16 +134,24 @@ test('integration: a model chosen for a conversation is still chosen after a rel
     const select = await fetch(`${s.base}/api/model`, {
       method: 'POST',
       headers: { cookie, 'content-type': 'application/json', 'x-majin-csrf': '1', origin: s.base },
-      body: JSON.stringify({ conversationId: conv.id, modelId: 'p/m-two' }),
+      body: JSON.stringify({ conversationId: conv.id, modelId: 'p/m-two', expectedVersion: 0, authorizePotentialCost: true }),
     });
     assert.equal(select.status, 200);
 
-    // "reload": read the conversation fresh, the way the UI does on open
+    // The canonical selector replaces per-conversation defaults while leaving
+    // historical conversation metadata untouched.
     const read = await fetch(`${s.base}/api/conversation?id=${conv.id}`, { headers: { cookie } });
     const body = await read.json();
-    assert.equal(body.conversation.modelId, 'p/m-two');
+    assert.equal(body.conversation.modelId, null);
+    await s.close({ keep: true }); closed = true;
+    after = await startTestServer({ home });
+    const models = await (await fetch(`${after.base}/api/models`, { headers: { cookie } })).json();
+    assert.equal(models.selection.modelId, 'p/m-two');
+    assert.equal(models.selection.version, 1);
+    assert.equal(after.context.model.routeForModel(null).model, 'm-two');
   } finally {
-    await s.close();
+    if (after) await after.close();
+    if (!closed) await s.close();
     fs.rmSync(home, { recursive: true, force: true });
   }
 });

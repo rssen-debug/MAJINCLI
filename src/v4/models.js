@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expandEnvValue } from './config.js';
 import { discoverModels as discoverProviderModels } from '../core/provider/catalog.js';
+import { listModelsUrl } from '../core/presets.js';
 import { t } from './ui/strings.js';
 
 export const CATALOG_TTL_MS = Number(process.env.MAJIN_V4_MODEL_CACHE_TTL_MS || 6 * 60 * 60 * 1000);
@@ -92,23 +93,57 @@ export async function refreshProviderCatalog({ home, env = process.env, provider
   } catch (err) {
     result = { ok: false, error: String(err?.message || err), models: [] };
   }
-  const entry = {
-    at,
-    ok: Boolean(result.ok),
-    models: result.ok ? [...new Set(result.models || [])] : [],
-    ...(result.ok ? {} : { error: result.error || 'catalog request failed' }),
-  };
   const cache = readCatalogCache({ home });
+  const previous = cache.providers?.[providerName];
+  const usage = providerOffering(provider.baseUrl) === 'opencode-go'
+    ? await fetchGoUsage(provider, { fetchImpl, timeoutMs }) : null;
+  const entry = {
+    at: result.ok ? at : previous?.at || null,
+    attemptedAt: at,
+    ok: Boolean(result.ok),
+    models: result.ok ? [...new Set(result.models || [])] : previous?.models || [],
+    metadata: result.ok ? (result.catalog || []).map((m) => ({ id: m.id, name: m.name, context: m.context, tools: m.tools === true ? true : null, vision: m.vision === true ? true : null, input: m.input, output: m.output })) : previous?.metadata || [],
+    source: (() => { try { const url = new URL(listModelsUrl(provider)); url.username = ''; url.password = ''; url.search = ''; url.hash = ''; return url.href; } catch { return null; } })(),
+    ...(usage ? { usage } : previous?.usage ? { usage: previous.usage } : {}),
+    // Never surface exception strings: a provider can echo credentials in errors.
+    ...(result.ok ? {} : { error: /timed out/i.test(result.error || '') ? 'Catalog timed out.' : 'Catalog request failed. Check provider access.' }),
+  };
   writeCatalogCache({ home }, { providers: { ...cache.providers, [providerName]: entry } });
   return entry;
 }
 
+/** Read-only workspace usage. It is NOT evidence of an included model or that
+ * Console Extra Usage is disabled. Persist only the documented window shape,
+ * never account identifiers or arbitrary provider response properties.
+ */
+export async function fetchGoUsage(provider, { fetchImpl = globalThis.fetch, timeoutMs = 8000 } = {}) {
+  if (providerOffering(provider.baseUrl) !== 'opencode-go' || !provider.apiKey) return null;
+  const source = 'https://opencode.ai/inference/go/v1/usage';
+  try {
+    const response = await withTimeout(fetchImpl, timeoutMs)(source, { headers: { ...(provider.headers || {}), accept: 'application/json', authorization: `Bearer ${provider.apiKey}` }, redirect: 'error' });
+    if (!response.ok) return null;
+    const body = await response.json(), windows = {};
+    for (const name of ['rolling', 'weekly', 'monthly']) {
+      const row = body?.usage?.[name];
+      if (!row || !['ok', 'rate-limited'].includes(row.status) || typeof row.percent !== 'number' || !Number.isFinite(row.percent) || row.percent < 0 || row.percent > 100 || typeof row.resetsAt !== 'string' || !Number.isFinite(Date.parse(row.resetsAt))) return null;
+      windows[name] = { status: row.status, percent: row.percent, resetsAt: new Date(row.resetsAt).toISOString() };
+    }
+    return { source, at: new Date().toISOString(), windows, accountEntitlementVerified: false, extraUsageEnabled: null };
+  } catch { return null; }
+}
+
 /** Wrap fetch so a hung provider cannot hold /api/models forever. */
 function withTimeout(fetchImpl, timeoutMs) {
-  return (url, opts = {}) => Promise.race([
-    fetchImpl(url, opts),
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`catalog timed out after ${timeoutMs}ms`)), timeoutMs)),
-  ]);
+  return async (url, opts = {}) => {
+    const controller = new AbortController();
+    let timer;
+    try {
+      return await Promise.race([
+        fetchImpl(url, { ...opts, signal: AbortSignal.any([controller.signal, opts.signal].filter(Boolean)) }),
+        new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('Catalog timed out')); }, timeoutMs); }),
+      ]);
+    } finally { clearTimeout(timer); }
+  };
 }
 
 /** Refresh every wired provider in parallel and persist the cache. */
@@ -153,6 +188,18 @@ function hostOf(baseUrl) {
   }
 }
 
+/** Endpoint identity, never a guess from a friendly provider/model label. */
+export function providerOffering(baseUrl) {
+  try {
+    const url = new URL(baseUrl);
+    if (url.origin === 'https://opencode.ai') {
+      if (/^\/(?:zen\/go\/v1|inference\/go\/(?:v1|openai\/v1|anthropic\/v1|google\/v1beta))(?:\/|$)/.test(url.pathname)) return 'opencode-go';
+      if (/^\/zen\/v1(?:\/|$)/.test(url.pathname)) return 'opencode-zen';
+    }
+  } catch { /* unknown */ }
+  return 'other';
+}
+
 /**
  * Build the catalogue. Never throws on a broken config: an unreadable file
  * yields `source: 'none'` and the demo lane, which the UI states plainly.
@@ -193,7 +240,7 @@ export function discoverModels({ home, env = process.env } = {}) {
     if (!p || typeof p !== 'object') continue;
     const declaredModels = Array.isArray(p.models) ? p.models.filter((m) => typeof m === 'string' && m.trim()) : [];
     const cached = cache.providers?.[name];
-    const discoveredModels = cacheEntryFresh(cached) ? cached.models : [];
+    const discoveredModels = Array.isArray(cached?.models) ? cached.models : [];
     const models = [...new Set([...declaredModels, ...discoveredModels])];
     const apiKey = expandEnvValue(p.apiKey, env);
     const hasKey = Boolean(apiKey);
@@ -206,12 +253,16 @@ export function discoverModels({ home, env = process.env } = {}) {
       hasKey,
       models: [...models],
       catalogAt: cacheEntryFresh(cached) ? cached.at : null,
+      offering: providerOffering(p.baseUrl),
+      catalogStale: Boolean(cached?.at) && !cacheEntryFresh(cached),
+      usage: cached?.usage ? { ...cached.usage, stale: Date.now() - Date.parse(cached.usage.at) > 60000 } : null,
     };
     result.providers.push(entry);
     for (const model of models) {
       const id = `${name}/${model}`;
       const live = liveResults.get(id);
       const fromCatalog = discoveredModels.includes(model) && !declaredModels.includes(model);
+      const metadata = cached?.metadata?.find((m) => m.id === model);
       const status = !hasKey
         ? 'missing-key'
         : live
@@ -236,6 +287,15 @@ export function discoverModels({ home, env = process.env } = {}) {
         }[status],
         discoveredVia: fromCatalog ? 'catalog' : (declaredModels.includes(model) ? 'config' : null),
         liveVerified: status === 'verified',
+        offering: entry.offering,
+        availableThroughGo: entry.offering === 'opencode-go' ? (discoveredModels.includes(model) ? true : null) : false,
+        displayName: metadata?.name || model,
+        contextWindow: metadata?.context || null,
+        capabilities: { tools: metadata?.tools ?? null, vision: metadata?.vision ?? null },
+        // Listing access and token prices do not establish the owner's plan.
+        billing: { status: 'unknown', label: 'Cost unknown — verify with provider', subscriptionIncluded: null, additionalUsageCost: null, verifiedAt: null },
+        pricing: metadata ? { inputPerMillion: metadata.input ?? null, outputPerMillion: metadata.output ?? null, source: cached.source || null, verifiedAt: cached.at || null, stale: !cacheEntryFresh(cached), note: entry.offering === 'opencode-go' ? 'Provider token prices may measure subscription allowance; account entitlement is unverified.' : 'Provider catalogue prices; account entitlement is unverified.' } : null,
+        catalogStale: entry.catalogStale,
         ...(live?.errorClass ? { errorClass: live.errorClass } : {}),
       });
     }
@@ -253,7 +313,7 @@ export function discoverModels({ home, env = process.env } = {}) {
   result.catalog = {
     at: Object.values(cache.providers || {}).map((e) => e?.at).filter(Boolean).sort().pop() || null,
     ttlMs: CATALOG_TTL_MS,
-    providers: Object.fromEntries(Object.entries(cache.providers || {}).map(([k, v]) => [k, { ok: Boolean(v?.ok), at: v?.at || null, count: v?.models?.length || 0, ...(v?.error ? { error: v.error } : {}) }])),
+    providers: Object.fromEntries(Object.entries(cache.providers || {}).map(([k, v]) => [k, { ok: Boolean(v?.ok), at: v?.at || null, stale: !cacheEntryFresh(v), count: v?.models?.length || 0, ...(v?.error ? { error: v.error } : {}) }])),
   };
   return result;
 }

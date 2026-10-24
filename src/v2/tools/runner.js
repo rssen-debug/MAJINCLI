@@ -16,7 +16,11 @@ export async function runTool(callRaw, { registry, approvals, mode = 'balanced',
   if (!def) throw new ToolError('INVALID_TOOL_OUTPUT', `unknown tool: ${call.tool}`);
 
   const inResult = def.inputSchema.safeParse(call.input);
-  if (!inResult.success) throw new ToolError('INVALID_TOOL_INPUT:MAJIN', `tool ${call.tool} input failed schema: ${inResult.error.issues[0]?.message}`, { tool: call.tool });
+  if (!inResult.success) {
+    const issue = inResult.error.issues[0];
+    const field = issue?.path?.join('.') || '(arguments)';
+    throw new ToolError('INVALID_TOOL_INPUT:MAJIN', `tool ${call.tool} input failed schema at ${field}: ${issue?.message}. Correct the named argument using the tool schema.`, { tool: call.tool });
+  }
 
   const tier = TIER_DEFAULT[def.tier] || 'hold';
   const scope = `tool:${call.tool}`;
@@ -31,18 +35,18 @@ export async function runTool(callRaw, { registry, approvals, mode = 'balanced',
 
   const t0 = Date.now();
   const timedOut = Symbol('timeout');
-  let out;
+  let out, timer;
   try {
     out = await Promise.race([
       def.execute(inResult.data),
-      new Promise((_, rej) => setTimeout(() => rej(timedOut), timeoutMs)),
+      new Promise((_, rej) => { timer = setTimeout(() => rej(timedOut), timeoutMs); }),
     ]);
   } catch (err) {
     const cls = err === timedOut ? 'TIMEOUT' : (err.cls || 'UNKNOWN');
     telemetry?.append('task.result', { taskId: call.tool, action: `tool:${call.tool}`, durationMs: Date.now() - t0, result: 'failure', errorCls: cls, attempt: 1 });
     if (err === timedOut) throw new ToolError('TIMEOUT', `tool ${call.tool} exceeded ${timeoutMs}ms`, { tool: call.tool });
     throw err instanceof ToolError ? err : new ToolError(cls, String(err.message || err), { tool: call.tool });
-  }
+  } finally { clearTimeout(timer); }
 
   const outResult = def.outputSchema.safeParse(out);
   if (!outResult.success) throw new ToolError('INVALID_TOOL_OUTPUT', `tool ${call.tool} produced schema-mismatching output: ${outResult.error.issues[0]?.message}`, { tool: call.tool });

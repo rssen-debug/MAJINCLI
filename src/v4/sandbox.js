@@ -150,8 +150,13 @@ export class PluginWorker {
    */
   stop() {
     const child = this.child;
-    if (!child || this.dead) return;
+    if (this.stopped) return this.stopped;
+    if (!child || this.dead) return Promise.resolve();
     this.dead = true;
+    // Keep a referenced deadline until exit: callers await this promise and on
+    // POSIX an unreferenced child plus an unreferenced timer can end Node early.
+    let timer;
+    this.stopped = new Promise((resolve) => child.once('exit', () => { clearTimeout(timer); resolve(); }));
     try {
       child.send({ type: 'shutdown' });
     } catch { /* already gone */ }
@@ -161,11 +166,11 @@ export class PluginWorker {
     child.stdout?.destroy();
     child.stderr?.destroy();
     child.unref();
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       try {
         child.kill('SIGKILL');
       } catch { /* already dead */ }
     }, 500);
-    timer.unref();
+    return this.stopped;
   }
 }

@@ -169,7 +169,7 @@ test('6. server teardown unsubscribes from the bus (no listener leak)', async ()
 
 test('7. CLI --studio: real child process serves /, SIGINT exits 0)', async () => {
   const dir = tmp();
-  const bin = path.resolve(path.dirname(new URL(import.meta.url).pathname).replace(/\/test$/, ''), 'bin', 'majin-v2.mjs');
+  const bin = path.resolve(import.meta.dirname, '..', 'bin', 'majin-v2.mjs');
   const { spawn } = await import('node:child_process');
   const child = spawn(process.execPath, [bin, '--studio', '--port', '0', '--telemetry-dir', path.join(dir, 't'), '--audit-dir', path.join(dir, 'a')], { stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
@@ -188,8 +188,9 @@ test('7. CLI --studio: real child process serves /, SIGINT exits 0)', async () =
   const apiRes = await fetch(url + '/api/audit/verify');
   assert.equal(apiRes.status, 200);
   const exitCode = await new Promise((resolve) => {
-    child.on('exit', (code) => resolve(code));
+    child.on('exit', (code, signal) => resolve({ code, signal }));
     child.kill('SIGINT');
   });
-  assert.equal(exitCode, 0);
+  if (process.platform === 'win32') assert.equal(exitCode.signal, 'SIGINT', 'Node terminates Windows children via the requested signal');
+  else assert.equal(exitCode.code, 0);
 });

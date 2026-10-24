@@ -85,7 +85,8 @@ html, body {
 body {
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
+  height: var(--app-height, 100dvh);
+  min-height: 0;
   overflow: hidden;
   padding-left: var(--safe-l);
   padding-right: var(--safe-r);
@@ -534,10 +535,11 @@ input[type="checkbox"] { accent-color: var(--pink); width: 18px; height: 18px; }
 
 .gate {
   position: fixed; inset: 0; z-index: 30;
-  display: grid; place-items: center;
+  place-items: center;
   padding: var(--s5) var(--s4);
   background: radial-gradient(60% 50% at 50% 18%, rgba(255, 79, 184, 0.14), transparent 70%), var(--ink-0);
 }
+.gate:not([hidden]) { display: grid; }
 .gate-card { width: 100%; max-width: 380px; text-align: center; }
 .gate-orb {
   width: 84px; height: 84px; margin: 0 auto var(--s5); border-radius: 50%;
@@ -643,8 +645,9 @@ input[type="checkbox"] { accent-color: var(--pink); width: 18px; height: 18px; }
 /* ------------------------------------------------------------ model list -- */
 
 .model-list { list-style: none; margin: var(--s3) 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+#model-search { width: 100%; min-width: 0; padding: 9px 12px; color: var(--text); background: transparent; border: 1px solid var(--text-mute); border-radius: var(--r-sm); font: inherit; }
 .model-item {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; overflow-wrap: anywhere;
   width: 100%; padding: 11px 12px;
   border-radius: var(--r-sm);
   border: 1px solid transparent;
@@ -664,7 +667,7 @@ input[type="checkbox"] { accent-color: var(--pink); width: 18px; height: 18px; }
 }
 .model-status {
   font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase;
-  color: var(--text-mute); white-space: nowrap;
+  color: var(--text-mute); white-space: normal; text-align: left;
 }
 .model-status[data-status="verified"] { color: var(--ok); }
 .model-status[data-status="missing-key"] { color: var(--err); }
@@ -766,15 +769,19 @@ input[type="checkbox"] { accent-color: var(--pink); width: 18px; height: 18px; }
 }
 @media (min-width: 720px) { .preview-frame { height: 420px; } }
 
+/* Author display rules must never make a closed modal intercept the UI. */
+[hidden] { display: none !important; pointer-events: none !important; }
+
 /* ---------------------------------------------------------------- lightbox -- */
 
 .lightbox {
   position: fixed; inset: 0; z-index: 50;
-  display: grid; place-items: center;
+  place-items: center;
   background: rgba(3, 2, 7, 0.92);
   backdrop-filter: blur(6px);
   animation: fade 180ms var(--ease) both;
 }
+.lightbox:not([hidden]) { display: grid; }
 .lightbox img { max-width: 94vw; max-height: 88dvh; border-radius: var(--r-md); }
 .lightbox-x {
   position: absolute; top: calc(var(--safe-t) + 12px); right: 16px;
@@ -868,7 +875,6 @@ input[type="checkbox"] { accent-color: var(--pink); width: 18px; height: 18px; }
   position: fixed; z-index: 31;
   top: 0; bottom: 0; left: 0;
   width: min(86vw, 380px);
-  display: flex;
   flex-direction: column;
   padding: calc(var(--safe-t) + 10px) 8px calc(var(--safe-b) + 8px);
   background: linear-gradient(180deg, rgba(16, 13, 26, 0.98), rgba(8, 7, 14, 0.99));
@@ -877,6 +883,7 @@ input[type="checkbox"] { accent-color: var(--pink); width: 18px; height: 18px; }
   animation: slide-in 220ms var(--ease) both;
   touch-action: pan-y;
 }
+.history:not([hidden]) { display: flex; }
 .history-head {
   display: flex; align-items: center; justify-content: space-between;
   gap: var(--s3); padding: 4px 8px 10px;

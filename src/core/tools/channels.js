@@ -46,7 +46,7 @@ export const channelTools = [
       else if (kind === 'slack') res = await fn(ctx.cfg, { channel: to, text, blocks: blocks ? JSON.parse(blocks) : null });
       else if (kind === 'matrix') res = await fn(ctx.cfg, { room: to, text });
       else if (kind === 'email') res = await fn(ctx.cfg, { to, subject, text });
-      else res = await fn(ctx.cfg, { url, payload: { text, source: 'majin' }, headersExtra: {} });
+      else res = await fn(ctx.cfg, { url: url || ctx.cfg.get('channels.webhook.url'), secret: ctx.cfg.get('channels.webhook.secret'), payload: { text, source: 'majin' }, headersExtra: {} });
       if (!res.ok) return { ok: false, error: res.error };
       return { ok: true, result: `${kind} sent${res.messageId ? ' (message ' + res.messageId + ')' : res.ts ? ' (ts ' + res.ts + ')' : res.eventId ? ' (event ' + res.eventId + ')' : ''}`, meta: res, summary: `${kind} → ok (${res.status})` };
     },

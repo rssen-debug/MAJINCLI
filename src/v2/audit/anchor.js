@@ -25,7 +25,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { AuditChain, HEAD_FILE, canonicalize } from './chain.js';
+import { AuditChain, HEAD_FILE, AUDIT_FILE, GENESIS, canonicalize } from './chain.js';
+import { protectAuditFile } from './permissions.js';
 
 export const ANCHOR_FILE = 'anchors.jsonl';
 export const KEY_DIR = 'keys';
@@ -38,8 +39,10 @@ export function keygen(dir) {
   const priv = path.join(keyDir, PRIV_FILE);
   const pub = path.join(keyDir, PUB_FILE);
   if (fs.existsSync(priv)) return { created: false, pubPath: pub, note: 'key already exists — refusing to rotate silently (rotation is a decision, not a default)' };
+  protectAuditFile(keyDir);
   const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
   fs.writeFileSync(priv, privateKey.export({ type: 'pkcs8', format: 'pem' }), { mode: 0o600 });
+  protectAuditFile(priv);
   fs.writeFileSync(pub, publicKey.export({ type: 'spki', format: 'pem' }), { mode: 0o644 });
   return { created: true, pubPath: pub, fingerprint: pubFingerprint(pub) };
 }
@@ -112,6 +115,7 @@ export function verifyAnchor(dir) {
     throw err;
   }
   const pub = fs.readFileSync(pubPath, 'utf8');
+  const chainHeads=fs.existsSync(path.join(dir,AUDIT_FILE))?fs.readFileSync(path.join(dir,AUDIT_FILE),'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line).hash):[];
   const lines = fs.readFileSync(anchorFile, 'utf8').trim().split('\n');
   let prevAnchorHash = '0'.repeat(64);
   let latest = null;
@@ -126,6 +130,9 @@ export function verifyAnchor(dir) {
     }
     const want = crypto.createHash('sha256').update(prevAnchorHash + '\n' + canonicalize(core) + '\n' + sig).digest('hex');
     if (anchorHash !== want) return { ok: false, cls: 'SIG_INVALID', chain: verdict, detail: `anchor ${i + 1}: anchorHash recompute mismatch` };
+    // A valid old signature must cover the actual prefix, even after new rows.
+    const coveredHead=core.chainSeq===0?GENESIS:chainHeads[core.chainSeq-1];
+    if(!Number.isSafeInteger(core.chainSeq)||core.chainSeq<0||core.chainHead!==coveredHead)return {ok:false,cls:'ANCHOR_MISMATCH',chain:verdict,detail:`anchor ${i+1}: signed head does not match the actual chain prefix — full rewrite detected`};
     prevAnchorHash = anchorHash;
     latest = rec;
   }

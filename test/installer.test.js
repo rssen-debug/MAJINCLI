@@ -151,7 +151,7 @@ test('the zip wrapper builds via the shared script and asks for nothing but node
   // the point of the zip: no GitHub, no token, no version-control commands
   assert.doesNotMatch(ps, /gh\s+release|git\s+push|git\s+am|GITHUB_TOKEN|Authorization|netrc/, 'no GitHub, no token, no manual git');
   assert.doesNotMatch(ps, /Invoke-Expression|iex |runAs/, 'no eval, no elevation');
-  assert.ok(!/[^\x00-\x7F]/.test(ps), 'pure ASCII: PS 5.1 reads BOM-less files as ANSI, so non-ASCII becomes mojibake');
+  assert.ok(!/[^\x00-\x7F]/.test(ps.replace(/^\uFEFF/, '')), 'ASCII body, with an optional UTF-8 BOM supported by PS 5.1; no mojibake');
 });
 
 test('the double-click entry point is honest and stays open', () => {

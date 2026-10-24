@@ -6,7 +6,7 @@ rem ============================================================
 setlocal EnableExtensions
 title MAJIN
 if "%MAJIN_HOME%"=="" set "MAJIN_HOME=%LOCALAPPDATA%\MAJIN"
-set "MAJIN_CONFIG="
+rem Preserve the configured MAJIN_CONFIG override.
 cd /d "%~dp0"
 
 where node >nul 2>nul
@@ -39,14 +39,14 @@ exit /b 1
 
 :run
 echo.
-echo   MAJIN 0.1.0 · data: %MAJIN_HOME%
+echo   MAJIN V4 · data: %MAJIN_HOME%
 echo   (Ctrl+C stoppar agenten. For fonsk utan start: majin start --no-window)
 echo.
-node "src\cli\majin.js" start %*
+node "bin\majin.mjs" start %*
 if errorlevel 1 (
   echo.
   echo   MAJIN avslutade med fel. Kor sjalvtest:
-  node "src\cli\majin.js" doctor
+  node "bin\majin.mjs" doctor
   echo.
   pause
 )

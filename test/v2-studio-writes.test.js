@@ -139,7 +139,7 @@ test('8. enableWrites without Approvals is a constructor error — the gate is w
 
 test('9. CLI --studio --enable-writes: real child, real grant over HTTP, audit chain has it on disk', async () => {
   const dir = tmp();
-  const bin = path.resolve(path.dirname(new URL(import.meta.url).pathname).replace(/\/test$/, ''), 'bin', 'majin-v2.mjs');
+  const bin = path.resolve(import.meta.dirname, '..', 'bin', 'majin-v2.mjs');
   const { spawn } = await import('node:child_process');
   const child = spawn(process.execPath, [bin, '--studio', '--enable-writes', '--port', '0', '--telemetry-dir', path.join(dir, 't'), '--audit-dir', path.join(dir, 'a')], { stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
@@ -157,8 +157,9 @@ test('9. CLI --studio --enable-writes: real child, real grant over HTTP, audit c
   const res = await fetch(url + '/api/consent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ scope: 'fs:write:/tmp/demo', user: 'operator-cli', mode: 'once' }) });
   assert.equal(res.status, 201);
 
-  const exitCode = await new Promise((resolve) => { child.on('exit', resolve); child.kill('SIGINT'); });
-  assert.equal(exitCode, 0);
+  const exitCode = await new Promise((resolve) => { child.on('exit', (code, signal) => resolve({ code, signal })); child.kill('SIGINT'); });
+  if (process.platform === 'win32') assert.equal(exitCode.signal, 'SIGINT', 'Node terminates Windows children via the requested signal');
+  else assert.equal(exitCode.code, 0);
 
   const chainFile = path.join(dir, 'a', 'chain.jsonl');
   assert.ok(fs.existsSync(chainFile), 'audit chain written by the child process');

@@ -11,7 +11,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
+import { runSafe } from '../spawn/safe-exec.js';
 import { preflight } from '../safety/command-preflight.js';
 import { ModelError } from '../model/provider.js';
 
@@ -28,25 +28,18 @@ export class CommandSttProvider {
   async transcribe(wavPath) {
     if (!this.commandTemplate) throw new ModelError('DEPENDENCY_MISSING', 'stt command has no template');
     if (!fs.existsSync(wavPath)) throw new ModelError('DEPENDENCY_MISSING', `audio missing: ${wavPath}`);
-    const cmd = this.commandTemplate.replace('{WAV}', JSON.stringify(wavPath));
-    const tier = preflight(cmd);
+    const tier = preflight(this.commandTemplate);
     if (tier.tier === 'no') throw new ModelError('PERMISSION_DENIED', `stt command blocked by preflight: ${tier.reason}`, { provider: this.name });
-    const parts = this.commandTemplate.split(/\s+/);
-    const exe = parts.shift();
-    const args = parts.map((a) => (a.includes('{WAV}') ? wavPath : a));
     const t0 = Date.now();
-    return await new Promise((resolve, reject) => {
-      execFile(exe, args.map((a) => a.replace(/^"|"$/g, '')), { timeout: this.timeoutMs, windowsHide: true }, (err, stdout) => {
-        if (err) {
-          const cls = /timeout|SIGTERM|ETIMED/i.test(String(err.message))
-            ? 'TIMEOUT'
-            : /spawn|ENOENT/i.test(String(err.message)) ? 'DEPENDENCY_MISSING' : 'MODEL_FAILURE';
-          reject(new ModelError(cls, `stt command failed: ${err.message}`, { provider: this.name }));
-          return;
-        }
-        resolve({ transcript: String(stdout).trim(), provider: this.name, elapsedMs: Date.now() - t0 });
-      });
-    });
+    try {
+      const result = await runSafe(this.commandTemplate, { WAV: wavPath }, { timeoutMs: this.timeoutMs });
+      if (result.truncated) throw new ModelError('MODEL_FAILURE', 'stt transcript exceeded the output limit', { provider: this.name });
+      return { transcript: result.stdout.trim(), provider: this.name, elapsedMs: Date.now() - t0 };
+    } catch (err) {
+      const cls = err.cls === 'TIMEOUT' ? 'TIMEOUT' : err.cls === 'SPAWN' ? 'DEPENDENCY_MISSING'
+        : err.cls === 'SAFE_REFUSED' ? 'PERMISSION_DENIED' : 'MODEL_FAILURE';
+      throw new ModelError(cls, `stt command failed: ${err.message}`, { provider: this.name });
+    }
   }
 }
 

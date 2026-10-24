@@ -15,6 +15,7 @@ import path from 'node:path';
 import { loadConfig, isNodeSupported, V4_MIN_NODE } from '../../src/v4/config.js';
 import { discoverModels } from '../../src/v4/models.js';
 import { pairingExists, loadSecret } from '../../src/v4/auth.js';
+import { privateFilePermissions } from '../../src/v4/file-permissions.js';
 
 const checks = [];
 const add = (id, ok, detail, blocking = false, hint = null) => {
@@ -45,7 +46,7 @@ function main() {
   const secretFile = config.paths.secret;
   const secretOk = (() => {
     try {
-      return /^[a-f0-9]{64}$/.test(loadSecret(secretFile)) && (fs.statSync(secretFile).mode & 0o077) === 0;
+      return /^[a-f0-9]{64}$/.test(loadSecret(secretFile)) && privateFilePermissions(secretFile);
     } catch {
       return false;
     }

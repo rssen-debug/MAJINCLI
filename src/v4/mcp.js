@@ -26,9 +26,10 @@
  */
 import { spawn as nodeSpawn } from 'node:child_process';
 import path from 'node:path';
+import { V4_VERSION } from './config.js';
 
 export const MCP_PROTOCOL_VERSION = '2025-06-18';
-export const MCP_CLIENT_INFO = Object.freeze({ name: 'majin-v4', version: '4.0.0' });
+export const MCP_CLIENT_INFO = Object.freeze({ name: 'majin-v4', version: V4_VERSION });
 
 /** Only these env keys reach an MCP server; provider keys must never leak. */
 const ENV_ALLOW = ['PATH', 'SystemRoot', 'windir', 'SystemDrive', 'HOME', 'USERPROFILE', 'TEMP', 'TMP', 'TMPDIR', 'LANG', 'LC_ALL', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)'];
@@ -146,6 +147,19 @@ export class McpServer {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
+    const transportError = (error) => {
+      this.dead = true;
+      this.exitReason = error.message;
+      for (const [, entry] of this.pending) {
+        clearTimeout(entry.timer);
+        entry.reject(new McpError('SERVER_DIED', `MCP transport closed: ${error.message}`));
+      }
+      this.pending.clear();
+    };
+    this.child.on('error', transportError);
+    this.child.stdin?.on('error', transportError);
+    this.child.stdout?.on('error', transportError);
+    this.child.stderr?.on('error', transportError);
     this.child.stdout?.setEncoding?.('utf8');
     this.child.stdout?.on('data', (chunk) => {
       this.buffer += chunk;

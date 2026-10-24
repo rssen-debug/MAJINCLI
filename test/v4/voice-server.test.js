@@ -132,15 +132,15 @@ import { synthesize, transcribe, voiceCapabilities, makeTtsProvider } from '../.
 
 const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../scripts/v4/voice-fixture.mjs');
 const ttsTemplate = () => `"${process.execPath}" "${FIXTURE}" tts {OUT} {TEXT}`;
-// NOTE: the V2 CommandSttProvider strips quotes from ARGUMENTS but uses the
-// executable token verbatim, so the binary path must be unquoted there. That is
-// a documented V2 limitation (SOURCE_AUDIT §5), not worked around silently.
-const sttTemplate = () => `${process.execPath} ${FIXTURE} stt {WAV}`;
+// STT uses the same shell-free, quoted argv parser as the TTS command lane.
+const sttTemplate = () => `"${process.execPath}" "${FIXTURE}" stt {WAV}`;
 
 test('voice/command: a real local binary is spawned without a shell and its audio is verified', async () => {
   const fs = await import('node:fs');
   const os = await import('node:os');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-tts-cmd-'));
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-tts-cmd-'));
+  const dir = path.join(parent, 'fresh-voice-directory');
+  assert.equal(fs.existsSync(dir), false);
   const result = await synthesize({ text: 'tre ord här', mode: 'command', command: ttsTemplate(), dir });
   assert.equal(result.ok, true);
   assert.equal(result.provider, 'command');
@@ -148,7 +148,7 @@ test('voice/command: a real local binary is spawned without a shell and its audi
   assert.equal(result.synthetic, false, 'a real subprocess produced it');
   assert.ok(result.bytes > 44);
   assert.ok(fs.existsSync(result.audioPath));
-  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(parent, { recursive: true, force: true });
 });
 
 test('voice/command: longer text produces a longer file (the text really reaches the binary)', async () => {
@@ -194,6 +194,9 @@ test('voice/stt: the local command lane returns a transcript, and an empty one s
   assert.equal(heard.verdict, 'capture');
   assert.equal(heard.transcript, 'öppna rapporten');
   assert.equal(heard.synthetic, false);
+  const structured = await transcribe({ audioPath: wav, command: sttTemplate().replace(' stt ', ' stt-json ') });
+  assert.equal(structured.transcript, heard.transcript);
+  assert.equal(structured.language, 'en', 'recognized language reaches the client instead of forcing phone locale');
 
   const quiet = path.join(dir, 'quiet.wav');
   fs.writeFileSync(quiet, Buffer.alloc(64));
@@ -201,6 +204,9 @@ test('voice/stt: the local command lane returns a transcript, and an empty one s
   assert.equal(empty.ok, false, 'an empty transcript is not a success');
   assert.equal(empty.verdict, 'inconclusive');
   assert.equal(empty.transcript, '');
+  const structuredEmpty = await transcribe({ audioPath: quiet, command: sttTemplate().replace(' stt ', ' stt-json ') });
+  assert.equal(structuredEmpty.ok, false, 'JSON metadata with an empty transcript is not recognition');
+  assert.equal(structuredEmpty.verdict, 'inconclusive');
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

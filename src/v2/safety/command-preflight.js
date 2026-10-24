@@ -45,6 +45,7 @@ const ALWAYS_NO = [
 ];
 
 const HOLD_PATTERNS = [
+  { pattern: /\b(?:rmdir|rd|del|erase)\s+/i, reason: 'Windows deletion requires confirmation of the exact target' },
   { pattern: /\brm\s+-[a-z]*r[a-z]*/ , reason: 'recursive delete of a scoped path — allowed with consent, scoped to target folder' },
   { pattern: /\bgit\s+(reset\s+--hard|clean\s+-fd)/, reason: 'discards local changes — only with explicit confirmation of the exact target' },
   { pattern: /\bgit\s+checkout\s+--\s/, reason: 'git checkout -- discards working-tree changes for named files' },

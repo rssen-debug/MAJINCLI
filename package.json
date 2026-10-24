@@ -1,6 +1,6 @@
 {
   "name": "majin",
-  "version": "4.0.0-alpha",
+  "version": "4.0.0-alpha.3",
   "description": "MAJIN — private, mobile-first AI assistant that executes on your own Windows machine.",
   "type": "module",
   "license": "MIT",
@@ -8,7 +8,7 @@
     "node": ">=22.0.0"
   },
   "bin": {
-    "majin": "./src/cli/majin.js",
+    "majin": "./bin/majin.mjs",
     "majin-v2": "./bin/majin-v2.mjs"
   },
   "main": "./src/core/runtime.js",
@@ -18,16 +18,16 @@
     "./tools": "./src/core/tools/index.js"
   },
   "scripts": {
-    "start": "node ./src/cli/majin.js start",
-    "serve": "node ./src/cli/majin.js _serve --no-window --no-channels",
-    "window": "node ./src/cli/majin.js window",
-    "doctor": "node ./src/cli/majin.js doctor",
-    "doctor:full": "node ./src/cli/majin.js doctor --full",
+    "start": "node ./bin/majin.mjs start",
+    "serve": "node ./bin/majin.mjs serve",
+    "window": "node ./bin/majin.mjs window",
+    "doctor": "node ./bin/majin.mjs doctor",
+    "doctor:full": "node ./bin/majin.mjs doctor --full",
     "test": "node --test test/*.test.js",
     "check": "node ./scripts/parse-all.js",
     "i18n": "node ./scripts/i18n-check.mjs",
-    "pair": "node ./src/cli/majin.js pair",
-    "ui": "node ./src/cli/majin.js window",
+    "pair": "node ./bin/majin.mjs pair",
+    "ui": "node ./bin/majin.mjs window",
     "setup": "powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1",
     "setup:whatsapp": "powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1 -WhatsApp",
     "uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1 -Uninstall",
@@ -38,7 +38,7 @@
     "bench": "node ./scripts/bench.mjs",
     "bench:json": "node ./scripts/bench.mjs --json",
     "icon": "node ./scripts/set-icon.mjs",
-    "shortcut": "node ./src/cli/majin.js shortcut",
+    "shortcut": "node ./bin/majin.mjs legacy shortcut",
     "setup:exe": "node ./scripts/build-setup.mjs",
     "setup:payload": "node ./scripts/build-setup.mjs --payload-only",
     "installer": "node ./scripts/build-installer.mjs",
@@ -70,6 +70,7 @@
     "qrcode": "1.5.4"
   },
   "files": [
+    "bin",
     "src",
     "rules",
     "docs",
@@ -104,6 +105,7 @@
     "node-edge-tts": "1.2.11",
     "p-queue": "10.0.0",
     "pngjs": "7.0.0",
+    "web-push": "3.6.7",
     "zod": "4.6.7"
   }
 }

@@ -25,6 +25,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { protectAuditFile } from './permissions.js';
 import jcsCanonicalize from 'canonicalize'; // RFC 8785 JCS — the RFC author's own reference implementation (Apache-2.0)
 
 export const GENESIS = '0'.repeat(64);
@@ -137,12 +138,16 @@ export class AuditChain {
     const line = JSON.stringify(entry) + '\n';
     const fd = fs.openSync(this.file, 'a', 0o600);
     try {
+      // Protect the empty/new file before writing sensitive audit payloads.
+      if (process.platform !== 'win32' || !this.privateAclApplied) {
+        protectAuditFile(this.file);
+        this.privateAclApplied = true;
+      }
       fs.writeSync(fd, line);
       fs.fsyncSync(fd);
     } finally {
       fs.closeSync(fd);
     }
-    fs.chmodSync(this.file, 0o600); // enforced even if the file pre-existed (Cancore rule)
     this.#writeHead(entry);
     this.seq = entry.seq;
     this.prev = entry.hash;

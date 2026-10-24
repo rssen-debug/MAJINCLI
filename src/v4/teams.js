@@ -42,7 +42,7 @@ export function normaliseMemberTools(list) {
  * against `teamStepCap`, and a worker that reports nothing would make the
  * budget decorative.
  */
-export function makeV4Worker({ runSubtask, turn, team, digest, budget = null }) {
+export function makeV4Worker({ runSubtask, turn, team, digest, budget = null, completed = new Map() }) {
   return (member) => async (node) => {
     const need = Math.max(1, Math.min(5, Number(member.maxSteps) || TEAM_DEFAULTS.maxStepsPerMember));
     /**
@@ -66,9 +66,12 @@ export function makeV4Worker({ runSubtask, turn, team, digest, budget = null }) 
     let out;
     try {
       out = await runSubtask({
-        task: String(node.input || node.goal || node.id),
+        task: String(node.input || node.goal || node.id) + (node.deps?.length
+          ? `\n\nDependency results:\n${node.deps.map((id) => `[${id}] ${String(completed.get(id)?.text || '').slice(0, 1000)}`).join('\n')}`
+          : ''),
         tools: normaliseMemberTools(member.tools),
         maxRounds: need,
+        maxCalls: need,
         instructions: member.instructions || member.role || '',
         digest,
         turn,
@@ -79,7 +82,7 @@ export function makeV4Worker({ runSubtask, turn, team, digest, budget = null }) 
     }
     const steps = Math.max(1, out.calls || 0);
     if (budget) budget.spent += steps;
-    return {
+    const result = {
       ok: !out.failure,
       text: out.answer,
       tools: out.tools,
@@ -87,7 +90,10 @@ export function makeV4Worker({ runSubtask, turn, team, digest, budget = null }) 
       ...(out.failure ? { error: out.failure } : {}),
       member: member.id,
       team,
+      artifacts: out.artifacts || [],
     };
+    if (result.ok) completed.set(node.id, result);
+    return result;
   };
 }
 
@@ -243,6 +249,7 @@ export function createTeamTools({ workspaceDir, runSubtask }) {
       teamStepCap: z.number(),
       skipped: z.array(z.string()),
       results: z.unknown(),
+      artifacts: z.array(z.unknown()).optional(),
     }),
     execute: async ({ team, goals, cap = 4, teamStepCap = TEAM_DEFAULTS.teamStepCap, resumeId = null }) => {
       const { turnState } = await import('./turn-state.js');
@@ -255,6 +262,7 @@ export function createTeamTools({ workspaceDir, runSubtask }) {
       // One budget object per run: V4's worker reserves against it before the
       // first await, so a parallel launch cannot overshoot the cap.
       const budget = { cap: Number(teamStepCap) || TEAM_DEFAULTS.teamStepCap, reserved: 0, spent: 0 };
+      const completed = new Map(Object.entries(resumeId ? store.loadCheckpoint(team, resumeId)?.done || {} : {}));
       const out = await runTeam({
         store,
         team,
@@ -262,6 +270,7 @@ export function createTeamTools({ workspaceDir, runSubtask }) {
         cap,
         teamStepCap,
         resumeId,
+        signal: st.signal || null,
         emit: (e) => {
           try {
             st.emit?.('team', { team, runId: e.runId || null, type: e.type, node: e.id || null });
@@ -273,6 +282,7 @@ export function createTeamTools({ workspaceDir, runSubtask }) {
           team,
           digest,
           budget,
+          completed,
         })(member),
       });
       const okCount = Number(out.okCount || 0);
@@ -290,6 +300,7 @@ export function createTeamTools({ workspaceDir, runSubtask }) {
         teamStepCap: Number(out.teamStepCap || teamStepCap),
         skipped: out.skipped || [],
         results: out.results,
+        artifacts: [...completed.values()].flatMap((value) => value.artifacts || []),
       };
     },
   };

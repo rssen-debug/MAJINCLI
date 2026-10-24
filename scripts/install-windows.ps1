@@ -1,4 +1,4 @@
-<#
+﻿<#
   MAJIN 0.1.1 - Windows build + install + verify, one double click.
 
   You do not need git, GitHub, a token, or Visual Studio. What this script does:
@@ -25,11 +25,18 @@ param(
   [switch]$KeepInPlace,
   [switch]$SkipVerify,
   [switch]$NoPause,
+  [switch]$Legacy,
   [string]$Port = '8787',
   [string]$Source = ''
 )
 
 $ErrorActionPreference = 'Stop'
+if (-not $Legacy) {
+  $v4Source = if ($Source) { $Source } else { Split-Path -Parent $PSScriptRoot }
+  & (Join-Path $v4Source 'install.ps1') -NoTask:$SkipVerify
+  if (-not $?) { exit 1 }
+  exit 0
+}
 $ProgressPreference = 'SilentlyContinue'
 $here = $PSScriptRoot
 $log = Join-Path $here 'INSTALL-log.txt'

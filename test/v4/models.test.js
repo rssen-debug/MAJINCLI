@@ -109,7 +109,7 @@ test('models: mobile alias endpoint requires a session', async () => {
   }
 });
 
-test('models: selecting a configured model is scoped to the conversation', async () => {
+test('models: explicit authorized selection becomes canonical without rewriting conversation history', async () => {
   const home = tempHome();
   writeV1Config(home);
   const s = await startTestServer({ home });
@@ -124,14 +124,18 @@ test('models: selecting a configured model is scoped to the conversation', async
     const select = await fetch(`${s.base}/api/model`, {
       method: 'POST',
       headers: { cookie, 'content-type': 'application/json', 'x-majin-csrf': '1', origin: s.base },
-      body: JSON.stringify({ conversationId: conv.id, modelId: 'deepseek/deepseek-reasoner' }),
+      body: JSON.stringify({ conversationId: conv.id, modelId: 'deepseek/deepseek-reasoner', expectedVersion: 0, authorizePotentialCost: true }),
     });
     assert.equal(select.status, 200);
     const body = await select.json();
     assert.equal(body.modelId, 'deepseek/deepseek-reasoner');
 
     const read = await fetch(`${s.base}/api/conversation?id=${conv.id}`, { headers: { cookie } });
-    assert.equal((await read.json()).conversation.modelId, 'deepseek/deepseek-reasoner');
+    assert.equal((await read.json()).conversation.modelId, null, 'history metadata is preserved');
+    const canonical = await (await fetch(`${s.base}/api/models`, { headers: { cookie } })).json();
+    assert.equal(canonical.selection.modelId, 'deepseek/deepseek-reasoner');
+    assert.equal(canonical.selection.version, 1);
+    assert.equal(s.context.model.routeForModel(null).model, 'deepseek-reasoner');
 
     const other = await fetch(`${s.base}/api/conversations`, {
       method: 'POST',
@@ -160,7 +164,7 @@ test('models: selecting an unknown or unconfigured model is refused', async () =
       const res = await fetch(`${s.base}/api/model`, {
         method: 'POST',
         headers: { cookie, 'content-type': 'application/json', 'x-majin-csrf': '1', origin: s.base },
-        body: JSON.stringify({ conversationId: conv.id, modelId }),
+        body: JSON.stringify({ conversationId: conv.id, modelId, expectedVersion: 0 }),
       });
       assert.equal(res.status, 400, modelId);
       assert.equal((await res.json()).error.code, 'MODEL_NOT_CONFIGURED');

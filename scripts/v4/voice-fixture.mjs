@@ -68,13 +68,13 @@ if (mode === 'tts') {
   process.exit(0);
 }
 
-if (mode === 'stt') {
+if (mode === 'stt' || mode === 'stt-json') {
   if (!target || !fs.existsSync(target)) {
     process.stderr.write('stt requires an existing wav path\n');
     process.exit(2);
   }
   const transcript = readComment(target);
-  process.stdout.write(`${transcript}\n`);
+  process.stdout.write(mode === 'stt-json' ? JSON.stringify({ transcript, language: 'en' }) : `${transcript}\n`);
   process.exit(0);
 }
 

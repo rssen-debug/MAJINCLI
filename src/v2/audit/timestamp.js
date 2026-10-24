@@ -18,6 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 
 const TSR_FILE = 'anchors.tsr';
@@ -25,8 +26,19 @@ const TSR_META = 'anchor-tsr.json';
 const ANCHOR_FILE = 'anchors.jsonl';
 const TSA_TIMEOUT_MS = 15000;
 
+// Git for Windows ships OpenSSL outside PATH. Reuse that installed binary;
+// never download a verifier or infer certificate trust from its presence.
+export function openSslBinary(env = process.env, platform = process.platform) {
+  if (env.MAJIN_OPENSSL) return env.MAJIN_OPENSSL;
+  if (platform === 'win32') {
+    const bundled = path.join(env.ProgramFiles || 'C:\\Program Files', 'Git', 'usr', 'bin', 'openssl.exe');
+    if (fs.existsSync(bundled)) return bundled;
+  }
+  return 'openssl';
+}
+
 export function hasOpenSsl({ execImpl = execFileSync } = {}) {
-  try { execImpl('openssl', ['version'], { stdio: 'pipe' }); return true; } catch { return false; }
+  try { execImpl(openSslBinary(), ['version'], { stdio: 'pipe', windowsHide: true, timeout: 10000 }); return true; } catch { return false; }
 }
 
 function latestAnchor(dir) {
@@ -38,7 +50,7 @@ function latestAnchor(dir) {
 
 function parseTsrText(dir, { execImpl = execFileSync } = {}) {
   const tsr = path.join(dir, TSR_FILE);
-  const text = execImpl('openssl', ['ts', '-reply', '-in', tsr, '-text'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const text = execImpl(openSslBinary(), ['ts', '-reply', '-in', tsr, '-text'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, timeout: 10000 }).replace(/\r\n/g, '\n');
   const time = /Time stamp:\s*(.+)/.exec(text)?.[1]?.trim() ?? null;
   // OpenSSL 3.x hexdump: "Message data:\n    0000 - f4 ca d4 ...-70 4c ...   <ascii>"
   let imprint = null;
@@ -66,10 +78,10 @@ export async function requestTimestamp(dir, url, { timeoutMs = TSA_TIMEOUT_MS, e
     throw err;
   }
   const imprint = crypto.createHash('sha256').update(anchor.anchorHash).digest('hex');
-  const work = fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'tsq-'));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'tsq-'));
   const tsq = path.join(work, 'q.tsq');
   try {
-    execImpl('openssl', ['ts', '-query', '-sha256', '-digest', imprint, '-cert', '-no_nonce', '-out', tsq], { stdio: 'pipe' });
+    execImpl(openSslBinary(), ['ts', '-query', '-sha256', '-digest', imprint, '-cert', '-no_nonce', '-out', tsq], { stdio: 'pipe', windowsHide: true, timeout: 10000 });
     const ac = new AbortController();
     const t = setTimeout(() => ac.abort(), timeoutMs);
     const res = await fetchImpl(url, {
@@ -129,7 +141,7 @@ export function verifyTimestamp(dir, { caFile = null, untrusted = null, execImpl
   }
   if (caFile && untrusted) {
     try {
-      execImpl('openssl', ['ts', '-verify', '-digest', meta.imprint, '-in', tsr, '-CAfile', caFile, '-untrusted', untrusted], { stdio: 'pipe' });
+      execImpl(openSslBinary(), ['ts', '-verify', '-digest', meta.imprint, '-in', tsr, '-CAfile', caFile, '-untrusted', untrusted], { stdio: 'pipe', windowsHide: true, timeout: 10000 });
       return { ok: true, cls: 'TSR_OK', chainTrusted: true, ...base, detail: `existence at ${info.time} proven under the TSA's certificate chain` };
     } catch (e) {
       return { ok: false, cls: 'TSR_TRUST_FAILED', ...base, detail: `chain verification failed: ${String(e.stderr || e.message).slice(0, 200)}` };

@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -111,13 +112,29 @@ test('installer: the automatic update task exists, is daily, and verifies signat
   assert.match(installer, /\[switch\]\$AutoUpdate/);
   assert.match(installer, /\$UpdateTaskName = 'MAJIN V4 Update'/);
   assert.match(installer, /New-ScheduledTaskTrigger -Daily -At \$UpdateTime/);
-  assert.match(installer, /'scripts\\v4\\update\.mjs', 'apply', '--quiet', '--log'/);
+  assert.match(installer, /Join-Path \$RepoRoot 'scripts\\v4\\update\.mjs'/);
+  assert.match(installer, /apply --quiet --log/);
+  assert.match(installer, /-Argument \$updateArguments/);
+  assert.doesNotMatch(installer, /-ArgumentList/, 'Scheduled Task actions accept Argument, not ArgumentList');
   assert.match(installer, /-RunOnlyIfNetworkAvailable/);
   assert.match(installer, /-ExecutionTimeLimit \(New-TimeSpan -Minutes 20\)/);
   // A failed update must not leave two updaters running against the same tree.
   assert.match(installer, /-MultipleInstances IgnoreNew/);
   // The task is registered by the same flow the owner already runs.
   assert.match(installer, /release-key\.json/);
+});
+
+test('installer: all Windows entry scripts parse in Windows PowerShell 5', { skip: process.platform !== 'win32' }, () => {
+  const out = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
+    $ErrorActionPreference = 'Stop'
+    foreach ($relative in @('install.ps1', 'scripts/install-windows.ps1', 'scripts/v4/install-v4-windows.ps1')) {
+      $tokens = $null; $errors = $null
+      [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $env:MAJIN_PS_PARSE_ROOT $relative), [ref]$tokens, [ref]$errors) | Out-Null
+      if ($errors.Count) { throw ($errors | Out-String) }
+    }
+    if (-not (Get-Command New-ScheduledTaskAction).Parameters.ContainsKey('Argument')) { throw 'Scheduled Task Argument parameter missing' }
+  `], { env: { ...process.env, MAJIN_PS_PARSE_ROOT: ROOT }, encoding: 'utf8', windowsHide: true, timeout: 20000 });
+  assert.equal(out.status, 0, out.stderr || out.error?.message);
 });
 
 test('installer: uninstall removes the update task too', () => {
@@ -134,7 +151,7 @@ test('installer: here-strings are balanced (the one syntax error that breaks the
 
   // A line-continuation backtick must be the last character on its line.
   // Backticks inside strings (`n, `t) are legal and are not continuations.
-  installer.split('\n').forEach((line, i) => {
+  installer.split(/\r?\n/).forEach((line, i) => {
     if (line.trim().startsWith('#')) return;
     if (!line.trimEnd().endsWith('`')) return;
     assert.equal(line, line.trimEnd(), `line ${i + 1}: whitespace after a continuation backtick`);

@@ -1,30 +1,30 @@
 # MAJIN capability inventory (generated)
 
-Generated 2026-10-23T16:06:44.963Z on linux. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
+Generated 2026-10-23T19:31:45.103Z on win32. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
 
 ## Totals
 
 | Version | Unit | Count |
 | --- | --- | --- |
 | V1 | tool modules | 26 |
-| V1 | tools | 140 |
-| V1 | integrated into V4 lanes | 110 |
+| V1 | tools | 141 |
+| V1 | integrated into V4 lanes | 111 |
 | V1 | excluded with a recorded reason | 30 |
-| V2 | components reused | 21/51 |
+| V2 | components reused | 22/52 |
 | V3 | components reused | 0/4 |
 | V4 | built-in tools | 8 |
-| V4 | tools registered on this host | 108 |
+| V4 | tools registered on this host | 119 |
 
 ## Capability domains
 
 | Domain | What exists |
 | --- | --- |
-| tools | builtin: 8; v1Integrated: 110; registeredOnHost: 108 |
+| tools | builtin: 8; v1Integrated: 111; registeredOnHost: 119 |
 | skills | shipped: ["fix-code","job-search"]; mechanism: src/v4/skills.js — declared required/preferred tools decide visibility, not app code |
 | mcp | state: configured by the owner in <data>/v4/mcp.json; mechanism: src/v4/mcp.js + mcp-tools.js — stdio JSON-RPC, scrubbed env, tools at process tier |
 | agentFunctions | turnEngine: src/v4/agent.js — goal, rounds, receipts, verification, recovery advisor; discovery: tools_search + tools_activate (src/v4/tool-exposure.js); delegation: agent_delegate — bounded subagent, owner-gated; resume: resumeGoal — re-verifies every artifact against the recorded SHA-256 |
-| computerControl | lanes: [{"lane":"desktop","available":false,"tools":0,"reason":"Windows-only (this host is linux)"},{"lane":"computer","available":false,"tools":0,"reason":"Windows-only (this host is linux)"},{"lane":"screen","available":false,"tools":0,"reason":"Windows-only (this host is linux)"}]; mechanism: V1 wincontrol.js / computer.js through the V1 lane adapter; Windows interactive session only |
-| browser | lane: web; tools: ["browser.open","browser.read","browser.click","browser.fill","browser.shot","browser.upload","browser.elements","browser.clear_marks","browser.close"]; runtime: {"available":false,"reason":"no browser binary found (npx playwright install chromium)"} |
+| computerControl | lanes: [{"lane":"desktop","available":true,"tools":5,"reason":null},{"lane":"computer","available":true,"tools":2,"reason":null},{"lane":"screen","available":true,"tools":3,"reason":null}]; mechanism: V1 wincontrol.js / computer.js through the V1 lane adapter; Windows interactive session only |
+| browser | lane: web; tools: ["browser.open","browser.read","browser.click","browser.fill","browser.shot","browser.upload","browser.verify","browser.elements","browser.clear_marks","browser.close"]; runtime: {"available":true,"reason":null,"binary":"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"} |
 | terminal | lanes: [{"lane":"shell","available":true,"tools":5},{"lane":"shelltools","available":true,"tools":5}]; mechanism: V1 exec.js (managed jobs) and shell.js (command/background) through the V2 runner and approvals |
 | memory | tools: ["memory_save","memory_search"]; store: src/v2/memory/store.js (used directly); promptInjection: src/v4/memory.js memoryForPrompt — retrieval, not just writes |
 | voice | server: src/v2/voice/{speak,listen,tts,stt}.js imported by src/v4/voice.js; client: browser-native speech + text fallback (src/v4/ui/voice.js); measured: false |
@@ -59,7 +59,7 @@ Generated 2026-10-23T16:06:44.963Z on linux. Every row is computed from the code
 | `sys.js` | 6 | sys | lane | reused through sys |
 | `teams.js` | 2 | — | replaced | The V1 tool wrapper binds team.run to V1's loop and registry. Its ENGINE (src/core/teams.js: TeamStore, runTeam) and the scheduler behind it (src/core/swarm.js) are reused verbatim by V4's team_run, with V4 subagents as the worker. |
 | `trading.js` | 2 | trading | lane | reused through trading |
-| `web.js` | 12 | web | lane | reused through web |
+| `web.js` | 13 | web | lane | reused through web |
 | `wincontrol.js` | 5 | desktop | lane | reused through desktop |
 
 ## V1 tools
@@ -198,6 +198,7 @@ Generated 2026-10-23T16:06:44.963Z on linux. Every row is computed from the code
 | `browser.fill` | exec | integrated | web | browser runtime |
 | `browser.shot` | read | integrated | web | browser runtime |
 | `browser.upload` | exec | integrated | web | browser runtime |
+| `browser.verify` | read | integrated | web | browser runtime |
 | `browser.elements` | read | integrated | web | browser runtime |
 | `browser.clear_marks` | write | integrated | web | browser runtime |
 | `browser.close` | write | integrated | web | browser runtime |
@@ -222,6 +223,7 @@ Generated 2026-10-23T16:06:44.963Z on linux. Every row is computed from the code
 | `src/v2/audit/chain.js` | not-used | V2 hash-chained audit log; only the V2 audit bundle uses it. |
 | `src/v2/audit/export.js` | not-used | V2 audit bundle format is reused as a format and documented in SOURCE_AUDIT, not imported; V4 backup has its own manifest + verify path. |
 | `src/v2/audit/index.js` | not-used | V2 cryptographic audit chain (hash chain, anchors). V4's audit trail is goal receipts + the V2 telemetry ledger. |
+| `src/v2/audit/permissions.js` | reused | imported by src/v2/audit/anchor.js, src/v2/audit/chain.js, src/v4/server.js |
 | `src/v2/audit/timestamp.js` | not-used | Timestamp helpers for the V2 audit chain; no V4 caller. |
 | `src/v2/compiler/goal-compiler.js` | not-used | Compiles natural language into V2 task graphs; V4 plans inside the conversation turn. |
 | `src/v2/compiler/router.js` | not-used | V2 intent compiler targets V2 tool vocabulary and orchestration. |
@@ -253,7 +255,7 @@ Generated 2026-10-23T16:06:44.963Z on linux. Every row is computed from the code
 | `src/v2/runtime/verify-bridge.js` | not-used | Bridges V2 acceptance to V2 verifiers; V4 calls runVerifier directly. |
 | `src/v2/safety/approvals.js` | reused | imported by src/v4/agent.js |
 | `src/v2/safety/command-preflight.js` | reused | imported by src/v2/exec/sandbox.js, src/v2/voice/stt.js, src/v2/voice/tts.js |
-| `src/v2/spawn/safe-exec.js` | reused | imported by src/v2/voice/tts.js |
+| `src/v2/spawn/safe-exec.js` | reused | imported by src/v2/voice/stt.js, src/v2/voice/tts.js |
 | `src/v2/studio/page.js` | not-used | UI for the V2 studio server, which V4 rejected for having no session model. |
 | `src/v2/studio/server.js` | not-used | Desktop operator surface without a session model (rejected in SOURCE_AUDIT). |
 | `src/v2/supervisor/plan-with-model.js` | not-used | Model-assisted V2 planning; V4 plans inside the conversation turn. |
@@ -282,16 +284,16 @@ Generated 2026-10-23T16:06:44.963Z on linux. Every row is computed from the code
 
 | Lane | Available | Tools | Reason |
 | --- | --- | --- | --- |
-| desktop | no | 0 | Windows-only (this host is linux) |
-| computer | no | 0 | Windows-only (this host is linux) |
-| screen | no | 0 | Windows-only (this host is linux) |
+| desktop | yes | 5 |  |
+| computer | yes | 2 |  |
+| screen | yes | 3 |  |
 | net | yes | 5 |  |
 | files | yes | 13 |  |
 | shell | yes | 5 |  |
 | shelltools | yes | 5 |  |
 | sys | yes | 6 |  |
 | power | yes | 3 |  |
-| web | yes | 12 |  |
+| web | yes | 13 |  |
 | research | yes | 1 |  |
 | jobs | yes | 9 |  |
 | flows | yes | 6 |  |

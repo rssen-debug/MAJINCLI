@@ -2,18 +2,19 @@
  * MAJIN V4 — client.
  *
  * The browser is a thin, honest client: it renders what the server proves and
- * never claims a task succeeded on its own. Voice uses the browser engines
- * (SpeechRecognition + SpeechSynthesis) so it works without extra services,
- * and every unsupported capability is reported instead of faked.
+ * never claims a task succeeded on its own. iOS voice uses foreground capture
+ * and host-local STT; other browsers retain Web Speech with recording fallback.
  */
-import { createSpirit } from '/spirit.js';
-import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage } from '/voice.js';
-import { t } from '/strings.js';
-import { INITIAL, applyEvent, createSseParser } from '/session.js';
+import { createSpirit } from '/spirit.js?v=15';
+import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage, playNarratorStream } from '/voice.js?v=15';
+import { t } from '/strings.js?v=15';
+import { INITIAL, applyEvent, createSseParser } from '/session.js?v=15';
+import { VoiceCapture } from '/recorder.js?v=15';
 
 const $ = (sel) => document.querySelector(sel);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const lowPower = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 4) <= 2;
+let refreshHeartbeatSettings = () => {};
 
 const els = {
   stage: $('#stage'),
@@ -44,6 +45,8 @@ const els = {
   sheetModel: $('#sheet-model'),
   sheetModelNote: $('#sheet-model-note'),
   modelList: $('#model-list'),
+  modelSearch: $('#model-search'),
+  modelIncluded: $('#model-included'),
   modelSource: $('#model-source'),
   refreshModels: $('#refresh-models'),
   sheetFiles: $('#file-list'),
@@ -68,8 +71,6 @@ const els = {
   approvalDeny: $('#approval-deny'),
   approvalDismiss: $('#approval-dismiss'),
   heroTitle: $('#hero-title'),
-  heroSub: $('#hero-sub'),
-  suggestions: $('#suggestions'),
   newChat: $('#new-chat'),
   logout: $('#logout'),
   historyBtn: $('#history-btn'),
@@ -98,6 +99,8 @@ const els = {
 const state = {
   conversationId: null,
   modelId: null,
+  modelCatalogue: null,
+  modelSelectionVersion: 0,
   streaming: false,
   controller: null,
   model: null,
@@ -592,9 +595,45 @@ function addToolCard(name, input) {
 
 const activeTools = new Map();
 
+/** Rebuild the transcript from server messages and their durable tool receipts. */
+function renderConversationMessages(conversation) {
+  activeTools.clear();
+  const goals = new Map((conversation.goals || []).map((goal) => [goal.id, goal]));
+  const rendered = new Set();
+  for (const message of conversation.messages) {
+    const goal = goals.get(message.meta?.goalId);
+    if (message.role === 'assistant' && goal) {
+      for (const receipt of goal.receipts || []) {
+        if (rendered.has(receipt.id) || !receipt.action?.startsWith('tool:')) continue;
+        // A resumed goal can have several answers. Put each receipt before the
+        // answer that followed it, rather than moving future work into the past.
+        if (receipt.at && message.at && receipt.at > message.at) continue;
+        rendered.add(receipt.id);
+        const name = receipt.action.slice(5);
+        const card = addToolCard(name, {});
+        const ok = receipt.result === 'success';
+        card.node.dataset.state = ok ? (receipt.verified ? 'verified' : 'ok') : 'failed';
+        card.node.dataset.historical = 'true';
+        card.node.dataset.receiptId = receipt.id;
+        card.node.querySelector('.tool-name').textContent = `${toolLabel(name)} · ${t('history.recorded')}`;
+        card.sum.textContent = receipt.target || name;
+        const status = ok ? (receipt.verified ? t('history.previouslyVerified') : t('state.done')) : t('state.failed');
+        card.detail.textContent = `${status} · ${t('state.receipt')} ${receipt.id}`
+          + (receipt.at ? ` · ${receipt.at}` : '')
+          + (receipt.errorClass ? ` · ${receipt.errorClass}` : '')
+          + `\n${t('history.receiptTime')}`;
+      }
+    }
+    addMessage(message.role === 'user' ? 'user' : 'assistant', message.content, {
+      error: message.meta?.error === true, meta: timeLabel(message.at),
+    });
+  }
+}
+
 /* ------------------------------------------------------------------ auth -- */
 
 function showGate(message = '') {
+  state.started = false;
   els.gate.hidden = false;
   els.gateError.hidden = !message;
   els.gateError.textContent = message;
@@ -676,6 +715,7 @@ async function loadState() {
   loadModels();
   if (demo) els.hint.textContent = t('hero.demoHint');
   state.started = true;
+  refreshHeartbeatSettings();
 }
 
 function renderFiles(files) {
@@ -963,10 +1003,7 @@ async function openConversation(id) {
   els.thread.textContent = '';
   state.bubble = null;
   state.bubbleText = '';
-  for (const m of data.conversation.messages) {
-    if (m.role === 'user') addMessage('user', m.content, { meta: timeLabel() });
-    else addMessage('assistant', m.content, { error: m.meta?.error === true, meta: timeLabel() });
-  }
+  renderConversationMessages(data.conversation);
   if (data.conversation.pendingApproval) {
     showApproval({ tool: data.conversation.pendingApproval.tool, reason: '' });
   } else {
@@ -984,7 +1021,7 @@ function newRequestId() {
   return `req_${Date.now()}_${state.requestSeq}`;
 }
 
-async function send(text) {
+async function send(text, { voiceTurn = false } = {}) {
   const message = String(text || '').trim();
   if (!message || state.streaming) return;
 
@@ -994,18 +1031,10 @@ async function send(text) {
   addMessage('user', message, { meta: timeLabel() });
   hideApproval();
 
-  state.streaming = true;
-  els.send.hidden = true;
-  els.stop.hidden = false;
-  els.send.disabled = true;
-  els.composer.dataset.streaming = 'true';
-  spirit.set('thinking');
-  els.hint.textContent = '';
-
-  const controller = new AbortController();
-  state.controller = controller;
+  const controller = startStream();
 
   const body = { text: message, requestId: newRequestId() };
+  if (voiceTurn) body.voiceTurn = true;
   if (state.conversationId) body.conversationId = state.conversationId;
 
   try {
@@ -1062,6 +1091,18 @@ async function tryReattach({ attempts = 3 } = {}) {
     }
   }
   return false;
+}
+
+function startStream(mode = 'thinking') {
+  state.streaming = true;
+  els.send.hidden = true;
+  els.stop.hidden = false;
+  els.send.disabled = true;
+  els.composer.dataset.streaming = 'true';
+  spirit.set(mode);
+  els.hint.textContent = '';
+  state.controller = new AbortController();
+  return state.controller;
 }
 
 function finishStream() {
@@ -1271,20 +1312,24 @@ function hideApproval() {
 }
 
 async function resolveApproval(approve) {
+  if (state.streaming) return;
   if (!state.conversationId) {
     hideApproval();
     return;
   }
   hideApproval();
-  spirit.set(approve ? 'working' : 'idle');
+  const controller = startStream(approve ? 'working' : 'idle');
   try {
-    const res = await api('/api/approve', { method: 'POST', body: { conversationId: state.conversationId, approve } });
+    const res = await api('/api/approve', { method: 'POST', body: { conversationId: state.conversationId, approve }, signal: controller.signal });
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-    await readStream(res.body, new AbortController().signal);
+    await readStream(res.body, controller.signal);
   } catch (err) {
-    addMessage('assistant', t('msg.approvalFailed', { error: err.message }), { error: true, meta: timeLabel() });
-    spirit.set('error');
+    if (err.name !== 'AbortError') {
+      addMessage('assistant', t('msg.approvalFailed', { error: err.message }), { error: true, meta: timeLabel() });
+      spirit.set('error');
+    }
   } finally {
+    finishStream();
     refreshSidebar();
   }
 }
@@ -1293,8 +1338,66 @@ async function resolveApproval(approve) {
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const voiceSupport = detectVoiceSupport(window);
+const canRecord = Boolean(window.isSecureContext && navigator.mediaDevices?.getUserMedia && window.MediaRecorder && (window.AudioContext || window.webkitAudioContext));
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let preferRecording = isIOS || !SpeechRecognition;
+let voiceRequest = null;
+let narratorAudio = null;
+let narratorRequest = null;
+let narratorUrl = null;
+let detectedVoiceLanguage = null;
+const capture = new VoiceCapture({
+  onState(mode) {
+    state.listening = capture.active;
+    els.mic.setAttribute('aria-pressed', String(capture.active));
+    spirit.set(mode === 'listening' ? 'listening' : 'idle');
+    els.hint.textContent = mode === 'idle' ? '' : t(`voice.capture.${mode}`);
+  },
+  onError(err) {
+    els.hint.textContent = err.name === 'NotAllowedError'
+      ? t('voice.capture.blocked')
+      : err.name === 'NotFoundError' ? t('voice.capture.missing') : err.message;
+  },
+  onSpeech() { if (window.speechSynthesis?.speaking || (narratorAudio && !narratorAudio.paused) || narratorRequest || state.streaming) void interruptVoiceTurn(); },
+  async onSegment(blob) {
+    voiceRequest = new AbortController();
+    const request = voiceRequest;
+    const timer = setTimeout(() => request.abort(), 120000);
+    try {
+      const data = await new Promise((resolve, reject) => {
+        const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(blob);
+      });
+      if (!capture.active) return;
+      const response = await api('/api/voice/transcribe', { method: 'POST', body: { data, type: blob.type }, signal: request.signal });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error?.code === 'STT_NOT_CONFIGURED' ? t('voice.capture.unconfigured') : t('voice.capture.failed'));
+      if (!capture.active || request.signal.aborted) return;
+      const text = String(result.transcript || '').trim();
+      detectedVoiceLanguage = result.language || null;
+      if (!text) return;
+      els.input.value = text; resizeInput();
+      if (shouldAutoSend({ finalTranscript: text, autosend: state.autosend, streaming: state.streaming })) send(text, { voiceTurn: true });
+    } finally { clearTimeout(timer); if (voiceRequest === request) voiceRequest = null; }
+  },
+});
+
+async function interruptVoiceTurn() {
+  cancelSpeech();
+  const body = state.session.turnId ? { turnId: state.session.turnId } : state.conversationId ? { conversationId: state.conversationId } : null;
+  state.controller?.abort();
+  if (body && state.streaming) { try { await api('/api/cancel', { method: 'POST', body }); } catch {} }
+}
+
+function stopCapture() { capture.stop(); voiceRequest?.abort(); state.recognition?.abort(); }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible') { stopCapture(); cancelSpeech(); } });
+window.addEventListener('pagehide', stopCapture);
+window.addEventListener('offline', stopCapture);
 
 function setupVoice() {
+  if (canRecord && preferRecording) {
+    els.voiceNote.textContent = t('voice.capture.ready');
+    return;
+  }
   if (!voiceSupport.recognition) {
     els.mic.disabled = true;
     els.mic.setAttribute('aria-disabled', 'true');
@@ -1332,6 +1435,10 @@ function setupVoice() {
     }
   };
   rec.onerror = (ev) => {
+    if (canRecord && ['network', 'service-not-allowed', 'audio-capture', 'not-allowed'].includes(ev.error)) {
+      preferRecording = true;
+      els.voiceNote.textContent = t('voice.capture.fallback');
+    }
     const msg = voiceErrorMessage(ev.error);
     if (msg) els.hint.textContent = msg;
   };
@@ -1346,7 +1453,7 @@ function setupVoice() {
     if (shouldAutoSend({ finalTranscript: spoken, autosend: state.autosend, streaming: state.streaming })) {
       els.input.value = '';
       resizeInput();
-      send(spoken);
+      send(spoken, { voiceTurn: true });
     }
   };
   state.recognition = rec;
@@ -1356,6 +1463,24 @@ function setupVoice() {
 }
 
 function toggleListening() {
+  if (canRecord && preferRecording) {
+    if (capture.active) { stopCapture(); return; }
+    cancelSpeech();
+    // Unlock synthesis in the actual microphone tap, before asynchronous iOS
+    // permission/STT work. The owner explicitly starts a two-way voice session.
+    if (voiceSupport.synthesis) {
+      const unlock = new SpeechSynthesisUtterance('');
+      window.speechSynthesis.speak(unlock);
+      state.tts = true; els.ttsToggle.checked = true;
+    }
+    // Reuse this exact element for delayed server audio on iOS. Prime only in
+    // the owner's tap; a rejected playback remains visible on the real reply.
+    narratorAudio ||= new Audio();
+    narratorAudio.src = 'data:audio/wav;base64,UklGRiUAAABXQVZFZm10IBAAAAABAAEARKwAAESsAAABAAgAZGF0YQEAAACA';
+    narratorAudio.play().catch(() => {});
+    void capture.start();
+    return;
+  }
   const rec = state.recognition;
   if (!rec) return;
   if (state.listening) {
@@ -1370,25 +1495,55 @@ function toggleListening() {
   }
 }
 
-function pickVoice() {
+function pickVoice(language = null) {
   const voices = window.speechSynthesis?.getVoices?.() || [];
-  const lang = document.documentElement.lang || 'sv-SE';
+  const lang = language || document.documentElement.lang || 'sv-SE';
   return voices.find((v) => v.lang?.toLowerCase().startsWith(lang.slice(0, 2))) || voices[0] || null;
 }
 
-function speak(text) {
+async function speak(text) {
+  const clean = speechText(text, 600);
+  if (!clean) return;
+  cancelSpeech();
+  const controller = new AbortController();
+  narratorRequest = controller;
+  try {
+    const capabilities = await api('/api/voice', { signal: controller.signal }).then((r) => r.ok ? r.json() : null);
+    if (controller.signal.aborted) return;
+    if (capabilities?.serverSide?.tts?.some((lane) => lane.mode === 'command' && lane.available)) {
+      const streamed = capabilities.serverSide.streamingTts?.available === true;
+      const response = await api('/api/voice/speak', { method: 'POST', body: { text: clean, mode: 'command', ...(streamed ? { stream: true } : {}) }, signal: controller.signal });
+      if (!response.ok) throw new Error(t('voice.narrator.failed'));
+      if (streamed) {
+        narratorAudio ||= new Audio();
+        await playNarratorStream({ response, audio: narratorAudio, signal: controller.signal, onStart: () => spirit.set('speaking') });
+        if (!controller.signal.aborted) spirit.set(capture.active ? 'listening' : 'idle');
+        return;
+      }
+      const audio = await response.blob();
+      if (controller.signal.aborted) return;
+      narratorAudio ||= new Audio();
+      narratorUrl = URL.createObjectURL(audio); narratorAudio.src = narratorUrl;
+      narratorAudio.onended = () => { if (narratorUrl) URL.revokeObjectURL(narratorUrl); narratorUrl = null; spirit.set(capture.active ? 'listening' : 'idle'); };
+      narratorAudio.onerror = () => { els.hint.textContent = t('voice.narrator.failed'); cancelSpeech(); };
+      await narratorAudio.play();
+      spirit.set('speaking');
+      return;
+    }
+  } catch (err) {
+    if (!controller.signal.aborted) els.hint.textContent = t('voice.narrator.failed');
+    return; // never silently substitute another voice for a configured narrator
+  } finally { if (narratorRequest === controller) narratorRequest = null; }
   if (!('speechSynthesis' in window)) {
     els.hint.textContent = t('voice.noTts');
     return;
   }
-  const clean = speechText(text);
-  if (!clean) return;
   window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(clean);
-  utter.lang = recognitionLang(navigator.language);
+  utter.lang = recognitionLang(detectedVoiceLanguage || navigator.language);
   utter.rate = 1.02;
   utter.pitch = 1.0;
-  const voice = pickVoice();
+  const voice = pickVoice(utter.lang);
   if (voice) utter.voice = voice;
   utter.onstart = () => spirit.set('speaking');
   utter.onboundary = () => spirit.level(0.45 + Math.random() * 0.3);
@@ -1400,6 +1555,10 @@ function speak(text) {
 }
 
 function cancelSpeech() {
+  narratorRequest?.abort(); narratorRequest = null;
+  narratorAudio?.pause();
+  if (narratorUrl) URL.revokeObjectURL(narratorUrl);
+  narratorUrl = null;
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 }
 
@@ -1411,6 +1570,7 @@ function openSheet() {
   els.menu.setAttribute('aria-expanded', 'true');
   els.sheet.querySelector('button, input')?.focus();
   refreshSidebar();
+  refreshHeartbeatSettings();
 }
 
 function closeSheet() {
@@ -1424,6 +1584,8 @@ async function loadModels({ refresh = false } = {}) {
     const res = await api(`/api/models${refresh ? '?refresh=1' : ''}`);
     if (!res.ok) return;
     const data = await res.json();
+    state.modelCatalogue = data;
+    state.modelSelectionVersion = data.selection?.version || 0;
     renderModels(data);
   } catch { /* model list is informational; chat still works */ }
 }
@@ -1432,7 +1594,21 @@ const refreshModelsBtn = els.refreshModels;
 
 function renderModels(data) {
   els.modelList.textContent = '';
-  const models = (data.models || []).filter((m) => m.configured);
+  const query = String(els.modelSearch?.value || '').toLowerCase().trim();
+  const active = data.selection?.modelId || data.current;
+  const selected = (data.models || []).find((m) => m.id === active);
+  state.modelId = active;
+  if (selected) {
+    els.modelLabel.textContent = selected.model;
+    els.sheetModel.textContent = selected.label;
+    els.sheetModelNote.textContent = selected.billing?.label || 'Cost unknown — verify with provider';
+    const usage = data.providers?.find((p) => p.name === selected.provider)?.usage;
+    if (usage?.windows) {
+      const windows = usage.windows;
+      els.sheetModelNote.textContent += ` · Go usage: 5h ${windows.rolling.percent}%, week ${windows.weekly.percent}%, month ${windows.monthly.percent}% · ${usage.at}${usage.stale ? ' · stale usage' : ''}`;
+    }
+  }
+  const models = (data.models || []).filter((m) => m.configured && (!query || `${m.label} ${m.displayName || ''}`.toLowerCase().includes(query)) && (!els.modelIncluded?.checked || m.billing?.subscriptionIncluded === true));
   if (!models.length) {
     const li = document.createElement('li');
     li.className = 'model-empty';
@@ -1443,7 +1619,6 @@ function renderModels(data) {
       : t('model.noConfig');
     return;
   }
-  const active = state.modelId || data.current;
   for (const m of models) {
     const li = document.createElement('li');
     const btn = document.createElement('button');
@@ -1458,13 +1633,7 @@ function renderModels(data) {
     const status = document.createElement('span');
     status.className = 'model-status';
     status.dataset.status = m.status;
-    status.textContent = m.liveVerified
-      ? t('model.live')
-      : m.status === 'missing-key'
-        ? t('model.missingKey')
-        : m.status === 'discovered'
-          ? t('model.discovered')
-          : t('model.unverified');
+    status.textContent = `${m.offering === 'opencode-go' ? 'OpenCode Go · ' : m.offering === 'opencode-zen' ? 'OpenCode Zen · ' : ''}${m.statusLabel || t('model.unverified')} · ${m.billing?.label || 'Cost unknown — verify with provider'}${m.catalogStale ? ' · stale catalogue' : ''}`;
     btn.append(name, status);
     btn.addEventListener('click', () => selectModel(m.id));
     li.append(btn);
@@ -1483,13 +1652,10 @@ async function selectModel(modelId) {
     return;
   }
   try {
-    if (!state.conversationId) {
-      const created = await api('/api/conversations', { method: 'POST' });
-      const data = await created.json();
-      if (!data.ok) throw new Error(data?.error?.message || t('msg.genericError'));
-      state.conversationId = data.conversation.id;
-    }
-    const res = await api('/api/model', { method: 'POST', body: { conversationId: state.conversationId, modelId } });
+    const entry = state.modelCatalogue?.models?.find((m) => m.id === modelId);
+    const needsCostAuthorization = modelId !== state.modelId && !['included', 'free'].includes(entry?.billing?.status);
+    if (needsCostAuthorization && !globalThis.confirm(`${entry?.billing?.label || 'Cost unknown — verify with provider'}. ${t('model.costConfirm')}`)) return;
+    const res = await api('/api/model', { method: 'POST', body: { modelId, expectedVersion: state.modelSelectionVersion, authorizePotentialCost: needsCostAuthorization } });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data?.error?.message || t('model.selectFailed'));
     state.modelId = modelId;
@@ -1499,6 +1665,7 @@ async function selectModel(modelId) {
     await loadModels();
     toast(t('model.selected'));
   } catch (err) {
+    await loadModels();
     toast(err.message || t('model.selectFailed'));
   }
 }
@@ -1554,14 +1721,13 @@ async function reloadOpenConversation(version = null) {
       return;
     }
     const data = await res.json();
+    // A poll can finish after the owner switched chats or started a new turn.
+    if (state.conversationId !== id || state.streaming) return;
     const atBottom = els.stage.scrollHeight - els.stage.scrollTop - els.stage.clientHeight < 80;
     els.thread.textContent = '';
     state.bubble = null;
     state.bubbleText = '';
-    for (const m of data.conversation.messages) {
-      if (m.role === 'user') addMessage('user', m.content, { meta: timeLabel(m.at), at: m.at });
-      else addMessage('assistant', m.content, { error: m.meta?.error === true, meta: timeLabel(m.at), at: m.at });
-    }
+    renderConversationMessages(data.conversation);
     state.conversationVersion = data.conversation.version;
     if (data.conversation.pendingApproval) {
       showApproval({ tool: data.conversation.pendingApproval.tool, reason: '' });
@@ -1582,10 +1748,12 @@ function startSync() {
     if (document.visibilityState !== 'visible') return;
     if (state.streaming) return;
     refreshConversations();
+    loadModels();
   }, 6000);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       refreshConversations({ force: true });
+      loadModels();
     }
   });
   // Stop polling when the page goes away; a timer that outlives the document
@@ -1672,6 +1840,9 @@ async function refreshSidebar() {
 }
 
 function bindEvents() {
+  const filterModels = () => { if (state.modelCatalogue) renderModels(state.modelCatalogue); };
+  els.modelSearch?.addEventListener('input', filterModels);
+  els.modelIncluded?.addEventListener('change', filterModels);
   els.composer.addEventListener('submit', (ev) => {
     ev.preventDefault();
     send(els.input.value);
@@ -1684,6 +1855,7 @@ function bindEvents() {
     }
   });
   els.stop.addEventListener('click', async () => {
+    stopCapture();
     cancelSpeech();
     // The turn now outlives the socket on purpose, so stopping it is a request
     // to the host — aborting the fetch alone would just detach and let it run.
@@ -1691,7 +1863,7 @@ function bindEvents() {
     // conversation id, which is exactly the case during a first message.
     const body = {};
     if (state.session.turnId) body.turnId = state.session.turnId;
-    else if (state.conversationId) body.conversationId = state.conversationId;
+    if (state.conversationId) body.conversationId = state.conversationId;
     if (Object.keys(body).length) {
       try {
         await api('/api/cancel', { method: 'POST', body });
@@ -1870,13 +2042,6 @@ function bindEvents() {
     await loadModels({ refresh: true });
     els.refreshModels.disabled = false;
   });
-  els.suggestions.addEventListener('click', (ev) => {
-    const btn = ev.target.closest('[data-fill]');
-    if (!btn) return;
-    els.input.value = btn.dataset.fill;
-    resizeInput();
-    els.input.focus();
-  });
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
     if (!els.sheet.hidden) closeSheet();
@@ -1895,9 +2060,15 @@ function bindEvents() {
   if (!navigator.onLine) els.offline.hidden = false;
   // Keep the composer visible when the mobile keyboard opens.
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => {
+    const resizeViewport = () => {
+      // Safari resizes the visual viewport for its keyboard, while dvh can
+      // continue to describe the larger layout viewport.
+      document.documentElement.style.setProperty('--app-height', `${window.visualViewport.height}px`);
       if (document.activeElement === els.input) setTimeout(() => scrollDown(true), 50);
-    });
+    };
+    window.visualViewport.addEventListener('resize', resizeViewport);
+    window.visualViewport.addEventListener('scroll', resizeViewport);
+    resizeViewport();
   }
 }
 
@@ -1911,7 +2082,7 @@ function restorePrefs() {
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {
       /* offline shell is optional; the app works without it */
     });
   });
@@ -1921,12 +2092,63 @@ async function main() {
   restorePrefs();
   setupVoice();
   bindEvents();
+  bindHeartbeat();
   registerServiceWorker();
   resizeInput();
   if (reducedMotion) spirit.set('idle');
   await boot();
   await restoreConversation();
+  const linkedConversation=new URL(location.href).searchParams.get('conversation');
+  if(linkedConversation&&/^conv_[a-z0-9_]+$/.test(linkedConversation))await openConversation(linkedConversation);
+  bindPush();
   startSync();
 }
 
 main();
+
+function bindPush(){
+  const enable=$('#push-enable'),test=$('#push-test'),disable=$('#push-disable'),note=$('#push-status');
+  if(!enable)return;
+  const request=async body=>{const response=await api('/api/push',body?{method:'POST',body}:{});const data=await response.json();if(!response.ok||!data.ok)throw Error(data.error?.message||'Notification request failed');return data;};
+  const supported='serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+  if(!supported){enable.disabled=true;note.textContent='Notifications require a supported browser. On iPhone, add MAJIN to the Home Screen and open that app.';return;}
+  enable.addEventListener('click',async()=>{
+    enable.disabled=true;
+    try{
+      // Request in the actual click gesture; Safari requires an installed PWA.
+      const permission=await Notification.requestPermission();
+      if(permission!=='granted')throw Error('Notification permission was not granted. Check this device’s settings.');
+      const config=await request();
+      if(!config.enabled)throw Error('Host needs its HTTPS public origin configured.');
+      const registration=await navigator.serviceWorker.ready;
+      const bytes=Uint8Array.from(atob(config.publicKey.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+      const subscription=await registration.pushManager.getSubscription()||await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:bytes});
+      await request({action:'subscribe',subscription:subscription.toJSON()});
+      test.hidden=false;disable.hidden=false;note.textContent='This device subscribed. A test must arrive while the phone is locked before physical acceptance.';
+    }catch(error){note.textContent=error.message;}finally{enable.disabled=false;}
+  });
+  test.addEventListener('click',async()=>{
+    test.disabled=true;try{await request({action:'test'});note.textContent='Test queued. Check the locked phone; server acceptance alone does not prove receipt.';}catch(error){note.textContent=error.message;}finally{test.disabled=false;}
+  });
+  disable.addEventListener('click',async()=>{
+    try{const registration=await navigator.serviceWorker.ready;const subscription=await registration.pushManager.getSubscription();if(subscription){await request({action:'unsubscribe',endpoint:subscription.endpoint});await subscription.unsubscribe();}test.hidden=true;disable.hidden=true;note.textContent='Notifications disabled on this device.';}catch(error){note.textContent=error.message;}
+  });
+}
+
+function bindHeartbeat(){
+  const toggle=$('#heartbeat-notify'),note=$('#heartbeat-status'),resume=$('#heartbeat-resume');
+  if(!toggle)return;
+  const request=async body=>{const response=await api('/api/heartbeat',body?{method:'POST',body}:{});const data=await response.json();if(!response.ok||!data.ok)throw Error(data.error?.message||'Background settings unavailable');return body?data.result:data;};
+  toggle.disabled=true;
+  refreshHeartbeatSettings=()=>{
+    if(!state.started||!els.gate.hidden)return;
+    return request().then(data=>{toggle.disabled=false;toggle.checked=data.notify;if(resume)resume.hidden=data.enabled&&!data.deliveryPaused;note.textContent=data.deliveryPaused?'Background delivery paused after repeated failures.':!data.enabled?'Background collection is paused.':'Background updates appear in history. Push needs a subscribed device.';}).catch(error=>{toggle.disabled=true;note.textContent=error.message;});
+  };
+  resume?.addEventListener('click',async()=>{resume.disabled=true;try{await request({action:'resume'});resume.hidden=true;note.textContent='Background updates resumed.';}catch(error){note.textContent=error.message;}finally{resume.disabled=false;}});
+  toggle.addEventListener('change',async()=>{
+    const chosen=toggle.checked;toggle.disabled=true;
+    try{await request({action:'configure',notify:chosen});note.textContent=chosen?'Notifications enabled for subscribed devices; physical delivery still requires verification.':'Background updates stay in history.';}
+    catch(error){toggle.checked=!chosen;note.textContent=error.message;}
+    finally{toggle.disabled=false;}
+  });
+}

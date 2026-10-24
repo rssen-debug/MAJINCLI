@@ -129,15 +129,35 @@ test('e2e: real browser acceptance on phone viewports', { skip: launched.skip ||
       await page.click('#send-btn');
 
       // the tool card must reach the verified state, driven by the server
-      await page.waitForSelector('.tool[data-state="verified"]', { timeout: 15_000 });
-      const toolText = await page.textContent('.tool[data-state="verified"] .tool-summary');
+      // Read state and summary in one browser task. An incremental history
+      // refresh may replace the transcript between two separate locator calls.
+      const verified = await page.waitForFunction(() => {
+        const text = document.querySelector('.tool[data-state="verified"] .tool-summary')?.textContent;
+        return text?.trim() || false;
+      }, null, { timeout: 15_000 });
+      const toolText = await verified.jsonValue();
       assert.ok(toolText && toolText.length > 0, `${vp.name}: tool summary empty`);
+      assert.equal(fs.readFileSync(path.join(s.home, 'workspace', `e2e-${vp.name}.txt`), 'utf8'), 'klart',
+        `${vp.name}: verified tool card must correspond to actual saved bytes`);
 
       // the answer arrives as text, and the conversation id survives a reload
       await page.waitForFunction(() => {
         const msgs = document.querySelectorAll('.msg[data-role="assistant"] .msg-body');
         return msgs.length > 0 && msgs[msgs.length - 1].textContent.trim().length > 10;
       }, { timeout: 15_000 });
+
+      // Reload the actual browser context, not just the message list. Durable
+      // receipts must be available in the same way on another PWA client.
+      await page.waitForSelector('#stop-btn', { state: 'hidden', timeout: 15_000 });
+      await page.reload({ waitUntil: 'load' });
+      try {
+        await page.waitForSelector('.tool[data-state="verified"][data-historical="true"]', { timeout: 15_000 });
+      } catch (error) {
+        t.diagnostic(JSON.stringify({ viewport: vp.name, consoleErrors,
+          thread: await page.textContent('#thread'), bookmark: await page.evaluate(() => localStorage.getItem('majin.conversationId')) }));
+        throw error;
+      }
+      assert.match(await page.textContent('.tool[data-historical="true"] .tool-summary'), new RegExp(`e2e-${vp.name}\\.txt`));
 
       const overflowAfter = await page.evaluate(() => ({
         scrollW: document.scrollingElement.scrollWidth,
@@ -151,7 +171,7 @@ test('e2e: real browser acceptance on phone viewports', { skip: launched.skip ||
       const realErrors = consoleErrors.filter((e) => !/favicon|manifest/i.test(e));
       assert.deepEqual(realErrors, [], `${vp.name}: console errors`);
 
-      results.push({ viewport: vp.name, w: vp.width, h: vp.height, verifiedTool: true });
+      results.push({ viewport: vp.name, w: vp.width, h: vp.height, verifiedTool: true, historicalReceipts: true });
       await context.close();
     }
 

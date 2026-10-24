@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="MAJIN" />
-  <link rel="stylesheet" href="/app.css" />
+  <link rel="stylesheet" href="/app.css?v=15" />
 </head>
 <body>
   <div class="aurora" aria-hidden="true"></div>
@@ -46,13 +46,7 @@
       <div class="spirit-wrap">
         <canvas id="spirit" width="320" height="320" role="img" aria-label="MAJINs närvaro"></canvas>
       </div>
-      <h1 class="hero-title" id="hero-title">Vad vill du få gjort?</h1>
-      <p class="hero-sub" id="hero-sub">Säg det. MAJIN planerar, utför och visar beviset.</p>
-      <div class="suggestions" id="suggestions">
-        <button type="button" class="chip" data-fill="Lista filerna i arbetsytan">Lista filerna i arbetsytan</button>
-        <button type="button" class="chip" data-fill="Skriv filen välkomst.txt med innehåll: Hej från MAJIN på min telefon.">Skriv en fil åt mig</button>
-        <button type="button" class="chip" data-fill="Vad kan du göra just nu?">Vad kan du göra?</button>
-      </div>
+      <h1 class="hero-title" id="hero-title">Majin lets run it.</h1>
     </section>
 
     <section class="thread" id="thread" aria-live="polite" aria-relevant="additions text"></section>
@@ -108,6 +102,9 @@
       <h3>Modell</h3>
       <p class="sheet-value" id="sheet-model">…</p>
       <p class="sheet-note" id="sheet-model-note"></p>
+      <label class="sr-only" for="model-search">Search models</label>
+      <input id="model-search" type="search" placeholder="Search models" autocomplete="off" />
+      <label class="row"><span>Verified subscription-included</span><input id="model-included" type="checkbox" /></label>
       <ul class="model-list" id="model-list" role="radiogroup" aria-label="Välj modell"></ul>
       <p class="sheet-note" id="model-source"></p>
       <button type="button" class="btn ghost wide" id="refresh-models" hidden>Uppdatera modellistan</button>
@@ -155,6 +152,13 @@
     <div class="sheet-section">
       <h3>Uppgifter</h3>
       <ul class="goal-list" id="goal-list"></ul>
+      <button type="button" class="btn ghost wide" id="push-enable">Enable notifications</button>
+      <button type="button" class="btn ghost wide" id="push-test" hidden>Send a test notification</button>
+      <button type="button" class="btn ghost wide" id="push-disable" hidden>Disable notifications on this device</button>
+      <p class="sheet-note" id="push-status"></p>
+      <label class="row"><span>Notify about stalled tasks</span><input type="checkbox" id="heartbeat-notify" /></label>
+      <p class="sheet-note" id="heartbeat-status"></p>
+      <button type="button" class="btn ghost wide" id="heartbeat-resume" hidden>Resume background updates</button>
     </div>
 
     <div class="sheet-section">
@@ -268,6 +272,6 @@
     </details>
   </template>
 
-  <script type="module" src="/app.js"></script>
+  <script type="module" src="/app.js?v=15"></script>
 </body>
 </html>

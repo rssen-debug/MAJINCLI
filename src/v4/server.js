@@ -7,7 +7,9 @@
  * happens in a request handler — the agent owns it, behind approvals.
  */
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertNodeSupported } from './config.js';
@@ -36,9 +38,13 @@ import { createToolRegistry } from './tools.js';
 import { createModelClient } from './model.js';
 import { createAgent } from './agent.js';
 import { discoverModels, refreshAllCatalogs } from './models.js';
+import { publicModelSelection, selectCanonicalModel } from './model-selection.js';
 import { Kernel } from './kernel.js';
 import { t } from './ui/strings.js';
-import { synthesize, VOICE_MODES, voiceCapabilities } from './voice.js';
+import { synthesize, transcribe, sttTemplateFromEnv, VOICE_MODES, voiceCapabilities, localNarratorStream } from './voice.js';
+import { pipeline } from 'node:stream/promises';
+import { Readable } from 'node:stream';
+import { protectAuditFile } from '../v2/audit/permissions.js';
 import { TurnJournal } from './turns.js';
 import { hostCapabilities, describeCapabilities, registerHostTools } from './tools/host.js';
 import { UploadStore, UploadError, serveHeadersFor, typeForName, MAX_UPLOAD_BYTES } from './uploads.js';
@@ -47,7 +53,12 @@ import { planV1Import, applyV1Import } from './import-history.js';
 import { discoverSkills, usableSkills, describeSkills } from './skills.js';
 import { parseMcpConfig, connectServers } from './mcp.js';
 import { registerMcpTools } from './mcp-tools.js';
-import { TelemetryLedger } from '../v2/telemetry/ledger.js';
+import { TelemetryLedger,telemetryRow } from '../v2/telemetry/ledger.js';
+import { createBackgroundTasks } from './background-tasks.js';
+import { createPushService } from './push.js';
+import { runTool } from '../v2/tools/runner.js';
+import { createV4Audit } from './audit.js';
+import { createV4Heartbeat } from './heartbeat.js';
 
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui');
 
@@ -58,6 +69,7 @@ const STATIC = {
   '/app.js': { file: 'app.js', type: 'text/javascript; charset=utf-8' },
   '/spirit.js': { file: 'spirit.js', type: 'text/javascript; charset=utf-8' },
   '/voice.js': { file: 'voice.js', type: 'text/javascript; charset=utf-8' },
+  '/recorder.js': { file: 'recorder.js', type: 'text/javascript; charset=utf-8' },
   '/strings.js': { file: 'strings.js', type: 'text/javascript; charset=utf-8' },
   '/session.js': { file: 'session.js', type: 'text/javascript; charset=utf-8' },
   '/manifest.webmanifest': { file: 'manifest.webmanifest', type: 'application/manifest+json; charset=utf-8' },
@@ -139,7 +151,8 @@ export function createV4Server({ config }) {
     dir: paths.conversations,
     maxMessages: config.limits.maxStoredMessages,
   });
-  const goals = new GoalStore({ dir: paths.goals });
+  const audit=createV4Audit({root:paths.root,workspace:workspaceDir});
+  const goals = new GoalStore({ dir: paths.goals,onSave:goal=>audit.recordGoal(goal) });
   // Reconciled goals are reported by the doctor and the boot banner; the
   // pending approvals they orphan are cleared with the same call.
   const reconciled = goals.reconcileOnBoot({ conversations });
@@ -168,11 +181,14 @@ export function createV4Server({ config }) {
   // Structured, privacy-preserving telemetry: V2's ledger keeps a fixed field
   // allowlist per event, so message text, paths and secrets cannot land in it.
   const telemetry = (() => {
-    try {
-      return new TelemetryLedger(path.join(paths.root, 'telemetry'));
-    } catch {
-      return null; // an unwritable data dir is reported by the doctor, not fatal here
-    }
+    let ledger=null;
+    try{ledger=new TelemetryLedger(path.join(paths.root,'telemetry'));}catch{/* optional analytics can be unavailable */}
+    return {append(event,payload){
+      const row=telemetryRow(event,payload);
+      audit.recordTelemetry(row); // Mandatory integrity storage uses same serializer.
+      try{ledger?.append(event,row);}catch{/* analytics failure cannot erase audit or break execution */}
+      return row;
+    }};
   })();
   // Skills are data on disk. What is *usable* depends on what the owner granted,
   // so the set is recomputed on every turn rather than cached at boot.
@@ -197,6 +213,7 @@ export function createV4Server({ config }) {
     tools,
     model,
     telemetry,
+    audit,
     skills: skillsBridge,
     // The model is told where it may look. Without this it only ever tried the
     // workspace, which is why a granted folder was never searched.
@@ -248,6 +265,7 @@ export function createV4Server({ config }) {
     const partial = registerHostTools(tools.registry, { ...hostCaps, lanes: allowed }, {
       allow: config.platform?.hostToolAllow?.length ? config.platform.hostToolAllow : null,
       workspaceDir: config.workspaceDir,
+      cfg: config.channelConfig,
       // V1 tools that need the data dir ask their config for the file path;
       // give them V4's, never V1's, so the two never diverge.
       dataFile: path.join(paths.root, 'config.json'),
@@ -512,6 +530,13 @@ export function createV4Server({ config }) {
       throw new HttpError(413, 'MESSAGE_TOO_LONG', 'Message is too long.');
     }
 
+    const {turn,finished}=startJournalTurn({conversationId,text,requestId,voiceTurn:body.voiceTurn===true,owner:session.id});
+    pipeTurn(res,turn,{from:0});
+    await finished;
+  }
+
+  function startJournalTurn({conversationId=null,text,requestId=null,voiceTurn=false,owner=null}){
+    audit.assertHealthy();
     // The turn becomes a journal entry before the response is written, so the
     // client learns its id (in the `open` event) and can reattach to the very
     // same turn if the connection drops.
@@ -520,7 +545,7 @@ export function createV4Server({ config }) {
     // literal 'new' meant a second device's first message cancelled the first
     // device's turn. A known conversation still supersedes its own old turn.
     const turnKey = conversationId ? `conv:${conversationId}` : `turn:${turn.id}`;
-    const controller = agent.beginTurn(turnKey, { owner: session.id });
+    const controller = agent.beginTurn(turnKey, { owner });
     journal.append(turn, 'open', {
       at: new Date().toISOString(),
       model: agent.modelInfo,
@@ -532,29 +557,73 @@ export function createV4Server({ config }) {
     const finished = agent.runTurn({
       conversationId,
       text,
+      voiceTurn,
       requestId,
       signal: controller.signal,
-      emit: (type, data) => journal.append(turn, type, data),
+      emit: (type, data) => {journal.append(turn,type,data);heartbeat.observe(type,data,conversationId);},
     }).then((result) => {
       journal.finish(turn, result?.status || 'completed');
       return result;
     }).catch((err) => {
       journal.append(turn, 'error', { message: err?.message || 'turn failed' });
+      heartbeat.observe('done',{status:'failed',conversationId});
       journal.finish(turn, 'failed');
       return { status: 'failed' };
     }).finally(() => {
       agent.endTurn(turnKey, controller);
     });
 
-    // Replay what already happened (normally just `open`), then follow live.
-    // A dropped socket deliberately does NOT abort the turn: the phone can
-    // reattach with GET /api/chat/stream?turnId=…&from=<lastSeq>.
-    pipeTurn(res, turn, { from: 0 });
-    await finished;
-    void session;
+    return {turn,finished,cancel:()=>controller.abort()};
   }
 
+  const notifications=createPushService({root:paths.root,subject:config.publicOrigin,audit});
+  const backgroundTasks=createBackgroundTasks({root:paths.root,conversations,startTurn:startJournalTurn,notifications,audit,ready:Promise.all([hostReady,kernelReady]),readSource:async(url)=>{
+    const result=await runTool({tool:'web_fetch',input:{url,extract:'json',maxChars:1000000}},{registry:tools.registry,approvals:agent.approvals,timeoutMs:30000});
+    if(!result.ok||result.data?.meta?.truncated)throw Error('Source response failed or was incomplete');
+    const text=result.data?.result;
+    if(typeof text!=='string'||!text.includes('\n\n'))throw Error('Source returned no JSON document');
+    return JSON.parse(text.slice(text.indexOf('\n\n')+2));
+  }});
+  for(const tool of backgroundTasks.tools)tools.registry.define(tool);
+  const heartbeat=createV4Heartbeat({root:paths.root,conversations,notifications,audit});
+
   const routes = {
+    'GET /api/heartbeat':async(req,res)=>{requireSession(req);sendJson(res,200,{ok:true,...heartbeat.view()});},
+    'POST /api/heartbeat':async(req,res)=>{
+      requireSession(req);assertCsrfHeader(req);limiter.take('general',clientKey(req,config));
+      const body=await readJsonBody(req,4096);
+      try{sendJson(res,200,{ok:true,result:await heartbeat.manage(body)});}catch(error){throw new HttpError(400,'HEARTBEAT_ACTION',error.message);}
+    },
+    'GET /api/audit':async(req,res)=>{requireSession(req);sendJson(res,200,audit.status());},
+    'POST /api/audit':async(req,res)=>{
+      requireSession(req);assertCsrfHeader(req);limiter.take('general',clientKey(req,config));
+      const body=await readJsonBody(req,4096);
+      if(body.action==='initialize'||body.action==='anchor')sendJson(res,200,{ok:true,anchor:audit.checkpoint({initialize:body.action==='initialize'})});
+      else if(body.action==='export')sendJson(res,200,{ok:true,...audit.exportPublic()});
+      else throw new HttpError(400,'AUDIT_ACTION','Unknown audit action');
+    },
+    'GET /api/push':async(req,res)=>{requireSession(req);sendJson(res,200,{ok:true,...notifications.view()});},
+    'POST /api/push':async(req,res)=>{
+      const {session}=requireSession(req);assertCsrfHeader(req);limiter.take('general',clientKey(req,config));
+      const body=await readJsonBody(req,16384);
+      try{
+        if(body.action==='subscribe')sendJson(res,200,{ok:true,...notifications.subscribe(body.subscription,session.id)});
+        else if(body.action==='unsubscribe'){notifications.unsubscribe(String(body.endpoint||''),session.id);sendJson(res,200,{ok:true});}
+        else if(body.action==='test'){
+          const conv=conversations.create({title:'Notification test',titlePolicy:'manual'});
+          const id=`test:${crypto.randomUUID()}`;
+          notifications.enqueue({id,conversationId:conv.id});await notifications.flush();sendJson(res,200,{ok:true,id,note:'Push-service acceptance is not physical device receipt.'});
+        }else throw Error('Unknown notification action');
+      }catch(error){throw new HttpError(400,'PUSH_ACTION',error.message);}
+    },
+    'GET /api/tasks': async(req,res)=>{
+      requireSession(req);sendJson(res,200,{ok:true,tasks:backgroundTasks.list()});
+    },
+    'POST /api/tasks': async(req,res)=>{
+      requireSession(req);assertCsrfHeader(req);limiter.take('general',clientKey(req,config));
+      const body=await readJsonBody(req,config.limits.maxBodyBytes);
+      try{sendJson(res,200,{ok:true,task:await backgroundTasks.manage(body)});}catch(error){throw new HttpError(400,'TASK_ACTION',error.message);}
+    },
     'GET /api/health': async (req, res) => {
       sendJson(res, 200, {
         ok: true,
@@ -589,6 +658,40 @@ export function createV4Server({ config }) {
       sendJson(res, 200, { ok: true });
     },
 
+    'POST /api/voice/transcribe': async (req, res) => {
+      requireSession(req);
+      assertCsrfHeader(req);
+      limiter.take('general', clientKey(req, config));
+      const command = sttTemplateFromEnv();
+      if (!command) throw new HttpError(503, 'STT_NOT_CONFIGURED', 'Server speech recognition is not configured.');
+      if (routes.sttBusy) throw new HttpError(429, 'STT_BUSY', 'Speech recognition is busy; try again.');
+      routes.sttBusy = true;
+      let dir;
+      try {
+        const body = await readJsonBody(req, 6 * 1024 * 1024);
+        const type = String(body.type || '').split(';')[0].trim().toLowerCase();
+        const extensions = { 'audio/mp4': 'm4a', 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/wav': 'wav' };
+        if (!extensions[type]) throw new HttpError(415, 'AUDIO_TYPE', 'Use MP4/AAC, WebM, Ogg or WAV audio.');
+        if (typeof body.data !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(body.data)) throw new HttpError(400, 'AUDIO_DATA', 'Invalid base64 audio.');
+        const audio = Buffer.from(body.data, 'base64');
+        if (!audio.length || audio.length > 4 * 1024 * 1024) throw new HttpError(413, 'AUDIO_SIZE', 'Audio must be between 1 byte and 4 MiB.');
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-stt-'));
+        protectAuditFile(dir);
+        const file = path.join(dir, `capture.${extensions[type]}`);
+        fs.writeFileSync(file, audio, { mode: 0o600, flag: 'wx' });
+        const result = await transcribe({ audioPath: file, command });
+        // Never expose a local path/command, or call a fixture a real recognizer.
+        sendJson(res, result.ok ? 200 : 422, {
+          ok: result.ok, transcript: result.transcript, language: result.language, provider: result.provider,
+          synthetic: result.synthetic === true, elapsedMs: result.elapsedMs,
+          ...(!result.ok ? { error: { code: result.errorClass || 'NO_SPEECH', message: 'No speech could be transcribed. Try again.' } } : {}),
+        });
+      } finally {
+        if (dir) fs.rmSync(dir, { recursive: true, force: true });
+        routes.sttBusy = false;
+      }
+    },
+
     'POST /api/voice/speak': async (req, res) => {
       const { session } = requireSession(req);
       assertCsrfHeader(req);
@@ -598,6 +701,19 @@ export function createV4Server({ config }) {
       const text = String(body.text || '').trim();
       if (!text) throw new HttpError(400, 'EMPTY_TEXT', 'text is required.');
       if (text.length > 1500) throw new HttpError(413, 'TEXT_TOO_LONG', 'text is limited to 1500 characters.');
+      if (body.stream === true) {
+        if (!voiceCapabilities().streamingTts.available) throw new HttpError(503, 'VOICE_STREAM_DISABLED', 'Streaming narrator is not configured.');
+        if (text.length > 700) throw new HttpError(413, 'TEXT_TOO_LONG', 'Streaming text is limited to 700 characters.');
+        const controller = new AbortController();
+        const disconnected = () => { if (!res.writableFinished) controller.abort(); };
+        res.once('close', disconnected);
+        try {
+          const upstream = await localNarratorStream({ text, signal: controller.signal });
+          res.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-store', 'x-accel-buffering': 'no', 'x-majin-tts-provider': 'kokoro-onnx', 'x-majin-tts-synthetic': 'false' });
+          await pipeline(Readable.fromWeb(upstream.body), res, { signal: controller.signal });
+        } finally { controller.abort(); res.off('close', disconnected); }
+        return;
+      }
       const mode = VOICE_MODES.includes(body.mode) ? body.mode : 'auto';
       const result = await synthesize({
         text,
@@ -644,7 +760,7 @@ export function createV4Server({ config }) {
         modes: VOICE_MODES,
         default: 'auto',
         // The browser engine is what the phone actually uses today.
-        clientEngine: 'SpeechSynthesis + SpeechRecognition',
+        clientEngine: 'SpeechSynthesis + MediaRecorder/server STT (iOS), SpeechRecognition fallback',
         serverSide: {
           ...voiceCapabilities(),
           note: 'Buffer is a deterministic offline provider that proves the pipeline, not a voice.',
@@ -795,9 +911,13 @@ export function createV4Server({ config }) {
         await refreshAllCatalogs({ home: paths.home, env: process.env });
       }
       const catalogue = discoverModels({ home: paths.home, env: process.env });
+      const selection = publicModelSelection({ home: paths.home });
       sendJson(res, 200, {
         ok: true,
         ...catalogue,
+        configuredDefault: catalogue.current,
+        current: selection.modelId,
+        selection,
         // A listed model is not proof of inference; the flag says so.
         caveat: t('model.caveat'),
       });
@@ -808,14 +928,8 @@ export function createV4Server({ config }) {
       assertCsrfHeader(req);
       const body = await readJsonBody(req, 4096);
       const modelId = body.modelId == null ? null : String(body.modelId);
-      const conversationId = String(body.conversationId || '');
-      if (modelId) {
-        const catalogue = discoverModels({ home: paths.home, env: process.env });
-        const known = catalogue.models.some((m) => m.id === modelId && m.configured);
-        if (!known) throw new HttpError(400, 'MODEL_NOT_CONFIGURED', 'That model is not configured on the host.');
-      }
-      const result = agent.setConversationModel({ conversationId, modelId });
-      sendJson(res, 200, { ok: true, ...result });
+      const selection = selectCanonicalModel({ home: paths.home, modelId, expectedVersion: body.expectedVersion, authorizePotentialCost: body.authorizePotentialCost, base: config.model });
+      sendJson(res, 200, { ok: true, modelId: selection.modelId, selection, info: model.infoFor(selection.modelId) });
     },
 
     'GET /api/state': async (req, res) => {
@@ -830,7 +944,7 @@ export function createV4Server({ config }) {
           configured: catalogue.models.filter((m) => m.configured).length,
           verified: catalogue.liveVerifiedCount,
           source: catalogue.source,
-          current: catalogue.current,
+          current: publicModelSelection({ home: paths.home }).modelId,
         },
         policy: config.approvals.policy,
         workspace: { label: 'arbetsyta', files: listWorkspace(tools.root) },
@@ -898,7 +1012,7 @@ export function createV4Server({ config }) {
         const result = await agent.resumeGoal({
           goalId,
           conversationId,
-          emit: (type, data) => sse.send(type, data),
+          emit: (type, data) => {sse.send(type,data);heartbeat.observe(type,data,conversationId);},
         });
         sse.send('resume_result', { status: result.status, missing: result.missing || [], results: result.results });
       } catch (err) {
@@ -909,7 +1023,7 @@ export function createV4Server({ config }) {
     },
 
     'POST /api/approve': async (req, res) => {
-      requireSession(req);
+      const { session } = requireSession(req);
       assertCsrfHeader(req);
       const body = await readJsonBody(req, 4096);
       const conversationId = String(body.conversationId || '');
@@ -917,8 +1031,9 @@ export function createV4Server({ config }) {
       try {
         await agent.resolveApproval({
           conversationId,
+          owner: session.id,
           approve: body.approve === true,
-          emit: (type, data) => sse.send(type, data),
+          emit: (type, data) => {sse.send(type,data);heartbeat.observe(type,data,conversationId);},
         });
       } catch (err) {
         sse.send('error', { message: err.message || 'approval failed' });
@@ -1106,6 +1221,12 @@ export function createV4Server({ config }) {
         id: g.id,
         state: g.state,
         objective: g.objective,
+          // Reuse durable goal receipts for every client. Do not expose raw
+          // tool output or inputs just to rebuild the conversation transcript.
+          receipts: g.receipts.filter((r) => typeof r.action === 'string' && r.action.startsWith('tool:')).map((r) => ({
+            id: r.id, action: r.action, target: r.target, result: r.result,
+            verified: r.verified === true, errorClass: r.errorClass || null, at: r.at,
+          })),
         ...(g.revisionOf ? { revisionOf: g.revisionOf, revision: g.revision } : {}),
       }));
   }
@@ -1177,15 +1298,19 @@ export function createV4Server({ config }) {
   // Workers are killed when the listener closes, so a stopped host leaves no
   // orphaned plugin processes behind.
   server.on('close', () => {
+    heartbeat.stop();
+    notifications.stop();
+    backgroundTasks.stop();
     kernel.shutdownWorkers();
     // MCP children are processes too: closing the host must not leave them.
     for (const entry of mcpState.connected) entry.server.stop();
     mcpState.connected = [];
   });
+  server.once('listening',()=>{notifications.start();heartbeat.start();void Promise.all([hostReady,kernelReady]).then(()=>backgroundTasks.start()).catch(()=>backgroundTasks.stop());});
 
   return {
     server,
-    context: { config, sessions, conversations, goals, tools, model, agent, kernel, kernelReady, reconciled, pairingFresh },
+    context: { config, sessions, conversations, goals, tools, model, agent, kernel, kernelReady, reconciled, pairingFresh, backgroundTasks, audit, heartbeat },
   };
 }
 

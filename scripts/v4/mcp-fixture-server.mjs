@@ -16,6 +16,7 @@
  *   --mode=noisy   print a log line before every response
  *   --mode=error   answer every call with isError:true
  */
+import { V4_VERSION } from '../../src/v4/config.js';
 const MODE = (process.argv.find((a) => a.startsWith('--mode=')) || '--mode=normal').slice('--mode='.length);
 
 const TOOLS = [
@@ -73,7 +74,7 @@ function handle(msg) {
       result: {
         protocolVersion: '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'majin-fixture', version: '1.0.0' },
+        serverInfo: { name: 'majin-fixture', version: V4_VERSION },
       },
     });
     return;

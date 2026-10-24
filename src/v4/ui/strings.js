@@ -7,6 +7,18 @@
  * declared localization resource and is exempt for that reason only.
  */
 export const SV = {
+  'voice.narrator.failed': 'Kunde inte spela värdens berättarröst. Kontrollera ljudbehörighet och försök med mikrofonknappen igen.',
+  'voice.capture.requesting': 'Tillåt mikrofonen i Safari…',
+  'voice.capture.listening': 'Lyssnar – tryck på mikrofonen för att avsluta.',
+  'voice.capture.transcribing': 'Tolkar tal på värden…',
+  'voice.capture.blocked': 'Mikrofonen är blockerad. Tillåt mikrofon för denna webbplats i Safaris webbplatsinställningar.',
+  'voice.capture.missing': 'Ingen mikrofon hittades.',
+  'voice.capture.unconfigured': 'Taligenkänning på servern är inte konfigurerad.',
+  'voice.capture.failed': 'Taligenkänning misslyckades. Tryck på mikrofonen för att försöka igen.',
+  'voice.capture.ready': 'Mikrofon via säker ljudinspelning och lokal taligenkänning på värden. Aktiv endast i öppen flik; tryck igen för att avsluta.',
+  'voice.capture.fallback': 'Nästa mikrofontryck använder ljudinspelning och serverns taligenkänning.',
+  'voice.capture.size': 'Inspelningen är för stor.',
+  'voice.capture.interrupted': 'Ljudinspelningen avbröts. Tryck på mikrofonen igen.',
   'gate.title': 'Anslut enheten',
   'gate.copy': 'Ange parkodningen som visades på MAJIN-värden första gången den startade.',
   'gate.code': 'Parkod',
@@ -18,8 +30,7 @@ export const SV = {
   'gate.expired': 'Sessionen har gått ut. Anslut igen.',
   'gate.loggedOut': 'Utloggad.',
 
-  'hero.title': 'Vad vill du få gjort?',
-  'hero.sub': 'Säg det. MAJIN planerar, utför och visar beviset.',
+  'hero.title': 'Majin lets run it.',
   'hero.demoHint': 'Demo-läge — koppla en modell för fri konversation.',
 
   'composer.placeholder': 'Skriv eller tryck på mikrofonen…',
@@ -58,6 +69,7 @@ export const SV = {
   'owner.lane.computer': 'Datorstyrning',
   'owner.lane.browser': 'Webbläsare',
   'owner.lane.net': 'Nätverk',
+  'owner.lane.channels': 'Outbound messages',
   'owner.lane.shelltools': 'Kommandon och bakgrundsjobb',
   'owner.lane.sys': 'Systeminformation',
   'owner.lane.audit': 'Självgranskning',
@@ -139,6 +151,7 @@ export const SV = {
   'model.unverified': 'okonfirmerad',
   'model.live': 'live',
   'model.selected': 'Modell vald',
+  'model.costConfirm': 'Tillåter du den här modellvägen även om extra kostnad kan tillkomma? Valet gäller alla dina enheter.',
   'model.selectFailed': 'Kunde inte byta modell',
   'model.waitForTurn': 'Vänta tills svaret är klart.',
 
@@ -215,6 +228,9 @@ export const SV = {
   'history.deleteFailed': 'Kunde inte radera samtalet.',
   'history.deleteRunning': 'En uppgift körs fortfarande i samtalet. Stoppa den och radera?',
   'history.deletedElsewhere': 'Samtalet raderades på en annan enhet.',
+  'history.previouslyVerified': 'Verifierades vid körningen',
+  'history.recorded': 'Historik',
+  'history.receiptTime': 'Sparat resultat från den angivna tiden. Filen eller omvärlden kan ha ändrats sedan dess.',
   'history.renameFailed': 'Kunde inte byta namn.',
   'history.importChecking': 'Letar efter tidigare historik…',
   'history.importAsk': '{creates} samtal att importera, {merges} att fylla på.',

@@ -21,6 +21,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { V1_LANES, LANE_EXPORTS, hostCapabilities } from './tools/host.js';
 
 /**
@@ -45,20 +46,17 @@ export const V1_MODULE_DECISIONS = Object.freeze({
       + 'setup, doctor, owner-mode and updater. Adapting these would let the model edit the wrong '
       + 'configuration while appearing to manage MAJIN.',
   },
-  'channels.js': {
-    status: 'excluded',
-    reason: 'Needs V1 channel credentials (Telegram/WhatsApp/webhook) that V4 does not use. A tool '
-      + 'that is registered but always reports "not configured" is the lie this project exists to avoid.',
-  },
   'heartbeat.js': {
-    status: 'excluded',
-    reason: 'V1 heartbeat is driven by V1\'s journal and scheduler. V4 runs a supervisor and a '
-      + 'Windows scheduled task; two heartbeat owners would fight.',
+    status: 'replaced',
+    reason: 'The existing core Heartbeat engine is reused by src/v4/heartbeat.js with actual V4 '
+      + 'goal/approval events, durable queue and shared-history/opt-in push delivery. The old tool '
+      + 'wrapper uses V1 journal events and is not a second V4 heartbeat owner.',
   },
   'memory-sync.js': {
-    status: 'excluded',
-    reason: 'Operates on V1\'s Memory store. V4\'s durable memory is V2\'s MemoryStore and its '
-      + 'backup/restore path; syncing a second store into it would fork the source of truth.',
+    status: 'replaced',
+    reason: 'The existing core memory-sync entry point now supports canonical V2 namespaced records. '
+      + 'V4 memory_sync uses that engine and MemoryStore with approval, folder checks and tombstones. '
+      + 'The old wrapper assumes V1 text facts and is not used to create a shadow V4 store.',
   },
   'reset.js': {
     status: 'excluded',
@@ -100,6 +98,7 @@ const V2_REASONS = Object.freeze({
   'src/v2/audit/bind.js': 'Binds the V2 audit chain to an operator identity; V4 sessions are their own identity model.',
   'src/v2/audit/anchor.js': 'RFC 3161 anchoring for the V2 audit chain; no V4 caller.',
   'src/v2/audit/timestamp.js': 'Timestamp helpers for the V2 audit chain; no V4 caller.',
+  'src/v2/audit/permissions.js': 'Protects V2 audit keys and chain files with POSIX modes or NTFS ACLs. V4 cryptographic audit integration remains an explicit release blocker; this helper alone does not establish V4 audit parity.',
   'src/v2/compiler/goal-compiler.js': 'Compiles natural language into V2 task graphs; V4 plans inside the conversation turn.',
   'src/v2/config/config.js': 'Trust-gated V2 config loader. V4\'s configuration is explicit and env-overridable.',
   'src/v2/exec/approval-modes.js': 'Execution approval modes for the V2 executor. V4 uses V2\'s Approvals + runner directly.',
@@ -206,7 +205,7 @@ export async function readV1Modules({ root, reusedFiles = new Map() }) {
     .sort();
   const modules = [];
   for (const file of files) {
-    const mod = await import(path.join(dir, file)).catch((err) => ({ __error: String(err?.message || err) }));
+    const mod = await import(pathToFileURL(path.join(dir, file)).href).catch((err) => ({ __error: String(err?.message || err) }));
     if (mod.__error) {
       modules.push({ file, error: mod.__error, tools: [], decision: { status: 'undecided', reason: null } });
       continue;

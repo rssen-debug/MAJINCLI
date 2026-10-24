@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { parseFlags } from './kernel.js';
+export const V4_VERSION = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
 export const V4_MIN_NODE = '22.0.0';
 
@@ -78,6 +79,23 @@ export function expandEnvValue(raw, env = process.env) {
   if (m) return env[m[1]] || null;
   if (raw === '' || raw === 'null') return null;
   return raw;
+}
+
+/** Read existing outbound credentials at call time; never expose or rewrite them. */
+export function channelConfigFromV1({home, env = process.env}) {
+  const file = env.MAJIN_CONFIG || path.join(home, 'config.json');
+  const allowed = new Set(['discord.token', 'discord.channelId', 'slack.token', 'slack.channel',
+    'matrix.token', 'matrix.homeserver', 'matrix.room', 'email.relayUrl', 'email.apiKey',
+    'email.from', 'webhook.url', 'webhook.secret']);
+  return Object.freeze({get(key) {
+    if (typeof key !== 'string' || !key.startsWith('channels.') || !allowed.has(key.slice(9))) return undefined;
+    let value;
+    try {
+      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      value = key.split('.').reduce((obj, part) => obj && Object.hasOwn(obj, part) ? obj[part] : undefined, data);
+    } catch { return undefined; }
+    return expandEnvValue(value, env) ?? undefined;
+  }});
 }
 
 function readJson(file) {
@@ -188,9 +206,10 @@ export function loadConfig({ env = process.env, argv = [], platform = process.pl
   const writePolicy = (env.MAJIN_V4_WRITE_POLICY || 'sandbox-auto').toLowerCase();
 
   return {
-    version: '4.0.0-alpha',
+    version: V4_VERSION,
     node: process.versions.node,
     paths,
+    channelConfig: channelConfigFromV1({home: paths.home, env}),
     host,
     port,
     publicOrigin,

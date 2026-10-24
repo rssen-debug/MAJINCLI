@@ -79,7 +79,12 @@ export async function startTestServer(overrides = {}) {
     },
     /** `keep: true` leaves the data dir on disk (backup/restore tests need it). */
     async close({ keep = false } = {}) {
-      await new Promise((resolve) => server.close(resolve));
+      await new Promise((resolve) => {
+        server.close(resolve);
+        // Browser clients keep history SSE subscriptions open. Test teardown
+        // must close those sockets before removing the isolated data directory.
+        server.closeAllConnections();
+      });
       if (!keep) fs.rmSync(home, { recursive: true, force: true });
     },
   };

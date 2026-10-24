@@ -13,10 +13,10 @@ import { fileURLToPath } from 'node:url';
 import { runSafe, tokenize, substitute, scrubEnv, SafeExecError } from '../src/v2/spawn/safe-exec.js';
 import { CommandTtsProvider } from '../src/v2/voice/tts.js';
 
-const REPO = path.dirname(fileURLToPath(import.meta.url)).replace(/\/test$/, '');
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FX = (n) => path.join(REPO, 'test', 'fixtures', 'safe-exec', n);
 const NODE = process.execPath;
-const echoT = (extra = '') => `{NODE} ${FX('argv-echo.mjs')} ${extra}`.trim();
+const echoT = (extra = '') => `{NODE} "${FX('argv-echo.mjs')}" ${extra}`.trim();
 
 test('1. INJECTION PROOF: $(...) in text passes literally, payload file PROVEN absent', async (t) => {
   const uid = typeof process.getuid === 'function' ? process.getuid() : 1000;
@@ -55,13 +55,13 @@ test('4. ENV SCRUB: *_KEY/_TOKEN/_SECRET never cross; PATH/HOME survive', async 
 test('5. TIMEOUT is mandatory and honest: sleeper killed inside budget with elapsed evidence', async () => {
   const t0 = Date.now();
   await assert.rejects(
-    () => runSafe(`{NODE} ${FX('sleeper.mjs')}`, { NODE }, { timeoutMs: 250, maxBuffer: 1024 }),
+    () => runSafe(`{NODE} "${FX('sleeper.mjs')}"`, { NODE }, { timeoutMs: 250, maxBuffer: 1024 }),
     (e) => e.cls === 'TIMEOUT' && /killed after/.test(e.message));
   assert.ok(Date.now() - t0 < 3000, 'must not hang');
 });
 
 test('6. output cap honest: flood → truncated flag, no silent loss, process exits', async () => {
-  const r = await runSafe(`{NODE} ${FX('blaster.mjs')}`, { NODE }, { maxBuffer: 4096, timeoutMs: 20_000 });
+  const r = await runSafe(`{NODE} "${FX('blaster.mjs')}"`, { NODE }, { maxBuffer: 4096, timeoutMs: 20_000 });
   assert.equal(r.truncated, true, 'overflow must be REPORTED, not hidden');
   assert.ok(r.stdout.length <= 4096);
 });

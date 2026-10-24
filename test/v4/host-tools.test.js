@@ -18,6 +18,61 @@ import {
   describeCapabilities, hostCapabilities, registerHostTools, zodFromV1Params,
 } from '../../src/v4/tools/host.js';
 import { tempHome } from './helpers.mjs';
+import { v1Context } from '../../src/v4/tools/host.js';
+import { runInTurn } from '../../src/v4/turn-state.js';
+
+test('host: rejected input names the missing argument without echoing private values', async () => {
+  const registry = new ToolRegistry(); let executed = false;
+  registry.define({ name: 'controlled_fill', description: 'Test input error', tier: 'read', inputSchema: z.object({value:z.string()}), outputSchema:z.object({}), execute:async()=>{executed=true;return {};} });
+  await assert.rejects(runTool({tool:'controlled_fill',input:{text:'private-content'}},{registry}), error => {
+    assert.match(error.message,/at value:/); assert.doesNotMatch(error.message,/private-content/); return true;
+  });
+  assert.equal(executed,false);
+});
+
+test('host: concurrent goals get isolated V1 sessions and approvals retain the same goal session', async () => {
+  const context = v1Context({ session: 'v4' });
+  assert.equal(context.session, 'v4', 'non-agent callers retain their explicit fallback');
+  const observed = await Promise.all(['goal_A', 'goal_B'].map((id) => runInTurn({ goal: { id } }, async () => {
+    const before = context.session;
+    await new Promise((resolve) => setImmediate(resolve));
+    return [before, context.session];
+  })));
+  assert.deepEqual(observed, [['v4:goal_A', 'v4:goal_A'], ['v4:goal_B', 'v4:goal_B']]);
+  assert.equal(runInTurn({ goal: { id: 'goal_A' } }, () => context.session), 'v4:goal_A', 'resumed checkpoint uses its original browser/job session');
+});
+
+test('host: browser uploads enforce live folder grants before reaching the browser', async () => {
+  const home=tempHome(), workspace=path.join(home,'workspace'), outside=path.join(home,'private');
+  fs.mkdirSync(workspace); fs.mkdirSync(outside);
+  let folders=[], executed=0;
+  const registry=new ToolRegistry();
+  registry.define(adaptV1Tool({name:'browser.upload',group:'web',risk:'exec',desc:'Controlled upload boundary',
+    raw:{path:'string: local file',ref:'string optional: observed control'},parameters:{required:['path']},
+    run:async()=>{executed++;return {ok:true,result:'controlled no-op',summary:'controlled no-op'};}},
+    {lane:'web',ctx:v1Context({workspaceDir:workspace,folders:()=>folders})}));
+  const upload=p=>runTool({tool:'browser_upload',input:{path:p,ref:'e1'}},{registry,approvals:{check:()=>({decision:'allow'})}});
+  try {
+    assert.equal((await upload('synthetic.txt')).ok,true);
+    await assert.rejects(upload(path.join(outside,'synthetic.txt')),e=>e.cls==='PERMISSION_DENIED');
+    await assert.rejects(upload('../private/synthetic.txt'),e=>e.cls==='PERMISSION_DENIED');
+    assert.equal(executed,1,'out-of-grant paths never reach the V1 browser tool');
+    folders=[outside]; assert.equal((await upload(path.join(outside,'synthetic.txt'))).ok,true);
+    folders=[]; await assert.rejects(upload(path.join(outside,'synthetic.txt')),e=>e.cls==='PERMISSION_DENIED');
+    assert.equal(executed,2,'revocation takes effect on the next upload');
+  } finally { fs.rmSync(home,{recursive:true,force:true}); }
+});
+
+test('host: adapted V1 calls receive the real per-call abort signal without mutating shared context', async()=>{
+  const ctl=new AbortController(), ctx=v1Context(); let observed;
+  const adapted=adaptV1Tool({name:'controlled.wait',risk:'read',desc:'Controlled abort propagation',raw:{},run:async(_,callContext)=>{
+    observed=callContext.signal;
+    await new Promise((_,reject)=>callContext.signal.addEventListener('abort',()=>reject(callContext.signal.reason),{once:true}));
+  }},{lane:'web',ctx});
+  const stopped=assert.rejects(adapted.execute({}, {signal:ctl.signal}),/controlled stop/);
+  assert.equal(observed,ctl.signal); assert.equal(ctx.signal,undefined);
+  ctl.abort(new Error('controlled stop'));await stopped;
+});
 
 test('host: capability detection is self-consistent on whatever host runs it', async () => {
   const caps = await hostCapabilities({ platform: 'linux' });

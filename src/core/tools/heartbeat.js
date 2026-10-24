@@ -9,6 +9,7 @@ let INSTANCE = null;
 function ensure(ctx) {
   const ws = ctx.cfg.get('workspace') || process.cwd();
   if (!INSTANCE || INSTANCE.ws !== ws) {
+    INSTANCE?.stop();
     INSTANCE = new Heartbeat({
       workspaceDir: ws,
       cfg: ctx.cfg,
@@ -24,11 +25,11 @@ export const heartbeatTools = [
   def({
     name: 'majin.heartbeat',
     group: 'meta',
-    risk: 'read',
+    risk: 'net',
     desc: 'W9 heartbeat: status/enable/disable/tick (force a digest of accumulated real events)/test (dry-run the alert text exactly as it would be sent). Only real bus events alert; missing channels never pretend.',
     params: {
-      action: 'string status|enable|disable|tick|test',
-      event: 'string: for action=test — an event name to synthesize a REAL stored ingest (e.g. "my.test.event")',
+      action: 'string: status | enable | disable | tick | test. optional (default: status) [status|enable|disable|tick|test]',
+      event: 'string: for action=test — a synthetic test event name (optional)',
     },
     examples: ['majin.heartbeat({action:"status"})', 'majin.heartbeat({action:"tick"})'],
     async run({ action = 'status', event }, ctx) {
@@ -37,9 +38,9 @@ export const heartbeatTools = [
       const hb = ensure(ctx);
       const act = String(action).toLowerCase();
       if (act === 'status') return { ok: true, result: JSON.stringify(hb.status(), null, 2), summary: `heartbeat ${hb.status().running ? 'on' : 'off'}` };
-      if (act === 'enable') { hb.autoStart = true; hb.start(); return { ok: true, result: `heartbeat running (tick ${hb.tickMs / 1000}s, silent unless real events)`, summary: 'on' }; }
+      if (act === 'enable') { hb.autoStart = true; hb.resume(); return { ok: true, result: `heartbeat running (tick ${hb.tickMs / 1000}s, silent unless real events)`, summary: 'on' }; }
       if (act === 'disable') { hb.stop(); return { ok: true, result: 'heartbeat stopped (no proactive alerts — you hear nothing until re-enabled)', summary: 'off' }; }
-      if (act === 'test') { if (event) hb.ingest(String(event), { message: 'synthesized real ingest for a test — promised: stamped as test' }); const r = await hb.tick({ force: true, dryRun: true }); return { ok: true, result: JSON.stringify(r, null, 2), summary: 'dry-run' }; }
+      if (act === 'test') { const r=event?{ok:true,sent:false,dryRun:true,synthetic:true,text:hb.digestText([{event:String(event),detail:{message:'Synthetic preview only; no event was queued.'}}])}:await hb.tick({dryRun:true});return {ok:true,result:JSON.stringify(r,null,2),summary:'dry-run'}; }
       if (act === 'tick') { const r = await hb.tick(); return { ok: true, result: JSON.stringify(r, null, 2), summary: r.sent ? `sent (${r.count} events)` : 'held' }; }
       return { ok: false, error: { code: 'bad_input', message: 'action must be status|enable|disable|tick|test' } };
     },

@@ -19,6 +19,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { PluginWorker } from './sandbox.js';
 
@@ -94,8 +95,9 @@ export class Kernel {
 
   /** Ordered shutdown: tell each worker to exit, then hard-kill stragglers. */
   shutdownWorkers() {
-    for (const [, worker] of this.workers) worker.stop();
+    const stopped = [...this.workers.values()].map((worker) => worker.stop());
     this.workers.clear();
+    return Promise.all(stopped);
   }
 
   flag(name) {
@@ -214,7 +216,7 @@ export class Kernel {
           // child (e.g. a stray interval). Stop it, or the host keeps a live
           // process and an open IPC channel for a capability that never loaded.
           try {
-            worker?.stop();
+            await worker?.stop();
           } catch { /* already gone */ }
           for (const key of [...this.capabilities.keys()]) if (!before.has(key)) this.capabilities.delete(key);
           const moved = this.quarantine(entry.name, err.message);
@@ -224,7 +226,7 @@ export class Kernel {
         continue;
       }
       try {
-        const mod = await import(path.join(pluginDir, 'index.js'));
+        const mod = await import(pathToFileURL(path.join(pluginDir, 'index.js')).href);
         const activate = mod.activate || mod.default;
         if (typeof activate !== 'function') throw new Error('index.js must export activate(ctx)');
         const ctx = this.#contextFor(manifest);

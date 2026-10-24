@@ -17,11 +17,14 @@ export function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 }
 
-function writePrivate(file, data) {
+export function writePrivate(file, data) {
   ensureDir(path.dirname(file));
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, data, { mode: 0o600 });
-  fs.renameSync(tmp, file);
+  const tmp = `${file}.${crypto.randomUUID()}.tmp`;
+  try {
+    const fd=fs.openSync(tmp,'wx',0o600);
+    try{fs.writeFileSync(fd,data);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+    fs.renameSync(tmp,file);
+  } finally {try{fs.unlinkSync(tmp);}catch(error){if(error.code!=='ENOENT')throw error;}}
   try {
     fs.chmodSync(file, 0o600);
   } catch { /* best effort on filesystems without POSIX modes */ }

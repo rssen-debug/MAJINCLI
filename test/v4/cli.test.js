@@ -17,6 +17,22 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 function cli(script, args = [], { home = null, timeout = 120_000 } = {}) {
   const env = { ...process.env, MAJIN_HOME: home || tempHome() };
+  if (script === 'host-doctor.mjs' && process.platform === 'win32') {
+    // The Windows temp directory may grant access to test/sandbox groups.
+    // A usable-host fixture needs a private ACL, just like a real data folder.
+    const acl = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
+      $ErrorActionPreference = 'Stop'
+      $acl = New-Object System.Security.AccessControl.DirectorySecurity
+      $acl.SetAccessRuleProtection($true, $false)
+      $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+      foreach ($sid in @($me, [System.Security.Principal.SecurityIdentifier]'S-1-5-18', [System.Security.Principal.SecurityIdentifier]'S-1-5-32-544')) {
+        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')
+        $acl.AddAccessRule($rule)
+      }
+      [System.IO.Directory]::SetAccessControl($env:MAJIN_HOME, $acl)
+    `], { env, encoding: 'utf8', windowsHide: true });
+    assert.equal(acl.status, 0, acl.stderr);
+  }
   const res = spawnSync(process.execPath, [path.join(ROOT, 'scripts/v4', script), ...args], {
     cwd: ROOT,
     env,

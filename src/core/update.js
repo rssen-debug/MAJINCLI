@@ -263,8 +263,12 @@ export async function installSetup(o = {}) {
     const ps = spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-EncodedCommand', relaunchCommand(child.pid, process.execPath)], {
       detached: true, stdio: 'ignore', windowsHide: true,
     });
-    ps.on('error', () => {});
-    ps.unref();
+    try {
+      await new Promise((resolve, reject) => { ps.once('spawn', resolve); ps.once('error', reject); });
+      ps.unref();
+    } catch {
+      return { ok: false, error: 'Installer started, but automatic relaunch could not be scheduled. Close MAJIN and launch it manually after installation.' };
+    }
   }
   return { ok: true, file: dl.file };
 }
@@ -279,7 +283,9 @@ export function relaunchScript(installerPid, executable = DEFAULT_INSTALLED_EXE)
   // not a reliable relaunch location. Use the executable currently installed.
   const safeExe = String(executable).replace(/'/g, "''");
   return [
-    "$log = Join-Path $env:LOCALAPPDATA 'MAJIN\\update-relaunch.log'",
+    "$logDir = Join-Path $env:LOCALAPPDATA 'MAJIN'",
+    "New-Item -Path $logDir -ItemType Directory -Force | Out-Null",
+    "$log = Join-Path $logDir 'update-relaunch.log'",
     "$exe = '" + safeExe + "'",
     "'--- ' + (Get-Date -Format o) + ' relaunch watchdog, installer pid " + installerPid + "' | Out-File $log -Append",
     '$deadline = (Get-Date).AddMinutes(15)',

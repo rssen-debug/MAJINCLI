@@ -61,6 +61,7 @@ export function makeSttProvider({ command = null } = {}) {
 /** Which lanes are actually available on this host, without pretending. */
 export function voiceCapabilities(env = process.env) {
   return {
+    streamingTts: { available: env.MAJIN_V4_STREAM_TTS === '1' && Boolean(commandTemplateFromEnv(env)), format: 'wav-ndjson', provider: 'kokoro-onnx' },
     tts: [
       { mode: 'buffer', kind: 'offline', description: 'Deterministic silent WAV. Proves the pipeline, not a voice.' },
       { mode: 'command', kind: 'local', available: Boolean(commandTemplateFromEnv(env)), description: 'Operator-configured local binary (piper, kokoro, …). Preflight-gated.' },
@@ -73,6 +74,19 @@ export function voiceCapabilities(env = process.env) {
   };
 }
 
+/** The explicitly enabled, host-local narrator. No client-supplied URL/command. */
+export async function localNarratorStream({ text, signal, fetchImpl = globalThis.fetch }) {
+  const response = await fetchImpl('http://127.0.0.1:18765/speak-stream', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text }), signal: AbortSignal.any([signal, AbortSignal.timeout(90000)].filter(Boolean)),
+  });
+  if (!response.ok || !response.headers.get('content-type')?.startsWith('application/x-ndjson') || !response.body) {
+    await response.body?.cancel();
+    throw new Error('Local narrator stream unavailable');
+  }
+  return response;
+}
+
 /**
  * Synthesize into a private temp dir and return the bytes plus the V2 verdict.
  * The caller decides what to do with a failed verification; nothing here turns
@@ -81,6 +95,7 @@ export function voiceCapabilities(env = process.env) {
 export async function synthesize({ text, mode = 'auto', voice = null, approvals, dir, command = null }) {
   const provider = makeTtsProvider({ mode, voice, command: command || commandTemplateFromEnv() });
   const target = path.join(dir || fs.mkdtempSync(path.join(os.tmpdir(), 'majin-tts-')), `speech-${Date.now()}.${provider.name === 'edge-tts' ? 'mp3' : 'wav'}`);
+  fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
   const started = Date.now();
   let result;
   try {
@@ -124,10 +139,22 @@ export async function transcribe({ audioPath, command = null }) {
   const started = Date.now();
   try {
     const result = await listen(audioPath, { provider });
+    // Warm local recognizers may also return a detected language. Generic V2
+    // command providers still accept plain text; parse only this explicit shape.
+    let transcript = result.transcript || '';
+    let language = null;
+    try {
+      const structured = JSON.parse(transcript);
+      if (typeof structured.transcript === 'string' && /^[a-z]{2,3}$/.test(structured.language)) {
+        transcript = structured.transcript;
+        language = structured.language;
+      }
+    } catch { /* plain transcript */ }
     return {
-      ok: Boolean(result.ok),
-      verdict: result.verdict || 'inconclusive',
-      transcript: result.transcript || '',
+      ok: Boolean(result.ok) && Boolean(transcript.trim()),
+      verdict: transcript.trim() ? (result.verdict || 'capture') : 'inconclusive',
+      transcript,
+      language,
       provider: provider.name,
       elapsedMs: Date.now() - started,
       synthetic: provider.name === 'buffer',

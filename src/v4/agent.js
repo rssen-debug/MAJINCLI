@@ -28,11 +28,13 @@ import { TOOL_SCHEMAS, safeFileName, schemasFromRegistry } from './tools.js';
 import { createToolExposure } from './tool-exposure.js';
 import { createTeamTools } from './teams.js';
 import { createGraphTool } from './graph.js';
-import { runInTurn, turnState } from './turn-state.js';
+import { runInTurn, turnState, hostSessionId } from './turn-state.js';
+import { closeFor } from '../core/browser.js';
 import { z } from 'zod';
 import { publicGoal, newId } from './store.js';
 import { explainModelError } from './model.js';
 import { t } from './ui/strings.js';
+import { hasApprovalContinuation } from './approval-continuation.js';
 
 const SYSTEM_PROMPT = `You are MAJIN, a private assistant running on the owner's own Windows machine.
 You speak in the language the user writes in (Swedish or English) and you are brief.
@@ -43,7 +45,7 @@ sandbox. When host tools are enabled you also get real filesystem, shell and Win
 tools; they run on the owner's machine and sensitive ones require the owner's approval.
 
 Choosing tools:
-- Prefer the narrowest tool that answers the question. workspace_read lists files; fs_read reads
+- Prefer the narrowest tool that answers the question. workspace_list lists files; fs_read reads
   a real path on the host; exec_start runs a command.
 - To find a file you only know the name of, use fs_find with the folder as its path argument.
   Do not assume the workspace is the only place the owner keeps things.
@@ -61,6 +63,13 @@ Choosing tools:
 - When the owner has a standing team (roles that persist between sessions), use team_manage to
   read or change the roster and blackboard and team_run to run a goal graph against it. A team
   run is checkpointed, so it can be resumed by runId without repeating finished work.
+- For work requested on a schedule or after the app closes, discover task_manage and task_list.
+  Create a durable bounded task with the owner's requested schedule and success criteria.
+  For monitoring a JSON source without repeated model calls, supply task_manage.condition:
+  url, JSON Pointer, operator eq/lt/lte/gt/gte and a typed threshold value. Inspect the source
+  first when its actual schema is unknown. A task string alone runs the model every time;
+  it does not create a deterministic condition. Set notify only for authorized notifications.
+  Never claim monitoring or push delivery from merely creating a task; inspect actual history.
 
 Rules:
 - Never say a file was created, saved or changed unless the tool result confirms it.
@@ -148,6 +157,7 @@ export function createAgent({
   tools,
   model,
   telemetry = null,
+  audit = null,
   skills = null,
   access = null,
 }) {
@@ -155,7 +165,8 @@ export function createAgent({
     if (!telemetry) return;
     try {
       telemetry.append(event, payload);
-    } catch {
+    } catch(error) {
+      if(error.code==='AUDIT_INTEGRITY')throw error;
       /* telemetry must never break a turn */
     }
   };
@@ -356,6 +367,7 @@ export function createAgent({
   }
 
   async function executeToolCall({ call, goal, conversationId, emit, attempt = 1, signal = null, turn = null }) {
+    audit?.assertHealthy();
     // A tool called by a SUBAGENT runs while the parent's delegate call is
     // itself mid-flight (goal already WAITING_FOR_TOOL). Letting the child drive
     // the parent state machine produced "illegal transition WAITING_FOR_TOOL ->
@@ -551,7 +563,7 @@ export function createAgent({
    * Run one turn. `emit(type, payload)` is the SSE sink. Returns a summary the
    * HTTP layer can log without leaking content.
    */
-  async function runTurn({ conversationId, text, requestId = null, signal, emit = () => {} }) {
+  async function runTurn({ conversationId, text, voiceTurn = false, requestId = null, signal, emit = () => {} }) {
     const conv = conversationId ? conversations.get(conversationId) : null;
     if (conversationId && !conv) throw Object.assign(new Error('conversation not found'), { status: 404 });
 
@@ -629,66 +641,86 @@ export function createAgent({
     const turn = { exposure, depth: 0, goal, conversationId: conversation.id, emit, signal, model };
     const packed = historyFor(conversations.get(conversation.id), message);
     const modelMessages = packed.messages;
+    if (voiceTurn && modelMessages[0]?.role === 'system') {
+      modelMessages[0].content += '\nThis is a spoken conversation. Reply in the language the user just spoke. Usually use one short natural sentence, around 20 words, unless the task needs detail. Do not recite capabilities or menus. Keep all tool and verification rules.';
+    }
     if (packed.dropped > 0 || packed.truncated) {
       // Say it once in the stream; the UI shows a quiet note, not an error.
       emit('context', { dropped: packed.dropped, truncated: packed.truncated, tokens: packed.tokens });
     }
 
-    let finalText = '';
-    let toolCallsUsed = 0;
-    let rounds = 0;
+    return executeModelLoop({ conversation, goal, exposure, turn, modelMessages, signal, emit, turnStartedAt, requestId });
+  }
+
+  // The same bounded loop handles fresh turns and durable approval continuations.
+  async function executeModelLoop({ conversation, goal, exposure, turn, modelMessages, signal, emit, turnStartedAt, requestId, continuation = null }) {
+    let finalText = continuation?.finalText || '';
+    let toolCallsUsed = continuation?.toolCallsUsed || 0;
+    let rounds = continuation?.rounds || 0;
     let assistantMessageId = null;
     // A turn may not end in a confident sentence after an unrecovered tool
     // failure. The last tool outcome decides whether the answer is allowed to
     // be treated as a success.
     let lastOutcome = null;
     let lastRefusal = null;
+    let finishedReasoning = false;
 
     try {
-      goal.transition(STATES.READY, 'model route resolved');
-      goal.transition(STATES.RUNNING, 'executing turn');
+      if (!continuation) {
+        goal.transition(STATES.READY, 'model route resolved');
+        goal.transition(STATES.RUNNING, 'executing turn');
+      }
       goals.save(goal);
 
-      while (rounds < config.limits.maxModelRounds) {
-        rounds += 1;
-        if (signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
+      while (continuation || rounds < config.limits.maxModelRounds) {
+        let response, toolMessages = [], startAt = 0;
+        if (continuation) {
+          response = continuation.response;
+          toolMessages = continuation.toolMessages;
+          startAt = continuation.startAt;
+          continuation = null;
+        } else {
+          rounds += 1;
+          if (signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
 
-        emit('state', { state: 'thinking', round: rounds });
-        const response = await model.chat({
-          messages: modelMessages,
-          // Every registered tool, not a fixed list. This was the reported bug:
-          // the model was only ever told about five workspace tools, so host
-          // file/shell/Windows tools could not be called even when registered.
-          tools: exposure.schemas(),
-          signal,
-          modelId: conversation.modelId || null,
-          onEvent: (ev) => {
-            if (signal?.aborted) return;
-            if (ev.type === 'delta') emit('delta', { text: ev.text });
-            else if (ev.type === 'thinking') emit('thinking', { text: ev.text });
-          },
-        });
+          emit('state', { state: 'thinking', round: rounds });
+          const budgetNote = `\nExecution budget for this response: ${config.limits.maxModelRounds - rounds + 1} model responses including this one, ${config.limits.maxToolCallsPerTurn - toolCallsUsed} tool calls left. Batch independent, already-grounded actions when useful; tools execute in order. Re-observe after actions that change control identities. Correct named schema arguments before retrying. Reserve a response to verify and report the actual outcome. Never repeat an irreversible action merely because verification failed.`;
+          const requestMessages = modelMessages.map((message, index) => index === 0 && message.role === 'system'
+            ? { ...message, content: message.content + budgetNote } : message);
+          response = await model.chat({
+            messages: requestMessages,
+            // Every registered tool, not a fixed list. This was the reported bug:
+            // the model was only ever told about five workspace tools, so host
+            // file/shell/Windows tools could not be called even when registered.
+            tools: exposure.schemas(),
+            signal,
+            modelId: conversation.modelId || null,
+            onEvent: (ev) => {
+              if (signal?.aborted) return;
+              if (ev.type === 'delta') emit('delta', { text: ev.text });
+              else if (ev.type === 'thinking') emit('thinking', { text: ev.text });
+            },
+          });
 
-        record('model.call', {
-          provider: response.provider || model.info.provider,
-          model: response.model || model.info.model,
-          elapsedMs: response.elapsedMs || 0,
-          usageInput: response.usage?.input || 0,
-          usageOutput: response.usage?.output || 0,
-          usageTotal: (response.usage?.input || 0) + (response.usage?.output || 0),
-          result: 'ok',
-        });
-        if (response.text) finalText += response.text;
-        if (response.refused) lastRefusal = response.refused;
+          record('model.call', {
+            provider: response.provider || model.info.provider,
+            model: response.model || model.info.model,
+            elapsedMs: response.elapsedMs || 0,
+            usageInput: response.usage?.input || 0,
+            usageOutput: response.usage?.output || 0,
+            usageTotal: (response.usage?.input || 0) + (response.usage?.output || 0),
+            result: 'ok',
+          });
+          if (response.text) finalText += response.text;
+          if (response.refused) lastRefusal = response.refused;
 
-        if (!response.toolCalls?.length) break;
-
-        if (toolCallsUsed + response.toolCalls.length > config.limits.maxToolCallsPerTurn) {
+          if (!response.toolCalls?.length) { finishedReasoning = true; break; }
+        }
+        if (toolCallsUsed + response.toolCalls.length - startAt > config.limits.maxToolCallsPerTurn) {
           throw Object.assign(new Error(`tool budget exceeded (${config.limits.maxToolCallsPerTurn})`), { code: 'TOOL_BUDGET' });
         }
-
-        const toolMessages = [];
-        for (const call of response.toolCalls) {
+        for (const [index, call] of response.toolCalls.entries()) {
+          if (index < startAt) continue;
           if (signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
           toolCallsUsed += 1;
           const outcome = await executeToolWithRecovery({ call, goal, conversationId: conversation.id, emit, signal, turn });
@@ -713,6 +745,11 @@ export function createAgent({
               scope: outcome.scope,
               reason: outcome.reason,
               requestedAt: new Date().toISOString(),
+              continuation: {
+                v: 1, modelMessages, response: { text: response.text || null, toolCalls: response.toolCalls },
+                toolMessages, startAt: index, finalText, toolCallsUsed: toolCallsUsed - 1, rounds,
+                requestId, turnStartedAt, exposed: exposure.schemas().map((schema) => schema.name),
+              },
             };
             conversations.save(conversation);
             emit('approval_required', {
@@ -737,6 +774,7 @@ export function createAgent({
         modelMessages.push(...toolMessages);
       }
 
+      if (!finishedReasoning) throw Object.assign(new Error(`model round budget exhausted (${config.limits.maxModelRounds}); task is incomplete`), { code: 'MODEL_BUDGET' });
       if (lastRefusal && toolCallsUsed === 0) {
         throw Object.assign(new Error(lastRefusal.reason || t('common.toolFailed')), {
           code: 'REQUEST_REFUSED',
@@ -855,6 +893,12 @@ export function createAgent({
       emit(aborted ? 'cancelled' : 'error', { message: reason, messageId: stored.id, goalId: goal.id });
       emit('done', { status: aborted ? 'cancelled' : 'failed', conversationId: conversation.id, goalId: goal.id });
       return { status: aborted ? 'cancelled' : 'failed', conversationId: conversation.id, goalId: goal.id };
+    } finally {
+      // Keep the page while consent is pending. Completed/cancelled headless
+      // tasks return their browser slot; owner-visible windows remain open.
+      if (goal.state !== STATES.WAITING_FOR_APPROVAL) {
+        await closeFor(hostSessionId('v4', turn), { wait: true, headlessOnly: true });
+      }
     }
   }
 
@@ -983,12 +1027,29 @@ export function createAgent({
   }
 
   /** Resolve a pending strict-policy approval for a conversation. */
-  async function resolveApproval({ conversationId, approve, emit = () => {} }) {
+  async function resolveApproval({ conversationId, approve, emit = () => {}, owner = null }) {
+    const key = `conv:${conversationId}`;
+    if (running.has(key)) throw Object.assign(new Error('conversation is already running'), { status: 409 });
+    const goalId = conversations.get(conversationId)?.pendingApproval?.goalId;
+    const controller = beginTurn(key, { owner });
+    try { return await continueApproval({ conversationId, approve, emit, signal: controller.signal }); }
+    finally {
+      endTurn(key, controller);
+      const goal = goalId ? goals.get(goalId) : null;
+      if (goal && goal.state !== STATES.WAITING_FOR_APPROVAL) await closeFor(hostSessionId('v4', { goal }), { wait: true, headlessOnly: true });
+    }
+  }
+
+  async function continueApproval({ conversationId, approve, emit, signal }) {
     const conversation = conversations.get(conversationId);
     if (!conversation) throw Object.assign(new Error('conversation not found'), { status: 404 });
     const pending = conversation.pendingApproval;
     if (!pending) throw Object.assign(new Error('no pending approval'), { status: 409 });
     const goal = goals.get(pending.goalId);
+    if (!goal || goal.state !== STATES.WAITING_FOR_APPROVAL) throw Object.assign(new Error('approval goal is not waiting'), { status: 409 });
+    if (approve && !hasApprovalContinuation(pending)) throw Object.assign(new Error('approval checkpoint is invalid or unavailable; no action was executed'), { status: 409 });
+    audit?.assertHealthy();
+    audit?.consent({conversationId,tool:pending.tool,approved:approve});
 
     conversation.pendingApproval = null;
     conversations.save(conversation);
@@ -1015,34 +1076,12 @@ export function createAgent({
     }
 
     emit('state', { state: 'working' });
-    const outcome = await executeToolWithRecovery({
-      call: { id: pending.callId, name: pending.tool, argsJson: JSON.stringify(pending.input) },
-      goal,
-      conversationId,
-      emit,
-      turn: { exposure: createToolExposure({ registry: tools.registry }), depth: 0, goal, conversationId, emit, signal: null, model },
-    });
-
-    if (goal && goal.state === STATES.VERIFYING) {
-      const uncovered = goal.uncoveredAcceptance();
-      if (!uncovered.length) goal.complete();
-    } else if (goal && goal.state === STATES.RUNNING) {
-      goal.transition(STATES.VERIFYING, 'approved action finished');
-      if (!goal.uncoveredAcceptance().length) goal.complete();
-    }
-    if (goal) goals.save(goal);
-
-    const summary = outcome.ok
-      ? t('agent.approved', { tool: pending.tool })
-      : t('agent.notExecuted', { error: outcome.error || t('common.unknownError') });
-    const stored = conversations.appendMessage(conversation.id, {
-      role: 'assistant',
-      content: summary,
-      meta: { goalId: pending.goalId, approval: 'granted' },
-    });
-    emit('goal', publicGoal(goal));
-    emit('done', { status: 'completed', conversationId, messageId: stored.id, goalId: pending.goalId });
-    return { status: 'completed', conversationId, messageId: stored.id };
+    const saved = pending.continuation;
+    const exposure = createToolExposure({ registry: tools.registry, maxVisible: config.limits.maxVisibleTools || 64 });
+    exposure.activate(saved.exposed || []);
+    const turn = { exposure, depth: 0, goal, conversationId, emit, signal, model };
+    return executeModelLoop({ conversation, goal, exposure, turn, modelMessages: saved.modelMessages, signal, emit,
+      turnStartedAt: saved.turnStartedAt, requestId: saved.requestId, continuation: saved });
   }
 
   /**
@@ -1060,12 +1099,13 @@ export function createAgent({
     task,
     tools: wanted = null,
     maxRounds = 3,
+    maxCalls = 6,
     turn,
     instructions = '',
     digest = '',
     countsAgainstCap = true,
   }) {
-    const allowed = Array.isArray(wanted) && wanted.length
+    const allowed = Array.isArray(wanted)
       ? new Set(wanted.map((n) => {
         const raw = String(n);
         return raw.includes('.') ? raw.toLowerCase().replace(/[^a-z0-9_]/g, '_') : raw;
@@ -1112,6 +1152,8 @@ export function createAgent({
     let text = '';
     let calls = 0;
     let failure = null;
+    let usedRounds = 0;
+    let finished = false;
     const rounds = Math.max(1, Math.min(5, Number(maxRounds) || 3));
     for (let round = 1; round <= rounds; round += 1) {
       if (turn?.signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
@@ -1122,11 +1164,12 @@ export function createAgent({
         modelId: null,
         onEvent: () => {},
       });
+      usedRounds = round;
       if (res.text) text += res.text;
-      if (!res.toolCalls?.length) break;
+      if (!res.toolCalls?.length) { finished = true; break; }
       const toolMessages = [];
       for (const call of res.toolCalls) {
-        if (calls >= 6) {
+        if (calls >= Math.max(1, Math.min(6, Number(maxCalls) || 6))) {
           failure = 'subagent tool budget exhausted';
           break;
         }
@@ -1155,6 +1198,7 @@ export function createAgent({
       messages.push(...toolMessages);
       if (failure) break;
     }
+    if (!finished && !failure) failure = `subagent model round budget exhausted (${rounds}); task is incomplete`;
     const artifacts = subGoal.receipts
       .filter((r) => r.verified && r.acceptanceId && r.evidence)
       .map((r) => ({
@@ -1162,7 +1206,7 @@ export function createAgent({
         acceptanceId: r.acceptanceId,
         evidence: r.evidence,
       }));
-    return { answer: text.trim(), tools: [...new Set(used)], calls, rounds, failure, artifacts };
+    return { answer: text.trim(), tools: [...new Set(used)], calls, rounds: usedRounds, failure, artifacts };
   }
 
   /**
@@ -1306,6 +1350,6 @@ export function createAgent({
     cancel,
     cancelOwnedBy,
     isRunning: (id) => running.has(id),
-    modelInfo: model.info,
+    get modelInfo() { return model.info; },
   };
 }

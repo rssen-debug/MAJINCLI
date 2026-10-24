@@ -81,7 +81,8 @@ test('sandbox: HOLD tier waits for consent; after owner consent it executes', as
   const events = new EventBus();
   const approvals = new Approvals(events);
   const opts = { root, whitelist: new Whitelist(null, null), approvals, events, mode: 'balanced', timeoutMs: 8000 };
-  const cmd = `rm -rf ${target.replace(/\\/g, '/')}`;
+  assert.equal(path.dirname(path.resolve(target)), path.resolve(root), 'the recursive delete fixture stays in its isolated workspace');
+  const cmd = process.platform === 'win32' ? `rmdir /s /q "${target}"` : `rm -rf "${target}"`;
   const w = await sandboxedExec(cmd, opts);
   assert.equal(w.decision, 'waiting');
   assert.ok(fs.existsSync(target), 'must NOT have executed without consent');

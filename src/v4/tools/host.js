@@ -25,6 +25,7 @@ import { z } from 'zod';
 import { runTool } from '../../v2/tools/runner.js';
 import { searchRegistry } from '../tool-exposure.js';
 import { assertPathsAllowed } from '../path-access.js';
+import { hostSessionId } from '../turn-state.js';
 
 /**
  * The V1 tool modules and the arrays they export.
@@ -35,6 +36,19 @@ import { assertPathsAllowed } from '../path-access.js';
  */
 const NET_TOOLS = Object.freeze(['net.dns', 'net.tcp', 'net.http', 'net.serve', 'net.serve_stop']);
 const SCREEN_TOOLS = Object.freeze(['screen.capture', 'screen.claim', 'sys.notify']);
+
+export async function interactiveWindowsSession(env = process.env) {
+  if (/^services$/i.test(env.SESSIONNAME || '')) return false;
+  if (env.SESSIONNAME) return true;
+  if (process.platform !== 'win32') return false;
+  // Desktop launchers and Scheduled Tasks often omit SESSIONNAME. Ask Windows
+  // instead of silently disabling a working browser in those sessions.
+  const { spawnSync } = await import('node:child_process');
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    '[Environment]::UserInteractive -and ([Diagnostics.Process]::GetCurrentProcess().SessionId -gt 0)'],
+  { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+  return result.status === 0 && result.stdout.trim() === 'True';
+}
 
 export const V1_LANES = Object.freeze({
   // Windows-only, because every tool drives the interactive desktop.
@@ -60,6 +74,7 @@ export const V1_LANES = Object.freeze({
   jobs: { module: '../../core/tools/jobs.js', export: 'jobTools', tierDefault: 'external' },
   flows: { module: '../../core/tools/flows.js', export: 'flowsTools', tierDefault: 'process' },
   github: { module: '../../core/tools/github.js', export: 'githubTools', tierDefault: 'external' },
+  channels: { module: '../../core/tools/channels.js', export: 'channelTools', tierDefault: 'process' },
   audit: { module: '../../core/tools/audit.js', export: 'auditTools', tierDefault: 'read' },
   learn: { module: '../../core/tools/learn.js', export: 'learnTools', tierDefault: 'write' },
   marketing: { module: '../../core/tools/marketing.js', export: 'marketingTools', tierDefault: 'external' },
@@ -141,13 +156,11 @@ export async function hostCapabilities({
   // a real browser exists. Reported separately so the owner is not told the web
   // lane is fully functional when half of it cannot launch.
   caps.browserRuntime = { available: false, reason: null };
-  if (platform === 'win32' && !env.SESSIONNAME) {
+  if (platform === 'win32' && !await interactiveWindowsSession(env)) {
     caps.browserRuntime.reason = 'no interactive Windows session detected (service sessions cannot show a browser)';
   } else {
     const bin = await browserBinary({ platform, env });
-    const pw = await load('playwright');
     if (!bin) caps.browserRuntime.reason = 'no browser binary found (npx playwright install chromium)';
-    else if (pw.__error) caps.browserRuntime.reason = 'playwright is not installed';
     else {
       caps.browserRuntime.available = true;
       caps.browserRuntime.binary = bin;
@@ -400,7 +413,7 @@ export function v1Context({
       file: dataFile,
     }),
     workspaceDir,
-    session,
+    get session() { return hostSessionId(session); },
     // Read at call time, never captured: a folder granted on the phone must be
     // usable on the very next tool call, not after a restart.
     folders,
@@ -424,18 +437,17 @@ export function adaptV1Tool(v1tool, { lane, ctx = null }) {
     inputSchema: zodFromV1Params(v1tool.raw || {}, v1tool.parameters?.required || []).strip(),
     outputSchema: OUTPUT,
     lane,
-    execute: async (input = {}) => {
+    execute: async (input = {}, {signal = null} = {}) => {
       // The grant is only real if it is enforced here: a path outside the
       // workspace and every granted folder never reaches V1's filesystem code.
-      if (v1tool.group === 'files') {
-        assertPathsAllowed(v1tool.name, input, {
-          workspace: ctx?.workspaceDir || null,
-          folders: typeof ctx?.folders === 'function' ? ctx.folders() : [],
-        });
-      }
+      assertPathsAllowed(v1tool.name, input, {
+        workspace: ctx?.workspaceDir || null,
+        folders: typeof ctx?.folders === 'function' ? ctx.folders() : [],
+      });
       let result;
       try {
-        result = await v1tool.run(input, ctx);
+        const callContext = signal ? Object.assign(Object.create(ctx || null), {signal}) : ctx;
+        result = await v1tool.run(input, callContext);
       } catch (err) {
         // A thrown V1 tool is a classified failure, never a silent success.
         const e = new Error(String(err?.message || err));

@@ -16,7 +16,7 @@ import { exportBundle, verifyBundle, findPrivateMaterial } from '../src/v2/audit
 import { AuditChain } from '../src/v2/audit/chain.js';
 import { keygen, anchor } from '../src/v2/audit/anchor.js';
 
-const REPO = path.dirname(fileURLToPath(import.meta.url)).replace(/\/test$/, '');
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TSR_FIXTURE = path.join(REPO, 'test', 'fixtures', 'tsr-anchor');
 
 function tmp(t, name = 'bundle-') {

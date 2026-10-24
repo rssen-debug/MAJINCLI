@@ -19,7 +19,7 @@ import { AuditChain, canonicalize, hashEntry, GENESIS } from '../src/v2/audit/ch
 import { keygen, anchor, verifyAnchor } from '../src/v2/audit/anchor.js';
 import fs from 'node:fs';
 
-const REPO = path.dirname(fileURLToPath(import.meta.url)).replace(/\/test$/, '');
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIXTURE = path.join(REPO, 'test', 'fixtures', 'jcs-compat-chain');
 
 /** the PRE-JCS hand-rolled canonicalizer, kept ONLY here as the comparison oracle */

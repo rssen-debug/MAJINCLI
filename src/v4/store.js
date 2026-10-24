@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Goal } from '../v2/runtime/goal.js';
 import { STATES, TERMINAL } from '../v2/runtime/states.js';
+import { hasApprovalContinuation } from './approval-continuation.js';
 
 export function newId(prefix) {
   return `${prefix}_${Date.now().toString(36)}_${crypto.randomBytes(6).toString('hex')}`;
@@ -147,7 +148,7 @@ export class ConversationStore {
    * message text. `since` returns only what changed after that ISO timestamp,
    * which is what a second device polls: an unchanged list costs nothing.
    */
-  list({ view = 'active', q = '', since = null } = {}) {
+  list({ view = 'active', q = '', since = null, limit = CONVERSATION_LIST_MAX } = {}) {
     const out = [];
     let files = [];
     try {
@@ -187,7 +188,10 @@ export class ConversationStore {
     }
     // Bounded: the phone's drawer never needs every conversation ever written,
     // and an unbounded list turns the menu into a full scan of the data dir.
-    return out.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0)).slice(0, CONVERSATION_LIST_MAX);
+    const sorted = out.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
+    // Internal boot reconciliation must also see approvals older than the
+    // drawer's 100-item cap. HTTP callers never request this uncapped mode.
+    return limit === null ? sorted : sorted.slice(0, CONVERSATION_LIST_MAX);
   }
 
   /** Rename with V1's title policy: a manual title is never overwritten. */
@@ -316,9 +320,10 @@ const ACTIVE_STATES = new Set([
 ]);
 
 export class GoalStore {
-  constructor({ dir, cacheMax = GOAL_CACHE_MAX }) {
+  constructor({ dir, cacheMax = GOAL_CACHE_MAX, onSave = null }) {
     this.dir = dir;
     this.cacheMax = cacheMax;
+    this.onSave = onSave;
     fs.mkdirSync(dir, { recursive: true });
     // Live goal objects are a cache, not a registry: they exist so a turn keeps
     // mutating one instance. Loading is cheap and the file is the truth, so the
@@ -353,6 +358,7 @@ export class GoalStore {
   }
 
   save(goal) {
+    this.onSave?.(goal);
     goal.save(this.dir);
     return this.#remember(goal);
   }
@@ -396,8 +402,14 @@ export class GoalStore {
   reconcileOnBoot({ conversations = null } = {}) {
     const moved = [];
     const stuck = [];
+    const durableApprovals = new Set();
+    if (conversations) for (const summary of conversations.list({ view: 'all', limit: null })) {
+      const pending = conversations.get(summary.id)?.pendingApproval;
+      if (hasApprovalContinuation(pending)) durableApprovals.add(pending.goalId);
+    }
 
     for (const summary of this.list()) {
+      if (summary.state === STATES.WAITING_FOR_APPROVAL && durableApprovals.has(summary.id)) continue;
       const path = interruptPath(summary.state);
       if (!path) continue; // already terminal or untouched
       const goal = this.get(summary.id);
@@ -461,7 +473,7 @@ function clearDeadApprovals(conversations, goals) {
   let cleared = 0;
   let listed = [];
   try {
-    listed = conversations.list();
+    listed = conversations.list({ view: 'all', limit: null });
   } catch {
     return 0;
   }

@@ -49,6 +49,28 @@ function realModelEnv(provider) {
 const REPORT = 'systemrapport.txt';
 const REPORT_TEXT = 'CPU och minne inventerade av MAJIN.';
 
+test('delegation: an explicit empty tool allowlist grants no tools', async () => {
+  const home = tempHome();
+  grantLanes(home, ['agent']);
+  let childObserved = false;
+  const provider = await startFakeProvider((body) => {
+    const child = body.messages.some((message) => message.role === 'system' && /MAJIN subagent/.test(message.content));
+    if (child) {
+      childObserved = true;
+      assert.deepEqual(offeredTools(body), []);
+      return { text: 'reasoning only' };
+    }
+    if (lastToolMessage(body)) return { text: 'Finished bounded reasoning.' };
+    return { toolCalls: [{ name: 'agent_delegate', args: { task: 'Think without using any tools.', tools: [] } }] };
+  });
+  const server = await startTestServer({ home, env: realModelEnv(provider) });
+  try {
+    const { cookie } = await server.pair();
+    await readSse(await postChat(server.base, cookie, { text: 'Delegate reasoning only.', requestId: 'empty-allowlist' }));
+    assert.equal(childObserved, true);
+  } finally { await server.close(); await provider.close(); }
+});
+
 test('universal: a new task is composed from a discovered tool, a real file and a read-back', async () => {
   const home = tempHome();
   // Only the sys lane is granted: system introspection is real, nothing else.

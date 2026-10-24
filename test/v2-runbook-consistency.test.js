@@ -11,12 +11,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const REPO = path.dirname(fileURLToPath(import.meta.url)).replace(/\/test$/, '');
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RUNBOOK = path.join(REPO, 'docs', 'v2', 'OPERATOR_RUNBOOK_WINDOWS.md');
 const BIN = path.join(REPO, 'bin', 'majin-v2.mjs');
 
-const doc = fs.readFileSync(RUNBOOK, 'utf8');
-const bin = fs.readFileSync(BIN, 'utf8');
+const doc = fs.readFileSync(RUNBOOK, 'utf8').replace(/\r\n/g, '\n');
+const bin = fs.readFileSync(BIN, 'utf8').replace(/\r\n/g, '\n');
 
 /** flags the CLI actually declares (source of truth = parseArgs options block) */
 function cliFlags(src) {

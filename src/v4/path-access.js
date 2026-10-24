@@ -54,7 +54,10 @@ function realish(target) {
     let dir = path.dirname(target);
     for (let i = 0; i < 40; i += 1) {
       try {
-        const real = fs.realpathSync(dir);
+        // Use the same resolver as the existing-target branch. On Windows the
+        // native resolver expands 8.3 names (RUNNER~1), while the JS resolver
+        // may retain them; mixing them can falsely deny a new workspace file.
+        const real = fs.realpathSync.native ? fs.realpathSync.native(dir) : fs.realpathSync(dir);
         return path.join(real, path.relative(dir, target));
       } catch {
         const parent = path.dirname(dir);
@@ -113,6 +116,8 @@ export function checkPath(candidate, { workspace, folders = [] } = {}) {
 
 /** The path arguments each V1 file tool actually uses. */
 export const PATH_ARGUMENTS = Object.freeze({
+  'browser.upload': ['path'],
+  'web.download': ['path'],
   'fs.list': ['path'],
   'fs.read': ['path'],
   'fs.write': ['path'],

@@ -201,7 +201,9 @@ test('turn journal: stop works by turn id, before the client knows the conversat
 test('turn journal: cancelling an unknown turn is a no-op, not an error', async () => {
   const s = await startTestServer();
   try {
-    const { cookie } = await s.pair();
+    const { cookie, res, body } = await s.pair();
+    assert.equal(res.status, 200, `pairing prerequisite failed: ${JSON.stringify(body)}`);
+    assert.ok(cookie, 'successful pairing must issue the session cookie used for cancellation');
     const cancel = await fetch(`${s.base}/api/cancel`, {
       method: 'POST',
       headers: { cookie, 'content-type': 'application/json', 'x-majin-csrf': '1', origin: s.base },
