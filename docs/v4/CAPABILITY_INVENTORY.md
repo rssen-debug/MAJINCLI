@@ -1,6 +1,6 @@
 # MAJIN capability inventory (generated)
 
-Generated 2026-10-24T09:15:23.839Z on linux. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
+Generated 2026-10-24T10:24:17.442Z on linux. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
 
 ## Totals
 

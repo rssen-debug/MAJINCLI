@@ -24,7 +24,7 @@ import { nextRecoveryStep, recoveryPlan } from '../v2/recover/advisor.js';
 import { buildMessages } from './context.js';
 import { memoryForPrompt } from './memory.js';
 import { renderSkills } from './skills.js';
-import { renderLearned } from './learning.js';
+import { renderLearned, renderExperiences } from './learning.js';
 import { TOOL_SCHEMAS, safeFileName, schemasFromRegistry } from './tools.js';
 import { createToolExposure } from './tool-exposure.js';
 import { createTeamTools } from './teams.js';
@@ -278,13 +278,28 @@ export function createAgent({
     } catch {
       learnedSection = '';
     }
+    // Prior tasks of the same kind. `learning.recall` reads the goals already on
+    // disk; this is workflow step 1 ("search previous task experiences") reaching
+    // the prompt, and a failure here must never lose the turn.
+    let experienceSection = '';
+    try {
+      experienceSection = renderExperiences(learning?.recall?.(currentMessage) || []);
+    } catch {
+      experienceSection = '';
+    }
 
     const delegationNote = tools.registry.get('agent_delegate')
       ? ''
       : 'Delegation is not granted on this host. Do the work yourself with the tools that are listed.';
-    const system = [SYSTEM_PROMPT, delegationNote, accessSection, learnedSection, memorySection, skillSection]
-      .filter(Boolean)
-      .join('\n\n');
+    const system = [
+      SYSTEM_PROMPT,
+      delegationNote,
+      accessSection,
+      experienceSection,
+      learnedSection,
+      memorySection,
+      skillSection,
+    ].filter(Boolean).join('\n\n');
 
     return buildMessages({
       system,

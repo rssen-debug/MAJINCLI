@@ -528,6 +528,74 @@ export function contrastiveInsight({ successTrace = [], failureTrace = [] } = {}
   };
 }
 
+/* ------------------------------------ prior experience (workflow step 1) --- */
+
+/**
+ * "Search existing verified skills AND PREVIOUS TASK EXPERIENCES."
+ *
+ * The agent already searched learned skills; it never looked at what happened on
+ * earlier tasks of the same kind. The material is already on disk — the V2 goals
+ * with their objectives, final states and receipts — so this reads it rather than
+ * introducing another store.
+ *
+ * What it returns is deliberately narrow: the outcome, the tools that were used,
+ * and what failed. No message text, no paths, no values, and the objective is
+ * sanitised, because an experience note is a prompt section like any other.
+ */
+export function recallExperiences({ goals = [], goalText = '', limit = 3 } = {}) {
+  const words = new Set(goalKeywords(goalText));
+  if (!words.size) return [];
+
+  const scored = [];
+  for (const goal of goals) {
+    if (!goal || typeof goal.objective !== 'string') continue;
+    const objectiveWords = goalKeywords(goal.objective);
+    if (!objectiveWords.length) continue;
+    let overlap = 0;
+    for (const w of objectiveWords) if (words.has(w)) overlap += 1;
+    if (overlap < 2) continue; // one shared word is noise, not a precedent
+
+    const receipts = Array.isArray(goal.receipts) ? goal.receipts : [];
+    const toolReceipts = receipts.filter((r) => typeof r.action === 'string' && r.action.startsWith('tool:'));
+    const okTools = [...new Set(toolReceipts.filter((r) => r.result === 'success').map((r) => r.action.slice(5)))];
+    const failed = [...new Set(toolReceipts.filter((r) => r.result === 'failure').map((r) => `${r.action.slice(5)} (${r.errorClass || 'failed'})`))];
+    const verified = receipts.filter((r) => r.verified).length;
+
+    scored.push({
+      score: overlap * 2 + (goal.state === 'COMPLETED' ? 1 : 0),
+      entry: {
+        objective: sanitizeInstruction(goal.objective, { maxChars: 140 }).text,
+        outcome: goal.state || 'UNKNOWN',
+        verified,
+        worked: okTools.slice(0, 6),
+        failed: failed.slice(0, 6),
+        at: goal.createdAt || goal.updatedAt || null,
+      },
+    });
+  }
+
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, Math.max(1, limit))
+    .map((x) => x.entry);
+}
+
+/** Render prior experience for the prompt. Never a lesson the engine did not observe. */
+export function renderExperiences(entries = []) {
+  if (!entries.length) return '';
+  const lines = entries.map((e, i) => {
+    const parts = [`${i + 1}. "${e.objective}" → ${e.outcome}${e.verified ? ` (${e.verified} verified receipt(s))` : ''}`];
+    if (e.worked.length) parts.push(`   tools that worked: ${e.worked.join(', ')}`);
+    if (e.failed.length) parts.push(`   what failed: ${e.failed.join(', ')}`);
+    return parts.join('\n');
+  });
+  return [
+    '## What happened last time you did something similar',
+    'These are real earlier tasks, not suggestions. Reuse what worked, and do not start with what already failed for this kind of request.',
+    ...lines,
+  ].join('\n');
+}
+
 /* ------------------------------------------ integrity (skill-provenance) --- */
 
 /** A tiny bundle hash so an out-of-band edit of a learned skill is visible. */

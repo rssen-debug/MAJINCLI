@@ -53,7 +53,7 @@ import { planV1Import, applyV1Import } from './import-history.js';
 import { discoverSkills, usableSkills, describeSkills } from './skills.js';
 import {
   LearnedSkillStore, environmentFingerprint, rankSkills, describeLearned, LEARNING_SCHEMA,
-  SKILL_STATES,
+  SKILL_STATES, recallExperiences,
 } from './learning.js';
 import { parseMcpConfig, connectServers } from './mcp.js';
 import { registerMcpTools } from './mcp-tools.js';
@@ -260,6 +260,18 @@ export function createV4Server({ config }) {
     retrieve(query) {
       const view = skillsNow();
       return rankSkills(view.learnedUsable, { goalText: String(query || ''), limit: 4 });
+    },
+    /**
+     * Workflow step 1, second half: what happened on earlier tasks of the same
+     * kind. The goal store already holds every past objective, state and receipt,
+     * so this reads it rather than keeping a parallel log.
+     */
+    recall(query) {
+      try {
+        return recallExperiences({ goals: goals.list(), goalText: String(query || ''), limit: 3 });
+      } catch {
+        return [];
+      }
     },
     observe({ goal, trace, conversationId, message }) {
       const before = new Set(learnedStore.list().map((s) => `${s.name}:${s.learned.state}`));

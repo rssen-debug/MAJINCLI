@@ -74,8 +74,12 @@ jobs:
       - name: A-H against the real provider (bounded, evidence written)
         if: steps.access.outputs.available == 'true'
         shell: bash
+        env:
+          # Three varied scenarios is what the promotion ladder needs; more would
+          # only spend quota. Each cycle is a handful of cheap calls.
+          LEARN_REPEAT: '3'
         run: |
-          node scripts/v4/learn-accept.mjs 2>&1 | tee learn-accept.out
+          node scripts/v4/learn-accept.mjs --repeat "${LEARN_REPEAT}" 2>&1 | tee learn-accept.out
           code=${PIPESTATUS[0]}
           {
             echo '### Learned-skill acceptance (A-H)'

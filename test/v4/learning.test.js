@@ -769,3 +769,125 @@ test('learning: a tool that fails and then succeeds is never recorded as avoided
   // fs_find is still part of the procedure; nothing was dropped.
   assert.ok(out.candidate.tools.includes('fs_read') && out.candidate.tools.includes('fs_find'));
 });
+
+/* ----------------------------------------- prior experience (step 1, rest) -- */
+
+test('learning: prior task experiences are recalled, not just learned skills', async () => {
+  const { recallExperiences, renderExperiences } = await import('../../src/v4/learning.js');
+  const goals = [
+    {
+      objective: 'Hitta CV:t i mappen och läs det',
+      state: 'COMPLETED',
+      receipts: [
+        { action: 'tool:fs_read', result: 'failure', errorClass: 'DEPENDENCY_MISSING' },
+        { action: 'tool:fs_find', result: 'success', verified: true },
+        { action: 'tool:fs_read', result: 'success', verified: true },
+      ],
+    },
+    { objective: 'Skicka ett mail till Anders', state: 'FAILED', receipts: [] },
+    { objective: 'Starta om servern', state: 'COMPLETED', receipts: [] },
+  ];
+  const out = recallExperiences({ goals, goalText: 'Läs ett dokument i mappen' });
+  assert.equal(out.length, 1, 'only the genuinely similar task may be recalled');
+  assert.equal(out[0].outcome, 'COMPLETED');
+  assert.equal(out[0].verified, 2);
+  assert.deepEqual(out[0].worked, ['fs_find', 'fs_read']);
+  assert.deepEqual(out[0].failed, ['fs_read (DEPENDENCY_MISSING)']);
+
+  const rendered = renderExperiences(out);
+  assert.match(rendered, /What happened last time/);
+  assert.match(rendered, /fs_find/);
+  // Nothing that is not an observed outcome may appear.
+  assert.ok(!rendered.includes('mail'), 'an unrelated task leaked into the prompt');
+});
+
+test('learning: a recalled experience carries no personal data', async () => {
+  const { recallExperiences } = await import('../../src/v4/learning.js');
+  const goals = [{
+    objective: 'Läs C:\\Users\\anders\\Documents\\cv.pdf och maila anders@example.com om mappen',
+    state: 'COMPLETED',
+    receipts: [{ action: 'tool:fs_read', result: 'success', verified: true }],
+  }];
+  const out = recallExperiences({ goals, goalText: 'Läs filen i mappen och maila om den' });
+  assert.equal(out.length, 1);
+  const text = JSON.stringify(out);
+  assert.ok(!text.includes('anders'), 'a personal name or path survived sanitising');
+  assert.ok(!text.includes('cv.pdf'), 'a personal file name survived sanitising');
+  assert.ok(!text.includes('@'), 'an e-mail address survived sanitising');
+});
+
+test('learning: prior experiences reach the real system prompt', async () => {
+  const home = tempHome();
+  const { createAgent } = await import('../../src/v4/agent.js');
+  const { ConversationStore, GoalStore } = await import('../../src/v4/store.js');
+  const { Goal } = await import('../../src/v2/runtime/goal.js');
+  const { STATE } = {};
+  void STATE;
+  const { z } = await import('zod');
+  const { createToolRegistry } = await import('../../src/v4/tools.js');
+  try {
+    const workspace = path.join(home, 'workspace');
+    const tools = createToolRegistry({ workspaceDir: workspace, memoryDir: path.join(home, 'mem') });
+    tools.registry.define({
+      name: 'noop',
+      description: 'does nothing',
+      tier: 'read',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const goals = new GoalStore({ dir: path.join(home, 'goals') });
+
+    // A past, completed task of the same kind, with a real receipt trail.
+    const past = new Goal({
+      objective: 'Hitta CV:t i mappen och läs det',
+      acceptance: [],
+      risk: 'low',
+      permissions: [],
+      budgets: {},
+    });
+    for (const state of ['PLANNING', 'READY', 'RUNNING', 'VERIFYING']) past.transition(state, 'test');
+    const okReceipt = past.addReceipt({ action: 'tool:fs_read', target: 'cv', result: 'success', evidence: { bytes: 1 } });
+    past.verifyReceipt(okReceipt.id, { kind: 'file', bytes: 1 });
+    past.complete();
+    goals.save(past);
+
+    let seen = null;
+    const model = {
+      info: { demo: false, model: 'm', provider: 'p', label: 'p' },
+      infoFor: () => ({ demo: false }),
+      async chat({ messages }) {
+        seen = messages.map((m) => String(m.content)).join('\n');
+        return { text: 'ok', toolCalls: [] };
+      },
+    };
+    const agent = createAgent({
+      config: {
+        version: 'test',
+        paths: { home },
+        workspaceDir: workspace,
+        limits: { maxMessageChars: 4000, maxModelRounds: 1, maxToolCallsPerTurn: 2, toolTimeoutMs: 2000, maxContextTokens: 4000 },
+        approvals: { policy: 'sandbox-auto' },
+      },
+      conversations: new ConversationStore({ dir: path.join(home, 'conv') }),
+      goals,
+      tools,
+      model,
+      learning: {
+        retrieve: () => [],
+        recall: (q) => recallExperiencesTest(q),
+      },
+    });
+    const { recallExperiences } = await import('../../src/v4/learning.js');
+    function recallExperiencesTest(q) {
+      return recallExperiences({ goals: goals.list(), goalText: q, limit: 3 });
+    }
+    await agent.runTurn({ text: 'Läs ett dokument i mappen' });
+    assert.ok(seen, 'the model was never called');
+    assert.match(seen, /What happened last time you did something similar/,
+      'prior experience never reached the system prompt');
+    assert.match(seen, /fs_read/, 'the tools that worked were not shown');
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});

@@ -34,8 +34,19 @@ const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
 const json = flag('--json');
 const dryRun = flag('--dry-run');
+const repeat = Math.max(1, Math.min(VARIANTS_LIMIT(), Number(
+  (() => {
+    const i = args.indexOf('--repeat');
+    return i >= 0 ? args[i + 1] : 1;
+  })(),
+) || 1));
 
 const log = (line = '') => { if (!json) process.stdout.write(`${line}\n`); };
+
+/** Bounded: the ladder has three rungs, so more repetitions prove nothing new. */
+function VARIANTS_LIMIT() {
+  return 3;
+}
 
 /* A safe, unfamiliar task that needs no external service and cannot submit
  * anything anywhere: find a note by name in a folder the owner granted. */
@@ -49,6 +60,21 @@ const log = (line = '') => { if (!json) process.stdout.write(`${line}\n`); };
  */
 const TASK_A = (folder) => `Läs filen ${path.join(folder, 'CV Anders 2026.txt')} och berätta vad som står.`;
 const TASK_B = 'Läs den andra filen som ligger i samma mapp.';
+
+/**
+ * Distinct scenarios for the same KIND of procedure.
+ *
+ * The brief is explicit: "One successful execution may establish a narrowly
+ * scoped skill; broader reliability requires repeated evaluations across varied
+ * unseen tasks." Each variant is a different file, named the way a person writes
+ * it (spaces) while disk holds underscores — so each one needs the same shape of
+ * work but is not the same task.
+ */
+const VARIANTS = [
+  { file: 'CV_Anders_2026.txt', ask: 'CV Anders 2026.txt', label: 'CV' },
+  { file: 'Faktura_Mars_2026.txt', ask: 'Faktura Mars 2026.txt', label: 'invoice' },
+  { file: 'Kontrakt_Anna_2025.txt', ask: 'Kontrakt Anna 2025.txt', label: 'contract' },
+];
 
 function stamp() {
   return new Date().toISOString().replace(/[:.]/g, '-');
@@ -162,6 +188,8 @@ function grantedFolder(home) {
   fs.mkdirSync(dir, { recursive: true });
   // Underscores on disk, spaces in the request: the mismatch is the obstacle.
   fs.writeFileSync(path.join(dir, 'CV_Anders_2026.txt'), 'CURRICULUM VITAE: Anders, 2026.');
+  fs.writeFileSync(path.join(dir, 'Faktura_Mars_2026.txt'), 'FAKTURA: mars 2026, belopp 1250 kr.');
+  fs.writeFileSync(path.join(dir, 'Kontrakt_Anna_2025.txt'), 'KONTRAKT: Anna, 2025, giltigt till 2027.');
   fs.writeFileSync(path.join(dir, 'andra.txt'), 'ANDRA ANTECKNINGEN: ekonomin är grön.');
   return dir;
 }
@@ -366,6 +394,42 @@ async function main() {
     record('H.failed_strategy_not_repeated', repeated.length === 0,
       repeated.length ? `re-executed: ${repeated.map((t) => t.name).join(', ')}` : 'the failed action was not executed again');
 
+    // ---- multi-scenario promotion (the brief's "broader reliability") ------
+    /**
+     * Run the remaining variants and then read the skill store once.
+     *
+     * Promotion is a function of evidence: EXPERIMENTAL after one verified
+     * success, VERIFIED after two, REUSABLE after three across at least two
+     * distinct scenarios. This does not force it — it runs the work and reports
+     * whatever state the store actually reached, including "no promotion".
+     */
+    const cycles = [{ label: 'first', turn: turnA.events }];
+    for (let i = 1; i < repeat; i += 1) {
+      const variant = VARIANTS[i % VARIANTS.length];
+      const prompt = `Läs filen ${path.join(documents, variant.ask)} och berätta kort vad som står.`;
+      const turn = await sse(`${second.base}/api/chat`, {
+        cookie: cookie2,
+        body: { text: prompt, requestId: `learn-cycle-${i}` },
+      });
+      const done = turn.events.find((e) => e.type === 'done')?.data;
+      const tools = turn.events.filter((e) => e.type === 'tool_result').map((e) => e.data);
+      cycles.push({ label: variant.label, turn: turn.events });
+      record(`cycle.${i}.completed`, done?.status === 'completed',
+        `${variant.label}: ${done?.status || 'no done event'} · ${tools.map((t) => `${t.name}:${t.ok}`).join(', ')}`);
+      record(`cycle.${i}.learned`, Boolean(done?.learned?.name),
+        done?.learned?.name || 'no skill updated');
+    }
+
+    if (repeat > 1) {
+      const all = second.context.learnedStore.list();
+      const best = all
+        .map((x) => ({ name: x.name, state: x.learned.state, successes: x.learned.successes, scenarios: (x.learned.scenarios || []).length }))
+        .sort((a, b) => b.successes - a.successes)[0] || null;
+      record('promotion.state', Boolean(best) && best.state !== 'EXPERIMENTAL',
+        best ? `${best.name}: ${best.state} (${best.successes} success(es), ${best.scenarios} scenario(s))` : 'no learned skill');
+      log(`  cycles: ${cycles.map((c) => c.label).join(', ')}`);
+    }
+
     // ---- evidence ---------------------------------------------------------
     if (!json) {
       fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -373,6 +437,14 @@ async function main() {
       fs.writeFileSync(file, `${JSON.stringify({
         at: new Date().toISOString(),
         cost: summarizeCost(usageLog),
+        promotion: second.context.learnedStore.list().map((x) => ({
+          name: x.name,
+          state: x.learned.state,
+          successes: x.learned.successes,
+          failures: x.learned.failures,
+          scenarios: (x.learned.scenarios || []).length,
+          confidence: x.learned.confidence,
+        })),
         provider: { id: configured[0].id, model: configured[0].model || null },
         node: process.versions.node,
         platform: process.platform,
