@@ -427,6 +427,24 @@ använder **optimistisk låsning** med `expectedVersion` och svarar 409 om en an
 enhet flyttat valet. Det är en skyddsmekanism, inte en bugg — testet talar nu det
 riktiga kontraktet i stället för att anta att en naken skrivning accepteras.
 
+## 2026-10-24 (forts. 10) — inlärningen överlever en uppdatering
+
+Specen kräver att inlärning bevaras. Omstart och klient-sessioner var testade —
+**release-uppdateringen var det inte**, trots att uppdateraren skriver över
+installationen. Lärda skills ligger i data-katalogen (`%LOCALAPPDATA%\MAJIN\v4`),
+inte i repot, så en uppdatering kan inte nå dem. Men det är en egenskap i
+kataloglayouten, och en egenskap ingen testar är en förhoppning: en release som
+råkade skeppa en `learned-skills`-mapp, eller en aktivering som kopierade
+data-katalogen, skulle radera månader av ackumulerade procedurer.
+
+`test/v4/learning-survives-update.test.js` (3 tester) pinnar det:
+
+| Test | Vad som bevisas |
+|---|---|
+| layout | data-roten ligger under data-hemmet, aldrig inuti källträdet |
+| overlay | en riktig `activateRelease` lämnar varje lärd skill **byte-identisk** — och en rollback gör det också |
+| release | releasens `INCLUDE`-lista namnger aldrig `learned-skills` eller en data-katalog |
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är
