@@ -125,16 +125,53 @@ test('installer: the automatic update task exists, is daily, and verifies signat
 });
 
 test('installer: all Windows entry scripts parse in Windows PowerShell 5', { skip: process.platform !== 'win32' }, () => {
-  const out = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
+  /**
+   * Two separate questions, asked separately.
+   *
+   * They used to share one PowerShell invocation, so a missing ScheduledTasks
+   * cmdlet and a genuine syntax error produced the same failure — and a cold
+   * powershell.exe start on a loaded runner could hit the 20 s timeout, which
+   * then read as "the scripts do not parse". Each check now reports exactly what
+   * went wrong, and the deadline is generous enough that a slow runner is not
+   * mistaken for a broken script.
+   */
+  const run = (script) => spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+    env: { ...process.env, MAJIN_PS_PARSE_ROOT: ROOT },
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: 60_000,
+  });
+  const detail = (out) => [
+    `status=${out.status}`,
+    out.error ? `error=${out.error.code || out.error.message}` : null,
+    out.signal ? `signal=${out.signal}` : null,
+    out.stdout ? `stdout=${String(out.stdout).trim().slice(0, 600)}` : null,
+    out.stderr ? `stderr=${String(out.stderr).trim().slice(0, 600)}` : null,
+  ].filter(Boolean).join(' | ');
+
+  const parse = run(`
     $ErrorActionPreference = 'Stop'
+    $bad = @()
     foreach ($relative in @('install.ps1', 'scripts/install-windows.ps1', 'scripts/v4/install-v4-windows.ps1')) {
       $tokens = $null; $errors = $null
-      [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $env:MAJIN_PS_PARSE_ROOT $relative), [ref]$tokens, [ref]$errors) | Out-Null
-      if ($errors.Count) { throw ($errors | Out-String) }
+      $null = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $env:MAJIN_PS_PARSE_ROOT $relative), [ref]$tokens, [ref]$errors)
+      if ($errors.Count) { $bad += ($relative + ': ' + ($errors | ForEach-Object { $_.Message } | Select-Object -First 3) -join '; ') }
     }
-    if (-not (Get-Command New-ScheduledTaskAction).Parameters.ContainsKey('Argument')) { throw 'Scheduled Task Argument parameter missing' }
-  `], { env: { ...process.env, MAJIN_PS_PARSE_ROOT: ROOT }, encoding: 'utf8', windowsHide: true, timeout: 20000 });
-  assert.equal(out.status, 0, out.stderr || out.error?.message);
+    if ($bad.Count) { Write-Output ($bad -join ' || '); exit 3 }
+    Write-Output 'parsed'
+  `);
+  assert.equal(parse.status, 0, `a Windows entry script has a syntax error: ${detail(parse)}`);
+  assert.match(String(parse.stdout), /parsed/);
+
+  // ScheduledTasks must expose the parameters the installer relies on. This is a
+  // runtime capability, not a syntax question, so it is asserted on its own.
+  const cmdlet = run(`
+    $ErrorActionPreference = 'Stop'
+    $c = Get-Command New-ScheduledTaskAction -ErrorAction Stop
+    if (-not $c.Parameters.ContainsKey('Argument')) { Write-Output 'no Argument'; exit 4 }
+    Write-Output 'ok'
+  `);
+  assert.equal(cmdlet.status, 0, `ScheduledTasks is unusable here: ${detail(cmdlet)}`);
 });
 
 test('installer: uninstall removes the update task too', () => {
