@@ -159,7 +159,7 @@ test('followNewTarget never follows the stale initial tab (the about:blank wire)
 test('visible Edge browser uses the startup blank tab rather than spawning two pages', async () => {
   const src = (await import('node:fs')).readFileSync(new URL('../src/core/browser.js', import.meta.url), 'utf8');
   assert.match(src, /initialTabs\.find\(t => t\.type === 'page' && t\.url === 'about:blank' && !t\.attached\)/);
-  assert.match(src, /startupTab\?\.targetId \|\|/);
+  assert.match(src, /existingPage\?\.targetId \|\| startupTab\?\.targetId \|\|/, 'prioritize populated tabs over blank startup tab');
   assert.match(src, /Target\.createTarget/, 'fallback still works if no startup tab exists');
 });
 
@@ -277,4 +277,17 @@ test('native textarea fallback stops on reactive framework reverting field value
  assert.equal(result.ok,false);
  assert.equal(result.code,'framework_reverted');
  assert.equal(writes,1,'do not repeatedly overwrite a reactive field');
+});
+
+test('browser never navigates null/about:blank during attach and cleans only surplus blanks', async () => {
+ const src=(await import('node:fs')).readFileSync(new URL('../src/core/browser.js', import.meta.url),'utf8');
+ assert.match(src, /if \(url && url !== 'about:blank'\) \{/);
+ assert.match(src, /currentUrl !== String\(url\)/);
+ assert.match(src, /tab\.targetId === b\.targetId \|\| tab\.url !== 'about:blank'/);
+ assert.match(src, /Target\.closeTarget/);
+ assert.doesNotMatch(src, /--disable-popup-blocking/, 'agent must not disable Chrome popup protection');
+ const {isChildTarget}=await import('../src/core/browser.js');
+ const browser={targetId:'job',knownTabs:new Set(['job'])};
+ assert.equal(isChildTarget({type:'page',targetId:'blank',openerId:'job',url:'about:blank'},browser),false);
+ assert.equal(isChildTarget({type:'page',targetId:'application',openerId:'job',url:'https://apply.example/'},browser),true);
 });
