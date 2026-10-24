@@ -308,3 +308,26 @@ test('visible Chrome startup cannot forward about:blank into an existing profile
   assert.match(src, /profile may already be in use/, 'explain profile lock, never blame the form');
   assert.match(src, /--remote-debugging-port=\$\{port\}/, 'retain MAJIN-owned CDP control');
 });
+
+test('failed browser launch activates cooldown and never starts another Chrome immediately', async () => {
+ const {openFor,browserLaunchState,_resetBrowser}=await import('../src/core/browser.js');
+ _resetBrowser();
+ const session='cooldown-test';
+ const pool={claim:async()=>1,release:()=>true};
+ const first=await openFor({session,exe:'/definitely/not/a/browser',pool}).then(()=>null,e=>e);
+ assert.ok(first instanceof Error);
+ assert.ok(browserLaunchState(session).retryAfterMs>0);
+ const second=await openFor({session,exe:'/definitely/not/a/browser',pool}).then(()=>null,e=>e);
+ assert.match(String(second.message),/cooldown/);
+ _resetBrowser();
+ assert.equal(browserLaunchState(session).retryAfterMs,0);
+});
+test('MAJIN Chrome browser requires exclusive ephemeral profile and single-flight open', async () => {
+ const fs=await import('node:fs');
+ const src=fs.readFileSync(new URL('../src/core/browser.js',import.meta.url),'utf8');
+ assert.match(src,/fs\.mkdtempSync\(path\.join\(dirs\.cache, 'browser-run-'\)\)/);
+ assert.match(src,/const pending = launches\.get\(session\)/);
+ assert.match(src,/launches\.set\(session, launching\)/);
+ assert.match(src,/failedLaunches\.set\(session, Date\.now\(\) \+ BROWSER_START_COOLDOWN_MS\)/);
+ assert.doesNotMatch(src,/const profile = profileFor\(\x60\$\{session\}-s\$\{slot\}\x60\)/);
+});
