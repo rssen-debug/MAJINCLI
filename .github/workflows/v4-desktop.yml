@@ -30,7 +30,20 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npx playwright install chromium
       - name: Windows V4 contracts and browser acceptance
-        run: node --test --test-concurrency=1 --test-timeout=180000 test/v4/*.test.js
+        shell: pwsh
+        run: |
+          # Windows failures used to be invisible outside the runner: the job log
+          # lives in blob storage. Capture the suite output and, on failure, emit
+          # the failing lines as annotations so they can be read from the API.
+          node --test --test-concurrency=1 --test-timeout=180000 test/v4/*.test.js *> test-output.log
+          $code = $LASTEXITCODE
+          Get-Content test-output.log -Tail 400 | Out-File -FilePath truncated.log -Encoding utf8
+          if ($code -ne 0) {
+            $fails = Select-String -Path truncated.log -Pattern '^not ok|^# fail|error:|failureType' -Context 0,6
+            $lines = ($fails | Select-Object -First 40 | ForEach-Object { $_.ToString() }) -join "`n"
+            Write-Host "::error title=V4 Windows test failure::$($lines -replace "`n", '%0A')"
+            throw "V4 test suite failed with exit $code"
+          }
       - name: Install desktop build dependencies
         working-directory: desktop
         run: npm ci --ignore-scripts --no-audit --no-fund
