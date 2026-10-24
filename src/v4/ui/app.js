@@ -601,10 +601,49 @@ function addToolCard(name, input) {
 }
 
 const activeTools = new Map();
+let progressCard = null;
+let progressStart = 0;
+let progressCount = 0;
+let progressErrors = 0;
+
+/** One live row per turn; precise receipts remain in the expandable details. */
+function updateProgress(label, { failed = false, complete = false, step = false } = {}) {
+  if (!progressCard) {
+    progressCard = addToolCard('Arbetar', {});
+    progressCard.node.open = false;
+    progressCard.node.classList.add('tool-progress');
+    progressCard.node.querySelector('.tool-name').textContent = 'Arbetar';
+    progressCard.detail.textContent = '';
+    progressStart = Date.now();
+    progressCount = 0;
+    progressErrors = 0;
+  }
+  if (failed) progressErrors += 1;
+  if (step) progressCount += 1;
+  const elapsed = Math.max(0, Math.round((Date.now() - progressStart) / 1000));
+  progressCard.node.dataset.state = complete ? (progressErrors ? 'failed' : 'verified') : 'running';
+  progressCard.sum.textContent = complete
+    ? `Arbetade i ${elapsed} s · ${progressCount} steg${progressErrors ? ` · ${progressErrors} fel` : ''}`
+    : `${label} · ${progressCount} steg`;
+  if (label && step) {
+    const line = document.createElement('div');
+    line.textContent = `${progressCount}. ${label}${failed ? ' · misslyckades' : ''}`;
+    progressCard.detail.append(line);
+  }
+  scrollDown();
+}
+
+function finishProgress() {
+  if (progressCard) updateProgress('', { complete: true });
+  progressCard = null;
+  activeTools.clear();
+}
+
 
 /** Rebuild the transcript from server messages and their durable tool receipts. */
 function renderConversationMessages(conversation) {
   activeTools.clear();
+  progressCard = null;
   const goals = new Map((conversation.goals || []).map((goal) => [goal.id, goal]));
   const rendered = new Set();
   for (const message of conversation.messages) {
@@ -617,18 +656,25 @@ function renderConversationMessages(conversation) {
         if (receipt.at && message.at && receipt.at > message.at) continue;
         rendered.add(receipt.id);
         const name = receipt.action.slice(5);
-        const card = addToolCard(name, {});
-        const ok = receipt.result === 'success';
-        card.node.dataset.state = ok ? (receipt.verified ? 'verified' : 'ok') : 'failed';
-        card.node.dataset.historical = 'true';
-        card.node.dataset.receiptId = receipt.id;
-        card.node.querySelector('.tool-name').textContent = `${toolLabel(name)} · ${t('history.recorded')}`;
-        card.sum.textContent = receipt.target || name;
-        const status = ok ? (receipt.verified ? t('history.previouslyVerified') : t('state.done')) : t('state.failed');
-        card.detail.textContent = `${status} · ${t('state.receipt')} ${receipt.id}`
-          + (receipt.at ? ` · ${receipt.at}` : '')
+        // Group all receipts under one collapsed work row, not one chat block
+        // per tool. The exact receipt IDs and failure classes are still visible.
+        if (!goal._receiptCard) {
+          goal._receiptCard = addToolCard('Arbetade', {});
+          goal._receiptCard.node.open = false;
+          goal._receiptCard.node.dataset.historical = 'true';
+          goal._receiptCard.node.querySelector('.tool-name').textContent = 'Arbetade';
+          goal._receiptCard.detail.textContent = '';
+          goal._receiptCount = 0;
+        }
+        const card = goal._receiptCard;
+        goal._receiptCount += 1;
+        card.sum.textContent = `${goal._receiptCount} steg · klicka för detaljer`;
+        const line = document.createElement('div');
+        line.textContent = `${toolLabel(name)} · ${receipt.result === 'success' ? (receipt.verified ? t('history.previouslyVerified') : t('state.done')) : t('state.failed')}`
+          + (receipt.target ? ` · ${receipt.target}` : '')
           + (receipt.errorClass ? ` · ${receipt.errorClass}` : '')
-          + `\n${t('history.receiptTime')}`;
+          + ` · ${t('state.receipt')} ${receipt.id}`;
+        card.detail.append(line);
       }
     }
     addMessage(message.role === 'user' ? 'user' : 'assistant', message.content, {
@@ -1103,6 +1149,10 @@ async function tryReattach({ attempts = 3 } = {}) {
 }
 
 function startStream(mode = 'thinking') {
+  progressCard = null;
+  progressStart = 0;
+  progressCount = 0;
+  progressErrors = 0;
   state.streaming = true;
   els.send.hidden = true;
   els.stop.hidden = false;
@@ -1111,10 +1161,12 @@ function startStream(mode = 'thinking') {
   spirit.set(mode);
   els.hint.textContent = '';
   state.controller = new AbortController();
+  updateProgress('Tänker…');
   return state.controller;
 }
 
 function finishStream() {
+  finishProgress();
   state.streaming = false;
   state.controller = null;
   els.stop.hidden = true;
@@ -1195,9 +1247,9 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'state':
-      if (data.state === 'thinking') spirit.set('thinking');
-      else if (data.state === 'working') spirit.set('working');
-      else if (data.state === 'verifying') spirit.set('working');
+      if (data.state === 'thinking') { spirit.set('thinking'); updateProgress('Tänker…'); }
+      else if (data.state === 'working') { spirit.set('working'); updateProgress('Arbetar…'); }
+      else if (data.state === 'verifying') { spirit.set('working'); updateProgress('Verifierar…'); }
       break;
 
     case 'delta':
@@ -1206,8 +1258,7 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'tool_start': {
-      const card = addToolCard(data.name, data.input);
-      activeTools.set(data.id || data.name, card);
+      updateProgress(`Gör: ${toolLabel(data.name)}`, { step: true });
       spirit.set('working');
       break;
     }
@@ -1218,13 +1269,13 @@ function viewIntents(event, data, intents) {
         const fileName = String(data.summary).split(' · ')[0].trim();
         if (fileName) offerPreview(fileName);
       }
-      const card = activeTools.get(data.id || data.name) || [...activeTools.values()].pop();
-      if (card) {
-        card.node.dataset.state = data.ok ? (data.verified ? 'verified' : 'ok') : 'failed';
-        card.sum.textContent = data.summary || '';
-        card.detail.textContent = data.ok
-          ? `${data.verified ? t('state.verified') : t('state.done')}${data.receiptId ? ` · ${t('state.receipt')} ${data.receiptId}` : ''}`
-          : t('state.failed');
+      if (progressCard) {
+        const line = document.createElement('div');
+        line.textContent = `${toolLabel(data.name)} · ${data.ok ? (data.verified ? t('state.verified') : t('state.done')) : t('state.failed')}`
+          + (data.summary ? ` · ${data.summary}` : '')
+          + (data.receiptId ? ` · ${t('state.receipt')} ${data.receiptId}` : '');
+        progressCard.detail.append(line);
+        if (!data.ok) progressErrors += 1;
       }
       spirit.set('working');
       break;
@@ -1263,11 +1314,13 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'error':
+      finishProgress();
       addMessage('assistant', data.message || t('msg.genericError'), { error: true, meta: timeLabel() });
       spirit.set('error');
       break;
 
     case 'cancelled':
+      finishProgress();
       addMessage('assistant', t('msg.cancelledShort'), { error: true, meta: timeLabel() });
       break;
 
@@ -1291,6 +1344,7 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'done': {
+      finishProgress();
       const text = endAssistantBubble(timeLabel());
       const finalText = text || '';
       if (data.status === 'already_handled' && !finalText) {
