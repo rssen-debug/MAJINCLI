@@ -187,6 +187,10 @@ export function createAgent({
   skills = null,
   access = null,
   learning = null,
+  // An externally supplied approval layer. The server passes a policy-aware
+  // facade so a change from the phone takes effect on the next tool call; tests
+  // can pass a plain Approvals.
+  approvals: providedApprovals = null,
 }) {
   const record = (event, payload) => {
     if (!telemetry) return;
@@ -198,7 +202,7 @@ export function createAgent({
     }
   };
   const bus = createBus();
-  const approvals = new Approvals(bus);
+  const approvals = providedApprovals || new Approvals(bus);
   if (config.approvals.policy === 'sandbox-auto') {
     // Workspace writes are create-only inside the sandbox and verified after
     // the fact, so they are auto-approved in the default policy. `strict`
@@ -978,7 +982,20 @@ export function createAgent({
         modelMessages.push(...toolMessages);
       }
 
-      if (!finishedReasoning) throw Object.assign(new Error(`model round budget exhausted (${config.limits.maxModelRounds}); task is incomplete`), { code: 'MODEL_BUDGET' });
+      if (!finishedReasoning) {
+        // The old message named a number and stopped. It now says what actually
+        // happened and what the owner can do, because "budget exhausted" on its
+        // own reads like a defect rather than a limit.
+        throw Object.assign(
+          new Error(
+            `The step budget for one turn (${config.limits.maxModelRounds} model rounds, `
+            + `${config.limits.maxToolCallsPerTurn} tool calls) ran out before the task finished. `
+            + 'Nothing was reported as done that was not verified. Retry with a narrower goal, or raise '
+            + 'MAJIN_V4_MAX_MODEL_ROUNDS / MAJIN_V4_MAX_TOOL_CALLS on the host.',
+          ),
+          { code: 'MODEL_BUDGET', cls: 'MODEL_BUDGET' },
+        );
+      }
       if (lastRefusal && toolCallsUsed === 0) {
         throw Object.assign(new Error(lastRefusal.reason || t('common.toolFailed')), {
           code: 'REQUEST_REFUSED',

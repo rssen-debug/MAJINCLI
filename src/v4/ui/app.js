@@ -58,6 +58,10 @@ const els = {
   folderAdd: $('#folder-add'),
   folderList: $('#folder-list'),
   ownerRevoke: $('#owner-revoke'),
+  approvalState: $('#approval-state'),
+  approvalNote: $('#approval-note'),
+  approvalAuto: $('#approval-auto'),
+  approvalWarning: $('#approval-warning'),
   skillList: $('#skill-list'),
   ttsToggle: $('#tts-toggle'),
   autosendToggle: $('#autosend-toggle'),
@@ -711,6 +715,7 @@ async function loadState() {
   els.versionNote.textContent = `MAJIN ${data.version} · policy: ${data.policy}`;
   renderFiles(data.workspace?.files || []);
   loadOwnerMode();
+  loadApprovalPolicy();
   loadSkills();
   loadLearned();
   renderGoals(data.goals || []);
@@ -1236,7 +1241,16 @@ function viewIntents(event, data, intents) {
       if (data.action && data.action !== 'none') {
         els.hint.textContent = t('state.recovering', { attempt: data.attempt || 1, reason });
       } else if (Array.isArray(data.advice) && data.advice.length) {
-        els.hint.textContent = t('state.recoveryAdvice', { advice: data.advice.join(', ') });
+        // Translate the advisor's step names into something the owner can act on,
+        // and prefer the first step that is actually about his next move.
+        const readable = data.advice
+          .map((step) => t(`recovery.${step}`))
+          .filter((line) => line && !line.startsWith('recovery.'))
+          .slice(0, 2)
+          .join(' ');
+        els.hint.textContent = t('state.recoveryAdvice', {
+          advice: readable || t('recovery.unknown'),
+        });
       }
       break;
     }
@@ -1876,6 +1890,47 @@ async function loadLearned() {
   } catch { /* the learning list is informational */ }
 }
 
+/**
+ * The approval policy, shown honestly.
+ *
+ * Full trust is a real choice the owner asked for, so it is one tap away — but it
+ * is never a hidden default: the state line says which mode is live, and the
+ * warning is only shown when prompts are OFF, so the consequence is visible at
+ * the moment the choice is made.
+ */
+async function loadApprovalPolicy() {
+  if (!els.approvalState) return;
+  try {
+    const res = await api('/api/approvals');
+    if (!res.ok) return;
+    const data = await res.json();
+    renderApprovalPolicy(data.policy, data.note);
+  } catch { /* the policy line is informational */ }
+}
+
+function renderApprovalPolicy(policy, note = '') {
+  const auto = policy === 'auto';
+  els.approvalState.textContent = auto ? t('approval.auto') : t('approval.ask');
+  els.approvalNote.textContent = note || (auto ? t('approval.autoNote') : t('approval.askNote'));
+  els.approvalAuto.checked = auto;
+  els.approvalWarning.hidden = !auto;
+  els.approvalWarning.textContent = auto ? t('approval.warning') : '';
+}
+
+async function setApprovalPolicy(policy) {
+  try {
+    const res = await api('/api/approvals', { method: 'POST', body: { policy } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || t('approval.failed'));
+    renderApprovalPolicy(data.policy, data.note);
+    toast(data.policy === 'auto' ? t('approval.on') : t('approval.off'));
+  } catch (err) {
+    toast(err.message || t('msg.genericError'));
+    // Put the checkbox back where the server says it is.
+    await loadApprovalPolicy();
+  }
+}
+
 async function refreshSidebar() {
   try {
     const res = await api('/api/state');
@@ -2054,6 +2109,9 @@ function bindEvents() {
       ev.preventDefault();
       addFolder();
     }
+  });
+  els.approvalAuto.addEventListener('change', () => {
+    setApprovalPolicy(els.approvalAuto.checked ? 'auto' : 'ask');
   });
   els.ownerRevoke.addEventListener('click', async () => {
     const data = await postOwner({ action: 'revoke' });

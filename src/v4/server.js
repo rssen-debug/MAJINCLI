@@ -49,6 +49,10 @@ import { TurnJournal } from './turns.js';
 import { hostCapabilities, describeCapabilities, registerHostTools } from './tools/host.js';
 import { UploadStore, UploadError, serveHeadersFor, typeForName, MAX_UPLOAD_BYTES } from './uploads.js';
 import { OwnerMode, OwnerModeError, GRANTABLE_LANES } from './owner-mode.js';
+import {
+  APPROVAL_POLICIES, ApprovalPolicyError, createPolicyAwareApprovals, readApprovalPolicy,
+} from './approval-policy.js';
+import { Approvals } from '../v2/safety/approvals.js';
 import { planV1Import, applyV1Import } from './import-history.js';
 import { discoverSkills, usableSkills, describeSkills } from './skills.js';
 import {
@@ -345,6 +349,33 @@ export function createV4Server({ config }) {
     store: learnedStore,
   };
 
+  /**
+   * Approval policy: `ask` or full trust (`auto`).
+   *
+   * The stored decision wins over the environment, so a toggle from the phone
+   * survives a restart. `MAJIN_V4_APPROVAL_POLICY=auto` lets the owner start in
+   * full trust from the setup command without opening the app first.
+   */
+  const approvalFile = path.join(paths.root, 'approvals.json');
+  const envPolicy = String(process.env.MAJIN_V4_APPROVAL_POLICY || '').toLowerCase();
+  const initialPolicy = readApprovalPolicy(approvalFile, {
+    fallback: envPolicy === APPROVAL_POLICIES.AUTO ? APPROVAL_POLICIES.AUTO : APPROVAL_POLICIES.ASK,
+  });
+  const approvalsLayer = createPolicyAwareApprovals({
+    approvals: new Approvals({ emit: () => {} }),
+    policyFile: approvalFile,
+    fallback: initialPolicy,
+    onAutoApprove: ({ scope }) => {
+      // "No prompts" must never mean "no record".
+      try {
+        audit.recordTelemetry({ event: 'consent', scope, decision: 'auto', mode: 'auto', at: new Date().toISOString() });
+      } catch { /* audit failures are reported elsewhere, never here */ }
+      try {
+        telemetry.append('consent', { scope, decision: 'used', mode: 'auto' });
+      } catch { /* optional analytics */ }
+    },
+  });
+
   const agent = createAgent({
     config,
     conversations,
@@ -353,6 +384,7 @@ export function createV4Server({ config }) {
     model,
     telemetry,
     audit,
+    approvals: approvalsLayer,
     skills: skillsBridge,
     learning: learningBridge,
     // The model is told where it may look. Without this it only ever tried the
@@ -967,6 +999,44 @@ export function createV4Server({ config }) {
      * What MAJIN has learned, with the evidence behind each procedure.
      * Read-only: promotion happens in the agent, from verified execution.
      */
+    /**
+     * Approval policy: `ask` (a held tool waits) or `auto` (full trust).
+     *
+     * GET is what the app shows. POST is the owner's decision, and it takes
+     * effect on the next tool call rather than at the next boot.
+     */
+    'GET /api/approvals': async (req, res) => {
+      requireSession(req);
+      sendJson(res, 200, {
+        ok: true,
+        policy: approvalsLayer.policy,
+        policies: Object.values(APPROVAL_POLICIES),
+        note: approvalsLayer.policy === APPROVAL_POLICIES.AUTO
+          ? 'Full trust: every tool in a granted lane runs without a prompt. Each call is still audited.'
+          : 'Held tools wait for your approval.',
+      });
+    },
+
+    'POST /api/approvals': async (req, res) => {
+      requireSession(req);
+      assertCsrfHeader(req);
+      const body = await readJsonBody(req, 4096);
+      const wanted = String(body.policy || '').toLowerCase();
+      try {
+        const saved = approvalsLayer.set(wanted);
+        sendJson(res, 200, {
+          ok: true,
+          policy: saved,
+          note: saved === APPROVAL_POLICIES.AUTO
+            ? 'Full trust is on. MAJIN will not ask before using a tool you have granted.'
+            : 'MAJIN will ask before a held tool runs.',
+        });
+      } catch (err) {
+        if (err instanceof ApprovalPolicyError) throw new HttpError(400, err.code, err.message);
+        throw err;
+      }
+    },
+
     'GET /api/learning': async (req, res, url) => {
       requireSession(req);
       // The host registers its lanes asynchronously; asking before that finishes
@@ -1127,7 +1197,7 @@ export function createV4Server({ config }) {
           source: catalogue.source,
           current: publicModelSelection({ home: paths.home }).modelId,
         },
-        policy: config.approvals.policy,
+        policy: approvalsLayer.policy,
         workspace: { label: 'arbetsyta', files: listWorkspace(tools.root) },
         conversations: conversations.list().slice(0, 30),
         goals: goals.list().slice(-10).reverse(),

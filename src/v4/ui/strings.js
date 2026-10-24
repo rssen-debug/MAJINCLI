@@ -95,7 +95,18 @@ export const SV = {
   'attach.pick': 'Bifoga en fil',
   'state.contextTrimmed': 'Äldre delar av samtalet lämnades utanför för att rymmas.',
   'state.recovering': 'Försöker igen ({attempt}) efter {reason}',
-  'state.recoveryAdvice': 'Kunde inte återhämta automatiskt: {advice}',
+  // The advisor names English recovery steps ("replan", "escalate"). Showing them
+  // raw told the owner nothing he could act on, so the line now says what the
+  // step means for him.
+  'state.recoveryAdvice': 'Stoppade här i stället för att gissa. {advice}',
+  'recovery.replan': 'MAJIN provade en metod som inte fungerade och behöver välja en annan — skriv gärna hur du vill att den ska göra.',
+  'recovery.escalate': 'Det här kräver ditt beslut innan MAJIN går vidare.',
+  'recovery.ask': 'MAJIN behöver mer information för att kunna fortsätta.',
+  'recovery.split_scope': 'Uppgiften var för stor för ett steg — dela upp den i två.',
+  'recovery.refresh_ui_map': 'Sidan eller fönstret hade ändrats; MAJIN måste läsa om det först.',
+  'recovery.refocus_or_dismiss': 'Något låg i vägen; stäng det och försök igen.',
+  'recovery.retry_simple': 'Ett tillfälligt fel — ett nytt försök kan räcka.',
+  'recovery.unknown': 'Försök igen, eller beskriv uppgiften lite mer konkret.',
   'state.truncated': 'Det svaret ligger inte kvar i historiken längre — uppgiften kördes bara en gång.',
   'state.receipt': 'kvitto',
 
@@ -209,6 +220,15 @@ export const SV = {
 
   'cli.pairExists': 'En parkod finns redan. Kör med --rotate för att ersätta den.',
   'common.cancel': 'Avbryt',
+
+  'approval.ask': 'Frågar innan känsliga verktyg körs',
+  'approval.auto': 'Full behörighet — frågar aldrig',
+  'approval.askNote': 'Känsliga verktyg (webbläsare, filer utanför arbetsytan, terminal) väntar på ditt ja.',
+  'approval.autoNote': 'Alla verktyg du gett behörighet för körs direkt. Varje körning loggas.',
+  'approval.warning': 'Full behörighet är på. MAJIN kan använda allt du godkänt utan att fråga — även om det blir fel.',
+  'approval.on': 'Full behörighet på.',
+  'approval.off': 'MAJIN frågar igen.',
+  'approval.failed': 'Kunde inte ändra godkännanderegeln.',
 
   'learned.empty': 'Inget inlärt ännu. MAJIN lär sig av uppgifter som verifierats.',
   'learned.meta': '{successes} verifierade · {failures} misslyckade',

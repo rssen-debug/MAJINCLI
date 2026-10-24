@@ -445,6 +445,45 @@ data-katalogen, skulle radera månader av ackumulerade procedurer.
 | overlay | en riktig `activateRelease` lämnar varje lärd skill **byte-identisk** — och en rollback gör det också |
 | release | releasens `INCLUDE`-lista namnger aldrig `learned-skills` eller en data-katalog |
 
+## 2026-10-24 (forts. 11) — full behörighet, och två fel från skärmbilden
+
+Ägarens rapport från telefonen visade tre saker: ett varv som dog med
+*"model round budget exhausted (12)"*, ett godkännandekort som sa
+*"browser_open kräver ditt godkännande — no consent on file for this exact scope"*,
+och en rad som sa *"Kunde inte återhämta automatiskt: replan"*.
+
+### 1. Full behörighet — ett val, inte en dold standard
+
+Ny policy i `src/v4/approval-policy.js`, växlingsbar från appen och sparad:
+
+| Läge | Innebörd |
+|---|---|
+| `ask` (standard) | ett hållet verktyg väntar på ditt ja |
+| `auto` | **full behörighet** — varje verktyg du gett lane för körs direkt |
+
+Designen är medvetet inte "tyst": läget sparas i `v4/approvals.json` (0600), syns i
+panelen **Godkännanden** med en varning när det är på, kan läsas på
+`GET /api/approvals`, och **varje automatiskt godkänt anrop loggas** till auditen och
+telemetrin. Full behörighet vidgar aldrig *vilka* verktyg som finns — Owner Mode
+bestämmer fortfarande lanes; policyn tar bara bort frågan inom dem.
+
+`MAJIN_V4_APPROVAL_POLICY=auto` låter dig starta i full behörighet direkt från
+setup-kommandot.
+
+### 2. Varvbudgeten tog slut mitt i en riktig uppgift
+
+Standard var **4 modellrundor och 6 verktygsanrop**. En verklig uppgift — läs ett
+dokument, öppna webbläsaren, sök, läs resultat, fyll i, verifiera — når aldrig
+fram. Höjt till **16 rundor och 24 anrop**, fortfarande bundet (specen kräver
+bundna försök), och felmeddelandet säger nu vilken gräns som slog i och hur du
+höjer den.
+
+### 3. "replan" sa ingenting
+
+`state.recoveryAdvice` skrev ut rå engelsk terminologi. Nu översätts steget till
+vad du faktiskt kan göra: *"MAJIN provade en metod som inte fungerade och behöver
+välja en annan — skriv gärna hur du vill att den ska göra."*
+
 ## MAJIN är en universal agent, inte en jobbapp
 
 Jobbsökningen är ett exempel och ligger kvar som en **skill** (data, inte appkod). Agenten själv är

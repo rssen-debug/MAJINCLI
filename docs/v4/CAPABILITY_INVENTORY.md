@@ -1,6 +1,6 @@
 # MAJIN capability inventory (generated)
 
-Generated 2026-10-24T13:27:26.844Z on linux. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
+Generated 2026-10-24T13:44:01.044Z on linux. Every row is computed from the code; a module without a recorded decision fails `npm run v4:inventory`.
 
 ## Totals
 
@@ -261,7 +261,7 @@ Generated 2026-10-24T13:27:26.844Z on linux. Every row is computed from the code
 | `src/v2/runtime/states.js` | reused | imported by src/v2/runtime/goal.js, src/v4/agent.js, src/v4/graph.js, src/v4/store.js |
 | `src/v2/runtime/verifiers.js` | reused | imported by src/v2/runtime/verify-bridge.js, src/v2/tools/builtins.js, src/v2/voice/speak.js, src/v3/runtime/file-deliverable.js, src/v4/agent.js |
 | `src/v2/runtime/verify-bridge.js` | not-used | Bridges V2 acceptance to V2 verifiers; V4 calls runVerifier directly. |
-| `src/v2/safety/approvals.js` | reused | imported by src/v4/agent.js |
+| `src/v2/safety/approvals.js` | reused | imported by src/v4/agent.js, src/v4/server.js |
 | `src/v2/safety/command-preflight.js` | reused | imported by src/v2/exec/sandbox.js, src/v2/voice/stt.js, src/v2/voice/tts.js |
 | `src/v2/spawn/safe-exec.js` | reused | imported by src/v2/voice/stt.js, src/v2/voice/tts.js |
 | `src/v2/studio/page.js` | not-used | UI for the V2 studio server, which V4 rejected for having no session model. |
