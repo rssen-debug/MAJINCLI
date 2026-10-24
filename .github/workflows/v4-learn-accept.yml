@@ -11,12 +11,21 @@ name: MAJIN V4 learned-skill acceptance (real Go)
 #   gh run list --workflow v4-learn-accept.yml
 #   gh run view <id> --log        (or download the evidence artifact)
 on:
+  # Manual dispatch is the normal route. It only becomes available once this file
+  # is on the default branch, which is the owner's merge decision — so there is
+  # also an explicit push trigger: committing a change to the trigger file below
+  # runs the gate on v4/main. Nothing runs by accident; a deliberate edit is what
+  # starts it.
   workflow_dispatch:
     inputs:
       model:
         description: 'Model id (default: the cheap allowlisted one)'
         required: false
         default: 'glm-5.3-flash'
+  push:
+    branches: [v4/main]
+    paths:
+      - '.github/learn-accept-trigger'
 
 permissions:
   contents: read
@@ -32,7 +41,7 @@ jobs:
     timeout-minutes: 20
     env:
       OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-      MAJIN_V4_MODEL: ${{ inputs.model }}
+      MAJIN_V4_MODEL: ${{ inputs.model || 'glm-5.3-flash' }}
       MAJIN_LLM_TIMEOUT: '120000'
     steps:
       - uses: actions/checkout@v5
