@@ -607,7 +607,7 @@ let progressCount = 0;
 let progressErrors = 0;
 
 /** One live row per turn; precise receipts remain in the expandable details. */
-function updateProgress(label, { failed = false, complete = false } = {}) {
+function updateProgress(label, { failed = false, complete = false, step = false } = {}) {
   if (!progressCard) {
     progressCard = addToolCard('Arbetar', {});
     progressCard.node.open = false;
@@ -619,13 +619,13 @@ function updateProgress(label, { failed = false, complete = false } = {}) {
     progressErrors = 0;
   }
   if (failed) progressErrors += 1;
-  if (!complete) progressCount += 1;
+  if (step) progressCount += 1;
   const elapsed = Math.max(0, Math.round((Date.now() - progressStart) / 1000));
   progressCard.node.dataset.state = complete ? (progressErrors ? 'failed' : 'verified') : 'running';
   progressCard.sum.textContent = complete
     ? `Arbetade i ${elapsed} s · ${progressCount} steg${progressErrors ? ` · ${progressErrors} fel` : ''}`
     : `${label} · ${progressCount} steg`;
-  if (label && !complete) {
+  if (label && step) {
     const line = document.createElement('div');
     line.textContent = `${progressCount}. ${label}${failed ? ' · misslyckades' : ''}`;
     progressCard.detail.append(line);
@@ -1161,10 +1161,12 @@ function startStream(mode = 'thinking') {
   spirit.set(mode);
   els.hint.textContent = '';
   state.controller = new AbortController();
+  updateProgress('Tänker…');
   return state.controller;
 }
 
 function finishStream() {
+  finishProgress();
   state.streaming = false;
   state.controller = null;
   els.stop.hidden = true;
@@ -1245,9 +1247,9 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'state':
-      if (data.state === 'thinking') spirit.set('thinking');
-      else if (data.state === 'working') spirit.set('working');
-      else if (data.state === 'verifying') spirit.set('working');
+      if (data.state === 'thinking') { spirit.set('thinking'); updateProgress('Tänker…'); }
+      else if (data.state === 'working') { spirit.set('working'); updateProgress('Arbetar…'); }
+      else if (data.state === 'verifying') { spirit.set('working'); updateProgress('Verifierar…'); }
       break;
 
     case 'delta':
@@ -1256,7 +1258,7 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'tool_start': {
-      updateProgress(`Gör: ${toolLabel(data.name)}`);
+      updateProgress(`Gör: ${toolLabel(data.name)}`, { step: true });
       spirit.set('working');
       break;
     }
