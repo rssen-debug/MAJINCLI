@@ -37,7 +37,7 @@ export function extractPdfWithInstalledPython(filePath, { runner = spawnSync } =
     'from pdfminer.high_level import extract_text',
     'text = extract_text(sys.argv[1])',
     'sys.stdout.write(text[:150000])',
-  ].join('\\n');
+  ].join('\n');
   const candidates = process.platform === 'win32'
     ? [['py', ['-3']], ['python', []]]
     : [['python3', []], ['python', []]];
@@ -50,8 +50,8 @@ export function extractPdfWithInstalledPython(filePath, { runner = spawnSync } =
       if (out.status !== 0 || out.error) continue;
       const text = String(out.stdout || '').trim();
       // Reject short/garbled output rather than pretending recovery succeeded.
-      if (text.length < 80 || /[\\uFFFD\\u0000-\\u0008]/.test(text)) continue;
-      const letters = (text.match(/[\\p{L}]/gu) || []).length;
+      if (text.length < 80 || /[\uFFFD\u0000-\u0008]/.test(text)) continue;
+      const letters = (text.match(/[\p{L}]/gu) || []).length;
       if (letters < Math.min(40, text.length * 0.3)) continue;
       return { kind: 'pdf', text, confidence: 'text',
         warning: 'Read with installed pdfminer.six fallback after default extraction could not decode fonts.' };
@@ -293,7 +293,7 @@ export function createToolRegistry({ workspaceDir, memoryDir, allowedRoots = () 
       }
       // Other document formats are unaffected; PDFs can transparently use an
       // installed second engine when the built-in one cannot decode glyphs.
-      if (/\\.pdf$/i.test(name) && (extractFailure || result?.confidence === 'partial')) {
+      if (/\.pdf$/i.test(name) && (extractFailure || result?.confidence === 'partial')) {
         result = extractPdfWithInstalledPython(target) || result;
       }
       if (!result) {
