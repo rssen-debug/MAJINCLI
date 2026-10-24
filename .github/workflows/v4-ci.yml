@@ -29,7 +29,20 @@ jobs:
         # child processes; running files in parallel means several processes
         # choose ports at once, and a collision is a flake, not a bug. Locally
         # `npm run v4:test` stays parallel for speed.
-        run: node --test --test-concurrency=1 test/v4/*.test.js
+        shell: bash
+        run: |
+          # A failing run used to leave nothing readable outside the runner: the
+          # job log lives in blob storage. Emit the failing lines as annotations,
+          # which the API can read, so a flake can actually be diagnosed.
+          set +e
+          node --test --test-concurrency=1 test/v4/*.test.js > v4-test.out 2>&1
+          code=$?
+          tail -120 v4-test.out
+          if [ $code -ne 0 ]; then
+            fails=$(grep -E '^not ok|error:|failureType' v4-test.out | head -30 | tr '\n' '|')
+            echo "::error title=V4 suite failure::$fails"
+          fi
+          exit $code
       - name: Acceptance matrix integrity (weights = 100, evidence required)
         run: npm run v4:progress -- --check
       - name: Host doctor (must not report a blocking failure)
