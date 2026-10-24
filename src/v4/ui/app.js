@@ -605,9 +605,11 @@ let progressCard = null;
 let progressStart = 0;
 let progressCount = 0;
 let progressErrors = 0;
+let progressTerminal = false;
 
 /** One live row per turn; precise receipts remain in the expandable details. */
 function updateProgress(label, { failed = false, complete = false, step = false } = {}) {
+  if (progressTerminal && !complete) return;
   if (!progressCard) {
     progressCard = addToolCard('Arbetar', {});
     progressCard.node.open = false;
@@ -644,6 +646,7 @@ function finishProgress() {
 function renderConversationMessages(conversation) {
   activeTools.clear();
   progressCard = null;
+  progressTerminal = true;
   const goals = new Map((conversation.goals || []).map((goal) => [goal.id, goal]));
   const rendered = new Set();
   for (const message of conversation.messages) {
@@ -662,11 +665,13 @@ function renderConversationMessages(conversation) {
           goal._receiptCard = addToolCard('Arbetade', {});
           goal._receiptCard.node.open = false;
           goal._receiptCard.node.dataset.historical = 'true';
+          goal._receiptCard.node.dataset.state = 'verified';
           goal._receiptCard.node.querySelector('.tool-name').textContent = 'Arbetade';
           goal._receiptCard.detail.textContent = '';
           goal._receiptCount = 0;
         }
         const card = goal._receiptCard;
+        if (receipt.result !== 'success') card.node.dataset.state = 'failed';
         goal._receiptCount += 1;
         card.sum.textContent = `${goal._receiptCount} steg · klicka för detaljer`;
         const line = document.createElement('div');
@@ -1153,6 +1158,7 @@ function startStream(mode = 'thinking') {
   progressStart = 0;
   progressCount = 0;
   progressErrors = 0;
+  progressTerminal = false;
   state.streaming = true;
   els.send.hidden = true;
   els.stop.hidden = false;
@@ -1166,6 +1172,7 @@ function startStream(mode = 'thinking') {
 }
 
 function finishStream() {
+  progressTerminal = true;
   finishProgress();
   state.streaming = false;
   state.controller = null;
@@ -1314,12 +1321,14 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'error':
+      progressTerminal = true;
       finishProgress();
       addMessage('assistant', data.message || t('msg.genericError'), { error: true, meta: timeLabel() });
       spirit.set('error');
       break;
 
     case 'cancelled':
+      progressTerminal = true;
       finishProgress();
       addMessage('assistant', t('msg.cancelledShort'), { error: true, meta: timeLabel() });
       break;
@@ -1344,6 +1353,7 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'done': {
+      progressTerminal = true;
       finishProgress();
       const text = endAssistantBubble(timeLabel());
       const finalText = text || '';
