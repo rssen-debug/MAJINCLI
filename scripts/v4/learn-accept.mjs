@@ -363,7 +363,12 @@ async function main() {
     second.context.model.chat = async (opts) => {
       const system = (opts?.messages || []).filter((m) => m.role === 'system').map((m) => String(m.content)).join('\n');
       prompts.push(system);
-      return realChatB(opts);
+      const res = await realChatB(opts);
+      // Host 2 is where the later cycles run, so this is also where their real
+      // cost has to be captured. Missing this made the efficiency comparison
+      // report zero calls and a false improvement.
+      if (res?.usage) usageLog.push({ model: res.model || process.env.MAJIN_V4_MODEL, usage: res.usage });
+      return res;
     };
     const turnB = await sse(`${second.base}/api/chat`, { cookie: cookie2, body: { text: TASK_B, requestId: 'learn-b' } });
     const doneB = turnB.events.find((e) => e.type === 'done')?.data;
@@ -445,11 +450,16 @@ async function main() {
       const baseCalls = costBaseline.calls;
       const callsDelta = baseCalls - avgCalls;
       const tokensDelta = baseTokens - avgTokens;
+      const measured = later.length > 0 && later.every((c) => c.calls > 0) && baseCalls > 0;
       const improved = callsDelta > 0 || (callsDelta === 0 && tokensDelta > 0);
       const same = callsDelta === 0 && Math.abs(tokensDelta) <= Math.max(200, baseTokens * 0.1);
-      record('efficiency.measured', true,
-        `baseline ${baseCalls} call(s)/${baseTokens} tokens · later ${avgCalls.toFixed(1)} call(s)/${Math.round(avgTokens)} tokens`
-        + ` → ${improved ? 'fewer calls or tokens' : same ? 'no material change' : 'more tokens (adaptation, not replay)'}`);
+      // An unmeasured comparison is NOT an improvement. Reporting one would be
+      // exactly the kind of claim this gate exists to prevent.
+      record('efficiency.measured', measured,
+        measured
+          ? `baseline ${baseCalls} call(s)/${baseTokens} tokens · later ${avgCalls.toFixed(1)} call(s)/${Math.round(avgTokens)} tokens`
+            + ` → ${improved ? 'fewer calls or tokens' : same ? 'no material change' : 'more tokens (adaptation, not replay)'}`
+          : `could not measure: ${baseCalls} baseline call(s), later cycles captured ${later.map((c) => c.calls).join('/') || 'none'}`);
     }
 
     if (repeat > 1) {
