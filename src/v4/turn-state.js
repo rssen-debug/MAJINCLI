@@ -27,7 +27,12 @@ export function turnState() {
   return storage.getStore() || null;
 }
 
-/** Stable across an approval pause, isolated from other goals and delegates. */
+/** Browser continuity is scoped to one conversation, not one model turn.
+ * Follow-up instructions must reuse the same form/page and never spawn a new
+ * window just because a new goal ID was assigned. Goals remain isolated when
+ * there is no conversation context (e.g. standalone tests/delegates).
+ */
 export function hostSessionId(base = 'v4', state = turnState()) {
+  if (state?.conversationId) return `${base}:conversation:${state.conversationId}`;
   return state?.goal?.id ? `${base}:${state.goal.id}` : base;
 }
