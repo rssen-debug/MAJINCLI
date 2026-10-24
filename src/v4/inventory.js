@@ -46,15 +46,11 @@ export const V1_MODULE_DECISIONS = Object.freeze({
       + 'setup, doctor, owner-mode and updater. Adapting these would let the model edit the wrong '
       + 'configuration while appearing to manage MAJIN.',
   },
-  'channels.js': {
-    status: 'excluded',
-    reason: 'Needs V1 channel credentials (Telegram/WhatsApp/webhook) that V4 does not use. A tool '
-      + 'that is registered but always reports "not configured" is the lie this project exists to avoid.',
-  },
   'heartbeat.js': {
-    status: 'excluded',
-    reason: 'V1 heartbeat is driven by V1\'s journal and scheduler. V4 runs a supervisor and a '
-      + 'Windows scheduled task; two heartbeat owners would fight.',
+    status: 'replaced',
+    reason: 'The existing core Heartbeat engine is reused by src/v4/heartbeat.js with actual V4 '
+      + 'goal/approval events, durable queue and shared-history/opt-in push delivery. The old tool '
+      + 'wrapper uses V1 journal events and is not a second V4 heartbeat owner.',
   },
   'memory-sync.js': {
     status: 'excluded',

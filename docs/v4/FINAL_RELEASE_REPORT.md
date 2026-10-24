@@ -252,3 +252,23 @@ not Go or physical-device proof. Shared V2 unused timers are cleared, with natur
 process-exit regression tests. Root legacy run: 1286/1/23; the one BOM-only source
 assertion is repaired and focused installer follow-up passed. A new live Go form
 acceptance harness is prepared; its actual model-driven run remains pending.
+
+### 24 October continuation: current evidence, still NOT READY
+
+Latest observed heartbeat head88bde65: V4 and runner CI successful; Windows desktop
+FAILED555/1/1 on a real pre-pairing heartbeat GET401. Packaging/native/cold-start
+were skipped. Source fix waits for authentication, reloads settings after pairing
+and session recovery; actual Chrome regression plus five-viewport/controls3/0/0.
+Exact follow-up CI must be observed separately.
+
+Outbound channels reuse existing five V1 transports with live read-only credential
+bridge, per-call approval and revocable V4 lane. Controlled loopback byte-level
+HMAC, blocked-before-consent, revoke and missing-config tests pass; relevant owner
+accounts and Ghost activation remain unverified. Real Go research successfully
+read both primary sources and saved/read its own report, but independent factual
+review found two qualifications; scenario C is PARTIAL (see attempt1 review).
+Memory-sync, typed self-config/reset, graph/team budget parity and remaining real
+scenarios are still open. Running Ghost modules remaine45640a, prepared checkout
+88bde65 before this follow-up; no restart bypass after policy denial. Production
+signer/channel, native update/rollback/login and full physical voice/push acceptance
+remain outstanding. No original requirement is removed and PR401 stays draft.

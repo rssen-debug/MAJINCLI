@@ -54,7 +54,7 @@ test('inventory: the lane map covers the modules it claims to reuse', async () =
     assert.ok(mod.lanes.length > 0, `${mod.file} claims a lane but names none`);
     for (const lane of mod.lanes) {
       assert.ok(['net', 'screen', 'desktop', 'computer', 'files', 'shell', 'shelltools', 'sys', 'power', 'web',
-        'research', 'jobs', 'flows', 'github', 'audit', 'learn', 'marketing', 're', 'trading'].includes(lane.lane),
+        'research', 'jobs', 'flows', 'github', 'channels', 'audit', 'learn', 'marketing', 're', 'trading'].includes(lane.lane),
         `unknown lane ${lane.lane} for ${mod.file}`);
     }
   }

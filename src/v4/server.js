@@ -265,6 +265,7 @@ export function createV4Server({ config }) {
     const partial = registerHostTools(tools.registry, { ...hostCaps, lanes: allowed }, {
       allow: config.platform?.hostToolAllow?.length ? config.platform.hostToolAllow : null,
       workspaceDir: config.workspaceDir,
+      cfg: config.channelConfig,
       // V1 tools that need the data dir ask their config for the file path;
       // give them V4's, never V1's, so the two never diverge.
       dataFile: path.join(paths.root, 'config.json'),

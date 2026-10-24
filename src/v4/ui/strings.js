@@ -69,6 +69,7 @@ export const SV = {
   'owner.lane.computer': 'Datorstyrning',
   'owner.lane.browser': 'Webbläsare',
   'owner.lane.net': 'Nätverk',
+  'owner.lane.channels': 'Outbound messages',
   'owner.lane.shelltools': 'Kommandon och bakgrundsjobb',
   'owner.lane.sys': 'Systeminformation',
   'owner.lane.audit': 'Självgranskning',

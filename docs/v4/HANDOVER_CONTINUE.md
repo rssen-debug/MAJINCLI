@@ -849,3 +849,45 @@ stop/restart API used. Pulling this code prepares future startup, not activation
 All other original parity/real-model/model billing/voice/native release gates
 remain in force. Next: owner-configured outbound channels, memory sync, typed
 self-configuration/reset and graph/team budgets, plus remaining real scenarios.
+
+### Channel integration and observed Windows regression — 24 October, PARTIAL
+
+88bde65793d3fa75134fdd74312ea40859552204: V4 CI40042737853 and runner40042737881
+SUCCESS, Windows desktop40042737849 FAILED (555 pass, 1 fail, 1 skip). Packaging,
+native window and cold-start steps were skipped, not passed. The failing browser
+assertion captured a real 401: new heartbeat initialization fetched a private API
+before pairing. This follow-up binds controls without fetching, refreshes after
+authenticated loadState and menu opening, and resets started state on session
+expiry. Failed settings can recover after pairing without a reload. Shell15.
+Actual local Chrome: explicit unpaired->pair->heartbeat controls regression plus
+existing five-viewport acceptance and authenticated controls3/0/0, no skips.
+
+Reused core channel.send and all five existing outbound transports through V4's
+same host adapter/approval runner, with a separate opt-in/revocable channels lane.
+Config bridge reads only named channels.* scalar keys from the existing config,
+honors MAJIN_CONFIG and existing env references, refreshes at call time and never
+rewrites credentials or exposes them in capabilities/JSON. Existing configured
+webhook URL/secret now actually used by the tool, preserving byte-level HMAC.
+Controlled real loopback socket: no delivery before approval, signed message
+delivered once, immediate revoke removes tool; missing credentials fail honestly.
+Three new tests pass. Combined old channel contracts/wire + new V4 + inventory
+24/0/0. Broader host/owner/channel/inventory suite55/0/0 after the new fixture was
+corrected to expect registry null instead of undefined. Parse652/652 before the
+last browser-only refinement; current i18n0/333. Original23 files unchanged and
+all39 restored backup hashes still match at00:10:40Z; no key contents recorded.
+No owner messaging account was used and no third-party recipient was contacted.
+Ghost activation/account-specific delivery remain open.
+
+Real Go research attempt1 used unchanged glm-5.3-flash, fetched both official RFCs,
+wrote/read its own report; structural/source checks PASS. Independent factual
+review found misleading storage guarantee wording and a minimum-supported payload
+mislabelled as a protocol maximum. Original receipt/artifact retained; review is
+genesis-research-attempt-1-review.json; scenario C remains PARTIAL, not full PASS.
+
+Installed checkout prepared88bde65; running process still last activatede45640a.
+No source restart was attempted after automatic review blocked it ('blocked by
+policy'). Audit/heartbeat/channel module activation is not claimed. Continue
+memory-sync, typed self-config/reset, graph resume/replan and token/currency team
+budgets, remaining real scenarios, billing/model eligibility, physical voice/push,
+and production-signed host/native update/rollback/login. Five old form FAILs are
+unchanged. Original scope and NOT READY retained; do not merge PR401.

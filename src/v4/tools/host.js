@@ -74,6 +74,7 @@ export const V1_LANES = Object.freeze({
   jobs: { module: '../../core/tools/jobs.js', export: 'jobTools', tierDefault: 'external' },
   flows: { module: '../../core/tools/flows.js', export: 'flowsTools', tierDefault: 'process' },
   github: { module: '../../core/tools/github.js', export: 'githubTools', tierDefault: 'external' },
+  channels: { module: '../../core/tools/channels.js', export: 'channelTools', tierDefault: 'process' },
   audit: { module: '../../core/tools/audit.js', export: 'auditTools', tierDefault: 'read' },
   learn: { module: '../../core/tools/learn.js', export: 'learnTools', tierDefault: 'write' },
   marketing: { module: '../../core/tools/marketing.js', export: 'marketingTools', tierDefault: 'external' },

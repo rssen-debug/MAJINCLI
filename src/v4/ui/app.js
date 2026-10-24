@@ -5,15 +5,16 @@
  * never claims a task succeeded on its own. iOS voice uses foreground capture
  * and host-local STT; other browsers retain Web Speech with recording fallback.
  */
-import { createSpirit } from '/spirit.js?v=14';
-import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage, playNarratorStream } from '/voice.js?v=14';
-import { t } from '/strings.js?v=14';
-import { INITIAL, applyEvent, createSseParser } from '/session.js?v=14';
-import { VoiceCapture } from '/recorder.js?v=14';
+import { createSpirit } from '/spirit.js?v=15';
+import { detectVoiceSupport, recognitionLang, shouldAutoSend, speechText, voiceErrorMessage, playNarratorStream } from '/voice.js?v=15';
+import { t } from '/strings.js?v=15';
+import { INITIAL, applyEvent, createSseParser } from '/session.js?v=15';
+import { VoiceCapture } from '/recorder.js?v=15';
 
 const $ = (sel) => document.querySelector(sel);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const lowPower = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 4) <= 2;
+let refreshHeartbeatSettings = () => {};
 
 const els = {
   stage: $('#stage'),
@@ -632,6 +633,7 @@ function renderConversationMessages(conversation) {
 /* ------------------------------------------------------------------ auth -- */
 
 function showGate(message = '') {
+  state.started = false;
   els.gate.hidden = false;
   els.gateError.hidden = !message;
   els.gateError.textContent = message;
@@ -713,6 +715,7 @@ async function loadState() {
   loadModels();
   if (demo) els.hint.textContent = t('hero.demoHint');
   state.started = true;
+  refreshHeartbeatSettings();
 }
 
 function renderFiles(files) {
@@ -1567,6 +1570,7 @@ function openSheet() {
   els.menu.setAttribute('aria-expanded', 'true');
   els.sheet.querySelector('button, input')?.focus();
   refreshSidebar();
+  refreshHeartbeatSettings();
 }
 
 function closeSheet() {
@@ -2088,6 +2092,7 @@ async function main() {
   restorePrefs();
   setupVoice();
   bindEvents();
+  bindHeartbeat();
   registerServiceWorker();
   resizeInput();
   if (reducedMotion) spirit.set('idle');
@@ -2096,7 +2101,6 @@ async function main() {
   const linkedConversation=new URL(location.href).searchParams.get('conversation');
   if(linkedConversation&&/^conv_[a-z0-9_]+$/.test(linkedConversation))await openConversation(linkedConversation);
   bindPush();
-  bindHeartbeat();
   startSync();
 }
 
@@ -2135,7 +2139,11 @@ function bindHeartbeat(){
   const toggle=$('#heartbeat-notify'),note=$('#heartbeat-status'),resume=$('#heartbeat-resume');
   if(!toggle)return;
   const request=async body=>{const response=await api('/api/heartbeat',body?{method:'POST',body}:{});const data=await response.json();if(!response.ok||!data.ok)throw Error(data.error?.message||'Background settings unavailable');return body?data.result:data;};
-  request().then(data=>{toggle.checked=data.notify;if(resume)resume.hidden=data.enabled&&!data.deliveryPaused;note.textContent=data.deliveryPaused?'Background delivery paused after repeated failures.':!data.enabled?'Background collection is paused.':'Background updates appear in history. Push needs a subscribed device.';}).catch(error=>{toggle.disabled=true;note.textContent=error.message;});
+  toggle.disabled=true;
+  refreshHeartbeatSettings=()=>{
+    if(!state.started||!els.gate.hidden)return;
+    return request().then(data=>{toggle.disabled=false;toggle.checked=data.notify;if(resume)resume.hidden=data.enabled&&!data.deliveryPaused;note.textContent=data.deliveryPaused?'Background delivery paused after repeated failures.':!data.enabled?'Background collection is paused.':'Background updates appear in history. Push needs a subscribed device.';}).catch(error=>{toggle.disabled=true;note.textContent=error.message;});
+  };
   resume?.addEventListener('click',async()=>{resume.disabled=true;try{await request({action:'resume'});resume.hidden=true;note.textContent='Background updates resumed.';}catch(error){note.textContent=error.message;}finally{resume.disabled=false;}});
   toggle.addEventListener('change',async()=>{
     const chosen=toggle.checked;toggle.disabled=true;
