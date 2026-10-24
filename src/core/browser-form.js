@@ -68,6 +68,44 @@ export async function submitForm({browser,session,button,run}){
  return {ok:true,result:JSON.stringify({action:'Button clicked once; submission success unproven',observation:JSON.parse(describeForm(after)),pageText:String(page.result||'').slice(0,3000)}),summary:'Navigation/submission observed; inspect errors or actual receipt',meta:{submitRetried:false}};
 }
 const identity=f=>JSON.stringify([f.label,f.type,f.tag,f.name,f.form]);
+
+/**
+ * Real keyboard input for framework-controlled fields that reject property setters.
+ * Text is inserted in bounded chunks so event-driven UIs can apply their state
+ * updates. No source text appears in a tool result, log or error.
+ */
+export async function typeWithNativeEvents({ browser, selector, value, signal, chunkSize = 160 }) {
+ const sel=JSON.stringify(selector), expected=String(value);
+ const read=async()=>browser.eval(`(() => {const el=document.querySelector(${sel});return el?{exists:true,value:el.value,disabled:el.disabled}: {exists:false};})()`);
+ signal?.throwIfAborted?.();
+ const focused=await browser.eval(`(() => {const el=document.querySelector(${sel});if(!el||el.disabled||el.readOnly||!['INPUT','TEXTAREA'].includes(el.tagName))return false;el.focus();el.select();return document.activeElement===el;})()`);
+ if(!focused)return {ok:false,code:'field_not_focusable'};
+ // Select via DOM, delete via Chrome's trusted native key input.
+ await browser.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Backspace',code:'Backspace',windowsVirtualKeyCode:8});
+ await browser.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Backspace',code:'Backspace',windowsVirtualKeyCode:8});
+ let text='';
+ for(let i=0;i<expected.length;i+=chunkSize){
+  signal?.throwIfAborted?.();
+  const chunk=expected.slice(i,i+chunkSize);
+  await browser.send('Input.insertText',{text:chunk});
+  text+=chunk;
+  const current=await read();
+  if(!current.exists||current.value!==text){
+   return {ok:false,code:'framework_reverted',insertedChars:i+chunk.length};
+  }
+ }
+ // Check again after the web framework's queued updates, then blur.
+ await new Promise(resolve=>setTimeout(resolve,180));
+ const retained=await read();
+ if(!retained.exists||retained.value!==expected)return {ok:false,code:'framework_reverted_after_update'};
+ await browser.eval(`document.querySelector(${sel})?.blur()`);
+ await new Promise(resolve=>setTimeout(resolve,120));
+ const final=await read();
+ return final.exists&&final.value===expected
+  ? {ok:true,insertedChars:expected.length}
+  : {ok:false,code:'framework_reverted_on_blur'};
+}
+
 export async function fillForm({browser,session,values,run,signal}){
  const prior=observed.get(String(session));
  if(!prior)return {ok:false,error:{code:'observe_required',message:'Call browser.form first to observe live labels and references.'}};
@@ -103,14 +141,9 @@ export async function fillForm({browser,session,values,run,signal}){
     const fresh=await observeForm(browser,session),again=fresh.fields.filter(x=>identity(x)===identity(f));
     if(fresh.document===prior.document&&again.length===1){
      const target=again[0];
-     await browser.eval(`document.querySelector(${JSON.stringify(target.selector)}).focus()`);
-     await browser.send('Input.dispatchKeyEvent',{type:'keyDown',key:'a',code:'KeyA',windowsVirtualKeyCode:65,modifiers:2});
-     await browser.send('Input.dispatchKeyEvent',{type:'keyUp',key:'a',code:'KeyA',windowsVirtualKeyCode:65,modifiers:2});
-     await browser.send('Input.insertText',{text:String(value)});
-     await browser.eval('document.activeElement?.blur()');
-     await new Promise(r=>setTimeout(r,180));
-     const retained=await browser.eval(`document.querySelector(${JSON.stringify(target.selector)})?.value===${JSON.stringify(String(value))}`);
-     strategy='native_type_retry';outcome=retained?{ok:true}:{ok:false,error:{code:'value_reverted',message:'Both native setter and keyboard strategies failed; stop and inspect framework validation.'}};
+     const typed=await typeWithNativeEvents({browser,selector:target.selector,value:String(value),signal});
+     strategy='native_type_retry';
+     outcome=typed.ok?{ok:true}:{ok:false,error:{code:'value_reverted',message:'Native input was not retained by the website. Preserve previously filled fields; inspect current form state.',reason:typed.code}};
     }
    }
   }
