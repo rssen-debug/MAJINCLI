@@ -135,6 +135,33 @@ test('403 access policy is distinguished from an invalid API key', () => {
   assert.equal(classifyProviderError(new Error('Invalid API key'), 401).code, 'AUTH_INVALID');
 });
 
+test('verified procedural memory is discoverable and reusable after reconstruction without storing argument values', async t => {
+  let name;
+  const { server } = await setup(t, (_body, count) => {
+    if (count === 1) return tool('first-write', 'fs_write', { path: 'first.txt', content: 'private-value-never-in-procedure' });
+    if (count === 2) return { role: 'assistant', content: 'First file created.' };
+    if (count === 3) return tool('lookup', 'procedures_search', { query: 'file' });
+    if (count === 4) return tool('activate', 'procedures_read', { name });
+    if (count === 5) return tool('second-write', 'fs_write', { path: 'second.txt', content: 'new-value' });
+    return { role: 'assistant', content: 'Reused the method for a new file.' };
+  });
+  const first = await server.providerAgent.execute({ goalText: 'Write a file', criteria: [{ kind: 'file', path: 'first.txt', contains: 'private-value-never-in-procedure' }] });
+  assert.equal(first.status, 'COMPLETED');
+  const disk = fs.readFileSync(path.join(server.architect.dataDir, 'learned-procedures.json'), 'utf8');
+  assert(!disk.includes('private-value-never-in-procedure'));
+  assert(!disk.includes('first.txt'));
+  const stored = JSON.parse(disk).procedures[0]; name = stored.procedureId;
+  assert.deepEqual(stored.steps[0].argKeys, ['content','path']);
+  const restartedServer = createV5Server({ dataDir: server.architect.dataDir });
+  const second = await restartedServer.providerAgent.execute({ goalText: 'Reuse a file method', criteria: [{ kind: 'file', path: 'second.txt', contains: 'new-value' }] });
+  assert.equal(second.status, 'COMPLETED');
+  assert.deepEqual(second.tool_results.map(x => x.tool), ['procedures_search','procedures_read','fs_write']);
+  assert.equal(fs.readFileSync(path.join(server.architect.workspaceDir, 'second.txt'), 'utf8'), 'new-value');
+  const foundResult = restartedServer.providerAgent.current.messages.filter(x => x.role === 'tool' && x.name === 'procedures_search').at(-1);
+  assert(JSON.parse(foundResult.content).result.procedures.some(x => x.name === name));
+  assert(!restartedServer.architect.learning.state.procedures.some(x => x.steps.some(s => s.tool.startsWith('procedures_'))));
+});
+
 test('stop aborts a live provider request before its proposed file action can execute', async t => {
   let entered;
   const requested = new Promise(resolve => { entered = resolve; });
