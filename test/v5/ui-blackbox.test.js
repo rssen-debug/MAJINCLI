@@ -153,14 +153,14 @@ test('99-dot matrix state & Black Box UI DOM: 99 segments, "Formulär 18/99 · +
   const skillTreeDrawer = document.getElementById('skill-tree-drawer');
   assert.equal(skillTreeDrawer.hidden, true, 'Skill tree must be closed by default');
 
-  // Verify 99 DOM dot segments rendered for initial Level 18 state
+  // Verify 99 DOM dot segments rendered for untrained initial state
   const dotStrip = document.getElementById('dot-segments');
   assert.equal(dotStrip.children.length, TOTAL_SKILL_DOTS);
   const filledCells = dotStrip.children.filter((c) => c.dataset.filled === 'true');
-  assert.equal(filledCells.length, 18);
+  assert.equal(filledCells.length, 1);
 
   const tickerEl = document.getElementById('xp-ticker');
-  assert.equal(tickerEl.textContent, formatXpTicker({ displayName: 'Formulär', level: 18, xpGain: 24 })); // input vocabulary, never rendered
+  assert.equal(tickerEl.textContent, formatXpTicker({ displayName: 'Formulär', level: 1, xpGain: 0 })); // input vocabulary, never rendered
 
   // Verify clicking logo opens Skill Tree and Escape closes it
   document.getElementById('majin-logo-trigger').click();

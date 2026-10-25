@@ -48,6 +48,66 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
   let selectedSkillId = null;
   let pendingFiles = [];
   let micListening = false;
+  let busy = false;
+  let generation = 0;
+  let providerState = null;
+  const modelSelect = doc.getElementById('model-select');
+  const discoverBtn = doc.getElementById('provider-discover-btn');
+
+  async function request(url, options) {
+    const response = await fetchImpl(url, options);
+    const data = await response.json();
+    if (response.ok === false || data.ok === false || data.error) {
+      throw new Error(typeof data.error === 'string' ? data.error : data.error?.message || t5('ux0'));
+    }
+    return data;
+  }
+
+  function syncSend() {
+    if (sendBtn) sendBtn.disabled = busy || !(wishInput?.value.trim() || pendingFiles.length);
+  }
+
+  function renderModels() {
+    if (!modelSelect) return;
+    modelSelect.innerHTML = '';
+    const providerId = providerSelect?.value || 'opencode-go';
+    const config = providerState?.providers?.[providerId];
+    const models = config?.discoveredModels || [];
+    const placeholder = doc.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = models.length ? t5('ux1') : t5('ux2');
+    modelSelect.appendChild(placeholder);
+    for (const id of models) {
+      const option = doc.createElement('option');
+      option.value = id;
+      option.textContent = id;
+      modelSelect.appendChild(option);
+    }
+    modelSelect.value = models.includes(modelIdInput?.value) ? modelIdInput.value : '';
+    if (providerKeyInput) providerKeyInput.placeholder = config?.hasKey ? t5('ux3') : t5('ux4');
+  }
+  modelSelect?.addEventListener('change', () => { modelIdInput.value = modelSelect.value; });
+  providerSelect?.addEventListener('change', () => {
+    modelIdInput.value = providerState?.activeProvider === providerSelect.value ? providerState.activeModelId || '' : '';
+    providerKeyInput.value = '';
+    renderModels();
+  });
+  discoverBtn?.addEventListener('click', async () => {
+    discoverBtn.disabled = true;
+    providerConnStatus.textContent = t5('ux5');
+    try {
+      const data = await request('/api/v5/provider', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ providerId: providerSelect.value, apiKey: providerKeyInput.value.trim(), verifyConnection: true }),
+      });
+      providerState = data.provider;
+      providerKeyInput.value = '';
+      renderModels();
+      const config = providerState?.providers?.[providerSelect.value];
+      providerConnStatus.textContent = config?.lastError?.message || (config?.discoveredModels?.length ? t5('ux6') : t5('ux7'));
+    } catch (error) { providerConnStatus.textContent = error.message; }
+    finally { discoverBtn.disabled = false; }
+  });
 
   function renderDotStrip(matrixState) {
     if (!dotStrip) return;
@@ -127,13 +187,23 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
   function renderSkillTreeList() {
     if (!skillTreeList) return;
     skillTreeList.innerHTML = '';
-    for (const sk of skills) {
+    if (!skills.length) {
+      const empty = doc.createElement('li');
+      empty.className = 'v5-skill-meta';
+      empty.textContent = t5('ux8');
+      skillTreeList.appendChild(empty);
+    }
+    for (const sk of [...skills].sort((a, b) => String(a.domain).localeCompare(String(b.domain)))) {
       const li = doc.createElement('li');
       li.className = 'v5-skill-item';
       li.setAttribute('role', 'option');
       const isSelected = sk.canonical_id === selectedSkillId;
       li.setAttribute('aria-selected', isSelected ? 'true' : 'false');
       li.dataset.skillId = sk.canonical_id;
+      li.tabIndex = 0;
+      li.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); li.click(); }
+      });
 
       const left = doc.createElement('div');
       const title = doc.createElement('strong');
@@ -150,6 +220,11 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
 
       li.appendChild(left);
       li.appendChild(right);
+      const meter = doc.createElement('progress');
+      meter.max = 99;
+      meter.value = Math.max(1, Math.min(99, Number(sk.level) || 1));
+      meter.setAttribute('aria-label', `${sk.display_name}: ${meter.value} av 99`);
+      li.appendChild(meter);
       li.addEventListener('click', () => {
         selectedSkillId = sk.canonical_id;
         applySkillMatrixState({
@@ -189,6 +264,11 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
     conversation.appendChild(card);
   }
 
+  drawerBackdrop?.addEventListener('click', () => {
+    closeSkillTree();
+    if (providerDrawer) providerDrawer.hidden = true;
+    providerPill?.setAttribute('aria-expanded', 'false');
+  });
   // Wire UI events
   logoTrigger?.addEventListener('click', toggleSkillTree);
   skillTreeToggle?.addEventListener('click', toggleSkillTree);
@@ -215,9 +295,12 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
     }
   });
 
-  wishInput?.addEventListener('input', () => {
-    const hasContent = Boolean(wishInput.value.trim()) || pendingFiles.length > 0;
-    if (sendBtn) sendBtn.disabled = !hasContent;
+  wishInput?.addEventListener('input', syncSend);
+  wishInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      if (!busy && (wishInput.value.trim() || pendingFiles.length)) wishForm.requestSubmit();
+    }
   });
 
   attachBtn?.addEventListener('click', () => fileInput?.click());
@@ -255,52 +338,60 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
   });
 
   providerSaveBtn?.addEventListener('click', async () => {
-    const providerId = providerSelect?.value || 'opencode-go';
-    const apiKey = providerKeyInput?.value || '';
-    const modelId = modelIdInput?.value.trim() || 'glm-5.3-flash';
-    if (typeof fetchImpl === 'function') {
-      try {
-        const res = await fetchImpl('/api/v5/provider', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ providerId, apiKey, modelId }),
-        });
-        const data = await res.json();
-        if (providerModelLabel) providerModelLabel.textContent = `${providerId} · ${modelId}`;
-        if (providerVerifiedDot) {
-          providerVerifiedDot.dataset.verified = data.connectionVerified ? 'true' : 'false';
-        }
-        if (providerConnStatus) {
-          providerConnStatus.textContent = data.connectionVerified
-            ? t5('providerVerified')
-            : t5('providerSavedNotVerified');
-        }
-      } catch { /* ignore */ }
-    }
-    if (providerDrawer) providerDrawer.hidden = true;
-    if (drawerBackdrop) drawerBackdrop.hidden = true;
+    const modelId = modelIdInput?.value.trim();
+    if (!modelId) { providerConnStatus.textContent = t5('ux9'); return; }
+    providerSaveBtn.disabled = true;
+    try {
+      const data = await request('/api/v5/provider', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ providerId: providerSelect.value, apiKey: providerKeyInput.value.trim(), modelId }),
+      });
+      providerState = data.provider;
+      providerKeyInput.value = '';
+      providerModelLabel.textContent = `${providerSelect.value} · ${modelId}`;
+      providerConnStatus.textContent = t5('providerSavedNotVerified');
+      providerDrawer.hidden = true;
+      providerPill.setAttribute('aria-expanded', 'false');
+      if (drawerBackdrop) drawerBackdrop.hidden = true;
+      wishInput?.focus?.();
+    } catch (error) { providerConnStatus.textContent = error.message; }
+    finally { providerSaveBtn.disabled = false; }
   });
 
   wishForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const goalText = wishInput?.value.trim() || '';
-    if (!goalText && pendingFiles.length === 0) return;
+    if (busy || (!goalText && pendingFiles.length === 0)) return;
+    busy = true;
+    const run = ++generation;
 
     appendMessage('user', goalText || pendingFiles.map((f) => f.name).join(', '));
-    if (wishInput) wishInput.value = '';
+    // Retain input and attachments until the server accepts the request.
     if (sendBtn) sendBtn.disabled = true;
     if (stopBtn) stopBtn.hidden = false;
 
-    setActivityStatus('working', t5('statusReadingCv'), { verifiedLearning: false });
+    setActivityStatus('working', t5('ux10'), { verifiedLearning: false });
 
     if (typeof fetchImpl === 'function') {
       try {
-        const res = await fetchImpl('/api/v5/goal', {
+        const files = [];
+        for (const file of pendingFiles) {
+          const uploaded = await request('/api/v5/uploads', {
+            method: 'POST', headers: { 'content-type': file.type || 'application/octet-stream', 'x-file-name': encodeURIComponent(file.name) }, body: file,
+          });
+          files.push(uploaded.upload);
+        }
+        if (run !== generation) return;
+        const data = await request('/api/v5/goal', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ goalText }),
+          body: JSON.stringify({ goalText, files }),
         });
-        const data = await res.json();
+        if (run !== generation) return;
+        if (wishInput) wishInput.value = '';
+        pendingFiles = [];
+        if (fileInput) fileInput.value = '';
+        if (attachmentsPreview) attachmentsPreview.hidden = true;
         const xpGain = data?.xp_award?.totalXpAwarded || 0;
         const pSkill = data?.xp_award?.primarySkill;
         if (pSkill) {
@@ -322,19 +413,25 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
         );
         appendMessage(
           'agent',
-          data?.summaryText || t5('statusCompleted'),
+          data?.summaryText || (data?.status === 'COMPLETED' ? t5('statusCompleted') : t5('statusPartial')),
           xpGain > 0 ? `+${xpGain} XP (${pSkill?.level || 1}/99)` : data?.status,
         );
-      } catch {
+        await refreshState();
+      } catch (error) {
+        if (run !== generation) return;
         setActivityStatus('idle', t5('statusFailed'), { verifiedLearning: false });
+        appendMessage('agent', error.message, t5('ux11'));
+      } finally {
+        if (run === generation) { busy = false; syncSend(); if (stopBtn) stopBtn.hidden = true; }
       }
     }
-    pendingFiles = [];
-    if (attachmentsPreview) attachmentsPreview.hidden = true;
-    if (stopBtn) stopBtn.hidden = true;
+
   });
 
   stopBtn?.addEventListener('click', async () => {
+    generation++;
+    busy = false;
+    syncSend();
     setActivityStatus('idle', t5('statusCancelled'), { verifiedLearning: false });
     if (stopBtn) stopBtn.hidden = true;
     if (typeof fetchImpl === 'function') {
@@ -346,13 +443,13 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
 
   // Initial state render
   applySkillMatrixState({
-    skillId: 'career.form-fill',
+    skillId: 'untrained',
     displayName: 'Formulär', // input vocabulary, never rendered
-    level: 18,
-    xp: 3660,
-    lastXpGain: 24,
+    level: 1,
+    xp: 0,
+    lastXpGain: 0,
     freshness: 'FRESH',
-    maturityStatus: 'VERIFIED',
+    maturityStatus: 'UNTRAINED',
     activity: 'idle',
   });
 
@@ -363,6 +460,18 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
       if (!res.ok) return;
       const state = await res.json();
       skills = Array.isArray(state.skills) ? state.skills : [];
+      providerState = state.provider;
+      if (providerSelect && providerState?.activeProvider) providerSelect.value = providerState.activeProvider;
+      if (modelIdInput) modelIdInput.value = providerState?.activeModelId || '';
+      renderModels();
+      renderSkillTreeList();
+      const selected = skills.find(sk => sk.canonical_id === selectedSkillId) || skills[0];
+      if (selected) {
+        selectedSkillId = selected.canonical_id;
+        applySkillMatrixState({ skillId: selected.canonical_id, displayName: selected.display_name,
+          level: selected.level, xp: selected.xp, lastXpGain: selected.last_xp_gain || 0,
+          freshness: selected.freshness, maturityStatus: selected.maturity_status, activity: 'idle' });
+      }
       if (state.provider?.activeModelId && providerModelLabel) {
         providerModelLabel.textContent = `${state.provider.activeProvider} · ${state.provider.activeModelId}`;
       }
