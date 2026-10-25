@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { discoverModels as discoverProviderCatalog } from '../core/provider/catalog.js';
 import { complete as completeV1 } from '../core/provider/chat.js';
+import { chatUrl, goDialect } from '../core/presets.js';
 
 export const PROVIDER_STATE_SCHEMA = 'majin.v5.provider-state/v1';
 
@@ -29,7 +30,7 @@ export const PROVIDER_PRESETS = Object.freeze({
     id: 'opencode-go',
     label: 'OpenCode Go',
     kind: 'openai',
-    baseUrl: 'https://opencode.ai/inference/go/v1',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
     supportsCatalog: true,
     paid: true,
     trainsOnData: false,
@@ -98,7 +99,10 @@ export function classifyProviderError(err, status = null) {
   if (err?.name === 'AbortError' || /abort|timed?\s*out/i.test(msg)) {
     return { code: 'TIMEOUT', retryable: true, message: 'Provider request timed out or was aborted.' };
   }
-  if (code === 401 || code === 403 || /invalid.*key|unauthorized|forbidden|authentication/i.test(msg)) {
+  if (code === 403 && !/invalid.*key|unauthorized|authentication/i.test(msg)) {
+    return { code: 'ACCESS_DENIED', retryable: false, message: 'The provider denied access. Check model availability and workspace privacy/region policy; do not replace a valid key blindly.' };
+  }
+  if (code === 401 || /invalid.*key|unauthorized|authentication/i.test(msg)) {
     return { code: 'AUTH_INVALID', retryable: false, message: 'API key was rejected by provider (401/403).' };
   }
   if (code === 429 || /quota|rate.?limit|insufficient_quota|allowance/i.test(msg)) {
@@ -308,6 +312,7 @@ export class ProviderManager {
       modelCapabilities: prev.modelCapabilities || {},
       lastError: null,
     };
+    if (this.state.activeProvider !== id) this.state.activeModelId = prev.activeModelId || null;
     this.state.activeProvider = id;
     this.state.savedConfig = true;
     // Saving config NEVER marks connectionVerified = true!
@@ -370,12 +375,20 @@ export class ProviderManager {
       p.modelCapabilities = {};
       for (const item of res.catalog || []) {
         if (!item?.id) continue;
+        const raw = res.payload?.data?.find(row => (typeof row === 'string' ? row : row.id || row.model) === item.id);
+        const declaredTools = raw?.tools ?? raw?.capabilities?.tools;
+        const hasToolMetadata = typeof declaredTools === 'boolean' || Array.isArray(raw?.supported_parameters) || Array.isArray(raw?.features);
         p.modelCapabilities[item.id] = {
-          tools: item.tools !== false,
+          tools: typeof declaredTools === 'boolean' ? declaredTools : hasToolMetadata ? item.tools !== false : true,
           vision: Boolean(item.vision),
           streaming: item.streaming !== false,
           contextWindow: Number(item.context) || 128_000,
         };
+      }
+      if (id === 'opencode-go' && this.state.activeProvider === id && !this.state.activeModelId) {
+        const preferred = p.discoveredModels.find(model => model === 'deepseek-v4-pro') ||
+          p.discoveredModels.find(model => /^deepseek-/i.test(model));
+        if (preferred) this.selectModel({ providerId: id, modelId: preferred });
       }
       p.connectionVerified = true;
       p.lastVerifiedAt = new Date().toISOString();
@@ -448,6 +461,7 @@ export class ProviderManager {
 
     this.state.activeProvider = id;
     this.state.activeModelId = model;
+    p.activeModelId = model;
     this.state.manualModelFallback = !inCatalog;
     this.state.savedConfig = true;
     // Selecting a model is saved configuration, NOT proof of verified inference on this model!
@@ -637,7 +651,11 @@ export class ProviderManager {
 
       try {
         const callFn = this.completeImpl || completeV1;
+        const dialect = providerId === 'opencode-go' ? goDialect(modelId) : p.kind || 'openai';
         const response = await callFn({
+          route: { providerName: providerId, kind: dialect, baseUrl: p.baseUrl,
+            endpoint: chatUrl({ baseUrl: p.baseUrl, kind: dialect }), model: modelId,
+            apiKey, extraHeaders: headers },
           provider: {
             name: providerId,
             kind: p.kind || 'openai',
@@ -648,6 +666,8 @@ export class ProviderManager {
           model: modelId,
           messages: adaptedMessages,
           tools: adaptedTools,
+          stream: false,
+          retries: 0,
           signal: controller.signal,
         });
 

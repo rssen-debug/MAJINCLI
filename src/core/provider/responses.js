@@ -24,7 +24,7 @@ export function responsesInput(messages = []) {
           type: 'function_call',
           call_id: tool.id,
           name: tool.name,
-          arguments: typeof tool.args === 'string' ? tool.args : JSON.stringify(tool.args || {}),
+          arguments: tool.argsJson || tool.function?.arguments || (typeof tool.args === 'string' ? tool.args : JSON.stringify(tool.args || {})),
         });
       }
     } else if (['system','developer','user','assistant'].includes(msg.role)) {
@@ -45,7 +45,7 @@ function payload(o, stream) {
     stream,
     max_output_tokens: o.maxTokens ?? 4096,
   };
-  if (Number.isFinite(o.temperature)) body.temperature = o.temperature;
+  if (Number.isFinite(o.temperature) && !/^(gpt-[56](?:[.-]|$)|o[134](?:[.-]|$))/i.test(o.route.model || '')) body.temperature = o.temperature;
   if (o.tools?.length) {
     body.tools = o.tools.map(t => ({
       type: 'function', name: t.name, description: t.description,
