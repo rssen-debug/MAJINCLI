@@ -53,6 +53,92 @@ function parseJson(result) {
   }
 }
 
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitForCondition(predicate, description, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await delay(25);
+  }
+  assert.fail(`timed out waiting for ${description}`);
+}
+
+function startCliSession(args, { root, timeoutMs = 120000, env = {} } = {}) {
+  const child = spawn(process.execPath, [BIN, ...args], {
+    env: {
+      ...process.env,
+      HOME: root,
+      USERPROFILE: root,
+      MAJIN_HOME: path.join(root, 'majin-home'),
+      ...env,
+    },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  const session = {
+    child,
+    stdout: '',
+    stderr: '',
+    status: null,
+    waiters: new Set(),
+    closed: null,
+  };
+  const matches = (waiter) => typeof waiter.pattern === 'string'
+    ? session[waiter.stream].includes(waiter.pattern)
+    : waiter.pattern.test(session[waiter.stream]);
+  const notify = () => {
+    for (const waiter of [...session.waiters]) {
+      if (!matches(waiter)) continue;
+      session.waiters.delete(waiter);
+      clearTimeout(waiter.timer);
+      waiter.resolve();
+    }
+  };
+  child.stdout.on('data', (chunk) => { session.stdout += chunk; notify(); });
+  child.stderr.on('data', (chunk) => { session.stderr += chunk; notify(); });
+  const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
+  session.closed = new Promise((resolve, reject) => {
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on('close', (status) => {
+      clearTimeout(timer);
+      session.status = status;
+      for (const waiter of session.waiters) {
+        clearTimeout(waiter.timer);
+        waiter.reject(new Error(`CLI exited (${status}) before output matched ${waiter.pattern}\nSTDOUT:\n${session.stdout}\nSTDERR:\n${session.stderr}`));
+      }
+      session.waiters.clear();
+      resolve({ status, stdout: session.stdout, stderr: session.stderr });
+    });
+  });
+  session.write = (line) => {
+    assert.equal(child.stdin.writable, true, `CLI stdin is not writable\nSTDOUT:\n${session.stdout}\nSTDERR:\n${session.stderr}`);
+    child.stdin.write(`${line}\n`);
+  };
+  session.waitFor = (pattern, stream = 'stdout', waitMs = 30000) => {
+    const waiter = { pattern, stream, resolve: null, reject: null, timer: null };
+    if (matches(waiter)) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      waiter.resolve = resolve;
+      waiter.reject = reject;
+      waiter.timer = setTimeout(() => {
+        session.waiters.delete(waiter);
+        reject(new Error(`timed out waiting for ${pattern} in ${stream}\nSTDOUT:\n${session.stdout}\nSTDERR:\n${session.stderr}`));
+      }, waitMs);
+      session.waiters.add(waiter);
+    });
+  };
+  session.exit = async () => {
+    if (child.stdin.writable) session.write('/exit');
+    return session.closed;
+  };
+  return session;
+}
+
 const toolCall = (id, name, args) => ({
   role: 'assistant',
   content: null,
@@ -103,6 +189,7 @@ test('CLI grants persist, doctor reports parity, and tools call executes through
   assert.equal(help.status, 0, help.stderr);
   assert.match(help.stdout, /majin-v5 run "Gör XYZ"/);
   assert.match(help.stdout, /tools call <tool_name>/);
+  assert.match(help.stdout, /chat \[first goal\.\.\.\]/);
   assert.match(help.stdout, /grants grant/);
 
   const version = await runCli(['version'], fx);
@@ -239,4 +326,150 @@ test('CLI model commands configure from env, discover a live catalog, and never 
   assert.equal(status.status, 0, status.stderr);
   assert.match(status.stdout, /Active model: opencode-go\/deepseek-v4-flash/);
   assert.doesNotMatch(status.stdout, /local-test-key/);
+});
+
+test('CLI chat steers the live provider goal before its stale tool batch can execute', async (t) => {
+  const fx = fixture(t);
+  let completions = 0;
+  const provider = await fakeProvider(t, async () => {
+    completions += 1;
+    if (completions === 1) {
+      await delay(1500);
+      return toolCall('stale-chat-write', 'fs_write', { path: 'chat-steer.txt', content: 'obsolete draft' });
+    }
+    if (completions === 2) {
+      return toolCall('steered-chat-write', 'fs_write', { path: 'chat-steer.txt', content: 'owner steered final' });
+    }
+    return { role: 'assistant', content: 'Created the steered output.' };
+  });
+  await configureProvider(fx.dataDir, provider.baseUrl);
+
+  const criteria = JSON.stringify([{ kind: 'file', path: 'chat-steer.txt', contains: 'owner steered final' }]);
+  const session = startCliSession(['chat', '--data-dir', fx.dataDir, '--criteria', criteria], fx);
+  await session.waitFor('Type a goal');
+  session.write('Create chat-steer.txt with obsolete draft');
+  await session.waitFor('Goal started');
+  await waitForCondition(
+    () => provider.requests.some((request) => request.method === 'POST'),
+    'the first provider completion request',
+  );
+  session.write('Use owner steered final instead; do not write obsolete draft.');
+  await session.waitFor('Steering accepted');
+  await session.waitFor('Status: COMPLETED');
+  session.write('/checkpoint');
+  await session.waitFor('Checkpoint file:');
+  const closed = await session.exit();
+
+  assert.equal(closed.status, 0, `${closed.stdout}\n${closed.stderr}`);
+  assert.equal(fs.readFileSync(path.join(fx.workspace, 'chat-steer.txt'), 'utf8'), 'owner steered final');
+  assert.match(closed.stderr, /tool fs_write ok/);
+  assert.equal(completions, 3);
+  const completionBodies = provider.requests.filter((request) => request.method === 'POST').map((request) => request.body);
+  assert.ok(
+    completionBodies[1].messages.some((message) => String(message.content || '').includes('do not write obsolete draft')),
+    'the second model round must receive the owner steering as a user instruction',
+  );
+});
+
+test('CLI chat pause survives process exit and the next chat process resumes the same checkpoint and provider session', async (t) => {
+  const fx = fixture(t);
+  let completions = 0;
+  const provider = await fakeProvider(t, async () => {
+    completions += 1;
+    if (completions === 1) {
+      await delay(1500);
+      return toolCall('late-paused-write', 'fs_write', { path: 'late-paused.txt', content: 'must never be written' });
+    }
+    if (completions === 2) {
+      return toolCall('resumed-chat-write', 'fs_write', { path: 'chat-pause.txt', content: 'resumed final' });
+    }
+    return { role: 'assistant', content: 'Finished after resume.' };
+  });
+  await configureProvider(fx.dataDir, provider.baseUrl);
+  const criteria = JSON.stringify([{ kind: 'file', path: 'chat-pause.txt', contains: 'resumed final' }]);
+
+  const first = startCliSession(['chat', '--data-dir', fx.dataDir, '--criteria', criteria], fx);
+  await first.waitFor('Type a goal');
+  first.write('Create chat-pause.txt with resumed final');
+  await waitForCondition(
+    () => provider.requests.some((request) => request.method === 'POST'),
+    'the first provider completion request',
+  );
+  first.write('/pause');
+  await first.waitFor('Status: PAUSED');
+  const firstClosed = await first.exit();
+  assert.equal(firstClosed.status, 1, 'exiting with only a paused goal must not claim shell success');
+  assert.equal(fs.existsSync(path.join(fx.workspace, 'late-paused.txt')), false);
+
+  const checkpoint = JSON.parse(fs.readFileSync(path.join(fx.dataDir, 'provider-agent', 'current.json'), 'utf8'));
+  assert.equal(checkpoint.goal.status, 'PAUSED');
+  assert.deepEqual(checkpoint.goal.criteria, JSON.parse(criteria));
+
+  const second = startCliSession(['chat', '--data-dir', fx.dataDir], fx);
+  await second.waitFor('Saved goal: PAUSED');
+  second.write('Continue and finish the saved work');
+  await second.waitFor('Saved checkpoint found');
+  await second.waitFor('Status: COMPLETED');
+  second.write('/status');
+  await second.waitFor('resumes: 1');
+  const secondClosed = await second.exit();
+
+  assert.equal(secondClosed.status, 0, `${secondClosed.stdout}\n${secondClosed.stderr}`);
+  assert.equal(fs.readFileSync(path.join(fx.workspace, 'chat-pause.txt'), 'utf8'), 'resumed final');
+  assert.equal(fs.existsSync(path.join(fx.workspace, 'late-paused.txt')), false);
+  const completionSessionHeaders = provider.requests
+    .filter((request) => request.method === 'POST')
+    .map((request) => request.headers['x-opencode-session']);
+  assert.equal(completionSessionHeaders.length, 3);
+  assert.equal(new Set(completionSessionHeaders).size, 1, 'resume in a new CLI process must retain the saved provider conversation');
+  const logs = await runCli(['logs', '--data-dir', fx.dataDir, '--json'], fx);
+  assert.equal(parseJson(logs).goal.resume_count, 1);
+});
+
+test('CLI chat queues the next goal without losing the active checkpoint and can cancel a later live goal', async (t) => {
+  const fx = fixture(t);
+  let completions = 0;
+  const provider = await fakeProvider(t, async () => {
+    completions += 1;
+    if (completions === 1) {
+      await delay(1200);
+      return toolCall('queue-first-write', 'fs_write', { path: 'queue-first.txt', content: 'first queued output' });
+    }
+    if (completions === 2) return { role: 'assistant', content: 'First goal done.' };
+    if (completions === 3) return toolCall('queue-second-write', 'fs_write', { path: 'queue-second.txt', content: 'second queued output' });
+    if (completions === 4) return { role: 'assistant', content: 'Second goal done.' };
+    if (completions === 5) {
+      await delay(1500);
+      return toolCall('cancelled-chat-write', 'fs_write', { path: 'cancelled-chat.txt', content: 'must never be written' });
+    }
+    return { role: 'assistant', content: 'Unexpected extra completion.' };
+  });
+  await configureProvider(fx.dataDir, provider.baseUrl);
+
+  const firstCriteria = JSON.stringify([{ kind: 'file', path: 'queue-first.txt', contains: 'first queued output' }]);
+  const secondCriteria = JSON.stringify([{ kind: 'file', path: 'queue-second.txt', contains: 'second queued output' }]);
+  const session = startCliSession(['chat', '--data-dir', fx.dataDir, '--criteria', firstCriteria], fx);
+  await session.waitFor('Type a goal');
+  session.write('Create queue-first.txt');
+  await waitForCondition(() => completions >= 1, 'the first queued-test provider request');
+  session.write('/queue Create queue-second.txt');
+  await session.waitFor('Queued after the active goal');
+  session.write(`/criteria ${secondCriteria}`);
+  await session.waitFor('Acceptance criteria will apply to the next new goal');
+  await session.waitFor('Starting queued goal: Create queue-second.txt');
+  await waitForCondition(
+    () => (session.stdout.match(/Status: COMPLETED/g) || []).length >= 2,
+    'both queued goals to complete',
+  );
+  assert.equal(fs.readFileSync(path.join(fx.workspace, 'queue-first.txt'), 'utf8'), 'first queued output');
+  assert.equal(fs.readFileSync(path.join(fx.workspace, 'queue-second.txt'), 'utf8'), 'second queued output');
+
+  session.write('/new Create cancelled-chat.txt');
+  await waitForCondition(() => completions >= 5, 'the cancellable provider request');
+  session.write('/cancel');
+  await session.waitFor('Status: CANCELLED');
+  const closed = await session.exit();
+  assert.equal(closed.status, 1, 'the final cancelled goal determines the interactive process exit code');
+  assert.equal(fs.existsSync(path.join(fx.workspace, 'cancelled-chat.txt')), false);
+  assert.equal(completions, 5);
 });
