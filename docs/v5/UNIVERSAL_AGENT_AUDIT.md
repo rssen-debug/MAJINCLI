@@ -14,7 +14,7 @@ the broader A–J checklist or an autonomous 500-employer workflow.
 | 4 Unified tool registry | Worker exposes actual available tools and input schemas | Cost, measured reliability, output contracts, failures and verification metadata are not yet unified for every tool |
 | 5 Observe, verify, recover and checkpoint | `provider-agent.js`; failure/recovery, cancellation, checkpoint HTTP/reconstruction tests; live DeepSeek resume proof | Dependency-aware plans, pause and long-task continuation need broader integration; default round budget requires explicit continuation |
 | 6 Useful bounded delegation | Existing V2 scheduler and V5 DAG path use bounded concurrency | Provider-driven delegation, shared-session exclusion and measured benefit are not proven by that scheduler alone |
-| 7 Verified reusable learning and XP | V5 learning, skill builder and receipt-ledger tests; file criteria gate completion | End-to-end model-driven skill creation, restart/retrieval, reuse and rollback must be demonstrated together |
+| 7 Verified reusable learning and XP | V5 learning/receipt tests plus live selected-provider learn/reconstruct/discover/read/reuse of parameterized file procedure | Generated executable skills and rollback still need integrated acceptance; optional Codex controller is not connected to V5 procedural memory |
 | 8 Minimal truthful experience | Existing living orb UI, provider execution endpoint and Windows Chromium CI | Confirm each live state/steering/voice path against current runtime; no background animation is task evidence |
 | 9 Outcome acceptance | Controlled browser multipart/hash test, live model file tasks, Windows UI CI | See A–J below; all ten are not yet proven |
 | 10 Incremental tested changes | Dedicated branches and PR checks; no failing increment merged | Keep new increments separate and inspect final head checks before merging |
@@ -24,10 +24,10 @@ the broader A–J checklist or an autonomous 500-employer workflow.
 | --- | --- |
 | A Browser | Real Chromium native form/radio/select/upload test, scoped write denial and unique selectors pass; full navigation/recovery suite remains |
 | B Desktop | Earlier physical Notepad test has independent contents/screenshot evidence; repeatable current-engine desktop acceptance remains |
-| C Coding | Live selected-provider file tools and independent verifier work; build/run/test small application acceptance remains |
+| C Coding | Live DeepSeek created a dependency-free calculator CLI and tests through Majin, executed commands, and passed independent syntax, test and two CLI checks (49 seconds); this is one controlled application |
 | D Research | Real public fetch works; source URL presence alone is insufficient to prove a correct cited comparison |
 | E Mock hiring | Real browser multipart file bytes verified; autonomous multi-step portal failure recovery remains |
-| F Memory/skills | Component tests exist; autonomous learn/restart/retrieve/reuse lifecycle remains |
+| F Memory/skills | Live DeepSeek completed a verified file task, reconstructed the architect, searched/read the persisted parameterized procedure and completed a different independently verified file task (16 seconds); generated executable skill lifecycle/rollback remain |
 | G Interruptions | Cancellation tests and live DeepSeek resume with same goal, original checks and exactly-once observed append pass; explicit pause/redirect matrix remains |
 | H Voice | Activation and interruption controller tests do not prove actual recognition, playback or physical microphone operation |
 | I Security/reliability | Path confinement, malformed calls, repeated failures, revocation, restart uncertainty and cross-origin denial tested; full adversarial acceptance remains |
