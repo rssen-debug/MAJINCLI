@@ -465,8 +465,13 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
             coveringRole:String(overlay.getAttribute('role')||'').slice(0,30),
             coveringId:String(over.id||'').slice(0,60),recoveryControls:controls};
         }
-        el.click();
+        // A DOM .click() is untrusted input and browsers may suppress the
+        // default action for links (notably target=_blank). Use CDP pointer
+        // input for anchors so navigation/new-tab behavior matches a real click.
+        const physicalClick = el.tagName === 'A';
+        if (!physicalClick) el.click();
         return { found: true, fromShadowRoot: Boolean(el.getRootNode?.()?.host), tag: String(el.tagName).toLowerCase(), text: t,
+          x, y, physicalClick,
           checked: isCheckbox ? Boolean(el.checked) : null,
           changed: isCheckbox ? Boolean(el.checked) !== before : null };
       })()`, {signal:ctx.signal});
@@ -498,6 +503,17 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           message: ref ? `element ${ref} vanished from the DOM (page re-rendered?) — do not guess a replacement` : `no clickable element matches ${selector}`,
           hint: 'Use an EXACT selector from the visible controls below (or browser.elements for live numbered refs). Avoid browser.open again unless navigation is required.' + candidates,
         } };
+      }
+      if (hit.physicalClick) {
+        const point = { x: hit.x, y: hit.y, button: 'left', clickCount: 1 };
+        await b.send('Input.dispatchMouseEvent', { ...point, type: 'mousePressed' }, { signal: ctx.signal });
+        try {
+          await b.send('Input.dispatchMouseEvent', { ...point, type: 'mouseReleased' }, { signal: ctx.signal });
+        } catch (error) {
+          // Always release a dispatched press before reporting an interrupted click.
+          await b.send('Input.dispatchMouseEvent', { ...point, type: 'mouseReleased' }).catch(() => {});
+          throw error;
+        }
       }
       noteBrowserAction(session);
       /* a click may spawn a NEW tab (target=_blank, window.open): follow it

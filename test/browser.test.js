@@ -86,6 +86,8 @@ test('process-wide session helpers stay truthful without a browser', () => {
 test('click follows a spawned tab, and the recovery cookbook lives in the system prompt', async () => {
   const web = (await import('node:fs')).readFileSync(new URL('../src/core/tools/web.js', import.meta.url), 'utf8');
   assert.match(web, /snapshotTargets/, 'capture current tab ids before the click');
+  assert.match(web, /physicalClick = el\.tagName === 'A'/, 'links use trusted pointer input so browser default navigation is not suppressed');
+  assert.match(web, /Input\.dispatchMouseEvent/, 'dispatch a real pointer press/release for links');
   assert.match(web, /followNewTarget\(\{ windowMs: 1500, beforeTargets: targetsBeforeClick \}\)/, 'click follows only a target created by that action even when Edge omits openerId');
   assert.match(web, /new tab followed/, 'the agent is told what actually happened');
   const agent = (await import('node:fs')).readFileSync(new URL('../src/core/agent.js', import.meta.url), 'utf8');
