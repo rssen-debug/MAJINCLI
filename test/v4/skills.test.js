@@ -22,6 +22,7 @@ test('skills: the shipped skills load and are well formed', () => {
   assert.deepEqual(errors, [], JSON.stringify(errors));
   const names = skills.map((s) => s.name);
   assert.ok(names.includes('job-search'));
+  assert.ok(names.includes('job-application'));
   assert.ok(names.includes('fix-code'));
   const jobSearch = skills.find((s) => s.name === 'job-search');
   assert.match(jobSearch.body, /Använd en söktjänst åt gången/);
@@ -45,6 +46,29 @@ test('skills: job-search needs files and web, and is withheld without them', () 
 
   const full = usableSkills({ skills, grantedLanes: ['files', 'web'] });
   assert.ok(full.usable.some((s) => s.name === 'job-search'));
+});
+
+test('skills: job application uses the native form workflow and forbids submission', () => {
+  const { skills } = discoverSkills(BUILTIN);
+  const application = skills.find((s) => s.name === 'job-application');
+  assert.ok(application, 'job-application skill is installed');
+  assert.deepEqual(application.tools, ['browser_open', 'browser_form', 'browser_form_fill']);
+  assert.match(application.body, /browser_form_fill/);
+  assert.match(application.body, /anropa aldrig `browser_form_submit`/i);
+  const ready = usableSkills({
+    skills: [application],
+    grantedLanes: ['web'],
+    availableTools: ['browser_open', 'browser_form', 'browser_form_fill', 'browser_read', 'browser_verify'],
+  });
+  assert.equal(ready.usable.length, 1);
+  assert.equal(ready.usable[0].missingPreferred.length, 0);
+  const blocked = usableSkills({
+    skills: [application],
+    grantedLanes: ['web'],
+    availableTools: ['browser_open'],
+  });
+  assert.equal(blocked.usable.length, 0);
+  assert.match(blocked.withheld[0].reason, /browser_form/);
 });
 
 test('skills: a REQUIRED tool that is missing withholds the skill', () => {
