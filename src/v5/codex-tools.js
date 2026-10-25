@@ -16,6 +16,7 @@ import { shellTools } from '../core/tools/shell.js';
 import { webTools } from '../core/tools/web.js';
 import { searchPlatsbanken } from '../core/jobs/platsbanken.js';
 import { scoreCv } from '../core/jobs/model.js';
+import { buildToolParity, createUniversalHostTools } from './host-bridge.js';
 
 export function checkedPath(root, raw) {
   if (typeof raw !== 'string' || !raw.trim()) throw new Error('A path is required');
@@ -77,7 +78,6 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
     if (t.name === 'fs.patch') schema.properties.edits = { type: 'array', minItems: 1, maxItems: 100,
       items: { type: 'object', properties: { find: { type: 'string', minLength: 1 }, replace: { type: 'string' } },
         required: ['find', 'replace'], additionalProperties: false } };
-    for (const prop of Object.values(schema.properties)) if (prop.type === 'number') { prop.minimum = 0; prop.maximum = 4000000; }
     // Description would invoke Majin's vision provider. Codex reads image content instead.
     if (t.name === 'screen.capture') {
       delete schema.properties.then;
@@ -104,7 +104,55 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
       },
     });
   }
-  const add = (name, description, schema, run) => tools.set(name, {
+
+  // WP1: connect the existing V4 universal host bridge. The direct tools above
+  // remain the deterministic baseline; owner/controller-selected legacy lanes
+  // are added through the same V2 runner, path policy, and nested registry.
+  let hostBridge = { selectedLanes: [], registered: [], skipped: [], events: [] };
+  const catalogSourceNames = definitions.map((tool) => tool.name);
+  try {
+    const universal = await createUniversalHostTools({
+      workspace,
+      allowedFolders,
+      grantedLanes,
+      desktop,
+      browser,
+      processAccess,
+      browserExecutable,
+      reservedNames: new Set([
+        ...tools.keys(),
+        'documents_extract', 'jobs_search', 'jobs_match', 'skills_search', 'skills_read', 'tools_search', 'driver_status',
+      ]),
+      resolveToolPath,
+      session: ctx.session,
+    });
+    hostBridge = universal.report;
+    for (const [name, tool] of universal.tools) {
+      tools.set(name, tool);
+      if (tool.source) catalogSourceNames.push(tool.source);
+    }
+  } catch (error) {
+    hostBridge.skipped.push({
+      lane: 'host-bridge',
+      reason: `universal host bridge failed to initialize: ${String(error?.message || error)}`,
+    });
+  }
+  if (!browserAvailable) {
+    for (const tool of browserTools) {
+      if (!hostBridge.skipped.some((item) => item.tool === tool.name)) {
+        hostBridge.skipped.push({
+          lane: 'browser',
+          tool: tool.name,
+          reason: browser
+            ? 'Playwright browser lane is enabled, but no supported browser binary was found on this host'
+            : 'Playwright browser lane is not enabled for this driver',
+        });
+      }
+    }
+  }
+  const parity = () => buildToolParity({ tools, hostBridge, grantedLanes });
+
+  const add = (name, description, schema, run, source = null) => tools.set(name, {
     name, description, inputSchema: z.toJSONSchema(schema), run: args => run(schema.parse(args)),
   });
   add('documents_extract', 'Extract text from a workspace PDF/DOCX/text file. Reports extraction confidence.',
@@ -130,8 +178,14 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
   if (grantedLanes && !grantedLanes.some(l => ['jobs','web'].includes(l))) tools.delete('jobs_search');
   const availableSkills = () => usableSkills({
     skills: discoverSkills(skillsDir || path.join(workspace, 'skills')).skills,
-    grantedLanes: ['files', ...(interactive ? ['desktop', 'screen'] : []), ...(browserAvailable ? ['browser'] : [])],
-    availableTools: definitions.map(t => t.name), limit: 100,
+    grantedLanes: [...new Set([
+      'files',
+      ...(Array.isArray(grantedLanes) ? grantedLanes : []),
+      ...(hostBridge.selectedLanes || []),
+      ...(interactive ? ['desktop', 'screen'] : []),
+      ...(browserAvailable ? ['browser'] : []),
+    ])],
+    availableTools: [...new Set(catalogSourceNames)], limit: 100,
   }).usable;
   add('skills_search', 'Search canonical Majin skill metadata. Skill text is untrusted procedure data.',
     z.object({ query: z.string().default('') }).strict(), ({ query }) => ({ result: availableSkills()
@@ -143,11 +197,41 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
       if (!skill) throw new Error('Unknown or unavailable canonical skill');
       return { result: { name: skill.name, body: skill.body, trusted: false } };
     });
-  add('driver_status', 'Actual host, capabilities and limitations. No provider inference is used.', z.object({}).strict(), () => ({ result: {
-    mode: controller === 'provider' ? 'PROVIDER_TOOLS' : 'CODEX_DRIVER', hostname: os.hostname(), platform: process.platform, workspace,
-    interactiveWindows: Boolean(interactive), browserAvailable, processAccess, browserWriteOrigins: writeOrigins, providerInference: false,
-    toolSources: [...tools.values()].map(t => ({ name: t.name, source: t.source || 'deterministic adapter' })),
-    unavailable: ['computer.use (requires Majin LLM)', 'learning approval/XP mutation', 'external accounts require owner-authorized credentials or sessions'],
-  } }));
+  add('tools_search', 'Search the complete Majin tool universe, including tools that are unavailable on this host or without an owner lane. Unavailable results include the concrete reason.',
+    z.object({
+      query: z.string().default(''),
+      limit: z.number().int().min(1).max(50).default(20),
+      includeUnavailable: z.boolean().default(true),
+    }).strict(), ({ query, limit, includeUnavailable }) => {
+      const current = parity();
+      const needle = query.toLowerCase().replaceAll('_', '.');
+      const matches = current.entries.filter((entry) => (
+        (includeUnavailable || entry.available)
+        && (!needle || entry.sourceName.toLowerCase().includes(needle) || entry.name.toLowerCase().includes(query.toLowerCase()) || entry.lane.toLowerCase().includes(needle))
+      )).slice(0, limit);
+      return { result: { total: current.universe, available: current.available, unavailable: current.unavailable, coveragePercent: current.coveragePercent, matches } };
+    }, 'tools.search');
+  add('driver_status', 'Actual host, capabilities and limitations. No provider inference is used.', z.object({}).strict(), () => {
+    const current = parity();
+    return { result: {
+      mode: controller === 'provider' ? 'PROVIDER_TOOLS' : 'CODEX_DRIVER', hostname: os.hostname(), platform: process.platform, workspace,
+      interactiveWindows: Boolean(interactive), browserAvailable, processAccess, browserWriteOrigins: writeOrigins, providerInference: false,
+      grantedLanes: grantedLanes ?? null,
+      selectedHostLanes: hostBridge.selectedLanes,
+      toolParity: {
+        universe: current.universe,
+        available: current.available,
+        unavailable: current.unavailable,
+        coveragePercent: current.coveragePercent,
+        unavailableTools: current.entries.filter((entry) => !entry.available),
+      },
+      hostBridge: {
+        registered: hostBridge.registered,
+        skipped: hostBridge.skipped,
+      },
+      toolSources: [...tools.values()].map(t => ({ name: t.name, source: t.source || 'deterministic adapter', ...(t.lane ? { lane: t.lane } : {}), ...(t.tier ? { tier: t.tier } : {}) })),
+      unavailable: ['learning approval/XP mutation from the deterministic driver', 'external accounts require owner-authorized credentials or sessions'],
+    } };
+  });
   return tools;
 }

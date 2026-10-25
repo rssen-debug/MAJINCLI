@@ -75,6 +75,7 @@ export function createV5Server({
   fetchImpl = globalThis.fetch,
   completeImpl = null,
   portalAdapter = null,
+  providerMaxRounds = undefined,
 } = {}) {
   const architect = new GrandArchitect({
     dataDir,
@@ -83,7 +84,7 @@ export function createV5Server({
     completeImpl,
     portalAdapter,
   });
-  const providerAgent = new ProviderAgent({ architect, browserWriteOrigins });
+  const providerAgent = new ProviderAgent({ architect, browserWriteOrigins, ...(providerMaxRounds ? { maxRounds: providerMaxRounds } : {}) });
   const useProviderAgent = body => Boolean(architect.providers.state.activeModelId) &&
     body.actions == null && body.jobAds == null && !body.synthesizeMissingSkill && !body.blocker && !body.requireUserConfirmation;
 
@@ -226,7 +227,7 @@ export function createV5Server({
       // Resume goal from checkpoint
       if (method === 'POST' && pathname === '/api/v5/goal/resume') {
         const body = await readJsonBody(req);
-        const resumed = providerAgent.getGoalState() ? await providerAgent.execute({ goalText: body.goalText, criteria: body.criteria, resume: true }) : await architect.resumeGoal(body);
+        const resumed = providerAgent.getGoalState() ? await providerAgent.execute({ goalText: body.goalText, criteria: body.criteria, maxRounds: body.maxRounds, resume: true }) : await architect.resumeGoal(body);
         return sendJson(res, 200, { ok: true, goal: resumed });
       }
 

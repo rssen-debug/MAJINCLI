@@ -69,6 +69,34 @@ export const V1_MODULE_DECISIONS = Object.freeze({
       + '(src/core/teams.js: TeamStore, runTeam) and the scheduler behind it (src/core/swarm.js) '
       + 'are reused verbatim by V4\'s team_run, with V4 subagents as the worker.',
   },
+  'browser.js': {
+    status: 'replaced',
+    reason: 'These Playwright-Core browser tools own a separate persistent browser profile and '
+      + 'session. V4 exposes browser work through its own browser lane and form engine, while '
+      + 'V5 uses this module directly in its deterministic driver; registering both in V4 would '
+      + 'create two competing browser sessions and duplicate form/submission state.',
+  },
+  'desktop-app.js': {
+    status: 'replaced',
+    reason: 'The Notepad/window-capture helpers are narrow V5 deterministic-driver adapters. '
+      + 'V4 already exposes the general Windows desktop and screen lanes through wincontrol '
+      + 'and net/screen tools, so adding these wrappers in V4 would duplicate the same host '
+      + 'effects under a second contract instead of improving capability coverage.',
+  },
+  'media.js': {
+    status: 'excluded',
+    reason: 'Image and speech generation need the configured provider/media service, credentials '
+      + 'and model routing owned outside the deterministic V1 tool wrapper. V4 keeps those '
+      + 'capabilities on its provider/voice surfaces; adapting media.* here would either fail '
+      + 'without that service context or bypass V4 provider selection and accounting.',
+  },
+  'plugins.js': {
+    status: 'replaced',
+    reason: 'The legacy plugin wrapper manages V1 plugin state directly. V4 loads plugins through '
+      + 'its kernel and sandboxed PluginWorker, then registers their tools in the same registry '
+      + 'with V4 schema validation, approvals and receipts; the V1 management wrapper must not '
+      + 'become a second plugin owner inside the V4 host.',
+  },
 });
 
 const V2_REASONS = Object.freeze({
