@@ -4,25 +4,38 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ProviderManager } from '../../src/v5/providers.js';
 import { browserBinary } from '../../src/v4/tools/host.js';
 
 const BIN = fileURLToPath(new URL('../../bin/majin-v5.mjs', import.meta.url));
 
+function killProcessTree(child) {
+  if (!child?.pid || child.exitCode !== null) return;
+  try {
+    if (process.platform === 'win32') {
+      spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, timeout: 10000 });
+    } else {
+      try { process.kill(-child.pid, 'SIGKILL'); }
+      catch { child.kill('SIGKILL'); }
+    }
+  } catch { /* the child may have exited between the check and the kill */ }
+}
+
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-v5-cli-'));
   const dataDir = path.join(root, 'data');
   const workspace = path.join(dataDir, 'workspace');
   fs.mkdirSync(workspace, { recursive: true });
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   return { root, dataDir, workspace };
 }
 
 function runCli(args, { root, timeoutMs = 120000, env = {} } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [BIN, ...args], {
+      detached: process.platform !== 'win32',
       encoding: 'utf8',
       env: {
         ...process.env,
@@ -36,7 +49,7 @@ function runCli(args, { root, timeoutMs = 120000, env = {} } = {}) {
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => {
-      child.kill('SIGKILL');
+      killProcessTree(child);
       reject(new Error(`CLI timed out: ${args.join(' ')}\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`));
     }, timeoutMs);
     child.stdout.on('data', (chunk) => { stdout += chunk; });
@@ -67,6 +80,7 @@ async function waitForCondition(predicate, description, timeoutMs = 30000) {
 
 function startCliSession(args, { root, timeoutMs = 120000, env = {} } = {}) {
   const child = spawn(process.execPath, [BIN, ...args], {
+    detached: process.platform !== 'win32',
     env: {
       ...process.env,
       HOME: root,
@@ -99,7 +113,7 @@ function startCliSession(args, { root, timeoutMs = 120000, env = {} } = {}) {
   };
   child.stdout.on('data', (chunk) => { session.stdout += chunk; notify(); });
   child.stderr.on('data', (chunk) => { session.stderr += chunk; notify(); });
-  const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
+  const timer = setTimeout(() => killProcessTree(child), timeoutMs);
   session.closed = new Promise((resolve, reject) => {
     child.on('error', (error) => {
       clearTimeout(timer);
@@ -128,14 +142,20 @@ function startCliSession(args, { root, timeoutMs = 120000, env = {} } = {}) {
       waiter.reject = reject;
       waiter.timer = setTimeout(() => {
         session.waiters.delete(waiter);
+        // A failed interactive assertion must not leave the CLI, its isolated
+        // tool worker, or a real browser alive behind the test process.
+        killProcessTree(child);
         reject(new Error(`timed out waiting for ${pattern} in ${stream}\nSTDOUT:\n${session.stdout}\nSTDERR:\n${session.stderr}`));
       }, waitMs);
       session.waiters.add(waiter);
     });
   };
+  session.terminate = () => killProcessTree(child);
   session.exit = async () => {
     if (child.stdin.writable) session.write('/exit');
-    return session.closed;
+    const fallback = setTimeout(() => killProcessTree(child), 60000);
+    fallback.unref?.();
+    return session.closed.finally(() => clearTimeout(fallback));
   };
   return session;
 }
@@ -173,7 +193,10 @@ async function fakeProvider(t, respond) {
     }));
   });
   await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
-  t.after(async () => new Promise((resolve) => upstream.close(resolve)));
+  t.after(async () => {
+    upstream.closeAllConnections?.();
+    await new Promise((resolve) => upstream.close(resolve));
+  });
   return { requests, baseUrl: `http://127.0.0.1:${upstream.address().port}/v1` };
 }
 
@@ -436,10 +459,15 @@ test('CLI chat grants a blocked browser origin in the same host and resumes the 
   const session = startCliSession([
     'chat', '--data-dir', fx.dataDir, '--criteria', criteria,
     '--lanes', 'files,browser', '--browser-headless',
-  ], { ...fx, env: { MAJIN_V4_BROWSER: browserPath } });
-  await session.waitFor('Type a goal');
+  ], { ...fx, timeoutMs: 600000, env: { MAJIN_V4_BROWSER: browserPath } });
+  t.after(() => session.terminate());
+  await session.waitFor('Type a goal', 'stdout', 60000);
   session.write(`Open ${origin}, fill it for Chat User with marker ${marker}, submit it, and save chat-browser-receipt.txt`);
-  await session.waitFor('Status: WAITING_USER');
+  // A cold real Edge/Chromium launch plus four isolated driver operations can
+  // exceed the generic 30s chat wait on a loaded Windows runner. The product
+  // still has its own per-model/per-tool timeouts; this waits for the same
+  // real WAITING_USER checkpoint without weakening any assertion below.
+  await session.waitFor('Status: WAITING_USER', 'stdout', 240000);
   await session.waitFor('Browser handoff: BROWSER_ORIGIN');
   await session.waitFor(`Exact origin: ${origin}`);
   await session.waitFor('Browser session retained at handoff: yes');
@@ -447,13 +475,13 @@ test('CLI chat grants a blocked browser origin in the same host and resumes the 
   assert.equal(completions, 4);
 
   session.write(`/browser-origin grant ${origin}/submit`);
-  await session.waitFor(`Browser write origins (1): ${origin}`);
-  await session.waitFor('Exact origin grant is effective immediately');
+  await session.waitFor(`Browser write origins (1): ${origin}`, 'stdout', 60000);
+  await session.waitFor('Exact origin grant is effective immediately', 'stdout', 60000);
 
   session.write('/resume');
-  await session.waitFor('Status: COMPLETED');
+  await session.waitFor('Status: COMPLETED', 'stdout', 240000);
   session.write('/status');
-  await session.waitFor('resumes: 1');
+  await session.waitFor('resumes: 1', 'stdout', 60000);
   const closed = await session.exit();
 
   assert.equal(closed.status, 0, `${closed.stdout}\n${closed.stderr}`);
