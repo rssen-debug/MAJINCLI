@@ -7,6 +7,8 @@ import { shellTools } from './shell.js';
 import { sysTools } from './sys.js';
 import { netTools } from './net.js';
 import { webTools } from './web.js';
+import { mediaTools } from './media.js';
+import { pluginTools } from './plugins.js';
 import { reTools } from './re.js';
 import { majinTools } from './majin.js';
 import { agentTools } from './agent.js';
@@ -25,7 +27,14 @@ import { computerTools } from './computer.js';
 import { resetTools } from './reset.js';import { auditTools } from './audit.js';import { memorySyncTools } from './memory-sync.js';import { learnTools } from './learn.js';import { teamTools } from './teams.js';import { powerTools } from './power.js';
 import { approvals } from '../guard.js';
 
-export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...reTools, ...majinTools, ...agentTools, ...jobTools, ...marketingTools, ...githubTools, ...tradingTools, ...metaTools, ...winControlTools, ...researchTools, ...execTools, ...flowsTools, ...channelTools, ...heartbeatTools, ...computerTools, ...resetTools, ...auditTools, ...memorySyncTools, ...learnTools, ...teamTools, ...powerTools];
+export const ALL_TOOLS = [
+  ...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools,
+  ...mediaTools, ...reTools, ...majinTools, ...pluginTools, ...agentTools,
+  ...jobTools, ...marketingTools, ...githubTools, ...tradingTools, ...metaTools,
+  ...winControlTools, ...researchTools, ...execTools, ...flowsTools, ...channelTools,
+  ...heartbeatTools, ...computerTools, ...resetTools, ...auditTools, ...memorySyncTools,
+  ...learnTools, ...teamTools, ...powerTools,
+];
 
 export function buildRegistry(ctx) {
   if (!ctx.approvals) ctx.approvals = approvals;

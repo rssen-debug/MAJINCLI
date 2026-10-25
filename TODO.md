@@ -34,7 +34,7 @@ autopilot/teamwork/dashboard additions).
   live opencode Go free 3/3 workers (mission gate med inline-listor).
   Remaining: mission gate coverage of inline lists (solved 2026-10-18),
   REALITY ENGINE step 1: verify-repair mot fil-artefakter SHIPPED 2026-10-18 (mission.test 8+9),
-  
+
   mission with REAL cloud models (needs Go plan or other key),
   UI mission surface (worker trace row in rail - UI lane), and Reality
   Engine verification loop (execute→test→repair).

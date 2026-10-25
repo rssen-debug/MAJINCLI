@@ -66,8 +66,9 @@ test('schema: gyllene mängder mot det verkliga bältet (d04-sanning nu ägd)', 
   }
 });
 
-test('schema: verktygs-skiktet äga 141 verktyg (5 control + 134 kärna — + power.propose/power.approve/power.apply (W6) tillagda medvetet)', () => {
-  assert.equal(ALL_TOOLS.length, 141, 'reparationer får inte tyst lägga till eller ta bort verktyg');
+test('schema: the integrated tool layer has 147 unique tools, including control and power surfaces', () => {
+  assert.equal(ALL_TOOLS.length, 147, 'registered tool count changed; review additions or removals deliberately');
+  assert.equal(new Set(ALL_TOOLS.map((tool) => tool.name)).size, ALL_TOOLS.length, 'each tool name has one implementation');
   const groups = [...new Set(ALL_TOOLS.map((t) => t.group))];
   assert.ok(groups.includes('control'), 'control-gruppen måste vara shipped');
 });

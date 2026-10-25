@@ -121,10 +121,11 @@ test('agent.turn: enkelfråga tas ALDRIG den mission-vägen (GENESIS ZERO intakt
   const rt = await createRuntime({ channels: false, scheduler: false });
   rt.cfg.patch({
     models: { provider: 'demo', routes: Object.fromEntries(['tasks', 'chat', 'router', 'analysis', 'plan', 'research', 'code', 're', 'final', 'aggregator'].map((j) => [j, 'demo/demo-fast'])) },
+    providers: { demo: { kind: 'mock', apiKey: 'demo' } },
     guard: { mode: 'off' },
     moa: { policy: 'off' },
   }, { persist: false });
-  setScript('main:tasks', [{ text: 'Stockholm är huvudstaden.' }]);
+  setScript('main:research', [{ text: 'Stockholm är huvudstaden.' }]);
   const r = await rt.agent.turn({ input: 'vad är Sveriges huvudstad?', session: 'single-demo' });
   assert.ok(!r.mission, 'enkelsekraften ska INTE bli mission');
   assert.match(r.text || '', /Stockholm/);

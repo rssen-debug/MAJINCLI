@@ -312,4 +312,3 @@ Generated 2026-10-24T13:44:01.044Z on linux. Every row is computed from the code
 | marketing | yes | 4 |  |
 | re | yes | 23 |  |
 | trading | yes | 2 |  |
-

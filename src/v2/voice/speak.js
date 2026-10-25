@@ -37,5 +37,3 @@ export async function speak(text, { provider, approvals = null, telemetry = null
   events?.emit('task.updated', { taskId: `voice:${provider.name}`, to: 'done', durationMs: Date.now() - t0 });
   return { ok: true, decision: 'done', ...res, verified, durationMs: Date.now() - t0 };
 }
-
-

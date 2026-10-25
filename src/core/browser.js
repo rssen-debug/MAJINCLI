@@ -231,10 +231,13 @@ async function httpJson(url, { timeoutMs = 5000, signal = null } = {}) {
 
 // Browser-owned sign-in/sync pages may appear after startup. A new page alone
 // is not evidence that the user's click opened it: require the current opener.
-export function isChildTarget(target, browser) {
+export function isChildTarget(target, browser, beforeTargets = null) {
+  const before = beforeTargets instanceof Set ? beforeTargets : new Set(beforeTargets || []);
+  const openedDuringAction = beforeTargets != null && !before.has(target.targetId);
   return target.type === 'page' && target.url !== 'about:blank'
-    && target.openerId === browser.targetId && target.targetId !== browser.targetId
-    && !target.attached && !browser.knownTabs.has(target.targetId);
+    && target.targetId !== browser.targetId && !target.attached
+    && !browser.knownTabs.has(target.targetId)
+    && (target.openerId === browser.targetId || openedDuringAction);
 }
 
 export async function waitForNavigation(navigation, read, { attempts = 150, delayMs = 100, wait = ms => new Promise(resolve => setTimeout(resolve, ms)), signal = null } = {}) {
@@ -463,6 +466,10 @@ async function openForOnce({ session, url = null, headless = true, cfgGet = null
     if (r.exceptionDetails) throw new Error(String(r.exceptionDetails.text || 'evaluate threw'));
     return r.result ? r.result.value : undefined;
   };
+  b.snapshotTargets = async () => {
+    const { targetInfos = [] } = await cdp('Target.getTargets');
+    return new Set(targetInfos.map((target) => target.targetId));
+  };
   // Attaching without a URL must not erase an in-progress application.
   if (url && url !== 'about:blank') {
     const currentUrl = await b.eval('location.href', {signal}).catch(() => null);
@@ -482,13 +489,14 @@ async function openForOnce({ session, url = null, headless = true, cfgGet = null
 
   /* smarttab: a click that opens a NEW page target must not strand the agent
      in the old, empty tab. 1.5 s window to catch the spawn, then re-attach. */
-  b.followNewTarget = async ({ windowMs = 1500 } = {}) => {
+  b.followNewTarget = async ({ windowMs = 1500, beforeTargets = null } = {}) => {
     const deadline = Date.now() + windowMs;
     while (Date.now() < deadline) {
       const { targetInfos = [] } = await cdp('Target.getTargets');
       const mine = targetInfos.find((t) => t.targetId === b.targetId);
-      /* a NEW tab, born after our spawn — never the stale initial blank tab */
-      const spawnTarget = targetInfos.find((t) => isChildTarget(t, b));
+      /* A new nonblank tab from this opener, or created since the click snapshot.
+         Edge may omit openerId for target=_blank links (implicit noopener). */
+      const spawnTarget = targetInfos.find((t) => isChildTarget(t, b, beforeTargets));
       if (spawnTarget) {
         const { sessionId: s2 } = await cdp('Target.attachToTarget', { targetId: spawnTarget.targetId, flatten: true });
         b.sessionId = s2;

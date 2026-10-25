@@ -6,7 +6,7 @@ import http from 'node:http';
 import { startTestServer, tempHome } from './helpers.mjs';
 import { discoverModels, providerOffering, refreshProviderCatalog, fetchGoUsage } from '../../src/v4/models.js';
 import { publicModelSelection, selectCanonicalModel, assertModelBillingAuthorized } from '../../src/v4/model-selection.js';
-import { createModelClient } from '../../src/v4/model.js';
+import { createModelClient, explainModelError } from '../../src/v4/model.js';
 import { loadConfig } from '../../src/v4/config.js';
 
 function setup(baseUrl = 'https://opencode.ai/zen/go/v1') {
@@ -111,8 +111,15 @@ test('actual HTTP transport uses canonical model for subsequent calls, no fallba
     assert.deepEqual(received, ['two', 'two'], 'failure never routes to another model');
     f.config.providers.go.models = ['one'];
     fs.writeFileSync(path.join(f.home, 'config.json'), JSON.stringify(f.config));
-    await assert.rejects(restarted.chat({ messages: [] }), /No fallback/);
-    assert.deepEqual(received, ['two', 'two']);
+    await assert.rejects(restarted.chat({ messages: [] }), (error) => {
+      assert.equal(error.code, 'MODEL_UNAVAILABLE');
+      assert.equal(error.reason, 'model-not-listed');
+      assert.match(error.message, /No fallback/);
+      assert.match(explainModelError(error), /Ingen modellförfrågan skickades/);
+      assert.match(explainModelError(error), /Uppdatera modellistan/);
+      return true;
+    });
+    assert.deepEqual(received, ['two', 'two'], 'an unavailable selection sends no request and never falls back');
   } finally { f.clean(); await new Promise((r) => upstream.close(r)); }
 });
 

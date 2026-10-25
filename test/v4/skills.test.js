@@ -23,6 +23,10 @@ test('skills: the shipped skills load and are well formed', () => {
   const names = skills.map((s) => s.name);
   assert.ok(names.includes('job-search'));
   assert.ok(names.includes('fix-code'));
+  const jobSearch = skills.find((s) => s.name === 'job-search');
+  assert.match(jobSearch.body, /Använd en söktjänst åt gången/);
+  assert.match(jobSearch.body, /Förbered bara på uttrycklig begäran/);
+  assert.match(jobSearch.body, /sluta efter verifierad jämförelse/);
   for (const s of skills) {
     assert.ok(s.title.length > 3);
     assert.ok(s.body.length > 50, `${s.name} has no real procedure`);

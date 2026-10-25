@@ -241,6 +241,21 @@ export class Registry {
     return this.byName.has(name);
   }
 
+  register(tool) {
+    if (!tool?.name || this.byName.has(tool.name)) throw new Error(`tool already exists or has no name: ${tool?.name || '(missing)'}`);
+    this.tools.push(tool);
+    this.byName.set(tool.name, tool);
+    return tool;
+  }
+
+  unregister(name) {
+    const tool = this.byName.get(name);
+    if (!tool) return false;
+    this.byName.delete(name);
+    this.tools = this.tools.filter((item) => item.name !== name);
+    return true;
+  }
+
   /** Typade kontrakt för allt som är synligt i just denna yta. */
   capabilities(opts = {}) {
     return this.visible(opts).map(capabilityOf);

@@ -37,6 +37,7 @@
     "exe:bundle": "node scripts/build-exe.mjs --no-pkg",
     "bench": "node ./scripts/bench.mjs",
     "bench:json": "node ./scripts/bench.mjs --json",
+    "eval:live": "node ./scripts/eval-live.mjs",
     "icon": "node ./scripts/set-icon.mjs",
     "shortcut": "node ./bin/majin.mjs legacy shortcut",
     "setup:exe": "node ./scripts/build-setup.mjs",
@@ -69,6 +70,7 @@
   },
   "optionalDependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
+    "playwright-core": "^1.64.1",
     "qrcode": "1.5.4"
   },
   "files": [

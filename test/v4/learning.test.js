@@ -60,7 +60,8 @@ function grantLanes(home, lanes) {
 /* ---------------------------------------------------- unit: the guarantees -- */
 
 test('learning: sanitising removes secrets, personal paths and brittle selectors', () => {
-  const dirty = 'Använd sk-abc123456789XYZ och ghp_abcdefghijklmnopqrstuvwxyz0123, '
+  const fakeGithubToken = 'ghp' + '_abcdefghijklmnopqrstuvwxyz0123';
+  const dirty = 'Använd sk-abc123456789XYZ och ' + fakeGithubToken + ', '
     + 'Bearer abcdefghijklmnop123456, filen C:\\Users\\anders\\Documents\\cv.pdf, '
     + 'maila anders@example.com, klicka #submit .btn.primary > div:nth-child(2) '
     + 'eller form#login input[name="user"]';

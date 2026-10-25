@@ -11,7 +11,7 @@
  */
 import { complete as v1Complete } from '../core/provider/chat.js';
 import { safeFileName } from './tools.js';
-import { resolveRouteForModel, recordLiveResult } from './models.js';
+import { resolveRouteForModel, routeUnavailableReason, recordLiveResult } from './models.js';
 import { readModelSelection, assertModelBillingAuthorized } from './model-selection.js';
 import { t } from './ui/strings.js';
 
@@ -189,7 +189,10 @@ export function createModelClient(config, { workspaceDir } = {}) {
       const route = routeForModel(modelId);
       const selection = readModelSelection({ home: config.paths.home });
       const requestedId = selection.persisted ? selection.modelId : modelId;
-      if (requestedId && !route) throw new Error('Selected model is unavailable. No fallback was attempted.');
+      if (requestedId && !route) {
+        const reason = routeUnavailableReason({ home: config.paths.home, env: process.env, modelId: requestedId, base: defaultRoute });
+        throw Object.assign(new Error(`Selected model is unavailable. ${reason} No fallback was attempted.`), { code: 'MODEL_UNAVAILABLE', reason });
+      }
       if (route && requestedId) assertModelBillingAuthorized({ home: config.paths.home, modelId: requestedId, base: defaultRoute });
       const demo = !route;
       if (demo) {
@@ -235,10 +238,24 @@ export function createModelClient(config, { workspaceDir } = {}) {
 
 /** Friendly, honest sentence for a failed model call. */
 export function explainModelError(err) {
+  if (err?.code === 'MODEL_UNAVAILABLE') {
+    const reasonKeys = {
+      'no-model': 'model.error.reason.noModel',
+      'env-route-unavailable': 'model.error.reason.envUnavailable',
+      'env-route-mismatch': 'model.error.reason.envMismatch',
+      'config-missing': 'model.error.reason.configMissing',
+      'invalid-model-id': 'model.error.reason.invalidId',
+      'provider-missing': 'model.error.reason.providerMissing',
+      'endpoint-missing': 'model.error.reason.endpointMissing',
+      'model-not-listed': 'model.error.reason.modelNotListed',
+      'api-key-missing': 'model.error.reason.apiKeyMissing',
+      'route-unresolved': 'model.error.reason.unresolved',
+    };
+    return t('model.error.unavailable', { reason: t(reasonKeys[err.reason] || 'model.error.reason.unresolved') });
+  }
   if (err?.majin?.human) return err.majin.human;
   if (err?.name === 'AbortError' || err?.code === 'ABORT_ERR') return 'Turn cancelled.';
   const msg = String(err?.message || err || 'unknown error');
   if (/no api key/i.test(msg)) return 'No API key is configured for this provider.';
   return msg;
 }
-

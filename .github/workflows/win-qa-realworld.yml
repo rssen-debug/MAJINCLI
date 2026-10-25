@@ -100,7 +100,7 @@ jobs:
         run: |
           # MÄTT (run 39422866759): Inno startar asynkront — utan -Wait mäts 'missing' direkt.
           $proc = Start-Process .\qa-stage\MAJIN-Setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LOG=install-silent.log' -Wait -PassThru
-          "installer exit=$($proc.ExitCode)" 
+          "installer exit=$($proc.ExitCode)"
           $exe = "$env:LOCALAPPDATA\Programs\MAJIN\majin-win-x64.exe"
           if (-not (Test-Path $exe)) { $exe = "$env:ProgramFiles\MAJIN\majin-win-x64.exe" }
           if (-not (Test-Path $exe)) { throw "installed exe missing after silent install" }
@@ -366,4 +366,3 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with: { name: qa-interactive-evidence, path: qa-evidence/, retention-days: 90 }
-

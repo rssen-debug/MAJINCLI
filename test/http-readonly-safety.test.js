@@ -33,7 +33,7 @@ test('raw HTTP remains available but a real POST waits for scoped approval',asyn
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
   const registry=new ToolRegistry();
   registry.define(adaptV1Tool(netTools.find(t=>t.name==='net.http'),{lane:'net',ctx:v1Context()}));
-  assert.equal(registry.get('net_http').tier,'external');
+  assert.equal(registry.get('net_http').tier,'process', 'raw arbitrary HTTP is held as an operation, stricter than a read capability');
   const call={tool:'net_http',input:{url:`http://127.0.0.1:${server.address().port}/controlled`,method:'POST',body:'synthetic data'}};
   try{
     const held=await runTool(call,{registry,approvals:{check:scope=>{assert.equal(scope,'tool:net_http');return {decision:'waiting'};}}});

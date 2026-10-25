@@ -14,7 +14,8 @@ import { dirs, ensureDirs } from './paths.js';
 import { Memory, Skills } from './memory.js';
 import { Adapters } from './adapters.js';
 import { Usage } from './usage.js';
-import { buildRegistry, ALL_TOOLS } from './tools/index.js';
+import { buildRegistry } from './tools/index.js';
+import { loadUserPlugins } from './tools/plugins.js';
 import { Agent } from './agent.js';
 import { Dataset } from './dataset.js';
 import { Scheduler } from './schedule.js';
@@ -38,6 +39,9 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
 
   const ctx = { cfg, bus, memory, skills, adapters, usage, dataset, approvals, agent: null, channels: null, scheduler: null, emit: (ev) => bus.emit(`tool.${ev.type}`, ev) };
   const registry = buildRegistry(ctx);
+  const plugins = await loadUserPlugins(registry);
+  for (const item of plugins.skipped) bus.warn('plugin.load', { name: item.name, reason: item.reason });
+  if (plugins.loaded.length) bus.info('plugin.load', { count: plugins.loaded.length, names: plugins.loaded });
 
   const agent = new Agent({ cfg, registry, memory, skills, usage, bus, shared: ctx });
   /* Del 1D: every fs.write lands in the session journal with the same truth the
@@ -137,7 +141,7 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
       presets: Object.entries(PRESETS).map(([name, p]) => presetCard(name, p)),
       moa: { policy: moa.policy, enabled: moa.enabled, width: moa.width, refs: moa.references.map((r) => r.model), aggregator: moa.aggregator, disagreementFloor: moa.disagreementFloor },
       guard: { mode: cfg.get('guard.mode'), pending: approvals.list().length, recent: approvals.recent(8) },
-      tools: includeTools ? registry.list().map((t) => ({ name: t.name, group: t.group, risk: t.risk, desc: t.desc })) : { count: ALL_TOOLS.length },
+      tools: includeTools ? registry.list().map((t) => ({ name: t.name, group: t.group, risk: t.risk, desc: t.desc })) : { count: registry.list().length },
       groups: includeTools ? registry.groups() : null,
       memory: memory.stats?.() || null,
       skills: skills.list?.() || [],

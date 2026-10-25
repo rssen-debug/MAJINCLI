@@ -140,7 +140,7 @@ export function renderMarkdown(rep) {
     'Same `runSwarm` executor, seeded artificial latency. Measures **executor',
     'parallelism only** — model quality/latency live in `scripts/live-bench.mjs`.',
     '',
-    `| scenario | median wall | overlap pairs |`, 
+    `| scenario | median wall | overlap pairs |`,
     `|---|---:|---:|`,
     `| single-agent baseline (cap=1), ${rep.config.fan} tasks | ${rep.serialMedianMs} ms | ${rep.overlap.serial.join('/')} |`,
     `| MAJIN parallel (cap=${rep.config.fan}) | ${rep.parallelMedianMs} ms | ${rep.overlap.parallel.join('/')} |`,

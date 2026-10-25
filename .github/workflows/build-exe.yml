@@ -77,7 +77,21 @@ jobs:
           python -m pip install --quiet ziglang
           python -m ziglang version
       - name: unit and HTTP suite must pass on Windows
-        run: npm test
+        shell: pwsh
+        run: |
+          npm test *> windows-test.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            $failures = Select-String -Path windows-test.log -Pattern '^not ok ' -Context 0,12
+            if ($failures) {
+              $details = ($failures | ForEach-Object { $_.ToString() + "`n" + ($_.Context.PostContext -join "`n") }) -join "`n---`n"
+            } else {
+              $details = (Get-Content windows-test.log -Tail 50) -join "`n"
+            }
+            $details | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            Write-Output $details
+            throw "Windows unit and HTTP suite failed with exit $code"
+          }
       - name: build the exe
         shell: pwsh
         run: |
@@ -132,7 +146,19 @@ jobs:
           MAJIN_BROWSER_LIVE: '1'
         run: |
           $env:MAJIN_HOME = "$env:GITHUB_WORKSPACE\.livedemo"
-          node --test --test-concurrency=1 test/browser.live.test.js test/jobs.live.test.js test/browser-domains.live.test.js
+          node --test --test-concurrency=1 test/browser.live.test.js test/jobs.live.test.js test/browser-domains.live.test.js *> windows-browser.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            $failures = Select-String -Path windows-browser.log -Pattern '^not ok ' -Context 0,20
+            if ($failures) {
+              $details = ($failures | ForEach-Object { $_.ToString() + "`n" + ($_.Context.PostContext -join "`n") }) -join "`n---`n"
+            } else {
+              $details = (Get-Content windows-browser.log -Tail 60) -join "`n"
+            }
+            $details | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            Write-Output $details
+            throw "Real browser e2e failed with exit $code"
+          }
 
       - name: the installer must install, run, survive a restart and uninstall
         # One verifier for CI and for a person's own laptop: the same script the
@@ -171,7 +197,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $f = [string][char]96 * 3
-          if (Test-Path build.log) { $log = (Get-Content build.log -Tail 60) -join "`n" } else { $log = "(no build.log)" }
+          $sections = @()
+          foreach ($file in @('windows-test.log', 'windows-browser.log', 'build.log')) {
+            if (-not (Test-Path $file)) { continue }
+            $failures = Select-String -Path $file -Pattern '^not ok ' -Context 0,20
+            if ($failures) { $details = ($failures | ForEach-Object { $_.ToString() + "`n" + ($_.Context.PostContext -join "`n") }) -join "`n---`n" }
+            else { $details = (Get-Content $file -Tail 60) -join "`n" }
+            $sections += "### $file`n$details"
+          }
+          if (-not $sections.Count) { $sections = @('(no test or build log)') }
+          $log = $sections -join "`n`n"
           $body = "run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID`n`n$f`n$log`n$f`n"
           $payload = @{ title = "build-exe failed on $($env:GITHUB_SHA.Substring(0,7))"; body = $body; labels = @('ci') } | ConvertTo-Json -Compress
           Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/issues" -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" } -Body $payload | ForEach-Object { "opened $($_.html_url)" }

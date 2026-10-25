@@ -128,7 +128,8 @@ export function budgetGate({ cfg, usageCtx = null, route, tally = null }) {
 
 export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = () => {}, signal, maxSteps, usage, ctx, allowTools = true, label = 'agent', providerErrorCap = 4, providerRetries = null, modelCall = null }) {
   const agent = cfg.get('agent') || {};
-  const limit = Number(maxSteps) || agent.maxSteps || 40;
+  const requestedLimit = Number(maxSteps) || Number(agent.maxSteps) || 40;
+  const limit = Math.max(1, Math.min(200, Math.floor(requestedLimit)));
   // Immutable goal anchor survives compact() and route escalation. Long turns
   // used to lose the actual user's objective after thousands of tool tokens.
   const initialGoal = [...messages].reverse().find((m) => m.role === 'user')?.content;
@@ -196,7 +197,10 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       return { text: answer || '(avbruten)', steps, toolLog, usage: tally, aborted: true, escalated };
     }
     steps += 1;
-    const stepJob = escalated ? cfg.get('routing.escalateJob') || 'analysis' : steps === 1 ? job : agent.stepJob || 'tasks';
+    // Reserve the final budgeted model call for a user-facing, tool-free answer.
+    const finalStep = limit > 1 && steps === limit;
+    const followupJob = !agent.stepJob || agent.stepJob === 'same' ? job : agent.stepJob;
+    const stepJob = finalStep ? 'final' : escalated ? cfg.get('routing.escalateJob') || 'analysis' : steps === 1 ? job : followupJob;
     /* P0: a TURN keeps the route chosen at its start. Resolving fresh on every
        step meant a provider switch mid-turn silently changed which model
        finished the running work (handover: picker wrote globally; every step
@@ -216,8 +220,9 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       return { text: monthlyBlock.text, steps, toolLog, usage: tally, error: monthlyBlock.error, errorKind: 'budget', fatal: true, stopReason: monthlyBlock.stopReason };
     }
 
-    const sentTools = allowTools ? pickSchemas(registry, ctx) : [];
-    onEvent({ type: 'step', label, step: steps, of: limit, job: stepJob, model: route.ref, escalated, toolsSent: sentTools.length, toolChars: sentTools.reduce((a, t) => a + t.description.length + JSON.stringify(t.parameters).length, 0) });
+    if (finalStep) messages.push({ role: 'system', content: 'FINAL STEP: do not call tools. Finish the task now using only verified evidence already in the conversation. State what is completed, what is not, and any exact blocker; do not claim actions that did not succeed.' });
+    const sentTools = allowTools && !finalStep ? pickSchemas(registry, ctx) : [];
+    onEvent({ type: 'step', label, step: steps, of: limit, job: stepJob, model: route.ref, escalated, finalizing: finalStep, toolsSent: sentTools.length, toolChars: sentTools.reduce((a, t) => a + t.description.length + JSON.stringify(t.parameters).length, 0) });
 
     let res;
     try {
@@ -232,7 +237,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
           job: `${label}:${stepJob}`,
           messages,
           tools: sentTools,
-          toolChoice: allowTools ? undefined : 'none',
+          toolChoice: sentTools.length ? undefined : 'none',
           stream: true,
           maxTokens: agent.maxTokens || 6000,
           temperature: agent.temperature ?? 0.2,
@@ -289,6 +294,11 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
     onEvent({ type: 'usage', label, step: steps, model: route.ref, tokensIn: res.usage?.input || 0, tokensOut: res.usage?.output || 0, costUsd: res.usage?.costUsd || 0, ms: res.elapsedMs });
 
     const calls = res.toolCalls || [];
+    if (finalStep && calls.length) {
+      onEvent({ type: 'tool_blocked', label, step: steps, reason: 'final budget step is reserved for the user-facing answer' });
+      return { text: summarizePartial(toolLog, limit), steps, toolLog, usage: tally, escalated,
+        incomplete: true, finalizedAtLimit: true, stopReason: 'tool_call_blocked' };
+    }
     if (!calls.length) {
       // A model cannot mark an executable goal completed without making a
       // SINGLE real tool call. One bounded retry can recover a missed tool.
@@ -336,7 +346,7 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
         if (contract) onEvent({ type: 'artifact_verify', label, step: steps, ok: true, target: contract.target });
       }
       if (res.text) messages.push({ role: 'assistant', content: res.text });
-      return { text: res.text || answer, steps, toolLog, usage: tally, escalated, stopReason: res.stopReason };
+      return { text: res.text || (finalStep ? summarizePartial(toolLog, limit) : answer), steps, toolLog, usage: tally, escalated, finalizedAtLimit: finalStep, stopReason: res.stopReason };
     }
 
     messages.push({ role: 'assistant', content: res.text || '', tool_calls: calls.map((c) => ({ id: c.id, name: c.name, args: safeParse(c.argsJson) })) });
@@ -440,8 +450,12 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
       // (och trådhistoriken kan inte återskapa *varför* verktyget kördes).
       return { id: c.id, name: c.name, args, out, repeatKey: rep?.key || null };
     };
+    const parallelSafe = calls.length > 1 && calls.every((call) => {
+      const tool = registry.byName?.get(call.name);
+      return tool?.risk === 'read' && !['browser', 'screen', 'agent'].includes(tool.group);
+    });
     const results = await runToolCalls(calls, runOne, {
-      parallel: allowTools && cfg.get('agent.parallel') !== false
+      parallel: allowTools && cfg.get('agent.parallel') !== false && parallelSafe,
     });
 
     for (const r of results) {
@@ -587,12 +601,13 @@ export async function loop({ cfg, registry, messages, job = 'tasks', onEvent = (
 
   onEvent({ type: 'loop.limit', label, steps, toolCalls: toolLog.length });
   return {
-    text: answer || `Step limit ${limit} reached without a final answer (${toolLog.length} tool runs). Raise agent.maxSteps or split the task.`,
+    text: summarizePartial(toolLog, limit, answer),
     steps,
     toolLog,
     usage: tally,
     escalated,
     incomplete: true,
+    stopReason: 'step_limit',
   };
 }
 
@@ -645,6 +660,12 @@ export function safeParse(s) {
       return kv;
     }
   }
+}
+
+function summarizePartial(toolLog, limit, priorAnswer = '') {
+  if (!toolLog.length) return priorAnswer || `I reached the ${limit}-step limit before I could verify a final result. No tool action was recorded.`;
+  const recent = toolLog.slice(-6).map((item) => `- ${item.ok ? 'Completed' : 'Failed'} ${item.tool}: ${item.summary || item.error || 'no details returned'}`).join('\n');
+  return `I reached the ${limit}-step limit before I could fully finish and verify the task. Here is the recorded progress:\n${recent}\nPlease let me continue or narrow the remaining work.`;
 }
 
 function summarize(out) {

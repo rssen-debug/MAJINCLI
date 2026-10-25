@@ -23,11 +23,19 @@ That makes it the right tool for:
   the timing shows the timeout being honoured
 * **self-config latency** — `self-config` must stay a single-digit millisecond no-model-call
 
-It says nothing about model quality, provider latency or real cost. For those: point a real
-provider at it the same way you would anywhere else
-(`majin config set providers.deepseek.apiKey …`, `majin config set models.provider deepseek`) and
-read the `usage` line — the harness records provider calls, tokens and cost from the same
-`Usage` object the UI chip shows. `majin send "…"` + `GET /api/usage` is the quick version.
+It says nothing about model quality or provider latency. For actual model behavior, use the separate live evaluator below. Do not interpret the scripted mock benchmark as evidence that a configured model can reason or use tools correctly.
+
+## Live configured-model evaluation
+
+The mock benchmark above verifies MAJIN's plumbing only. To gather behavioral evidence from the model actually configured on this machine:
+
+```bash
+npm run eval:live -- --yes
+```
+
+This is deliberately opt-in: it runs two live scenarios, each allowing up to eight model steps, and can incur provider charges. It uses MAJIN's normal per-job routing, requires real keyed `tasks` and `final` routes, turns MOA and the classifier tiebreak off for this isolated check, allows only `fs.read`, `fs.write`, and `fs.list`, and confines writes to a temporary workspace that is deleted afterward. It does not change the user's config or workspace. It refuses configured routes matching OpenCode or Qwen and marks any unexpected mock-routed step as a failure. The JSON result reports the selected model routes, tool calls, usage, checks, and pass/fail; redirect stdout to keep the report, for example `npm run eval:live -- --yes > live-eval.json`.
+
+The checks use random markers that the model cannot know without reading a file: (1) retrieve and report a marker, then (2) write a marker, read it back, and report only after verification. Passing is evidence of basic live tool-use and verification for that provider/model at that moment—not proof of general intelligence, Arena parity, or quality on arbitrary tasks. No live provider was exercised in CI; only the deterministic mock harness is suitable for routine CI runs.
 
 ## Scenarios
 

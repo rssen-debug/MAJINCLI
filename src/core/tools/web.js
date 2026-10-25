@@ -370,6 +370,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const semanticTarget=JSON.stringify(semantic ? {role:String(role),name:String(accessibleName).trim()} : null);
       const expectedIdentity=JSON.stringify(identity);
       ctx.signal?.throwIfAborted();
+      const targetsBeforeClick = await b.snapshotTargets?.().catch(() => null);
       const hit = await b.eval(`(() => {
         // Playwright-MCP-style unique target selection: acting on the first
         // of multiple matching buttons is unsafe, especially Submit/Buy.
@@ -422,7 +423,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
             return {found:true,blocked:'ref_identity_changed',tag:current.tag,
               text:'stale element reference'};
         }
-        
+
         el.scrollIntoView({ block: 'center' });
         // NEVER echo input.value: it can contain passwords, tokens, email or
         // uploaded data. Use rendered label/accessible name for click evidence.
@@ -464,8 +465,13 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
             coveringRole:String(overlay.getAttribute('role')||'').slice(0,30),
             coveringId:String(over.id||'').slice(0,60),recoveryControls:controls};
         }
-        el.click();
+        // A DOM .click() is untrusted input and browsers may suppress the
+        // default action for links (notably target=_blank). Use CDP pointer
+        // input for anchors so navigation/new-tab behavior matches a real click.
+        const physicalClick = el.tagName === 'A';
+        if (!physicalClick) el.click();
         return { found: true, fromShadowRoot: Boolean(el.getRootNode?.()?.host), tag: String(el.tagName).toLowerCase(), text: t,
+          x, y, physicalClick,
           checked: isCheckbox ? Boolean(el.checked) : null,
           changed: isCheckbox ? Boolean(el.checked) !== before : null };
       })()`, {signal:ctx.signal});
@@ -498,10 +504,21 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
           hint: 'Use an EXACT selector from the visible controls below (or browser.elements for live numbered refs). Avoid browser.open again unless navigation is required.' + candidates,
         } };
       }
+      if (hit.physicalClick) {
+        const point = { x: hit.x, y: hit.y, button: 'left', clickCount: 1 };
+        await b.send('Input.dispatchMouseEvent', { ...point, type: 'mousePressed' }, { signal: ctx.signal });
+        try {
+          await b.send('Input.dispatchMouseEvent', { ...point, type: 'mouseReleased' }, { signal: ctx.signal });
+        } catch (error) {
+          // Always release a dispatched press before reporting an interrupted click.
+          await b.send('Input.dispatchMouseEvent', { ...point, type: 'mouseReleased' }).catch(() => {});
+          throw error;
+        }
+      }
       noteBrowserAction(session);
       /* a click may spawn a NEW tab (target=_blank, window.open): follow it
          so the agent lands where the page actually went */
-      const fol = await (b.followNewTarget ? b.followNewTarget({ windowMs: 1500 }) : { followed: false });
+      const fol = await (b.followNewTarget ? b.followNewTarget({ windowMs: 1500, beforeTargets: targetsBeforeClick }) : { followed: false });
       const after = fol.followed ? { url: fol.url, title: fol.title } : await b.eval('(() => ({ url: location.href, title: document.title }))()');
       // Stagehand-inspired deterministic action + evidence. No extra model
       // call and no second click. Only poll the outcome on the live page.

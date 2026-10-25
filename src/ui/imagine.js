@@ -32,7 +32,7 @@
     'jobs.search': 'Searched job listings', 'jobs.match': 'Matched jobs to CV',
     'jobs.prepare': 'Prepared an application', 'jobs.send': 'Submitted an application'
   })[name] || String(name || 'Working').replace(/[._]/g,' ');
- 
+
   // core states: idle | thinking | working | waiting | done | error
   let core = 'idle';
   let root = null, orb = null, coreLabel = null, list = null, empty = null;

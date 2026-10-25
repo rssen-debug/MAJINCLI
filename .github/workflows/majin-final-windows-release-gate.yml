@@ -31,8 +31,19 @@ jobs:
       - name: Run JS unit and integration suite on Windows
         shell: pwsh
         run: |
-          npm test
-          if ($LASTEXITCODE -ne 0) { throw "Unit and integration tests failed with exit $LASTEXITCODE" }
+          npm test *> windows-test.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            $failures = Select-String -Path windows-test.log -Pattern '^not ok ' -Context 0,12
+            if ($failures) {
+              $details = ($failures | ForEach-Object { $_.ToString() + "`n" + ($_.Context.PostContext -join "`n") }) -join "`n---`n"
+            } else {
+              $details = (Get-Content windows-test.log -Tail 50) -join "`n"
+            }
+            $details | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            Write-Output $details
+            throw "Unit and integration tests failed with exit $code"
+          }
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4

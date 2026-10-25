@@ -188,7 +188,7 @@ export const DEFAULTS = {
     temperature: 0.2,
     maxTokens: 6000,
     historyInPrompt: 40,
-    stepJob: 'tasks',
+    stepJob: 'same',
   },
   ui: {
     title: 'MAJIN',

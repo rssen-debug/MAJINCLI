@@ -28,11 +28,11 @@ const demoRt = async () => {
 test('historiken i sessionen gar tillbaka till modellen vid nasta meddelande (KALL-bristen)', async () => {
   const rt = await demoRt();
   resetCalls();
-  setScript('main:tasks', [{ text: 'Jag minns att du heter Kalle.' }]);
+  setScript('main:chat', [{ text: 'Jag minns att du heter Kalle.' }]);
 
   await rt.agent.turn({ input: 'Mitt namn är Kalle.', session: 'hista' });
   resetCalls();
-  setScript('main:tasks', [{ text: 'Du sa att du heter Kalle.' }]);
+  setScript('main:chat', [{ text: 'Du sa att du heter Kalle.' }]);
   const r2 = await rt.agent.turn({ input: 'Vad sa jag att jag hette?', session: 'hista' });
 
   const calls = lastCalls();
@@ -64,11 +64,11 @@ test('sessioner lar sig ALDRIG kitring varandra (fullstandig isolation)', async 
 test('modellbyte mitt i samtalet: ny modell far HELA neskonkon (handoff-testet i praktiken)', async () => {
   const rt = await demoRt();
   resetCalls();
-  setScript('main:tasks', [{ text: 'Ko.de start: jag bygger spelet in i game.js, steg 1 av 3 klart.' }]);
+  setScript('main:tools', [{ text: 'Ko.de start: jag bygger spelet in i game.js, steg 1 av 3 klart.' }]);
   await rt.agent.turn({ input: 'Bygg ett spel med DeepSeek.', session: 'spelskiftet' });
   /* anvandaren byter modell (intent: use qwen) */
   rt.cfg.patch({ models: { provider: 'qwin-like', routes: { tasks: 'demo/demo-fast' } } }, { persist: false });
-  setScript('main:tasks', [{ text: 'Jag fortsätter bygningetwei: steg 2 av 3 nu, i samma game.js.' }]);
+  setScript('main:chat', [{ text: 'Jag fortsätter bygningetwei: steg 2 av 3 nu, i samma game.js.' }]);
   const h = await rt.agent.handoff?.({ session: 'spelskiftet', to: 'demo/demo-fast' });
   resetCalls();
   const r = await rt.agent.turn({ input: 'Fortsätt med Qwen.', session: 'spelskiftet' });

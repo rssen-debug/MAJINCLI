@@ -36,6 +36,7 @@ const JOB_HINTS = [
   { job: 'code', weight: 0.45, re: /(^|\n)[ \t]{2,}\S/ },
   { job: 'research', weight: 0.6, re: /(s[oö]k|googl|webb|hitta|research|nyheter|k[aä]llor|vad kostar|priset|j[aä]mf[oö]r (med )?modell|latest|version of|docs)/i },
   { job: 'plan', weight: 0.55, re: /(plan|arkitektur|designa|hur b[oä]r|strategi|v[aä]lj|tradeoff|steg f[oö]r steg|scaffolds?|b[oö]rja|roadmap)/i },
+  { job: 'tasks', weight: 0.6, re: /\b(create|write|edit|update|delete|remove|move|copy|rename|make|save|install|run|execute)\b/i },
   { job: 'tasks', weight: 0.5, re: /(fil|mapp|katalog|d[oö]p om|rename|flytta|kopiera|ta bort|rensa|st[aä]da|batch|zip|packa|omorganisera|sortera|backup)/i },
   { job: 'analysis', weight: 0.5, re: /(analysera|rapport|sammanfatt|statistik|m[aä]t|benchmark|logga|json-data|csv|excel)/i },
   { job: 'chat', weight: 0.4, re: /^(tack|okej|ok|ja|nej|jo|nah|hej|hall[aå]|hmm|lol|test)\b[\s.!]*$/i },

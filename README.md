@@ -4,7 +4,7 @@
 runs its own configuration, and answers to you — in the browser window, from Telegram, or from
 WhatsApp on your phone. No subscription, no hosted runtime: your keys, your models, your files.
 
-MAJIN is a single Node.js process (or a single `.exe`) with a built-in web UI, 77 tools, a
+MAJIN is a single Node.js process (or a single `.exe`) with a built-in web UI, 89 tools, a
 tool-calling agent loop, Mixture-of-Agents answering, persistent memory and self-modifying
 config. It ships with a real reverse-engineering stack (PE/ELF/APK/pcap parsers, a mini-YARA
 engine, entropy and string analysis) because "read this file and tell me what it is" should not
@@ -42,6 +42,8 @@ node src/cli/majin.js
 | **MOA by default** | Mixture-of-Agents: 3 reference models answer, an aggregator merges. Runs on every non-trivial turn. |
 | **Self-configuring** | "use deepseek-v4-pro for analysis, always", "add my key", "confirm every dangerous thing" — MAJIN parses those and patches its own config, no config editing needed. |
 | **Owns its keys** | Keys are stored in your local config file, never on a server. Add one in the UI, with `majin config`, or from your phone via a one-time pairing code. |
+| **Image and speech generation** | `media.generate_image` and `media.speak` use a configured OpenAI-compatible media model and save results locally; generation may cost money. |
+| **Browser automation** | Nine `browser.*` tools powered by Playwright Core: open, inspect, click, fill, check radio/checkboxes, select options, attach files and close. Form submits and non-read HTTP requests are blocked. |
 | **Reverse engineering** | 22 `re.*` tools: structured PE/ELF/Mach-O parsing, entropy, strings, yara (built-in mini engine + real `yara` if installed), APK/ZIP/pcap containers, hexdump, decompilers through external tools. |
 | **Persistent memory** | Facts, events, sessions and auto-harvested skills as plain files under `~/.majin` (`%LOCALAPPDATA%\MAJIN` on Windows). |
 | **Everywhere** | The same agent answers the browser window, Telegram and WhatsApp. Scheduled jobs run on their own. |
@@ -152,7 +154,7 @@ the browser's Web Speech API and off until you turn it on.
 
 ## Tools
 
-77 tools, always all on. Risk is per tool, not per group — that is what the guard reads.
+89 tools, always all on. Risk is per tool, not per group — that is what the guard reads.
 
 | prefix | count | tools |
 |---|---|---|
@@ -162,13 +164,22 @@ the browser's Web Speech API and off until you turn it on.
 | `net` | 5 | dns, tcp, http, serve, serve_stop |
 | `screen` | 2 | capture, claim |
 | `web` | 3 | search, fetch, download |
+| `browser` | 9 | open, inspect, click, fill, check, select, upload, press, close |
+| `media` | 2 | generate_image, speak |
 | `re` | 23 | analyze, strings, hexdump, search, entropy, sections, imports, exports, yara, iocs, overlay, extract, apk, pcap, diff, modules, tool, tools, disasm, unpack, hash, rules, spec |
-| `majin` | 16 | configure, routes, provider, moa, guard, memory, skill, schedule, channel, status, selftest, tools, backup, ui, control, dataset |
+| `majin` | 17 | configure, routes, provider, moa, guard, memory, skill, plugin, schedule, channel, status, selftest, tools, backup, ui, control, dataset |
 | `agent` | 4 | plan, delegate, moa, approve |
 
 Every tool's parameters and examples: `GET /api/tools` (or the Tools card in the panel), and
-`majin doctor` prints the count plus which subsystems are ready. Notes on the RE set and how the built-in parsers, YARA rules and external tools fit
-together: [docs/REVERSE.md](docs/REVERSE.md).
+`majin doctor` prints the count plus which subsystems are ready. Browser automation needs `npm install`
+and an installed Chrome, Edge or Chromium; `browser.open` starts an isolated MAJIN profile. The
+browser can fill and prepare forms, but native submits and all non-read HTTP methods are blocked.
+`majin.plugin` can create custom JS tools at runtime; they are hash-checked on restart and require
+exec approval. Plugins run with MAJIN process privileges, so install only trusted code. Media
+generation needs a provider/model that implements the matching endpoint and may incur charges.
+MAJIN uses its configured model for planning but does not depend on a particular provider.
+Notes on the RE set and how the built-in parsers, YARA rules and external tools fit together:
+[docs/REVERSE.md](docs/REVERSE.md).
 
 ## Guard rails
 
@@ -249,9 +260,7 @@ node src/cli/majin.js send "what is in this folder?"
 
 The test suites are `config`, `selfconfig`, `router-moa`, `tools`, `re`, `agent` (end-to-end
 against the `demo` mock provider) and `server` (a real child process on a free port).
-Building the exe and the CI recipe: [docs/EXE.md](docs/EXE.md). Benchmarks:
-`npm run bench` (mock provider, deterministic — what the harness measures and what it does not is
-spelled out in [docs/BENCHMARKS.md](docs/BENCHMARKS.md)).
+Building the exe and the CI recipe: [docs/EXE.md](docs/EXE.md). `npm run bench` is a deterministic mock-only plumbing check. To test actual configured-model tool use, run `npm run eval:live -- --yes`; it runs two live scenarios (up to eight model steps each), may incur charges, uses a temporary workspace and refuses OpenCode/Qwen routes. Details and limitations: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## Layout
 
@@ -265,7 +274,7 @@ src/core/routes.js      job classification
 src/core/moa.js         Mixture-of-Agents
 src/core/guard.js       modes, askOn/neverOn, approvals
 src/core/server/        HTTP + SSE + static UI, token auth
-src/core/tools/         the 77 tools, nine groups
+src/core/tools/         the 89 tools, eleven groups
 src/core/binary/        PE, ELF, Mach-O, containers, entropy, strings, YARA subset
 src/core/channels/      telegram (long poll), whatsapp (baileys)
 src/core/provider/      openai-compat, anthropic, gemini, mock/demo

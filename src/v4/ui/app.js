@@ -567,31 +567,31 @@ function endAssistantBubble(meta = '') {
 
 function toolLabel(name) {
   return {
-    workspace_write: 'Skapar en fil',
-    workspace_read: 'Läser en fil',
-    workspace_list: 'Letar bland filer',
-    document_read: 'Läser dokument',
-    fs_find: 'Letar efter en fil',
-    fs_read: 'Läser filens innehåll',
-    fs_list: 'Utforskar mappar',
-    memory_save: 'Sparar ett minne',
-    memory_search: 'Söker i minnet',
-    browser_open: 'Öppnar webbsida',
-    browser_read: 'Läser webbsida',
-    browser_elements: 'Undersöker formulär',
-    browser_click: 'Klickar på webbsida',
-    browser_form: 'Undersöker formulär',
-    browser_form_fill: 'Fyller i formulär',
-    browser_form_submit: 'Skickar formulär',
-    browser_screenshot: 'Tar skärmbild',
-    browser_snapshot: 'Undersöker webbsidan',
-    exec_start: 'Kör kommando',
-    exec_wait: 'Kontrollerar kommandot',
-    tools_search: 'Söker efter verktyg',
-    tools_activate: 'Aktiverar verktyg',
-    agent_delegate: 'Delegerar deluppgift',
-    agent_graph: 'Samordnar deluppgifter',
-  }[name] || String(name || 'Arbetar').replaceAll('_', ' ');
+    workspace_write: 'Creating a file',
+    workspace_read: 'Reading a file',
+    workspace_list: 'Finding files',
+    document_read: 'Reading a document',
+    fs_find: 'Finding a file',
+    fs_read: 'Reading file contents',
+    fs_list: 'Exploring folders',
+    memory_save: 'Saving a memory',
+    memory_search: 'Searching memory',
+    browser_open: 'Opening a webpage',
+    browser_read: 'Reading a webpage',
+    browser_elements: 'Inspecting a form',
+    browser_click: 'Clicking a webpage',
+    browser_form: 'Inspecting a form',
+    browser_form_fill: 'Filling in a form',
+    browser_form_submit: 'Submitting a form',
+    browser_screenshot: 'Taking a screenshot',
+    browser_snapshot: 'Inspecting the webpage',
+    exec_start: 'Running a command',
+    exec_wait: 'Checking a command',
+    tools_search: 'Searching for a tool',
+    tools_activate: 'Activating a tool',
+    agent_delegate: 'Delegating a task',
+    agent_graph: 'Coordinating tasks',
+  }[name] || String(name || 'Working').replaceAll('_', ' ');
 }
 
 /** Only show a short, non-secret hint from the server's redacted input. */
@@ -643,10 +643,10 @@ let progressTerminal = false;
 function updateProgress(label, { failed = false, complete = false, step = false } = {}) {
   if (progressTerminal && !complete) return;
   if (!progressCard) {
-    progressCard = addToolCard('Arbetar', {});
+    progressCard = addToolCard('Working', {});
     progressCard.node.open = false;
     progressCard.node.classList.add('tool-progress');
-    progressCard.node.querySelector('.tool-name').textContent = 'Arbetar';
+    progressCard.node.querySelector('.tool-name').textContent = 'Working';
     progressCard.detail.textContent = '';
     progressStart = Date.now();
     progressCount = 0;
@@ -657,13 +657,13 @@ function updateProgress(label, { failed = false, complete = false, step = false 
   const elapsed = Math.max(0, Math.round((Date.now() - progressStart) / 1000));
   progressCard.node.dataset.state = complete ? (progressErrors ? 'failed' : 'verified') : 'running';
   const activity = progressCard.node.querySelector('.tool-name');
-  if (activity) activity.textContent = complete ? 'Arbetade' : (label || 'Arbetar');
+  if (activity) activity.textContent = complete ? 'Worked' : (label || 'Working');
   progressCard.sum.textContent = complete
-    ? `${elapsed} s · ${progressCount} steg${progressErrors ? ` · ${progressErrors} fel` : ''}`
-    : `${progressCount} steg · detaljer`;
+    ? `${elapsed} s · ${progressCount} steps${progressErrors ? ` · ${progressErrors} issues` : ''}`
+    : `${progressCount} steps · details`;
   if (label && step) {
     const line = document.createElement('div');
-    line.textContent = `${progressCount}. ${label}${failed ? ' · misslyckades' : ''}`;
+    line.textContent = `${progressCount}. ${label}${failed ? ' · failed' : ''}`;
     progressCard.detail.append(line);
   }
   scrollDown();
@@ -696,18 +696,18 @@ function renderConversationMessages(conversation) {
         // Group all receipts under one collapsed work row, not one chat block
         // per tool. The exact receipt IDs and failure classes are still visible.
         if (!goal._receiptCard) {
-          goal._receiptCard = addToolCard('Arbetade', {});
+          goal._receiptCard = addToolCard('Worked', {});
           goal._receiptCard.node.open = false;
           goal._receiptCard.node.dataset.historical = 'true';
           goal._receiptCard.node.dataset.state = 'verified';
-          goal._receiptCard.node.querySelector('.tool-name').textContent = 'Arbetade';
+          goal._receiptCard.node.querySelector('.tool-name').textContent = 'Worked';
           goal._receiptCard.detail.textContent = '';
           goal._receiptCount = 0;
         }
         const card = goal._receiptCard;
         if (receipt.result !== 'success') card.node.dataset.state = 'failed';
         goal._receiptCount += 1;
-        card.sum.textContent = `${goal._receiptCount} steg · klicka för detaljer`;
+        card.sum.textContent = `${goal._receiptCount} steps · click for details`;
         const line = document.createElement('div');
         line.textContent = `${toolLabel(name)} · ${receipt.result === 'success' ? (receipt.verified ? t('history.previouslyVerified') : t('state.done')) : t('state.failed')}`
           + (receipt.target ? ` · ${receipt.target}` : '')
@@ -1201,7 +1201,7 @@ function startStream(mode = 'thinking') {
   spirit.set(mode);
   els.hint.textContent = '';
   state.controller = new AbortController();
-  updateProgress('Tänker…');
+  updateProgress('Thinking…');
   return state.controller;
 }
 
@@ -1288,9 +1288,9 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'state':
-      if (data.state === 'thinking') { spirit.set('thinking'); updateProgress('Tänker på nästa steg…'); }
-      else if (data.state === 'working') { spirit.set('working'); if (!progressCount) updateProgress('Förbereder uppgiften…'); }
-      else if (data.state === 'verifying') { spirit.set('working'); updateProgress('Verifierar resultatet…'); }
+      if (data.state === 'thinking') { spirit.set('thinking'); updateProgress('Thinking about the next step…'); }
+      else if (data.state === 'working') { spirit.set('working'); if (!progressCount) updateProgress('Preparing the task…'); }
+      else if (data.state === 'verifying') { spirit.set('working'); updateProgress('Verifying the result…'); }
       break;
 
     case 'delta':
@@ -1313,7 +1313,7 @@ function viewIntents(event, data, intents) {
       }
       if (progressCard) {
         const activity = progressCard.node.querySelector('.tool-name');
-        if (activity) activity.textContent = `${data.ok ? 'Klart' : 'Problem'} · ${toolLabel(data.name)}`;
+        if (activity) activity.textContent = `${data.ok ? 'Done' : 'Issue'} · ${toolLabel(data.name)}`;
         const line = document.createElement('div');
         line.textContent = `${toolLabel(data.name)} · ${data.ok ? (data.verified ? t('state.verified') : t('state.done')) : t('state.failed')}`
           + (data.summary ? ` · ${data.summary}` : '')
@@ -1333,7 +1333,7 @@ function viewIntents(event, data, intents) {
     case 'recovery': {
       // The host is retrying on its own; say so instead of looking frozen.
       spirit.set('working');
-      updateProgress('Försöker lösa ett problem…');
+      updateProgress('Trying to resolve a problem…');
       const reason = data.failureClass || t('common.unknownError');
       if (data.action && data.action !== 'none') {
         els.hint.textContent = t('state.recovering', { attempt: data.attempt || 1, reason });
@@ -1727,6 +1727,10 @@ function renderModels(data) {
       const windows = usage.windows;
       els.sheetModelNote.textContent += ` · Go usage: 5h ${windows.rolling.percent}%, week ${windows.weekly.percent}%, month ${windows.monthly.percent}% · ${usage.at}${usage.stale ? ' · stale usage' : ''}`;
     }
+  } else if (active) {
+    els.modelLabel.textContent = t('model.selectionUnavailable');
+    els.sheetModel.textContent = t('model.selectionUnavailable');
+    els.sheetModelNote.textContent = t('model.error.unavailable');
   }
   const models = (data.models || []).filter((m) => m.configured && (!query || `${m.label} ${m.displayName || ''}`.toLowerCase().includes(query)) && (!els.modelIncluded?.checked || m.billing?.subscriptionIncluded === true));
   if (!models.length) {

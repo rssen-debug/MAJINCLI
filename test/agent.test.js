@@ -153,8 +153,27 @@ test('abort: stop() unwinds without hanging', async () => {
   assert.ok(!c.types().includes('error') || c.evs.some((e) => e.type === 'error' && /abort|cancel|stop/i.test(String(e.message))), 'the error must be an abort, not a crash');
 });
 
+test('the last budgeted step is tool-free and delivers a final answer', async () => {
+  rt.cfg.patch({ agent: { maxSteps: 2 } });
+  scriptAll([
+    { text: 'I will inspect the workspace.', toolCalls: [{ name: 'fs.list', args: { path: '.' } }] },
+    { text: 'I inspected the workspace and verified the listing.' },
+  ]);
+  const c = collect();
+  const result = await rt.agent.turn({ input: 'list the workspace files and tell me what you found', session: 'final-step', maxSteps: 2, onEvent: c.onEvent });
+  assert.match(result.text, /fs\.list/, 'the fallback answer must expose the actual tool evidence');
+  const steps = c.evs.filter((event) => event.type === 'step');
+  assert.equal(steps.length, 2);
+  assert.equal(steps[1].finalizing, true);
+  assert.equal(steps[1].toolsSent, 0, 'the final budgeted call receives no tools');
+  const toolResults = c.evs.filter((event) => event.type === 'tool_result');
+  assert.equal(toolResults.length, 1, 'only the first-step inspection may execute');
+  assert.equal(toolResults[0].step, 1);
+  rt.cfg.patch({ agent: { maxSteps: 6 } });
+});
+
 test('registry + runtime: the promises kept', async () => {
-  assert.equal(rt.registry.list().length, 141, '141 tools (136 core/majic + 5 control), none disabled');
+  assert.equal(rt.registry.list().length, 147, '147 integrated tools, including browser/media/plugin capabilities');
   const names = rt.registry.list().map((t) => t.name);
   for (const must of ['fs.write', 'shell.run', 'web.fetch', 're.analyze', 'majin.configure', 'agent.delegate', 'agent.moa']) {
     assert.ok(names.includes(must), `${must} must exist`);
@@ -163,8 +182,8 @@ test('registry + runtime: the promises kept', async () => {
   assert.ok(Object.keys(groups).length >= 6, 'groups for the UI');
   assert.ok(groups.reverse.length >= 20, 'the RE group must be large');
   assert.equal(typeof rt.version, 'string');
-  assert.equal(rt.state({ includeTools: false }).tools.count, 141, 'state must report the tool count');
-  assert.equal(rt.state().tools.length, 141, 'full state lists every tool');
+  assert.equal(rt.state({ includeTools: false }).tools.count, 147, 'state must report the tool count');
+  assert.equal(rt.state().tools.length, 147, 'full state lists every tool');
   const st = rt.state();
   for (const k of ['config', 'routes', 'moa', 'guard', 'usage', 'channels', 'providers', 'memory']) {
     assert.ok(k in st, `state.${k} is missing`);

@@ -56,7 +56,7 @@ test('failed delivery is retained and pauses after three attempts across reload;
 
 test('the legacy heartbeat control tool cannot dispatch external digests as a read-only capability',async()=>{
   const registry=new ToolRegistry();registry.define(adaptV1Tool(heartbeatTools[0],{lane:'heartbeat',ctx:{}}));
-  assert.equal(registry.get('majin_heartbeat').tier,'external');
+  assert.equal(registry.get('majin_heartbeat').tier,'write', 'heartbeat changes stored state and must not be exposed as read-only');
   const result=await runTool({tool:'majin_heartbeat',input:{action:'tick'}},{registry,approvals:{check:()=>({decision:'waiting'})}});
   assert.equal(result.decision,'waiting');
 });
