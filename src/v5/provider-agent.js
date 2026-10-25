@@ -217,7 +217,7 @@ export class ProviderAgent {
             else if (/^(fs_write|fs_patch|fs_mkdir|shell_run|browser_|desktop_|wincontrol_)/.test(call.function.name)) failed.clear();
           } catch (error) {
             if (signature) failed.add(signature);
-            result = { isError: true, structuredContent: { operationId, status: 'failed', errorCode: error.code || 'INVALID_TOOL_CALL', blocker: error.message }, content: [] };
+            result = { isError: true, structuredContent: { ...(error.code === 'REPEATED_FAILED_ACTION' ? {} : { operationId }), status: 'failed', errorCode: error.code || 'INVALID_TOOL_CALL', blocker: error.message }, content: [] };
           }
           const record = result.structuredContent;
           adaptive.failedActions = [...failed];
