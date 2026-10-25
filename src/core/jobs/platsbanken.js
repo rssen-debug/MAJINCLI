@@ -7,7 +7,18 @@
  *
  * parseHits() is pure and fixture-tested — the wire part is five lines.
  */
-const API = 'https://jobsearch.api.jobtechdev.se/search';
+const DEFAULT_API = 'https://jobsearch.api.jobtechdev.se/search';
+
+/**
+ * The base URL is overridable so the wire path can be proven against a local
+ * fixture instead of the live service: the old test suite only ever exercised
+ * parseHits(), so a broken fetch or a changed response shape would have shipped
+ * unnoticed. MAJIN_PLATSBANKEN_URL exists for that test, and for a mirror.
+ */
+export function apiUrl(env = process.env) {
+  const override = env && env.MAJIN_PLATSBANKEN_URL;
+  return override ? String(override) : DEFAULT_API;
+}
 
 const labels = (list) => (Array.isArray(list) ? list.map((s) => s && s.label).filter(Boolean) : []);
 
@@ -40,10 +51,11 @@ export function parseHits(json) {
 }
 
 /** search Platsbanken. errors come back shaped — never thrown raw at a tool. */
-export async function searchPlatsbanken({ q, limit = 10, offset = 0, timeoutSec = 15 } = {}) {
-  const url = `${API}?q=${encodeURIComponent(String(q || '').trim())}&limit=${Math.min(100, Math.max(1, limit))}&offset=${Math.max(0, offset)}`;
+export async function searchPlatsbanken({ q, limit = 10, offset = 0, timeoutSec = 15, baseUrl = null } = {}) {
+  const url = `${baseUrl || apiUrl()}?q=${encodeURIComponent(String(q || '').trim())}&limit=${Math.min(100, Math.max(1, limit))}&offset=${Math.max(0, offset)}`;
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(new Error('timeout')), timeoutSec * 1000);
+  let timedOut = false;
+  const t = setTimeout(() => { timedOut = true; ctrl.abort(); }, timeoutSec * 1000);
   t.unref?.();
   try {
     const res = await fetch(url, { signal: ctrl.signal, headers: { accept: 'application/json', 'user-agent': 'MAJIN-jobs/1.0 (+https://github.com/rssen-debug/MAJINCLI)' } });
@@ -51,7 +63,10 @@ export async function searchPlatsbanken({ q, limit = 10, offset = 0, timeoutSec 
     const json = await res.json();
     return { ok: true, ...parseHits(json) };
   } catch (e) {
-    return { ok: false, error: { code: 'site_unreachable', message: `could not reach Platsbanken (${e.name === 'AbortError' ? 'timeout' : e.message})` } };
+    // A timeout is a timeout. Reading e.name here was wrong: aborting with a
+    // reason makes the thrown error a plain Error, so the message never said so.
+    const why = timedOut ? 'timeout' : (e && e.message) || String(e);
+    return { ok: false, error: { code: 'site_unreachable', message: `could not reach Platsbanken (${why})` } };
   } finally {
     clearTimeout(t);
   }

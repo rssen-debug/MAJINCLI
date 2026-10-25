@@ -281,7 +281,15 @@ const OUTPUT = z.object({
   error: V1_ERROR.optional(),
   hint: z.string().optional(),
   unsupported: z.boolean().optional(),
-});
+}).passthrough();
+/* `passthrough` is not cosmetic. A V1 tool returns its own structured object —
+   jobs.search returns {total, seenBefore, applications}, jobs.list returns
+   {counts, applications} — and zod strips unknown keys by default. Carrying only
+   `result` therefore handed the model `{result: null, summary: "3 new jobs
+   found"}`: no titles, no companies, no urls, and no fp, so it could not list a
+   job or call jobs.match afterwards. That is why "search for a job" never
+   produced a list. The envelope keeps every field the tool actually returned. */
+const ENVELOPE_KEYS = new Set(['ok', 'result', 'meta', 'summary', 'hint', 'error', 'unsupported']);
 
 function errorText(err) {
   if (!err) return '';
@@ -472,9 +480,19 @@ export function adaptV1Tool(v1tool, { lane, ctx = null }) {
       if (result.ok === false) {
         const e = new Error(errorText(result.error) || `${v1tool.name} reported failure`);
         e.cls = classifyV1Error(result.error);
+        // The V1 code is more specific than the class (site_unsupported is not a
+        // missing dependency); keep it so the caller can say the right thing.
+        if (result.error && result.error.code) e.code = String(result.error.code);
         throw e;
       }
+      // Everything the V1 tool returned that is not part of the envelope, so a
+      // structured result survives the hop instead of being reduced to a string.
+      const extras = {};
+      for (const [key, value] of Object.entries(result)) {
+        if (!ENVELOPE_KEYS.has(key)) extras[key] = value;
+      }
       return {
+        ...extras,
         ok: true,
         result: typeof result.result === 'string' ? result.result : (result.result ?? null),
         meta: result.meta ?? null,

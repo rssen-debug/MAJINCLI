@@ -1037,8 +1037,57 @@ export function createV4Server({ config }) {
       }
     },
 
-    'GET /api/learning': async (req, res, url) => {
+    /**
+     * Job search without a model.
+     *
+     * Everything in V4 otherwise needs the LLM to pick a tool, so when the
+     * provider is rate-limited the owner cannot even search a job — which is
+     * exactly what he reported. jobs.search is a plain HTTP call to
+     * Arbetsförmedlingen: it needs no model, no browser and no approval, so the
+     * app can offer it as a direct action. It runs through the same runner the
+     * agent uses, so the tool contract, audit and error classification are
+     * identical; only the model is out of the loop.
+     */
+    'POST /api/jobs/search': async (req, res) => {
       requireSession(req);
+      assertCsrfHeader(req);
+      await hostReady;
+      const body = await readJsonBody(req, 4096);
+      const query = String(body.query || '').trim();
+      const limit = Math.min(25, Math.max(1, Number(body.limit) || 8));
+      if (!tools.registry.get('jobs_search')) {
+        // Two very different reasons, and guessing wrong wastes the owner's time.
+        const granted = ownerMode.activeLanes();
+        if (!granted.includes('jobs')) {
+          throw new HttpError(503, 'LANE_NOT_GRANTED',
+            granted.length
+              ? 'The jobs lane is turned off. Enable it under Permissions — it reaches Platsbanken and nothing else on this machine.'
+              : 'No permissions are granted yet. Enable the jobs lane under Permissions (setup grants it by default).');
+        }
+        throw new HttpError(503, 'TOOL_UNAVAILABLE', 'The jobs lane is granted but its tools did not load on this host.');
+      }
+      try {
+        const result = await runTool(
+          { tool: 'jobs_search', input: { query, limit } },
+          { registry: tools.registry, approvals: approvalsLayer, mode: 'balanced' },
+        );
+        if (!result.ok) {
+          // A held call is not a failed search; say which one it is.
+          return sendJson(res, 200, {
+            ok: false,
+            decision: result.decision,
+            error: { code: result.decision === 'waiting' ? 'APPROVAL_REQUIRED' : 'TOOL_FAILED', message: result.reason || 'The search did not run.' },
+          });
+        }
+        // Flattened for the panel: total, seenBefore, applications, summary.
+        sendJson(res, 200, { ...result.data });
+      } catch (err) {
+        // The tool's own honest failure is data for the panel, not a 500.
+        sendJson(res, 200, { ok: false, error: { code: err.meta?.code || err.code || 'TOOL_FAILED', message: String(err.message || err) } });
+      }
+    },
+
+    'GET /api/learning': async (req, res, url) => {
       // The host registers its lanes asynchronously; asking before that finishes
       // would report every learned skill as "unavailable".
       await hostReady;

@@ -45,7 +45,9 @@ export async function runTool(callRaw, { registry, approvals, mode = 'balanced',
     const cls = err === timedOut ? 'TIMEOUT' : (err.cls || 'UNKNOWN');
     telemetry?.append('task.result', { taskId: call.tool, action: `tool:${call.tool}`, durationMs: Date.now() - t0, result: 'failure', errorCls: cls, attempt: 1 });
     if (err === timedOut) throw new ToolError('TIMEOUT', `tool ${call.tool} exceeded ${timeoutMs}ms`, { tool: call.tool });
-    throw err instanceof ToolError ? err : new ToolError(cls, String(err.message || err), { tool: call.tool });
+    // `code` is the tool's own machine code (site_unsupported, permission_denied…).
+    // It is finer-grained than the class, so it travels in meta instead of being lost.
+    throw err instanceof ToolError ? err : new ToolError(cls, String(err.message || err), { tool: call.tool, code: err.code || null });
   } finally { clearTimeout(timer); }
 
   const outResult = def.outputSchema.safeParse(out);

@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { startTestServer } from './helpers.mjs';
+import { startTestServer, tempHome } from './helpers.mjs';
 
 const UI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/v4/ui');
 
@@ -816,5 +816,79 @@ test('history ui: another session sees failed and unverified receipts without fa
   } finally {
     if (app) await app.close();
     else await server.close();
+  }
+});
+
+/**
+ * The Jobbsök panel, executed in a real DOM.
+ *
+ * The owner's report was "it cannot even search a job". The panel is the direct
+ * answer: it calls `POST /api/jobs/search`, which runs the real Platsbanken tool
+ * with no model in the loop, so a rate-limited provider cannot stop it. This test
+ * serves a Platsbanken-shaped fixture and drives the actual panel.
+ */
+test('client: the Jobbsök panel lists jobs without any model', { skip }, async () => {
+  const http = await import('node:http');
+  const fixture = http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      total: { value: 1 },
+      hits: [{
+        id: 987,
+        webpage_url: 'https://arbetsformedlingen.se/platsbanken/annonser/987',
+        headline: 'Webbutvecklare',
+        application_deadline: '2026-11-30',
+        description: { text: 'JavaScript och HTML.' },
+        employer: { name: 'Exempelbolaget AB' },
+        workplace_address: { municipality: 'Stockholm', city: 'Stockholm', country: 'SE' },
+        application_details: { url: 'https://exempelbolaget.se/ansok' },
+        must_have: { skills: [{ label: 'JavaScript' }] },
+      }],
+    }));
+  });
+  await new Promise((r) => fixture.listen(0, '127.0.0.1', r));
+  const home = tempHome('majin-jobs-ui-');
+  process.env.MAJIN_HOME = home;
+  process.env.MAJIN_PLATSBANKEN_URL = `http://127.0.0.1:${fixture.address().port}/search`;
+  const server = await startTestServer({ home });
+  try {
+    const session = server.existingSession();
+    // The panel needs the jobs lane; grant it the way setup does.
+    const grant = await fetch(`${server.base}/api/owner-mode`, {
+      method: 'POST',
+      headers: { cookie: session, 'content-type': 'application/json', 'x-majin-csrf': '1', origin: server.base },
+      body: JSON.stringify({ action: 'grant', lanes: ['jobs'] }),
+    });
+    assert.equal(grant.status, 200, await grant.text());
+
+    const app = await bootApp({ server, session });
+    try {
+      await until(() => app.document.querySelector('#gate').hidden, { label: 'authenticated app' });
+
+      const query = app.document.querySelector('#jobs-query');
+      assert.ok(query, 'the Jobbsök panel must exist in the shipped HTML');
+      query.value = 'webbutvecklare stockholm';
+      app.document.querySelector('#jobs-search-btn').click();
+
+      await until(() => app.document.querySelectorAll('#jobs-results li').length > 0, {
+        label: 'job results',
+        dom: () => app.document.querySelector('#jobs-status')?.textContent || '',
+      });
+      const rows = app.document.querySelectorAll('#jobs-results li');
+      assert.equal(rows.length, 1);
+      assert.match(rows[0].textContent, /Webbutvecklare/);
+      assert.match(rows[0].textContent, /Exempelbolaget AB/);
+      assert.match(rows[0].textContent, /Stockholm/);
+      const link = rows[0].querySelector('a');
+      assert.equal(link?.href, 'https://arbetsformedlingen.se/platsbanken/annonser/987');
+      assert.equal(app.document.querySelector('#jobs-status').textContent.startsWith('1'), true);
+      assert.deepEqual(app.errors, []);
+    } finally {
+      await app.close();
+    }
+  } finally {
+    delete process.env.MAJIN_PLATSBANKEN_URL;
+    await new Promise((r) => { fixture.close(r); fixture.closeAllConnections?.(); });
+    await server.close();
   }
 });

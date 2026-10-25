@@ -76,7 +76,25 @@ export const jobTools = [
     },
     required: ['query'],
     run: async ({ query, limit = 8, includeSeen = false }) => {
-      const r = await searchPlatsbanken({ q: query, limit: Math.min(25, Math.max(1, limit)) });
+      /* The owner asked "sök jobbet till mig" and pasted a LinkedIn URL. The old
+         code sent that URL to Platsbanken as a search phrase, which matches
+         nothing; the agent then fell back to driving a browser and got stuck on
+         an approval prompt. Say exactly what this tool can and cannot do
+         instead of failing generically. */
+      const looked = String(query || '').trim();
+      if (/^(https?:\/\/|www\.)/i.test(looked)) {
+        const host = (() => { try { return new URL(/^www\./i.test(looked) ? `https://${looked}` : looked).hostname.toLowerCase(); } catch { return ''; } })();
+        return {
+          ok: false,
+          error: {
+            code: 'site_unsupported',
+            message: `jobs.search only queries Platsbanken (Sweden's public job board) — it cannot read a link${host ? ` from ${host}` : ''}. `
+              + 'A specific job page has to be opened with the browser tools instead (browser.open + browser.read), or you search the same role by words here.',
+          },
+        };
+      }
+      if (!looked) return { ok: false, error: { code: 'query_required', message: 'jobs.search needs search words, e.g. "webbutvecklare stockholm".' } };
+      const r = await searchPlatsbanken({ q: looked, limit: Math.min(25, Math.max(1, limit)) });
       if (!r.ok) return { ok: false, error: r.error };
       const apps = await loadApplications();
       const fresh = [];

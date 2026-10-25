@@ -438,3 +438,78 @@ Still not verified here, and therefore still 0 points: anything that needs the
 owner's Windows machine or phone (H1–H6, G8, M10, M11, V6, S14, M9) and real
 inference (A7, no key in this sandbox). The score stays **78.5/100** — a green
 suite is not new hardware evidence.
+
+## 12. "It cannot even search a job" — the actual causes, 2026-10-24
+
+The owner's report was taken literally. Four separate defects were behind it, and
+three of them had nothing to do with the job sites themselves.
+
+### The defect that mattered most: the model never received the job list
+
+`adaptV1Tool` copied only `result`/`meta`/`summary` out of the V1 tool's return
+value, and the output schema was a plain `z.object` — which **strips unknown
+keys**. `jobs.search` returns `{total, seenBefore, applications[]}`. The model was
+therefore handed:
+
+```json
+{ "ok": true, "result": null, "summary": "1 new jobs found (0 seen before, hidden)" }
+```
+
+No titles, no companies, no urls, and no `fp` — so it could not list a job and
+could not call `jobs.match` afterwards. The search ran, wrote the pipeline, and
+the answer was still "I could not find any jobs". `jobs.list` lost `counts` and
+its rows the same way.
+
+Fix: `OUTPUT.passthrough()` plus an explicit passthrough of every non-envelope
+field the V1 tool returned. Proven end-to-end by a scripted model that calls
+`jobs_search` and whose *next request* is asserted to contain the title, the
+company, the ad url and the `fp`.
+
+### Job search required a model to choose the tool
+
+When the provider was rate-limited — which the owner saw four times in one
+evening — nothing worked, not even a plain Platsbanken search. The host now
+exposes `POST /api/jobs/search`, which runs the same tool through the same
+runner, with the same audit, and **no model in the loop**.
+
+### A pasted LinkedIn link was searched as if it were words
+
+`sök jobbet till mig` + a LinkedIn URL was sent to Platsbanken as a query. It
+matches nothing, so the agent fell back to driving a browser and stopped on an
+approval prompt. `jobs.search` now refuses a URL by name and says which host it
+was given and what to do instead.
+
+### The wire path had never been tested
+
+Every existing job test used `parseHits()` fixtures; the real `fetch` never ran
+against a server. The base URL is now overridable (`MAJIN_PLATSBANKEN_URL`) and
+the whole path is tested against a local Platsbanken-shaped fixture: success,
+HTTP 503, connection refused, and a timeout. The timeout message was also a real
+bug — aborting with a reason makes the error a plain `Error`, so `e.name ===
+'AbortError'` was never true and a timeout was reported as an unnamed failure.
+
+### Evidence
+
+```
+$ node --test test/v4/jobs-search.test.js
+# tests 7   # pass 7   # fail 0        (0.68 s)
+
+$ node --test --test-name-pattern="Jobbsök panel" test/v4/client-dom.test.js
+ok 1 - client: the Jobbsök panel lists jobs without any model   (jsdom, real DOM)
+
+$ node --test --test-concurrency=1 test/v4/*.test.js
+# tests 636  # pass 622  # fail 0  # skipped 14
+```
+
+### What is still NOT verified here
+
+The live Platsbanken service is unreachable from this sandbox (the network
+allowlist covers npm and GitHub only), so the fixture proves the code path, not
+Arbetsförmedlingen's current response. On the owner's machine:
+
+```powershell
+npm run v4 -- start
+# menu → Jobbsök → "webbutvecklare stockholm"
+```
+
+That is the one command that turns this into real evidence.

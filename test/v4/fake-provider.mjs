@@ -97,7 +97,13 @@ export async function startFakeProvider(steps, { onRequest = null } = {}) {
   return {
     url,
     requests,
-    close: () => new Promise((resolve) => server.close(resolve)),
+    // Undici keeps pooled keep-alive sockets to the provider, so a plain
+    // server.close() waits for connections that will never end on their own and
+    // the test process hangs after the assertions have already passed.
+    close: () => new Promise((resolve) => {
+      server.close(resolve);
+      server.closeAllConnections?.();
+    }),
   };
 }
 

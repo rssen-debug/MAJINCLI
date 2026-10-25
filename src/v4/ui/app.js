@@ -58,6 +58,11 @@ const els = {
   folderAdd: $('#folder-add'),
   folderList: $('#folder-list'),
   ownerRevoke: $('#owner-revoke'),
+  jobsQuery: $('#jobs-query'),
+  jobsSearchBtn: $('#jobs-search-btn'),
+  jobsResults: $('#jobs-results'),
+  jobsStatus: $('#jobs-status'),
+  jobsNote: $('#jobs-note'),
   approvalState: $('#approval-state'),
   approvalNote: $('#approval-note'),
   approvalAuto: $('#approval-auto'),
@@ -1931,6 +1936,70 @@ async function setApprovalPolicy(policy) {
   }
 }
 
+/**
+ * Job search, the one action that does not need a model.
+ *
+ * The owner's report was "it cannot even search a job". It was true: every
+ * other capability in the app waits for the LLM to choose a tool, so a
+ * rate-limited provider made even a plain Platsbanken search impossible. The
+ * host exposes jobs.search directly (`POST /api/jobs/search`), so this panel
+ * talks to Arbetsförmedlingen with no model, no browser and no approval.
+ */
+async function searchJobs() {
+  const query = String(els.jobsQuery?.value || '').trim();
+  if (!query) {
+    if (els.jobsStatus) els.jobsStatus.textContent = t('jobs.needQuery');
+    return;
+  }
+  if (els.jobsStatus) els.jobsStatus.textContent = t('jobs.searching');
+  if (els.jobsResults) els.jobsResults.textContent = '';
+  if (els.jobsSearchBtn) els.jobsSearchBtn.disabled = true;
+  try {
+    const res = await api('/api/jobs/search', { method: 'POST', body: { query, limit: 8 } });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      // A missing grant is not a failed search, and saying "search failed"
+      // would send the owner looking in the wrong place.
+      const code = data?.error?.code;
+      const message = code === 'LANE_NOT_GRANTED' || code === 'TOOL_UNAVAILABLE'
+        ? t('jobs.needLane')
+        : data?.error?.message || data?.message || t('jobs.failed');
+      if (els.jobsStatus) els.jobsStatus.textContent = message;
+      return;
+    }
+    const jobs = data.applications || [];
+    if (!jobs.length) {
+      if (els.jobsStatus) els.jobsStatus.textContent = t('jobs.empty');
+      return;
+    }
+    if (els.jobsStatus) els.jobsStatus.textContent = t('jobs.found').replace('{n}', String(jobs.length));
+    for (const job of jobs) {
+      const li = document.createElement('li');
+      const title = document.createElement('strong');
+      title.textContent = job.title || t('jobs.untitled');
+      li.append(title);
+      const meta = document.createElement('span');
+      meta.className = 'sheet-note';
+      meta.textContent = [job.company, job.city, job.deadline ? `${t('jobs.deadline')}: ${job.deadline}` : '', job.alreadySeen ? t('jobs.seenBefore') : ''].filter(Boolean).join(' · ');
+      li.append(meta);
+      const href = job.url || job.apply?.url || null;
+      if (href) {
+        const link = document.createElement('a');
+        link.href = href;
+        link.target = '_blank';
+        link.rel = 'noreferrer noopener';
+        link.textContent = t('jobs.open');
+        li.append(link);
+      }
+      els.jobsResults.append(li);
+    }
+  } catch (err) {
+    if (els.jobsStatus) els.jobsStatus.textContent = err.message || t('jobs.failed');
+  } finally {
+    if (els.jobsSearchBtn) els.jobsSearchBtn.disabled = false;
+  }
+}
+
 async function refreshSidebar() {
   try {
     const res = await api('/api/state');
@@ -2108,6 +2177,13 @@ function bindEvents() {
     if (ev.key === 'Enter') {
       ev.preventDefault();
       addFolder();
+    }
+  });
+  els.jobsSearchBtn?.addEventListener('click', searchJobs);
+  els.jobsQuery?.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      searchJobs();
     }
   });
   els.approvalAuto.addEventListener('change', () => {
