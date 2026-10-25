@@ -91,6 +91,23 @@ test('403 access policy is distinguished from an invalid API key', () => {
   assert.equal(classifyProviderError(new Error('Invalid API key'), 401).code, 'AUTH_INVALID');
 });
 
+test('stop aborts a live provider request before its proposed file action can execute', async t => {
+  let entered;
+  const requested = new Promise(resolve => { entered = resolve; });
+  const { server } = await setup(t, async () => {
+    entered();
+    await new Promise(resolve => setTimeout(resolve, 200));
+    return tool('too-late', 'fs_write', { path: 'should-not-exist.txt', content: 'late' });
+  });
+  const running = server.providerAgent.execute({ goalText: 'Wait for a model action' });
+  await requested;
+  await server.providerAgent.cancel();
+  const result = await running;
+  assert.equal(result.status, 'CANCELLED');
+  assert.equal(fs.existsSync(path.join(server.architect.workspaceDir, 'should-not-exist.txt')), false);
+  assert.equal(server.providerAgent.active, null);
+});
+
 test('a catalog without capability metadata does not silently disable tools; explicit false is respected', async t => {
   const { server } = await setup(t, () => ({ role: 'assistant', content: 'ok' }));
   server.architect.providers.fetchImpl = async () => new Response(JSON.stringify({ data: [
