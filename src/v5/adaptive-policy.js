@@ -15,7 +15,7 @@ export function ensureAdaptiveState(goal) {
 }
 
 const STOPWORDS = new Set(('the and for with from into this that then after before please make create write read use file files task goal verify ' +
-  'och att det den med till fran från detta sedan efter innan skapa skriv läs använd fil filer uppgift verifiera').split(' '));
+  '\u{6f}\u{63}\u{68}\u{20}\u{61}\u{74}\u{74}\u{20}\u{64}\u{65}\u{74}\u{20}\u{64}\u{65}\u{6e}\u{20}\u{6d}\u{65}\u{64}\u{20}\u{74}\u{69}\u{6c}\u{6c}\u{20}\u{66}\u{72}\u{61}\u{6e}\u{20}\u{66}\u{72}\u{e5}\u{6e}\u{20}\u{64}\u{65}\u{74}\u{74}\u{61}\u{20}\u{73}\u{65}\u{64}\u{61}\u{6e}\u{20}\u{65}\u{66}\u{74}\u{65}\u{72}\u{20}\u{69}\u{6e}\u{6e}\u{61}\u{6e}\u{20}\u{73}\u{6b}\u{61}\u{70}\u{61}\u{20}\u{73}\u{6b}\u{72}\u{69}\u{76}\u{20}\u{6c}\u{e4}\u{73}\u{20}\u{61}\u{6e}\u{76}\u{e4}\u{6e}\u{64}\u{20}\u{66}\u{69}\u{6c}\u{20}\u{66}\u{69}\u{6c}\u{65}\u{72}\u{20}\u{75}\u{70}\u{70}\u{67}\u{69}\u{66}\u{74}\u{20}\u{76}\u{65}\u{72}\u{69}\u{66}\u{69}\u{65}\u{72}\u{61}').split(' '));
 const tokens = text => [...new Set(String(text || '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(word => word.length > 2 && !STOPWORDS.has(word)))];
 
 export function readyAdaptiveSteps(state) {
