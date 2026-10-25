@@ -13,12 +13,13 @@ import test from 'node:test';
 import { z } from 'zod';
 import { ToolRegistry } from '../../src/v2/tools/registry.js';
 import { ConversationStore, GoalStore } from '../../src/v4/store.js';
-import { createAgent } from '../../src/v4/agent.js';
+import { createAgent, browserFormPreflight, browserFormToolPolicy, isBrowserFormRequest } from '../../src/v4/agent.js';
 import { createToolRegistry, schemasFromRegistry, jsonSchemaFor } from '../../src/v4/tools.js';
 import { adaptV1Tool, registerHostTools, v1Context } from '../../src/v4/tools/host.js';
+import { createToolExposure } from '../../src/v4/tool-exposure.js';
 import { tempHome } from './helpers.mjs';
 
-function agentWith(tools) {
+function agentWith(tools, respond = null) {
   const home = tempHome();
   const config = {
     version: 'test',
@@ -36,12 +37,131 @@ function agentWith(tools) {
     infoFor: () => ({ demo: false }),
     async chat(opts) {
       seen.push({ tools: opts.tools || [], messages: opts.messages });
-      return { text: 'ok', toolCalls: [], demo: false };
+      return respond ? respond(opts, seen.length) : { text: 'ok', toolCalls: [], demo: false };
     },
   };
   const agent = createAgent({ config, conversations, goals, tools, model });
-  return { agent, seen, home, cleanup: () => fs.rmSync(home, { recursive: true, force: true }) };
+  return { agent, seen, home, config, cleanup: () => fs.rmSync(home, { recursive: true, force: true }) };
 }
+
+test('form policy: explicit Swedish and English form-fill requests are recognized', () => {
+  assert.equal(isBrowserFormRequest('Fyll i Fellowmind-formuläret, skicka inte in ansökan.'), true);
+  assert.equal(isBrowserFormRequest('Fill out the application form, do not submit it.'), true);
+  assert.equal(isBrowserFormRequest('Hitta fem jobb inom Dynamics 365.'), false);
+  assert.equal(browserFormToolPolicy('Fyll i formuläret', 'shell_run', { command: 'node cdp-bridge.js' }), 'NATIVE_BROWSER_REQUIRED');
+  assert.equal(browserFormToolPolicy('Fyll i formuläret, skicka inte in', 'browser_form_submit', { button: 'Submit application' }), 'SUBMISSION_FORBIDDEN');
+  assert.equal(browserFormToolPolicy('Fyll i formuläret, skicka inte in', 'browser_click', { selector: 'button[type="submit"]' }), 'SUBMISSION_FORBIDDEN');
+  assert.equal(browserFormToolPolicy('Fyll i formuläret', 'shell_run', { command: 'node test.js' }), 'NATIVE_BROWSER_REQUIRED');
+  assert.equal(browserFormToolPolicy('Hitta jobb', 'shell_run', { command: 'node search.js' }), null);
+});
+
+test('form policy: missing native browser tools fail before spending a model round', async () => {
+  const home = tempHome();
+  const tools = createToolRegistry({ workspaceDir: path.join(home, 'workspace'), memoryDir: path.join(home, 'memory') });
+  const h = agentWith(tools);
+  try {
+    const blocker = browserFormPreflight('Fyll i Fellowmind-formuläret, skicka inte in ansökan.', tools.registry);
+    assert.match(blocker, /browser_open, browser_form, browser_form_fill/);
+    const result = await h.agent.runTurn({ text: 'Fyll i Fellowmind-formuläret, skicka inte in ansökan.' });
+    assert.equal(result.status, 'failed');
+    assert.equal(h.seen.length, 0, 'missing browser capability must not trigger a model loop');
+  } finally {
+    h.cleanup();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('form workflow: known fields take the native open-observe-batch-fill path without submission', async () => {
+  const home = tempHome();
+  const tools = createToolRegistry({ workspaceDir: path.join(home, 'workspace'), memoryDir: path.join(home, 'memory') });
+  const calls = [];
+  for (const [name, inputSchema] of [
+    ['browser_open', z.object({ url: z.string() })],
+    ['browser_form', z.object({})],
+    ['browser_form_fill', z.object({ values: z.record(z.string(), z.union([z.string(), z.boolean()])) })],
+  ]) {
+    tools.registry.define({
+      name, description: name, tier: 'read', inputSchema,
+      outputSchema: z.object({ ok: z.boolean() }).passthrough(),
+      execute: async (input) => {
+        calls.push({ name, input });
+        if (name === 'browser_form_fill') return { ok: true, result: '2 fields retained', meta: { verifiedFields: 2 } };
+        return { ok: true, result: name === 'browser_form' ? 'observed: Name, Email' : 'opened: Fellowmind form' };
+      },
+    });
+  }
+  let submissions = 0;
+  tools.registry.define({ name: 'browser_form_submit', description: 'Submit form', tier: 'read', inputSchema: z.object({ button: z.string() }), outputSchema: z.object({ ok: z.boolean() }), execute: async () => { submissions += 1; return { ok: true }; } });
+  const script = [
+    { toolCalls: [{ id: 'open', name: 'browser_open', argsJson: '{"url":"https://career.fellowmind.se/jobs/8515519-technical-consultant-dynamics-365-till-vart-managed-services-team"}' }] },
+    { toolCalls: [{ id: 'form', name: 'browser_form', argsJson: '{}' }] },
+    { toolCalls: [{ id: 'fill', name: 'browser_form_fill', argsJson: '{"values":{"Name":"Owner-provided name","Email":"owner@example.invalid"}}' }] },
+    { text: 'Två kända fält fylldes och verifierades. Ansökan skickades inte.' },
+  ];
+  const h = agentWith(tools, (_opts, call) => script[call - 1]);
+  h.config.limits.maxModelRounds = 5;
+  h.config.limits.maxToolCallsPerTurn = 5;
+  const events = [];
+  try {
+    const result = await h.agent.runTurn({ text: 'Fyll i Fellowmind-formuläret med mina uppgifter, skicka inte in ansökan.', emit: (type, data) => events.push({ type, data }) });
+    assert.equal(result.status, 'completed', JSON.stringify(events));
+    assert.deepEqual(calls.map((c) => c.name), ['browser_open', 'browser_form', 'browser_form_fill']);
+    assert.equal(calls[2].input.values.Name, 'Owner-provided name');
+    assert.equal(submissions, 0);
+    const offered = h.seen[0].tools.map((tool) => tool.name);
+    for (const name of ['browser_open', 'browser_form', 'browser_form_fill']) assert.ok(offered.includes(name));
+    assert.ok(events.some((event) => event.data?.formProgress?.verifiedFields === 2));
+  } finally {
+    h.cleanup();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('form policy: a browser task cannot start a shell-built bridge', async () => {
+  const home = tempHome();
+  const tools = createToolRegistry({ workspaceDir: path.join(home, 'workspace'), memoryDir: path.join(home, 'memory') });
+  for (const name of ['browser_open', 'browser_form', 'browser_form_fill']) {
+    tools.registry.define({ name, description: name, tier: 'process', inputSchema: z.object({}), outputSchema: z.object({ ok: z.boolean() }), execute: async () => ({ ok: true }) });
+  }
+  let shellRuns = 0;
+  tools.registry.define({ name: 'shell_run', description: 'Run shell', tier: 'process', inputSchema: z.object({}), outputSchema: z.object({ ok: z.boolean() }), execute: async () => { shellRuns += 1; return { ok: true }; } });
+  const h = agentWith(tools, (_opts, call) => call === 1
+    ? { toolCalls: [{ id: 'shell-1', name: 'shell_run', argsJson: '{"command":"node cdp-bridge.js"}' }] }
+    : { text: 'I will use the native browser.' });
+  const events = [];
+  try {
+    const result = await h.agent.runTurn({ text: 'Fyll i Fellowmind-formuläret, skicka inte in.', emit: (type, data) => events.push({ type, data }) });
+    assert.equal(result.status, 'failed', 'a refused shell bridge cannot be reported as task success');
+    assert.equal(shellRuns, 0, 'the shell implementation was never called');
+    assert.ok(events.some((event) => event.data?.summary === 'NATIVE_BROWSER_REQUIRED'), JSON.stringify(events));
+  } finally {
+    h.cleanup();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('form policy: a no-submit instruction blocks the form submit tool before execution', async () => {
+  const home = tempHome();
+  const tools = createToolRegistry({ workspaceDir: path.join(home, 'workspace'), memoryDir: path.join(home, 'memory') });
+  let submissions = 0;
+  for (const name of ['browser_open', 'browser_form', 'browser_form_fill']) {
+    tools.registry.define({ name, description: name, tier: 'process', inputSchema: z.object({}), outputSchema: z.object({ ok: z.boolean() }), execute: async () => ({ ok: true }) });
+  }
+  tools.registry.define({ name: 'browser_form_submit', description: 'Submit form', tier: 'process', inputSchema: z.object({}), outputSchema: z.object({ ok: z.boolean() }), execute: async () => { submissions += 1; return { ok: true }; } });
+  const h = agentWith(tools, (_opts, call) => call === 1
+    ? { toolCalls: [{ id: 'submit-1', name: 'browser_form_submit', argsJson: '{"button":"Skicka in ansökan"}' }] }
+    : { text: 'I will not submit.' });
+  const events = [];
+  try {
+    const result = await h.agent.runTurn({ text: 'Fyll i Fellowmind-formuläret, skicka inte in ansökan.', emit: (type, data) => events.push({ type, data }) });
+    assert.equal(result.status, 'failed', 'a refused submission cannot be reported as task success');
+    assert.equal(submissions, 0, 'submission implementation was never called');
+    assert.ok(events.some((event) => event.data?.summary === 'SUBMISSION_FORBIDDEN'));
+  } finally {
+    h.cleanup();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
 
 test('exposure: a tool registered on the registry reaches the model', async () => {
   const home = tempHome();
@@ -99,6 +219,37 @@ test('exposure: host tools (files, shell) are offered to the model when enabled'
     fs.rmSync(home, { recursive: true, force: true });
     void caps;
   }
+});
+
+test('exposure: native browser form tools are pinned even when the visible-tool budget is tiny', () => {
+  const registry = new ToolRegistry();
+  for (const name of ['browser_open', 'browser_form', 'browser_form_fill', 'browser_verify']) {
+    registry.define({
+      name,
+      description: `registered ${name}`,
+      tier: 'process',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+  }
+  for (let i = 0; i < 20; i += 1) {
+    registry.define({
+      name: `unrelated_${i}`,
+      description: `unrelated tool ${i}`,
+      tier: 'read',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+  }
+  const exposure = createToolExposure({ registry, maxVisible: 1 });
+  const names = exposure.schemas().map((schema) => schema.name);
+  for (const name of ['browser_open', 'browser_form', 'browser_form_fill', 'browser_verify']) {
+    assert.ok(names.includes(name), `${name} was hidden behind the visible tool budget`);
+  }
+  assert.ok(names.length >= 4, 'pinned tools must be allowed to exceed the soft visibility budget');
+  assert.equal(names.includes('unrelated_0'), false);
 });
 
 test('exposure: the schema list is bounded, and every entry is valid JSON Schema', () => {

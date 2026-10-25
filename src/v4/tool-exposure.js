@@ -22,7 +22,7 @@
 import { jsonSchemaFor } from './schema.js';
 import { modelSchemaOf } from './mcp-tools.js';
 
-/** Always offered: the sandbox, memory, documents, discovery and delegation. */
+/** Always offered: core work tools plus the safe browser/form workflow when granted. */
 export const CORE_TOOL_NAMES = Object.freeze([
   'workspace_write',
   'workspace_read',
@@ -33,6 +33,16 @@ export const CORE_TOOL_NAMES = Object.freeze([
   'tools_search',
   'tools_activate',
   'agent_delegate',
+  // Browser tools are often at the tail of the universal host registry. If a
+  // user explicitly asks to operate a form, hiding these behind discovery costs
+  // model rounds and makes shell/CDP workarounds more likely. The exposure only
+  // pins names that are registered (i.e. granted and available on this host).
+  'browser_open',
+  'browser_read',
+  'browser_form',
+  'browser_form_fill',
+  'browser_verify',
+  'browser_click',
 ]);
 
 const STOP = new Set([
