@@ -17,6 +17,7 @@ import { webTools } from '../core/tools/web.js';
 import { searchPlatsbanken } from '../core/jobs/platsbanken.js';
 import { scoreCv } from '../core/jobs/model.js';
 import { buildToolParity, createUniversalHostTools } from './host-bridge.js';
+import { normaliseBrowserOrigin } from '../v4/owner-mode.js';
 
 export function checkedPath(root, raw) {
   if (typeof raw !== 'string' || !raw.trim()) throw new Error('A path is required');
@@ -36,14 +37,25 @@ export function checkedPath(root, raw) {
 }
 
 export async function createDriverTools({ workspace, desktop = false, browser = false, processAccess = false, skillsDir,
-  allowedFolders = [], controller = 'codex', grantedLanes = null, browserWriteOrigins = [] } = {}) {
+  allowedFolders = [], controller = 'codex', grantedLanes = null, browserWriteOrigins = [], browserWriteOriginsFile = null,
+  browserVisible = undefined } = {}) {
   fs.mkdirSync(workspace, { recursive: true });
-  const writeOrigins = browserWriteOrigins.map(raw => {
-    const url = new URL(raw);
-    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('Browser write permission must be an exact http(s) origin');
-    return url.origin;
-  });
-  const ctx = { session: `majin-${createHash('sha256').update(path.resolve(workspace)).digest('hex').slice(0,20)}`, browserWriteOrigins: Object.freeze(writeOrigins), cfg: { get: (key) => key === 'workspace' ? workspace : undefined } };
+  const staticWriteOrigins = browserWriteOrigins.map((raw) => normaliseBrowserOrigin(raw));
+  const readWriteOrigins = () => {
+    let persisted = [];
+    if (browserWriteOriginsFile) {
+      try {
+        const state = JSON.parse(fs.readFileSync(browserWriteOriginsFile, 'utf8'));
+        persisted = (Array.isArray(state.browserOrigins) ? state.browserOrigins : []).flatMap((raw) => {
+          try { return [normaliseBrowserOrigin(raw)]; } catch { return []; }
+        });
+      } catch { /* A missing/corrupt grant file means no persisted browser writes. */ }
+    }
+    return [...new Set([...staticWriteOrigins, ...persisted])].sort();
+  };
+  const envBrowserVisible = process.env.MAJIN_V5_BROWSER_VISIBLE == null ? undefined : process.env.MAJIN_V5_BROWSER_VISIBLE !== '0';
+  const effectiveBrowserVisible = typeof browserVisible === 'boolean' ? browserVisible : envBrowserVisible;
+  const ctx = { session: `majin-${createHash('sha256').update(path.resolve(workspace)).digest('hex').slice(0,20)}`, browserWriteOrigins: readWriteOrigins, cfg: { get: (key) => key === 'workspace' ? workspace : undefined } };
   const definitions = fileTools.filter(t => ['fs.list','fs.read','fs.write','fs.patch','fs.search','fs.grep','fs.stat','fs.mkdir','fs.find'].includes(t.name));
   definitions.push(...webTools.filter(t => ['web.search', 'web.fetch'].includes(t.name)));
   if (processAccess) definitions.push(shellTools.find(t => t.name === 'shell.run'));
@@ -89,7 +101,11 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
       name: t.name.replaceAll('.', '_'), source: t.name, description: t.desc, inputSchema: schema,
       async run(args) {
         const parsed = validator.parse(args);
-        if (t.name === 'browser.open') parsed.executablePath = browserExecutable;
+        if (t.name === 'browser.open') {
+          parsed.executablePath = browserExecutable;
+          if (effectiveBrowserVisible === true) parsed.headless = false;
+          else if (effectiveBrowserVisible === false) parsed.headless = true;
+        }
         // All path-bearing inputs of the allowlisted tools pass the same realpath boundary.
         for (const key of ['path', 'filePath', 'cwd']) if (parsed[key] != null) parsed[key] = resolveToolPath(parsed[key]);
         if (t.name === 'screen.capture' && !parsed.path) parsed.path = checkedPath(workspace, `captures/${Date.now()}.png`);
@@ -215,7 +231,7 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
     const current = parity();
     return { result: {
       mode: controller === 'provider' ? 'PROVIDER_TOOLS' : 'CODEX_DRIVER', hostname: os.hostname(), platform: process.platform, workspace,
-      interactiveWindows: Boolean(interactive), browserAvailable, processAccess, browserWriteOrigins: writeOrigins, providerInference: false,
+      interactiveWindows: Boolean(interactive), browserAvailable, browserVisible: effectiveBrowserVisible ?? null, processAccess, browserWriteOrigins: readWriteOrigins(), providerInference: false,
       grantedLanes: grantedLanes ?? null,
       selectedHostLanes: hostBridge.selectedLanes,
       toolParity: {

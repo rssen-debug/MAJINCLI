@@ -86,6 +86,23 @@ function submitOrigins() {
   return readAllArgs('--submit-origin');
 }
 
+function browserOriginArgs() {
+  return readAllArgs('--browser-origin');
+}
+
+function effectiveBrowserOrigins(access) {
+  return [...new Set([...(access?.browserWriteOrigins || []), ...submitOrigins(), ...browserOriginArgs()])];
+}
+
+function browserVisibleOption(defaultVisible = false) {
+  if (args.includes('--browser-headless')) return false;
+  if (args.includes('--browser-visible')) return true;
+  if (process.env.MAJIN_V5_BROWSER_VISIBLE != null && process.env.MAJIN_V5_BROWSER_VISIBLE !== '') {
+    return process.env.MAJIN_V5_BROWSER_VISIBLE !== '0';
+  }
+  return defaultVisible;
+}
+
 function parseJsonValue(raw, label) {
   try {
     return JSON.parse(String(raw));
@@ -192,6 +209,8 @@ function printAccess(access, ownerView = null) {
     console.log(`Stored but inactive: ${storedInactive.join(', ')}${storedInactive.includes('files') ? ' (files needs at least one granted folder; workspace tools remain available)' : ''}`);
   }
   console.log(`Granted folders (${access.grantedFolders.length}): ${access.grantedFolders.length ? access.grantedFolders.join(', ') : '(workspace only)'}`);
+  const browserOrigins = access.browserWriteOrigins || [];
+  console.log(`Browser write origins (${browserOrigins.length}): ${browserOrigins.length ? browserOrigins.join(', ') : '(none; browser writes/submits blocked)'}`);
   console.log(`OS administrator elevated: ${access.osAdminElevated ? 'yes' : 'no'} — separate from MAJIN owner mode.`);
 }
 
@@ -207,6 +226,23 @@ function printGoalResult(result) {
   if (goal.model_reply && goal.model_reply !== goal.summaryText) console.log(goal.model_reply);
   if (goal.blocker) console.log(`Blocker: ${goal.blocker}`);
   if (goal.errorCode) console.log(`Error: ${goal.errorCode}`);
+  if (goal.browser_handoff) {
+    const handoff = goal.browser_handoff;
+    const dataDir = readArg('--data-dir', resolveV5DataDir());
+    console.log(`Browser handoff: ${handoff.kind || 'OWNER'}${handoff.signal ? ` (${handoff.signal})` : ''}${handoff.url ? ` at ${handoff.url}` : ''}`);
+    console.log(`Browser session retained at handoff: ${handoff.browserSessionRetained ? 'yes' : 'no'} · visible browser: ${handoff.visibleBrowser ? 'yes' : 'no'}`);
+    if (!['chat', 'repl', 'session', 'serve', 'start'].includes(command)) {
+      console.log('Note: a one-shot/logs CLI process does not keep the live page open after it exits. Use `majin-v5 chat` or `majin-v5 serve` for a live owner handoff; the checkpoint and persistent browser profile remain available for resume.');
+    }
+    if (handoff.origin) console.log(`Exact origin: ${handoff.origin}`);
+    if (handoff.action) console.log(`Owner action: ${handoff.action}`);
+    if (handoff.kind === 'BROWSER_ORIGIN' && handoff.origin) {
+      console.log(`Grant from CLI: majin-v5 grants browser-origin grant ${JSON.stringify(handoff.origin)} --data-dir ${JSON.stringify(dataDir)}`);
+      console.log(`In chat: /browser-origin grant ${handoff.origin} then /resume`);
+    } else {
+      console.log('Complete the step in MAJIN\'s browser, then resume with `majin-v5 resume` or `/resume` in chat. Do not paste passwords or one-time codes into chat.');
+    }
+  }
   const tools = Array.isArray(goal.tool_results) ? goal.tool_results : [];
   if (tools.length) {
     console.log(`Tool results (${tools.length}):`);
@@ -223,6 +259,7 @@ function printGoalResult(result) {
 function goalExitCode(result) {
   const status = (result.goal || result).status;
   if (status === 'COMPLETED') return 0;
+  if (status === 'WAITING_USER') return 0; // active resumable owner handoff, not a failure
   if (status === 'PARTIAL') return 2;
   return 1;
 }
@@ -235,17 +272,22 @@ function applyExplicitCliGrants(srv) {
   // existing grants are used exactly as stored.
   const selection = parseLaneSelection({ fallback: srv.architect.files.describeAccessState().grantedLanes });
   const folders = folderArgs();
-  if (!selection.explicit && !folders.length) return srv.architect.files.describeAccessState();
-  const current = srv.architect.files.describeAccessState();
-  const lanes = [...new Set([...current.grantedLanes, ...selection.lanes])];
-  return srv.architect.files.enableOwnerMode({
-    lanes,
-    folders: withWorkspaceFolderIfFiles(
+  const browserOrigins = browserOriginArgs();
+  if (!selection.explicit && !folders.length && !browserOrigins.length) return srv.architect.files.describeAccessState();
+  let current = srv.architect.files.describeAccessState();
+  if (selection.explicit || folders.length) {
+    const lanes = [...new Set([...current.grantedLanes, ...selection.lanes])];
+    current = srv.architect.files.enableOwnerMode({
       lanes,
-      [...new Set([...current.grantedFolders, ...folders])],
-      srv.architect.workspaceDir,
-    ),
-  });
+      folders: withWorkspaceFolderIfFiles(
+        lanes,
+        [...new Set([...current.grantedFolders, ...folders])],
+        srv.architect.workspaceDir,
+      ),
+    });
+  }
+  if (browserOrigins.length) current = srv.architect.files.grantBrowserOrigins(browserOrigins);
+  return current;
 }
 
 function requireCliProviderModel(srv, { resume = false } = {}) {
@@ -329,7 +371,7 @@ function createGoalProgressPrinter(srv) {
 async function executeGoalCommand({ resume = false } = {}) {
   const dataDir = readArg('--data-dir', resolveV5DataDir());
   const valueFlags = new Set([
-    '--data-dir', '--lanes', '--folder', '--submit-origin', '--max-rounds', '--criteria', '--criteria-file', '--file',
+    '--data-dir', '--lanes', '--folder', '--submit-origin', '--browser-origin', '--max-rounds', '--criteria', '--criteria-file', '--file',
   ]);
   const goalText = positionalsFor(valueFlags).join(' ').trim();
   if (!resume && !goalText) throw new Error('Goal text is required. Example: majin-v5 run "Gör XYZ"');
@@ -341,6 +383,7 @@ async function executeGoalCommand({ resume = false } = {}) {
     dataDir,
     providerMaxRounds: maxRounds,
     browserWriteOrigins: submitOrigins(),
+    browserVisible: browserVisibleOption(true),
   });
 
   requireCliProviderModel(srv, { resume });
@@ -396,6 +439,9 @@ function printChatHelp() {
     '  /grants [show]                 Show persisted owner lanes and folders',
     '  /grants grant [all|lane,csv] [--folder <dir>]',
     '  /grants revoke [all|lane,csv] [--folder <dir>]',
+    '  /browser-origin [list]         Show exact origins allowed for browser writes/submits',
+    '  /browser-origin grant <url>    Persist one exact browser-write origin (dynamic and resumable)',
+    '  /browser-origin revoke <url>   Revoke one origin; /browser-origin clear revokes all origins',
     '  /attach <path>                 Attach a file to the next new goal; /files lists pending files',
     '  /criteria [<json>|clear]      Set/show acceptance criteria for the next new goal',
     '  /help                          Show this help',
@@ -407,7 +453,7 @@ async function executeChatCommand() {
   const dataDir = readArg('--data-dir', resolveV5DataDir());
   const maxRounds = Number(readArg('--max-rounds', '')) || undefined;
   const valueFlags = new Set([
-    '--data-dir', '--lanes', '--folder', '--submit-origin', '--max-rounds', '--criteria', '--criteria-file', '--file',
+    '--data-dir', '--lanes', '--folder', '--submit-origin', '--browser-origin', '--max-rounds', '--criteria', '--criteria-file', '--file',
   ]);
   const initialText = positionalsFor(valueFlags).join(' ').trim();
   const srv = createV5Server({
@@ -416,6 +462,7 @@ async function executeChatCommand() {
     dataDir,
     providerMaxRounds: maxRounds,
     browserWriteOrigins: submitOrigins(),
+    browserVisible: browserVisibleOption(true),
   });
   applyExplicitCliGrants(srv);
   const bound = await srv.start();
@@ -434,7 +481,7 @@ async function executeChatCommand() {
   const done = new Promise((resolve) => { resolveDone = resolve; });
 
   const goalState = () => srv.providerAgent.getGoalState() || srv.architect.getGoalState();
-  const isResumable = (goal) => ['PAUSED', 'BLOCKED'].includes(String(goal?.status || ''));
+  const isResumable = (goal) => ['PAUSED', 'BLOCKED', 'WAITING_USER'].includes(String(goal?.status || ''));
   const providerReady = () => Boolean(srv.architect.providers.state.activeModelId) || args.includes('--allow-deterministic');
 
   const rl = readline.createInterface({
@@ -478,6 +525,12 @@ async function executeChatCommand() {
         ownerModeActive: access.ownerModeActive,
         grantedLanes: access.grantedLanes,
         grantedFolders: access.grantedFolders,
+        browserWriteOrigins: access.browserWriteOrigins || [],
+        effectiveBrowserWriteOrigins: effectiveBrowserOrigins(access),
+      },
+      browser: {
+        visible: browserVisibleOption(true),
+        retainedSession: srv.providerAgent.hasRetainedBrowserDriver(),
       },
       pendingFiles,
       pendingCriteria: pendingCriteria || null,
@@ -490,6 +543,7 @@ async function executeChatCommand() {
         verificationEvidence: Array.isArray(goal.verification_evidence) ? goal.verification_evidence.length : 0,
         resumeCount: goal.resume_count || 0,
         adaptiveMode: goal.adaptive?.mode || null,
+        browserHandoff: goal.browser_handoff || null,
       } : null,
     };
     if (args.includes('--json')) {
@@ -501,10 +555,12 @@ async function executeChatCommand() {
     console.log(`Workspace: ${srv.architect.workspaceDir}`);
     console.log(`Checkpoint: ${payload.checkpoint || '(none yet)'}`);
     console.log(`Owner lanes (${access.grantedLanes.length}): ${access.grantedLanes.length ? access.grantedLanes.join(', ') : '(none)'}`);
+    console.log(`Browser write origins (${(access.browserWriteOrigins || []).length}): ${(access.browserWriteOrigins || []).length ? access.browserWriteOrigins.join(', ') : '(none)'} · visible: ${payload.browser.visible ? 'yes' : 'no'} · retained session: ${payload.browser.retainedSession ? 'yes' : 'no'}`);
     if (goal) {
       console.log(`Goal: ${goal.status || 'UNKNOWN'} ${goal.goal_id || goal.goalId || ''} — ${goal.objective || ''}`);
       console.log(`Tool results: ${payload.goal.toolResults} · verification evidence: ${payload.goal.verificationEvidence} · resumes: ${payload.goal.resumeCount}${payload.goal.adaptiveMode ? ` · adaptive mode: ${payload.goal.adaptiveMode}` : ''}`);
       if (goal.blocker) console.log(`Blocker: ${goal.blocker}`);
+      if (goal.browser_handoff) console.log(`Browser handoff: ${goal.browser_handoff.kind || 'OWNER'} at ${goal.browser_handoff.url || goal.browser_handoff.origin || '(current page)'} — ${goal.browser_handoff.action || 'complete the owner step, then resume.'}`);
     } else {
       console.log('Goal: (none yet)');
     }
@@ -522,6 +578,13 @@ async function executeChatCommand() {
     console.log(`Goal: ${goal.status || 'UNKNOWN'} ${goal.goal_id || goal.goalId || ''}`);
     console.log(`Objective: ${goal.objective || ''}`);
     console.log(`Observed tool results: ${Array.isArray(goal.tool_results) ? goal.tool_results.length : 0} · verification evidence: ${Array.isArray(goal.verification_evidence) ? goal.verification_evidence.length : 0} · resumes: ${goal.resume_count || 0}`);
+    if (goal.browser_handoff) {
+      const handoff = goal.browser_handoff;
+      console.log(`Browser handoff: ${handoff.kind || 'OWNER'} (${handoff.signal || handoff.code || 'owner step required'}) at ${handoff.url || handoff.origin || '(current page)'}`);
+      console.log(`Live browser retained in this host: ${srv.providerAgent.hasRetainedBrowserDriver() ? 'yes' : 'no'} · visible: ${handoff.visibleBrowser ? 'yes' : 'no'}${handoff.origin ? ` · exact origin: ${handoff.origin}` : ''}`);
+      if (handoff.action) console.log(`Owner action: ${handoff.action}`);
+      if (handoff.kind === 'BROWSER_ORIGIN' && handoff.origin) console.log(`Next: /browser-origin grant ${handoff.origin} then /resume`);
+    }
     const plan = Array.isArray(goal.adaptive?.plan) ? goal.adaptive.plan : [];
     if (plan.length) {
       console.log(`Adaptive plan (${goal.adaptive?.mode || 'direct'}, revision ${goal.adaptive?.planRevision || 0}):`);
@@ -689,11 +752,15 @@ async function executeChatCommand() {
 
   function parseGrantTokens(tokens) {
     const folders = [];
+    const browserOrigins = [];
     const laneTokens = [];
     for (let index = 0; index < tokens.length; index++) {
       if (tokens[index] === '--folder') {
         if (!tokens[index + 1]) throw new Error('--folder requires a directory path');
         folders.push(path.resolve(tokens[++index]));
+      } else if (tokens[index] === '--browser-origin') {
+        if (!tokens[index + 1]) throw new Error('--browser-origin requires an origin or URL');
+        browserOrigins.push(tokens[++index]);
       } else {
         laneTokens.push(tokens[index]);
       }
@@ -702,7 +769,7 @@ async function executeChatCommand() {
     const lanes = wantsAll ? [...GRANTABLE_LANES] : laneTokens.flatMap((token) => token.split(',')).map((lane) => lane.trim()).filter(Boolean);
     const unknown = lanes.filter((lane) => !GRANTABLE_LANES.includes(lane));
     if (unknown.length) throw new Error(`Unknown lane(s): ${unknown.join(', ')}`);
-    return { lanes, folders, wantsAll };
+    return { lanes, folders, browserOrigins, wantsAll };
   }
 
   function handleGrants(rest) {
@@ -713,27 +780,61 @@ async function executeChatCommand() {
       printAccess(files.describeAccessState(), files.ownerMode.view());
       return;
     }
-    if (!['grant', 'revoke'].includes(subcommand)) throw new Error('Usage: /grants [show], /grants grant [all|lane,csv] [--folder <dir>], or /grants revoke [all|lane,csv] [--folder <dir>]');
-    if (activeOperation) throw new Error('Pause or cancel the active goal before changing grants; the saved checkpoint can then resume under the new grants.');
-    const { lanes, folders, wantsAll } = parseGrantTokens(tokens.slice(1));
+    if (!['grant', 'revoke'].includes(subcommand)) throw new Error('Usage: /grants [show], /grants grant [all|lane,csv] [--folder <dir>] [--browser-origin <url>], or /grants revoke [all|lane,csv] [--folder <dir>] [--browser-origin <url>]');
+    if (activeOperation) throw new Error('Pause or cancel the active goal before changing lane/folder grants; the saved checkpoint can then resume under the new grants. Exact browser origins can be changed live with /browser-origin.');
+    const { lanes, folders, browserOrigins, wantsAll } = parseGrantTokens(tokens.slice(1));
     if (subcommand === 'grant') {
       const current = files.describeAccessState();
       const lanesToGrant = lanes.length ? [...new Set([...current.grantedLanes, ...lanes])] : [...GRANTABLE_LANES];
       const updated = files.enableOwnerMode({
         lanes: lanesToGrant,
         folders: withWorkspaceFolderIfFiles(lanesToGrant, [...new Set([...current.grantedFolders, ...folders])], srv.architect.workspaceDir),
+        browserOrigins,
       });
       printAccess(updated, files.ownerMode.view());
       return;
     }
     let updated;
-    if (wantsAll || (!lanes.length && !folders.length)) {
+    if (wantsAll || (!lanes.length && !folders.length && !browserOrigins.length)) {
       updated = files.revokePermissions({});
     } else {
-      updated = files.revokePermissions({ lanes: lanes.length ? lanes : null, folder: folders[0] || null });
+      updated = files.revokePermissions({ lanes: lanes.length ? lanes : null, folder: folders[0] || null, browserOrigins: browserOrigins.length ? browserOrigins : null });
       for (const folder of folders.slice(1)) updated = files.revokePermissions({ folder });
     }
     printAccess(updated, files.ownerMode.view());
+  }
+
+  function handleBrowserOrigin(rest) {
+    const parts = rest.trim().split(/\s+/).filter(Boolean);
+    const subcommand = (parts[0] || 'list').toLowerCase();
+    const value = parts.slice(1).join(' ').trim();
+    const files = srv.architect.files;
+    if (subcommand === 'list' || subcommand === 'show') {
+      const access = files.describeAccessState();
+      console.log(`Persisted browser write origins (${(access.browserWriteOrigins || []).length}): ${(access.browserWriteOrigins || []).length ? access.browserWriteOrigins.join(', ') : '(none)'}`);
+      const sessionOrigins = submitOrigins();
+      if (sessionOrigins.length) console.log(`Session-only --submit-origin values: ${sessionOrigins.join(', ')}`);
+      console.log(`Live browser session retained: ${srv.providerAgent.hasRetainedBrowserDriver() ? 'yes' : 'no'} · browser visible: ${browserVisibleOption(true) ? 'yes' : 'no'}`);
+      return;
+    }
+    if (!['grant', 'revoke', 'clear'].includes(subcommand)) {
+      throw new Error('Usage: /browser-origin [list], /browser-origin grant <url>, /browser-origin revoke <url>, or /browser-origin clear');
+    }
+    if (subcommand !== 'clear' && !value) throw new Error(`Usage: /browser-origin ${subcommand} <url>`);
+    // Exact-origin changes are read dynamically by the retained browser
+    // worker. They are therefore safe while a goal is active as long as the
+    // browser lane itself does not need to change mid-flight.
+    const accessBefore = files.describeAccessState();
+    if (activeOperation && subcommand === 'grant' && !accessBefore.grantedLanes.includes('browser')) {
+      throw new Error('Pause the active goal before granting the browser lane; then grant the origin and resume.');
+    }
+    const updated = subcommand === 'grant'
+      ? files.grantBrowserOrigins([value])
+      : subcommand === 'revoke'
+        ? files.revokeBrowserOrigins([value])
+        : files.revokeBrowserOrigins(null);
+    printAccess(updated, files.ownerMode.view());
+    if (subcommand === 'grant') console.log('[majin] Exact origin grant is effective immediately for the retained browser session; resume the WAITING_USER checkpoint to continue.');
   }
 
   async function handleTools(rest) {
@@ -744,7 +845,9 @@ async function executeChatCommand() {
       grantedLanes: access.grantedLanes,
       controller: 'provider',
       ...runtimeFromLanes(access.grantedLanes),
-      browserWriteOrigins: submitOrigins(),
+      browserWriteOrigins: effectiveBrowserOrigins(access),
+      browserWriteOriginsFile: srv.architect.files.ownerMode.file,
+      browserVisible: browserVisibleOption(true),
     });
     const query = rest.trim();
     if (!query) {
@@ -826,6 +929,10 @@ async function executeChatCommand() {
       case 'grants':
       case 'access':
         handleGrants(rest);
+        return;
+      case 'browser-origin':
+      case 'origin':
+        handleBrowserOrigin(rest);
         return;
       case 'tools':
         await handleTools(rest);
@@ -937,17 +1044,21 @@ async function main() {
         '  majin-v5 run "Gör XYZ" [options]                          Run a goal with the adaptive V5 agent',
         'Commands:',
         '  run <goal...> [--criteria <json>|--criteria-file <file>] [--file <path>] [--max-rounds <n>]',
-        '                [--all-lanes|--lanes <csv>] [--folder <dir>] [--submit-origin <origin>] [--allow-deterministic] [--quiet] [--json]',
-        '                                                            Execute a goal; explicit lanes/folders are saved as owner grants',
+        '                [--all-lanes|--lanes <csv>] [--folder <dir>] [--browser-origin <url>|--submit-origin <origin>] [--browser-visible|--browser-headless] [--allow-deterministic] [--quiet] [--json]',
+        '                                                            Execute a goal; explicit lanes/folders/browser origins are saved as owner grants (submit-origin is session-only)',
         '  chat [first goal...] [--resume] [--criteria <json>] [--file <path>] [--max-rounds <n>]',
-        '                [--all-lanes|--lanes <csv>] [--folder <dir>] [--submit-origin <origin>] [--quiet]',
+        '                [--all-lanes|--lanes <csv>] [--folder <dir>] [--browser-origin <url>|--submit-origin <origin>] [--browser-visible|--browser-headless] [--quiet]',
         '                                                            Interactive persistent session: live steer, pause, cancel, queue, resume and checkpoints',
         '  resume [instruction...] [--criteria <json>] [--max-rounds <n>] [--json]',
         '                                                            Resume the saved goal/checkpoint without replaying completed work',
-        '  grants [show] [--json]                                    Show persisted owner lanes and folders',
-        '  grants grant [--all-lanes|--lanes <csv>] [--folder <dir>] [--json]',
-        '                                                            Persist owner lanes/folders (default: all user-level lanes)',
-        '  grants revoke [--lanes <csv>] [--folder <dir>] [--json]   Revoke selected lanes/folders, or all grants',
+        '  grants [show] [--json]                                    Show persisted owner lanes, folders and browser origins',
+        '  grants grant [--all-lanes|--lanes <csv>] [--folder <dir>] [--browser-origin <url>] [--json]',
+        '                                                            Persist owner lanes/folders/exact browser origins (lanes default: all user-level lanes)',
+        '  grants revoke [--lanes <csv>] [--folder <dir>] [--browser-origin <url>] [--json]',
+        '                                                            Revoke selected lanes/folders/browser origins, or all grants',
+        '  grants browser-origin [list] [--json]                     Show exact origins allowed for browser writes/submits',
+        '  grants browser-origin grant|revoke <url> [--json]         Persist or revoke one exact browser origin (live in a running covered host)',
+        '  grants browser-origin clear [--json]                      Revoke all persisted browser write origins',
         '  model [status] [--json]                                   Show secret-safe provider/model state',
         '  model configure [--provider <id>] [--base-url <url>] [--kind openai|anthropic] [--label <name>]',
         '                  [--api-key-env <VAR>|--api-key-stdin|--no-key] [--discover] [--model <id>] [--json]',
@@ -962,8 +1073,8 @@ async function main() {
         '                                                            Call one deterministic tool through the isolated V5 driver',
         '  doctor [--json] [--all-lanes] [--lanes <csv>]             Diagnose data dir, grants, provider and tool parity',
         '  logs [--json]                                             Show the current/last goal, tool results and blockers',
-        '  serve [--host 0.0.0.0] [--port 4555] [--data-dir <dir>] [--submit-origin <origin>] [--max-rounds <n>]',
-        '                                                            Start V5 Black Box UI & HTTP Host',
+        '  serve [--host 0.0.0.0] [--port 4555] [--data-dir <dir>] [--submit-origin <origin>] [--browser-visible|--browser-headless] [--max-rounds <n>]',
+        '                                                            Start V5 Black Box UI & HTTP Host; persisted browser origins are read live',
         '  window                                                    Open native MAJIN V5 Electron window',
         '  status [--port 4555]                                      Check running V5 host health',
         '  version                                                   Print V5 version and Git SHA',
@@ -990,12 +1101,44 @@ async function main() {
   if (command === 'grants' || command === 'access') {
     const dataDir = readArg('--data-dir', resolveV5DataDir());
     const { accessController, access } = accessFor(dataDir);
-    const subcommand = positionalsFor(new Set(['--data-dir', '--lanes', '--folder']))[0] || 'show';
+    const grantPositionals = positionalsFor(new Set(['--data-dir', '--lanes', '--folder', '--browser-origin']));
+    const subcommand = grantPositionals[0] || 'show';
     if (subcommand === 'show') {
       printAccess(access, accessController.ownerMode.view());
       return;
     }
+    if (subcommand === 'browser-origin' || subcommand === 'origin') {
+      const action = (grantPositionals[1] || 'list').toLowerCase();
+      const value = browserOriginArgs()[0] || grantPositionals[2] || '';
+      if (action === 'list' || action === 'show') {
+        if (args.includes('--json')) {
+          console.log(JSON.stringify({
+            browserWriteOrigins: access.browserWriteOrigins || [],
+            effectiveBrowserWriteOrigins: access.effectiveBrowserWriteOrigins || access.browserWriteOrigins || [],
+            browserLaneGranted: (access.grantedLanes || []).includes('browser'),
+            browserVisible: browserVisibleOption(true),
+          }, null, 2));
+        } else {
+          console.log(`Persisted browser write origins (${(access.browserWriteOrigins || []).length}): ${(access.browserWriteOrigins || []).length ? access.browserWriteOrigins.join(', ') : '(none)'}`);
+          console.log(`Browser lane granted: ${(access.grantedLanes || []).includes('browser') ? 'yes' : 'no'}`);
+          console.log(`Interactive browser visible: ${browserVisibleOption(true) ? 'yes' : 'no'} (use --browser-headless for run/chat/serve to hide it)`);
+        }
+        return;
+      }
+      if (!['grant', 'revoke', 'clear'].includes(action)) {
+        throw new Error(`Unknown browser-origin command: ${action} (use list, grant, revoke, or clear)`);
+      }
+      if (action !== 'clear' && !value) throw new Error(`Browser origin is required. Example: majin-v5 grants browser-origin ${action} https://example.com`);
+      const updated = action === 'grant'
+        ? accessController.grantBrowserOrigins([value])
+        : action === 'revoke'
+          ? accessController.revokeBrowserOrigins([value])
+          : accessController.revokeBrowserOrigins(null);
+      printAccess(updated, accessController.ownerMode.view());
+      return;
+    }
     if (subcommand === 'grant') {
+      const browserOrigins = browserOriginArgs();
       const selection = parseLaneSelection({ fallback: [...GRANTABLE_LANES] });
       const folders = withWorkspaceFolderIfFiles(
         selection.lanes,
@@ -1005,6 +1148,7 @@ async function main() {
       const updated = accessController.enableOwnerMode({
         lanes: selection.lanes,
         folders,
+        browserOrigins,
       });
       printAccess(updated, accessController.ownerMode.view());
       return;
@@ -1012,15 +1156,17 @@ async function main() {
     if (subcommand === 'revoke') {
       const selection = parseLaneSelection({ fallback: [] });
       const folders = folderArgs();
+      const browserOrigins = browserOriginArgs();
       let updated = accessController.revokePermissions({
         lanes: selection.explicit ? selection.lanes : null,
         folder: folders[0] || null,
+        browserOrigins: browserOrigins.length ? browserOrigins : null,
       });
       for (const folder of folders.slice(1)) updated = accessController.revokePermissions({ folder });
       printAccess(updated, accessController.ownerMode.view());
       return;
     }
-    throw new Error(`Unknown grants command: ${subcommand} (use show, grant, or revoke)`);
+    throw new Error(`Unknown grants command: ${subcommand} (use show, grant, revoke, or browser-origin)`);
   }
 
   if (['model', 'models', 'provider'].includes(command)) {
@@ -1122,7 +1268,9 @@ async function main() {
       grantedLanes: selection.lanes,
       controller: 'provider',
       ...runtimeFromLanes(selection.lanes),
-      browserWriteOrigins: submitOrigins(),
+      browserWriteOrigins: effectiveBrowserOrigins(access),
+      browserWriteOriginsFile: accessController.ownerMode.file,
+      browserVisible: browserVisibleOption(true),
     });
     const status = (await tools.get('driver_status').run({})).result;
     const provider = new ProviderManager({ dataDir }).getPublicState();
@@ -1156,6 +1304,12 @@ async function main() {
         connectionVerified: provider.connectionVerified,
         activeProviderHasKey: Boolean(activeProvider?.hasKey),
       },
+      browser: {
+        available: status.browserAvailable,
+        writeOrigins: status.browserWriteOrigins || [],
+        dynamicWriteOriginsFile: status.browserWriteOriginsFile || accessController.ownerMode.file,
+        visible: status.browserVisible === true,
+      },
       selectedHostLanes: status.selectedHostLanes,
       toolParity: {
         universe: status.toolParity.universe,
@@ -1175,7 +1329,7 @@ async function main() {
       console.log(`Provider: ${report.provider.canonicalSelection || 'no active model'} · configured: ${report.checks.providerConfigured ? 'yes' : 'no'} · verified: ${report.checks.providerConnectionVerified ? 'yes' : 'no'}`);
       console.log(`Owner lanes: ${access.grantedLanes.length ? access.grantedLanes.join(', ') : '(none)'}`);
       console.log(`Tool parity: ${report.toolParity.available}/${report.toolParity.universe} (${report.toolParity.coveragePercent}%) · driver tools: ${report.driverTools}`);
-      console.log(`Browser available: ${report.checks.browserAvailable ? 'yes' : 'no'} · interactive Windows: ${report.checks.interactiveWindows ? 'yes' : 'no'}`);
+      console.log(`Browser available: ${report.checks.browserAvailable ? 'yes' : 'no'} · interactive Windows: ${report.checks.interactiveWindows ? 'yes' : 'no'} · visible: ${report.browser.visible ? 'yes' : 'no'} · write origins: ${report.browser.writeOrigins.length ? report.browser.writeOrigins.join(', ') : '(none)'}`);
       if (!access.grantedLanes.length) console.log('Next: run `majin-v5 grants grant --all-lanes` or add --all-lanes to a run command to enable the full owner tool surface.');
       if (!report.checks.providerConfigured) console.log('Next: run `majin-v5 model configure --provider opencode-go --api-key-env OPENCODE_API_KEY --discover`, then `majin-v5 model select <model-id>`; deterministic tools still work via `tools call`.');
     }
@@ -1218,7 +1372,9 @@ async function main() {
         grantedLanes,
         controller: 'codex',
         ...runtimeFromLanes(grantedLanes),
-        browserWriteOrigins: submitOrigins(),
+        browserWriteOrigins: effectiveBrowserOrigins(access),
+        browserWriteOriginsFile: accessController.ownerMode.file,
+        browserVisible: browserVisibleOption(true),
         timeoutMs,
       });
       try {
@@ -1250,7 +1406,9 @@ async function main() {
       grantedLanes,
       controller: 'provider',
       ...runtimeFromLanes(grantedLanes),
-      browserWriteOrigins: submitOrigins(),
+      browserWriteOrigins: effectiveBrowserOrigins(access),
+      browserWriteOriginsFile: accessController.ownerMode.file,
+      browserVisible: browserVisibleOption(true),
     });
     const query = readArg('--search', positionals[0] || '');
     const limit = Math.max(1, Math.min(50, Number(readArg('--limit', query ? '20' : '50')) || 20));
@@ -1332,6 +1490,7 @@ async function main() {
       dataDir,
       providerMaxRounds: Number(readArg('--max-rounds', '')) || undefined,
       browserWriteOrigins: args.flatMap((value, index) => value === '--submit-origin' && args[index + 1] ? [args[index + 1]] : []),
+      browserVisible: browserVisibleOption(true),
     });
     const bound = await srv.start();
     console.log(`MAJIN V5 (${V5_VERSION}) listening on ${bound.url}`);

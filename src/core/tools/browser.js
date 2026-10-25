@@ -12,8 +12,21 @@ import { dirs } from '../paths.js';
 
 const sessions = new Map();
 
+export function browserWriteOrigins(ctx) {
+  try {
+    const raw = typeof ctx?.browserWriteOrigins === 'function' ? ctx.browserWriteOrigins() : ctx?.browserWriteOrigins;
+    if (!Array.isArray(raw)) return [];
+    return [...new Set(raw.map((value) => {
+      try {
+        const parsed = new URL(String(value));
+        return ['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password ? parsed.origin : null;
+      } catch { return null; }
+    }).filter(Boolean))].sort();
+  } catch { return []; }
+}
+
 export function browserWriteAllowed(ctx, url) {
-  try { const parsed = new URL(url); return !parsed.username && !parsed.password && (ctx.browserWriteOrigins || []).includes(parsed.origin); } catch { return false; }
+  try { const parsed = new URL(url); return !parsed.username && !parsed.password && browserWriteOrigins(ctx).includes(parsed.origin); } catch { return false; }
 }
 
 function stateFor(ctx) {
@@ -51,6 +64,92 @@ function withPage(ctx, fn) {
   return withSession(ctx, () => fn(requirePage(ctx)));
 }
 
+async function syncBrowserWriteOrigins(p, ctx) {
+  const origins = browserWriteOrigins(ctx);
+  await p.evaluate((allowed) => { window.__majinBrowserWriteOrigins = [...allowed]; }, origins).catch(() => {});
+  return origins;
+}
+
+function browserHandoffError(code, message, handoff) {
+  const error = new Error(message);
+  error.code = code;
+  error.meta = { ownerHandoff: { code, ...handoff } };
+  return error;
+}
+
+async function detectOwnerHandoff(p, ctx) {
+  const found = await p.evaluate(() => {
+    const visible = (el) => !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
+    const labelFor = (el) => [
+      ...(el.labels ? [...el.labels].map((label) => label.innerText || '') : []),
+      el.closest?.('label')?.innerText || '',
+      el.getAttribute?.('aria-label') || '',
+      el.getAttribute?.('placeholder') || '',
+    ].join(' ');
+    const attrsFor = (el) => [
+      el.getAttribute?.('type') || '', el.getAttribute?.('name') || '', el.getAttribute?.('id') || '',
+      el.getAttribute?.('autocomplete') || '', el.getAttribute?.('inputmode') || '', labelFor(el),
+    ].join(' ');
+    const title = document.title || '';
+    const text = (document.body?.innerText || '').slice(0, 16000);
+    const pageText = `${title}\n${location.href}\n${text}`;
+    const inputs = [...document.querySelectorAll('input,textarea')].filter(visible);
+    const captchaWidget = [
+      'iframe[src*="recaptcha" i]', 'iframe[src*="hcaptcha" i]', 'iframe[src*="turnstile" i]',
+      '.g-recaptcha', '.h-captcha', '.cf-turnstile', '[data-sitekey]',
+    ].some((selector) => [...document.querySelectorAll(selector)].some(visible));
+    const signals = [];
+    let kind = null;
+    if (captchaWidget || /\b(complete (?:the )?captcha|captcha (?:verification|challenge|check)|verify you are human|i am not a robot|security check)\b/i.test(pageText)) {
+      kind = 'CAPTCHA';
+      signals.push(captchaWidget ? 'captcha widget' : 'captcha challenge text');
+    }
+    const otpInput = inputs.find((el) => {
+      const attrs = attrsFor(el);
+      return /one-time-code/i.test(el.getAttribute?.('autocomplete') || '')
+        || /\b(otp|one[-\s]?time(?:\s+code)?|verification\s+code|authenticator(?:\s+code)?|two[-\s]?factor|multi[-\s]?factor)\b/i.test(attrs);
+    });
+    if (otpInput || /\b(two[-\s]?factor authentication|multi[-\s]?factor authentication|enter (?:the )?(?:verification|authenticator|one[-\s]?time) code|check your authenticator)\b/i.test(pageText)) {
+      kind ||= 'MFA';
+      signals.push(otpInput ? 'one-time-code field' : 'multi-factor challenge text');
+    }
+    const password = inputs.find((el) => String(el.getAttribute?.('type') || '').toLowerCase() === 'password');
+    if (password) {
+      const form = password.closest?.('form');
+      const formText = form?.innerText || '';
+      const hasSubmit = Boolean(form?.querySelector('button[type="submit"],input[type="submit"],button:not([type])'));
+      const loginContext = hasSubmit || /\b(log\s*in|sign\s*in|username|password)\b/i.test(`${pageText}\n${formText}`);
+      if (loginContext) {
+        kind ||= 'LOGIN';
+        signals.push('password field on a sign-in form');
+      }
+    }
+    return kind ? { kind, signal: signals[0], signals } : null;
+  }).catch(() => null);
+  if (!found) return null;
+  let origin = null;
+  try { origin = new URL(p.url()).origin; } catch { /* keep URL evidence only */ }
+  return {
+    ...found,
+    code: 'BROWSER_OWNER_HANDOFF_REQUIRED',
+    url: p.url(),
+    origin,
+    headless: stateFor(ctx).headless,
+    visibleBrowser: !stateFor(ctx).headless,
+    action: found.kind === 'LOGIN'
+      ? 'Complete sign-in in MAJIN\'s browser session, then resume the saved goal.'
+      : `Complete the ${found.kind} check in MAJIN's browser session, then resume the saved goal.`,
+  };
+}
+
+async function withOwnerHandoff(p, ctx, output) {
+  const handoff = await detectOwnerHandoff(p, ctx);
+  if (!handoff) return output;
+  output.meta = { ...(output.meta || {}), ownerHandoff: handoff };
+  output.result = `${output.result}\nOWNER HANDOFF REQUIRED (${handoff.kind}: ${handoff.signal}). ${handoff.action} The live browser session is preserved while the MAJIN host remains running.`;
+  return output;
+}
+
 function chromePath() {
   const candidates = process.platform === 'win32'
     ? [
@@ -77,6 +176,7 @@ async function loadChromium() {
 }
 
 async function safeClick(p, selector, index, ctx) {
+  await syncBrowserWriteOrigins(p, ctx);
   const locator = p.locator(selector);
   const count = await locator.count();
   if (!count) throw new Error(`no element matched selector: ${selector}`);
@@ -90,7 +190,23 @@ async function safeClick(p, selector, index, ctx) {
   }));
   const submitLabel = /\b(apply|submit|send application|skicka ansökan|skicka ansokan|skicka ansökan|ansök nu|ansok nu)\b/i.test(meta.text);
   if (!browserWriteAllowed(ctx, p.url()) && ((meta.tag === 'button' && meta.type === 'submit') || (meta.tag === 'input' && ['submit', 'image'].includes(meta.type)) || meta.role === 'submit' || (['button', 'input'].includes(meta.tag) && submitLabel))) {
-    throw new Error(`blocked final form-submit control (${meta.text || selector}). Forms can be prepared, but submitting is intentionally unavailable.`);
+    let origin = null;
+    try { origin = new URL(p.url()).origin; } catch { /* URL remains in the handoff record */ }
+    throw browserHandoffError(
+      'BROWSER_ORIGIN_GRANT_REQUIRED',
+      `Blocked final form-submit control (${meta.text || selector}) because this exact origin has no owner browser-write grant: ${origin || p.url()}. Nothing was submitted. Grant that exact origin, then resume the saved goal.`,
+      {
+        kind: 'BROWSER_ORIGIN',
+        signal: 'final submit control on an ungranted origin',
+        url: p.url(),
+        origin,
+        selector,
+        control: meta,
+        headless: stateFor(ctx).headless,
+        visibleBrowser: !stateFor(ctx).headless,
+        action: 'Grant this exact browser origin, then resume the saved goal. The prepared page is preserved while the MAJIN host remains running.',
+      },
+    );
   }
   await target.click();
   await p.waitForTimeout(200);
@@ -120,6 +236,16 @@ export const browserTools = [
     async run({ url, headless = true, executablePath = '' }, ctx) {
       const targetUrl = validateUrl(url);
       return withSession(ctx, async (state) => {
+        if (state.context && state.page && !state.page.isClosed() && state.headless !== Boolean(headless)) {
+          // A visibility change cannot be applied to a launched Chromium
+          // context. Relaunch against the same persistent MAJIN profile so
+          // cookies/site storage survive; only transient page state is lost,
+          // and we are about to navigate to the requested URL anyway.
+          await state.context.close().catch(() => {});
+          state.context = null;
+          state.page = null;
+          state.browserType = null;
+        }
         if (!state.context || !state.page || state.page.isClosed()) {
           state.browserType = await loadChromium();
           fs.mkdirSync(dirs.cache, { recursive: true });
@@ -138,13 +264,15 @@ export const browserTools = [
           state.context.on('page', (newPage) => newPage.on('dialog', (dialog) => dialog.dismiss().catch(() => {})));
           // Defense in depth: stop native form submits in every tab before site handlers run.
           await state.context.addInitScript((origins) => {
+            window.__majinBrowserWriteOrigins = [...origins];
             document.addEventListener('submit', (event) => {
+              const allowed = window.__majinBrowserWriteOrigins || [];
               const action = event.submitter?.formAction || event.target.action || location.href;
-              if (origins.includes(location.origin) && origins.includes(new URL(action, location.href).origin)) return;
+              if (allowed.includes(location.origin) && allowed.includes(new URL(action, location.href).origin)) return;
               event.preventDefault();
               event.stopImmediatePropagation();
             }, true);
-          }, [...(ctx.browserWriteOrigins || [])]);
+          }, browserWriteOrigins(ctx));
           // Stop JS-driven writes too; this workflow prepares forms but never sends them.
           await state.context.route('**/*', async (route) => {
             const method = route.request().method().toUpperCase();
@@ -167,9 +295,10 @@ export const browserTools = [
         }
         await state.page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
         await state.page.waitForTimeout(350);
+        await syncBrowserWriteOrigins(state.page, ctx);
         const result = { url: state.page.url(), title: await state.page.title(), headless: state.headless, submissionsBlocked: !browserWriteAllowed(ctx, state.page.url()) };
         audit(ctx, 'open', { url: result.url, title: result.title, headless: result.headless }, state.page);
-        return { result: `Opened ${result.url}\nTitle: ${result.title}\n${result.submissionsBlocked ? 'Form submissions and non-read HTTP requests are blocked.' : 'Owner-authorized writes are enabled for this exact origin.'}`, meta: result, summary: `opened ${new URL(result.url).host}` };
+        return withOwnerHandoff(state.page, ctx, { result: `Opened ${result.url}\nTitle: ${result.title}\n${result.submissionsBlocked ? 'Form submissions and non-read HTTP requests are blocked.' : 'Owner-authorized writes are enabled for this exact origin.'}`, meta: result, summary: `opened ${new URL(result.url).host}` });
       });
     },
   }),
@@ -228,7 +357,7 @@ export const browserTools = [
         }, Math.max(500, Math.min(Number(maxChars) || 10000, 24000)));
         if (stateFor(ctx).blockedRequests.length) details.text += '\nBlocked network writes (owner grant required):\n' + JSON.stringify(stateFor(ctx).blockedRequests);
         audit(ctx, 'inspect', { controls: details.controls.length });
-        return { result: `URL: ${p.url()}\nTitle: ${details.title}\n\nVisible text:\n${details.text}\n\nControls (${details.controls.length}, max 100):\n${JSON.stringify(details.controls, null, 2)}\n\nLinks:\n${JSON.stringify(details.links)}`, meta: { url: p.url(), title: details.title, controls: details.controls.length }, summary: `inspected page (${details.controls.length} controls)` };
+        return withOwnerHandoff(p, ctx, { result: `URL: ${p.url()}\nTitle: ${details.title}\n\nVisible text:\n${details.text}\n\nControls (${details.controls.length}, max 100):\n${JSON.stringify(details.controls, null, 2)}\n\nLinks:\n${JSON.stringify(details.links)}`, meta: { url: p.url(), title: details.title, controls: details.controls.length }, summary: `inspected page (${details.controls.length} controls)` });
       });
     },
   }),
@@ -244,7 +373,7 @@ export const browserTools = [
       return withPage(ctx, async (p) => {
         const element = await safeClick(p, selector, index, ctx);
         audit(ctx, 'click', { selector, index: index ?? 0, element });
-        return { result: `Clicked ${selector}${element.text ? ` (${element.text})` : ''}. URL: ${p.url()}`, meta: { url: p.url(), selector, element }, summary: `clicked ${selector}` };
+        return withOwnerHandoff(p, ctx, { result: `Clicked ${selector}${element.text ? ` (${element.text})` : ''}. URL: ${p.url()}`, meta: { url: p.url(), selector, element }, summary: `clicked ${selector}` });
       });
     },
   }),
@@ -261,9 +390,40 @@ export const browserTools = [
         const locator = p.locator(selector);
         const count = await locator.count();
         if (count !== 1) throw new Error(count ? `${count} elements matched; use a unique selector` : `no element matched selector: ${selector}`);
+        const field = await locator.evaluate((el) => ({
+          type: String(el.getAttribute?.('type') || '').toLowerCase(),
+          autocomplete: String(el.getAttribute?.('autocomplete') || '').toLowerCase(),
+          name: String(el.getAttribute?.('name') || ''),
+          id: String(el.getAttribute?.('id') || ''),
+          label: [
+            ...(el.labels ? [...el.labels].map((label) => label.innerText || '') : []),
+            el.closest?.('label')?.innerText || '', el.getAttribute?.('aria-label') || '', el.getAttribute?.('placeholder') || '',
+          ].join(' '),
+        }));
+        const sensitiveText = `${field.name} ${field.id} ${field.label}`;
+        const isPassword = field.type === 'password' || ['current-password', 'new-password'].includes(field.autocomplete);
+        const isOneTimeCode = field.autocomplete === 'one-time-code' || /\b(otp|one[-\s]?time(?:\s+code)?|verification\s+code|authenticator(?:\s+code)?)\b/i.test(sensitiveText);
+        if (isPassword || isOneTimeCode) {
+          let origin = null;
+          try { origin = new URL(p.url()).origin; } catch { /* URL remains in the handoff record */ }
+          throw browserHandoffError(
+            'BROWSER_OWNER_HANDOFF_REQUIRED',
+            `Refused to enter a ${isPassword ? 'password' : 'one-time code'} through the model/tool path. Complete it in MAJIN's browser session, then resume the saved goal. Nothing was entered or submitted.`,
+            {
+              kind: isPassword ? 'LOGIN' : 'MFA',
+              signal: isPassword ? 'password field' : 'one-time-code field',
+              url: p.url(),
+              origin,
+              selector,
+              headless: stateFor(ctx).headless,
+              visibleBrowser: !stateFor(ctx).headless,
+              action: `Enter the ${isPassword ? 'password' : 'one-time code'} in MAJIN's browser session, then resume the saved goal.`,
+            },
+          );
+        }
         await locator.fill(String(value));
         audit(ctx, 'fill', { selector, valueLength: String(value).length });
-        return { result: `Filled ${selector} (${String(value).length} characters). Nothing was submitted.`, meta: { selector, valueLength: String(value).length }, summary: `filled ${selector}` };
+        return withOwnerHandoff(p, ctx, { result: `Filled ${selector} (${String(value).length} characters). Nothing was submitted.`, meta: { selector, valueLength: String(value).length }, summary: `filled ${selector}` });
       });
     },
   }),
@@ -289,7 +449,7 @@ export const browserTools = [
           if (current !== Boolean(checked)) await locator.click();
         }
         audit(ctx, checked ? 'check' : 'uncheck', { selector });
-        return { result: `${checked ? 'Checked' : 'Unchecked'} ${selector}. Nothing was submitted.`, meta: { selector, checked: Boolean(checked) }, summary: `${checked ? 'checked' : 'unchecked'} ${selector}` };
+        return withOwnerHandoff(p, ctx, { result: `${checked ? 'Checked' : 'Unchecked'} ${selector}. Nothing was submitted.`, meta: { selector, checked: Boolean(checked) }, summary: `${checked ? 'checked' : 'unchecked'} ${selector}` });
       });
     },
   }),
@@ -307,7 +467,7 @@ export const browserTools = [
         if (await locator.count() !== 1) throw new Error(`selector must match exactly one select: ${selector}`);
         await locator.selectOption(String(value));
         audit(ctx, 'select', { selector, value });
-        return { result: `Selected option ${value} in ${selector}. Nothing was submitted.`, meta: { selector, value }, summary: `selected ${selector}` };
+        return withOwnerHandoff(p, ctx, { result: `Selected option ${value} in ${selector}. Nothing was submitted.`, meta: { selector, value }, summary: `selected ${selector}` });
       });
     },
   }),
@@ -327,7 +487,7 @@ export const browserTools = [
         if (await locator.count() !== 1) throw new Error(`selector must match exactly one file input: ${selector}`);
         await locator.setInputFiles(abs);
         audit(ctx, 'attach-file', { selector, file: path.basename(abs) });
-        return { result: `Attached ${path.basename(abs)} in ${selector}. The file was not uploaded and the form was not submitted.`, meta: { selector, file: path.basename(abs) }, summary: `attached ${path.basename(abs)}` };
+        return withOwnerHandoff(p, ctx, { result: `Attached ${path.basename(abs)} in ${selector}. The file was not uploaded and the form was not submitted.`, meta: { selector, file: path.basename(abs) }, summary: `attached ${path.basename(abs)}` });
       });
     },
   }),
@@ -343,10 +503,11 @@ export const browserTools = [
       return withPage(ctx, async (p) => {
         const locator = p.locator(selector);
         if (await locator.count() !== 1) throw new Error(`selector must match exactly one element: ${selector}`);
+        await syncBrowserWriteOrigins(p, ctx);
         await locator.press(String(key));
         await p.waitForTimeout(150);
         audit(ctx, 'press', { selector, key });
-        return { result: `Pressed ${key} on ${selector}. URL: ${p.url()}`, meta: { selector, key, url: p.url() }, summary: `pressed ${key}` };
+        return withOwnerHandoff(p, ctx, { result: `Pressed ${key} on ${selector}. URL: ${p.url()}`, meta: { selector, key, url: p.url() }, summary: `pressed ${key}` });
       });
     },
   }),

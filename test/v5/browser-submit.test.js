@@ -6,6 +6,8 @@ import os from 'node:os';
 import http from 'node:http';
 import { randomUUID, createHash } from 'node:crypto';
 import { CodexDriver } from '../../src/v5/codex-driver.js';
+import { createDriverTools } from '../../src/v5/codex-tools.js';
+import { FileAndAccessController } from '../../src/v5/files-access.js';
 import { browserWriteAllowed } from '../../src/core/tools/browser.js';
 
 test('browser write grants match exact origins and cannot be escalated by a subdomain or URL credentials', () => {
@@ -68,4 +70,72 @@ test('real browser submits exact file bytes only for owner-granted origin; radio
   assert(received);assert.equal(received.radio,'yes');assert.equal(received.choice,'two');assert.equal(received.name,'Fixture User');
   assert.equal(createHash('sha256').update(received.bytes).digest('hex'),createHash('sha256').update(expected).digest('hex'));
   assert.match((await call('browser_inspect')).structuredContent.result.result,/APPLICATION RECEIVED/);
+});
+
+test('persisted browser origin grants and revocations are reread for the already-open page', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-dynamic-origin-'));
+  const dataDir = path.join(root, 'data');
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(workspace, { recursive: true });
+  const access = new FileAndAccessController({ dataDir, workspaceDir: workspace });
+  access.enableOwnerMode({ lanes: ['browser'], folders: [workspace] });
+
+  const submissions = [];
+  const portal = http.createServer(async (req, res) => {
+    if (req.method === 'POST') {
+      const chunks = []; for await (const chunk of req) chunks.push(chunk);
+      submissions.push(Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString('utf8'))));
+      res.setHeader('content-type', 'text/html');
+      res.end('<h1>DYNAMIC RECEIVED</h1><a href="/">Again</a>');
+      return;
+    }
+    res.setHeader('content-type', 'text/html');
+    res.end('<h1>Dynamic portal</h1><form method="post" action="/submit"><label>Name <input name="name" required></label><button type="submit">Send</button></form>');
+  });
+  await new Promise(resolve => portal.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${portal.address().port}`;
+
+  const tools = await createDriverTools({
+    workspace,
+    allowedFolders: [workspace],
+    grantedLanes: ['browser'],
+    browser: true,
+    browserWriteOrigins: [],
+    browserWriteOriginsFile: access.ownerMode.file,
+    browserVisible: false,
+  });
+  const run = async (name, args = {}) => tools.get(name).run(args);
+  t.after(async () => {
+    try { await run('browser_close'); } catch { /* browser may not have opened on a skipped runner */ }
+    portal.closeAllConnections();
+    await new Promise(resolve => portal.close(resolve));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  if (!tools.has('browser_open')) { t.skip('No installed Chromium/Edge on this runner'); return; }
+
+  const succeeded = (result) => result.ok !== false && !result.error;
+  assert.equal(succeeded(await run('browser_open', { url: origin })), true);
+  assert.equal(succeeded(await run('browser_fill', { selector: 'input[name="name"]', value: 'Dynamic User' })), true);
+  const captureError = async (promise) => {
+    try { await promise; assert.fail('expected the browser action to be blocked'); }
+    catch (error) { return error; }
+  };
+  const blocked = await captureError(run('browser_click', { selector: 'button[type="submit"]' }));
+  assert.equal(blocked.code, 'BROWSER_ORIGIN_GRANT_REQUIRED');
+  assert.equal(blocked.meta.ownerHandoff.origin, origin);
+  assert.deepEqual(submissions, []);
+
+  access.grantBrowserOrigins([`${origin}/submit`]);
+  const statusAfterGrant = (await run('driver_status')).result;
+  assert.deepEqual(statusAfterGrant.browserWriteOrigins, [origin]);
+  assert.equal(succeeded(await run('browser_click', { selector: 'button[type="submit"]' })), true);
+  assert.match((await run('browser_inspect')).result, /DYNAMIC RECEIVED/);
+  assert.deepEqual(submissions, [{ name: 'Dynamic User' }], 'granting the origin did not require reopening or refilling the page');
+
+  access.revokeBrowserOrigins([origin]);
+  assert.equal(succeeded(await run('browser_open', { url: origin })), true);
+  assert.equal(succeeded(await run('browser_fill', { selector: 'input[name="name"]', value: 'Should Not Submit' })), true);
+  const blockedAfterRevoke = await captureError(run('browser_click', { selector: 'button[type="submit"]' }));
+  assert.equal(blockedAfterRevoke.code, 'BROWSER_ORIGIN_GRANT_REQUIRED');
+  assert.deepEqual(submissions, [{ name: 'Dynamic User' }], 'revocation is also effective without recreating the tool context');
 });

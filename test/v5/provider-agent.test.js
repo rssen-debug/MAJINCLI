@@ -9,6 +9,7 @@ import { ProviderAgent } from '../../src/v5/provider-agent.js';
 import { classifyProviderError } from '../../src/v5/providers.js';
 import { responsesInput } from '../../src/core/provider/responses.js';
 import { toAnthropic } from '../../src/core/provider/anthropic.js';
+import { browserBinary } from '../../src/v4/tools/host.js';
 
 async function setup(t, respond) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-provider-agent-'));
@@ -219,4 +220,136 @@ test('a catalog without capability metadata does not silently disable tools; exp
   assert.equal(result.ok, true);
   assert.equal(server.architect.providers.getCapabilities('opencode-go', 'deepseek-v4-pro').tools, true);
   assert.equal(server.architect.providers.getCapabilities('opencode-go', 'text-only').tools, false);
+});
+
+test('blocked browser submit waits for an exact owner origin grant, then resumes the same filled page to a verified portal receipt', async t => {
+  if (!(await browserBinary())) { t.skip('No installed Chromium/Edge on this runner'); return; }
+
+  let portalOrigin = '';
+  let received = null;
+  const marker = `retained-${Date.now()}`;
+  const portal = http.createServer(async (req, res) => {
+    if (req.method === 'POST') {
+      const chunks = []; for await (const chunk of req) chunks.push(chunk);
+      const form = new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
+      received = { name: form.get('name'), marker: form.get('marker') };
+      res.setHeader('content-type', 'text/html');
+      res.end('<h1>PORTAL RECEIVED</h1>');
+      return;
+    }
+    res.setHeader('content-type', 'text/html');
+    res.end(`<h1>Application portal</h1><form method="post" action="/submit">
+      <label>Name <input name="name" required></label>
+      <label>Marker <input name="marker" required></label>
+      <button type="submit">Send application</button>
+    </form>`);
+  });
+  await new Promise(resolve => portal.listen(0, '127.0.0.1', resolve));
+  portalOrigin = `http://127.0.0.1:${portal.address().port}`;
+  t.after(async () => {
+    portal.closeAllConnections();
+    await new Promise(resolve => portal.close(resolve));
+  });
+
+  const { requests, server } = await setup(t, (_body, count) => {
+    if (count === 1) return tool('open-portal', 'browser_open', { url: portalOrigin });
+    if (count === 2) return tool('fill-name', 'browser_fill', { selector: 'input[name="name"]', value: 'Ada Lovelace' });
+    if (count === 3) return tool('fill-marker', 'browser_fill', { selector: 'input[name="marker"]', value: marker });
+    if (count === 4) return tool('submit-before-grant', 'browser_click', { selector: 'button[type="submit"]' });
+    if (count === 5) return tool('inspect-after-grant', 'browser_inspect', {});
+    if (count === 6) return tool('submit-after-grant', 'browser_click', { selector: 'button[type="submit"]' });
+    if (count === 7) return tool('inspect-receipt', 'browser_inspect', {});
+    if (count === 8) return tool('write-receipt', 'fs_write', { path: 'browser-receipt.txt', content: `Portal receipt for Ada Lovelace ${marker}` });
+    return { role: 'assistant', content: 'Submitted the retained form and observed the portal receipt.' };
+  });
+  server.architect.files.enableOwnerMode({
+    lanes: ['files', 'browser'],
+    folders: [server.architect.workspaceDir],
+  });
+
+  const criteria = [{ kind: 'file', path: 'browser-receipt.txt', contains: marker }];
+  const initial = await server.providerAgent.execute({
+    goalText: `Open ${portalOrigin}, fill the form for Ada Lovelace with marker ${marker}, submit it, and save browser-receipt.txt`,
+    criteria,
+  });
+  const waiting = JSON.parse(JSON.stringify(initial));
+
+  assert.equal(waiting.status, 'WAITING_USER', JSON.stringify(waiting));
+  assert.equal(waiting.errorCode, 'BROWSER_ORIGIN_GRANT_REQUIRED');
+  assert.equal(waiting.browser_handoff.kind, 'BROWSER_ORIGIN');
+  assert.equal(waiting.browser_handoff.origin, portalOrigin);
+  assert.equal(waiting.browser_handoff.browserSessionRetained, true);
+  assert.equal(waiting.browser_handoff.toolExecuted, false);
+  assert.equal(waiting.browser_handoff.externalEffectMayHaveOccurred, false);
+  assert.equal(waiting.browser_handoff.visibleBrowser, false);
+  assert.equal(received, null, 'nothing may reach the portal before the owner grant');
+  assert.equal(requests.length, 4, 'the provider loop must stop immediately at the handoff');
+  assert.equal(server.providerAgent.hasRetainedBrowserDriver(), true);
+  assert.deepEqual(waiting.adaptive.failedActions, [], 'a no-effect blocked submit must not poison the identical retry after grant');
+  assert.equal(waiting.tool_results.at(-1).errorCode, 'BROWSER_ORIGIN_GRANT_REQUIRED');
+
+  server.architect.files.grantBrowserOrigins([`${portalOrigin}/submit`]);
+  const resumed = await server.providerAgent.execute({ resume: true, goalText: 'The owner granted the exact origin. Inspect the preserved page and submit it once.' });
+
+  assert.equal(resumed.status, 'COMPLETED', JSON.stringify(resumed));
+  assert.equal(resumed.browser_handoff, undefined);
+  assert.equal(resumed.last_browser_handoff.origin, portalOrigin);
+  assert.ok(resumed.last_browser_handoff.resumed_at);
+  assert.deepEqual(received, { name: 'Ada Lovelace', marker }, 'the resumed run submitted the already-filled page without reopening or refilling it');
+  assert.equal(fs.readFileSync(path.join(server.architect.workspaceDir, 'browser-receipt.txt'), 'utf8'), `Portal receipt for Ada Lovelace ${marker}`);
+  assert.equal(server.providerAgent.hasRetainedBrowserDriver(), false, 'a completed goal releases the retained browser driver');
+  const clicks = resumed.tool_results.filter(row => row.tool === 'browser_click');
+  assert.equal(clicks.length, 2);
+  assert.equal(clicks[0].ok, false);
+  assert.equal(clicks[1].ok, true, 'the identical submit is allowed after the owner grant');
+  assert.equal(requests.length, 9);
+  assert.ok(requests[4].body.messages.some(message => String(message.content || '').includes('the owner resumed after a browser handoff')));
+  assert.ok(requests[4].body.messages.some(message => String(message.content || '').includes('The blocked browser action was not executed')));
+});
+
+test('visible login and CAPTCHA signals pause immediately for the owner without asking the model to enter secrets', async t => {
+  if (!(await browserBinary())) { t.skip('No installed Chromium/Edge on this runner'); return; }
+
+  let loginOrigin = '';
+  const portal = http.createServer((_req, res) => {
+    res.setHeader('content-type', 'text/html');
+    res.end(`<h1>Sign in</h1>
+      <form method="post">
+        <label>Email <input name="email" autocomplete="username"></label>
+        <label>Password <input type="password" name="password" autocomplete="current-password"></label>
+        <p>Complete CAPTCHA verification to continue.</p>
+        <div class="g-recaptcha" data-sitekey="test" style="width:300px;height:80px">CAPTCHA</div>
+        <button type="submit">Sign in</button>
+      </form>`);
+  });
+  await new Promise(resolve => portal.listen(0, '127.0.0.1', resolve));
+  loginOrigin = `http://127.0.0.1:${portal.address().port}`;
+  t.after(async () => {
+    portal.closeAllConnections();
+    await new Promise(resolve => portal.close(resolve));
+  });
+
+  const { requests, server } = await setup(t, (_body, count) => {
+    if (count === 1) return tool('open-login', 'browser_open', { url: loginOrigin });
+    return tool('must-not-run', 'browser_fill', { selector: 'input[type="password"]', value: 'must-never-be-entered' });
+  });
+  server.architect.files.enableOwnerMode({ lanes: ['browser'], folders: [server.architect.workspaceDir] });
+
+  try {
+    const result = await server.providerAgent.execute({ goalText: `Open ${loginOrigin} and continue past sign-in` });
+    assert.equal(result.status, 'WAITING_USER', JSON.stringify(result));
+    assert.equal(result.errorCode, 'BROWSER_OWNER_HANDOFF_REQUIRED');
+    assert.equal(result.browser_handoff.kind, 'CAPTCHA');
+    assert.equal(result.browser_handoff.origin, loginOrigin);
+    assert.equal(result.browser_handoff.toolExecuted, true, 'browser_open completed before the handoff signal was observed');
+    assert.equal(result.browser_handoff.externalEffectMayHaveOccurred, false);
+    assert.equal(result.browser_handoff.browserSessionRetained, true);
+    assert.ok(result.browser_handoff.signals.some(signal => /password/i.test(signal)));
+    assert.equal(requests.length, 1, 'no further model round may run after a login/CAPTCHA handoff is detected');
+    assert.deepEqual(result.tool_results.map(row => row.tool), ['browser_open']);
+    assert.equal(server.providerAgent.hasRetainedBrowserDriver(), true);
+  } finally {
+    await server.providerAgent.close();
+  }
+  assert.equal(server.providerAgent.hasRetainedBrowserDriver(), false);
 });

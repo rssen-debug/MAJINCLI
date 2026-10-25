@@ -92,6 +92,50 @@ export function isFilesystemRoot(value) {
   return false;
 }
 
+/**
+ * Normalise an owner-supplied browser write grant to one exact origin.
+ * A page URL may be pasted for convenience, but only its scheme/host/port is
+ * stored. URL credentials are refused because they can visually disguise the
+ * real host and must never become a persistent permission.
+ */
+export function normaliseBrowserOrigin(raw) {
+  const value = String(raw ?? '').trim();
+  if (!value) throw new OwnerModeError('INVALID_BROWSER_ORIGIN', 'a browser origin or URL is required');
+  if (value.length > 2048) throw new OwnerModeError('INVALID_BROWSER_ORIGIN', 'the browser origin is too long');
+  if (value.includes('\0')) throw new OwnerModeError('INVALID_BROWSER_ORIGIN', 'the browser origin contains a null byte');
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new OwnerModeError('INVALID_BROWSER_ORIGIN', 'the browser origin must be a valid http(s) origin or URL');
+  }
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new OwnerModeError('INVALID_BROWSER_ORIGIN', 'only http(s) browser origins can be granted');
+  }
+  if (url.username || url.password) {
+    throw new OwnerModeError('INVALID_BROWSER_ORIGIN', 'browser origins with embedded credentials are not allowed');
+  }
+  return url.origin;
+}
+
+function normaliseBrowserOrigins(values) {
+  return [...new Set((Array.isArray(values) ? values : []).map(normaliseBrowserOrigin))].sort();
+}
+
+function persistedBrowserOrigins(raw) {
+  if (!raw || raw.schema !== OWNER_MODE_SCHEMA) return [];
+  const origins = [];
+  for (const value of Array.isArray(raw.browserOrigins) ? raw.browserOrigins : []) {
+    try {
+      origins.push(normaliseBrowserOrigin(value));
+    } catch {
+      // A corrupt or credential-bearing persisted entry is ignored rather
+      // than discarding every valid owner grant in the same file.
+    }
+  }
+  return [...new Set(origins)].sort();
+}
+
 export class OwnerMode {
   /**
    * @param {object} o
@@ -109,13 +153,15 @@ export class OwnerMode {
   #load() {
     const raw = readJson(this.file);
     if (!raw || raw.schema !== OWNER_MODE_SCHEMA) {
-      return { schema: OWNER_MODE_SCHEMA, version: 1, lanes: [], folders: [], grantedAt: null, revokedAt: null, history: [] };
+      return { schema: OWNER_MODE_SCHEMA, version: 1, lanes: [], folders: [], browserOrigins: [], grantedAt: null, revokedAt: null, history: [] };
     }
+    const browserOrigins = persistedBrowserOrigins(raw);
     return {
       schema: OWNER_MODE_SCHEMA,
       version: raw.version || 1,
       lanes: Array.isArray(raw.lanes) ? raw.lanes.filter((l) => GRANTABLE_LANES.includes(l)) : [],
       folders: Array.isArray(raw.folders) ? raw.folders.filter((f) => typeof f === 'string') : [],
+      browserOrigins,
       grantedAt: raw.grantedAt || null,
       revokedAt: raw.revokedAt || null,
       history: Array.isArray(raw.history) ? raw.history.slice(-50) : [],
@@ -128,6 +174,13 @@ export class OwnerMode {
       if (this.state.history.length > 50) this.state.history = this.state.history.slice(-50);
     }
     writePrivate(this.file, this.state);
+  }
+
+  #reloadBrowserOrigins() {
+    // Browser origins are intentionally dynamic: a grant or revocation from
+    // another owner CLI process must be visible to an already-running host
+    // and must not be overwritten by that host's next unrelated save.
+    this.state.browserOrigins = persistedBrowserOrigins(readJson(this.file));
   }
 
   /** Effective lanes: what the owner granted, plus anything the installer forced. */
@@ -147,6 +200,12 @@ export class OwnerMode {
     return [...this.state.folders];
   }
 
+  /** Exact origins where the owner has authorized browser writes/submits. */
+  browserOrigins() {
+    this.#reloadBrowserOrigins();
+    return [...this.state.browserOrigins];
+  }
+
   /** True when a path is inside one of the granted folders. */
   allowsPath(candidate) {
     let target;
@@ -162,13 +221,15 @@ export class OwnerMode {
     });
   }
 
-  /** Grant lanes and/or folders. Returns the new state. */
-  grant({ lanes = [], folders = [], reason = null } = {}) {
+  /** Grant lanes, folders and/or exact browser write origins. Returns the new state. */
+  grant({ lanes = [], folders = [], browserOrigins = [], reason = null } = {}) {
     const wanted = [...new Set(lanes)];
     for (const lane of wanted) {
       if (!GRANTABLE_LANES.includes(lane)) throw new OwnerModeError('UNKNOWN_LANE', `unknown lane: ${lane}`);
     }
     const addedFolders = folders.map(normaliseFolder);
+    const addedBrowserOrigins = normaliseBrowserOrigins(browserOrigins);
+    this.#reloadBrowserOrigins();
 
     const nextLanes = new Set(this.state.lanes);
     for (const lane of wanted) nextLanes.add(lane);
@@ -176,39 +237,72 @@ export class OwnerMode {
     const nextFolders = new Set(this.state.folders);
     for (const f of addedFolders) nextFolders.add(f);
 
-    // Granting a folder implies the files lane: that is what the owner meant.
+    const nextBrowserOrigins = new Set(this.state.browserOrigins);
+    for (const origin of addedBrowserOrigins) nextBrowserOrigins.add(origin);
+
+    // Granting a folder implies the files lane, and granting a browser write
+    // origin implies the browser runtime lane: that is what the owner meant.
     if (addedFolders.length) nextLanes.add('files');
+    if (addedBrowserOrigins.length) nextLanes.add('browser');
 
     this.state.lanes = [...nextLanes];
     this.state.folders = [...nextFolders];
+    this.state.browserOrigins = [...nextBrowserOrigins].sort();
     this.state.grantedAt = new Date(this.now()).toISOString();
     this.state.revokedAt = null;
-    this.#save({ action: 'grant', lanes: wanted, folders: addedFolders, reason });
+    this.#save({ action: 'grant', lanes: wanted, folders: addedFolders, browserOrigins: addedBrowserOrigins, reason });
     return this.view();
   }
 
-  /** Revoke specific lanes, or everything with no argument. Effective at once. */
-  revoke({ lanes = null, folders = null, reason = null } = {}) {
-    if (!lanes && !folders) {
+  /** Grant one or more exact browser write origins without touching other lanes/folders. */
+  grantBrowserOrigins(origins, reason = null) {
+    return this.grant({ browserOrigins: Array.isArray(origins) ? origins : [origins], reason });
+  }
+
+  /** Revoke specific lanes/folders/browser origins, or everything with no argument. Effective at once. */
+  revoke({ lanes = null, folders = null, browserOrigins = null, reason = null } = {}) {
+    if (!lanes && !folders && !browserOrigins) {
       this.state.lanes = [];
       this.state.folders = [];
+      this.state.browserOrigins = [];
       this.state.revokedAt = new Date(this.now()).toISOString();
       this.#save({ action: 'revoke-all', reason });
       return this.view();
     }
+    const removedBrowserOrigins = Array.isArray(browserOrigins) ? normaliseBrowserOrigins(browserOrigins) : null;
+    this.#reloadBrowserOrigins();
     if (Array.isArray(lanes)) this.state.lanes = this.state.lanes.filter((l) => !lanes.includes(l));
     if (Array.isArray(folders)) {
       const drop = new Set(folders.map((f) => path.resolve(f)));
       this.state.folders = this.state.folders.filter((f) => !drop.has(path.resolve(f)));
     }
+    if (removedBrowserOrigins) {
+      const drop = new Set(removedBrowserOrigins);
+      this.state.browserOrigins = this.state.browserOrigins.filter((origin) => !drop.has(origin));
+    }
+    if (Array.isArray(lanes) && lanes.includes('browser')) this.state.browserOrigins = [];
     if (this.state.folders.length === 0) this.state.lanes = this.state.lanes.filter((l) => l !== 'files');
     this.state.revokedAt = new Date(this.now()).toISOString();
-    this.#save({ action: 'revoke', lanes, folders, reason });
+    this.#save({ action: 'revoke', lanes, folders, browserOrigins: removedBrowserOrigins, reason });
     return this.view();
+  }
+
+  /** Revoke one or more browser write origins, or all of them when omitted. */
+  revokeBrowserOrigins(origins = null, reason = null) {
+    if (origins == null) {
+      this.#reloadBrowserOrigins();
+      const removed = [...this.state.browserOrigins];
+      this.state.browserOrigins = [];
+      this.state.revokedAt = new Date(this.now()).toISOString();
+      this.#save({ action: 'revoke-browser-origins', browserOrigins: removed, reason });
+      return this.view();
+    }
+    return this.revoke({ browserOrigins: Array.isArray(origins) ? origins : [origins], reason });
   }
 
   /** What the phone is shown. */
   view() {
+    this.#reloadBrowserOrigins();
     const active = this.activeLanes();
     return {
       enabled: active.length > 0,
@@ -216,6 +310,8 @@ export class OwnerMode {
       granted: this.state.lanes,
       forced: this.forceLanes,
       folders: this.state.folders,
+      browserOrigins: [...this.state.browserOrigins],
+      effectiveBrowserOrigins: active.includes('browser') ? [...this.state.browserOrigins] : [],
       sensitive: active.filter((l) => SENSITIVE_LANES.includes(l)),
       grantable: GRANTABLE_LANES,
       grantedAt: this.state.grantedAt,

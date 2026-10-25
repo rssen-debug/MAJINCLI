@@ -302,20 +302,34 @@ export class FileAndAccessController {
    * specified folders, persisted on disk so routine tasks never re-prompt).
    * Explicitly separates user-level Owner Mode from OS Administrator rights.
    */
-  enableOwnerMode({ lanes = [...GRANTABLE_LANES], folders = [] } = {}) {
+  enableOwnerMode({ lanes = [...GRANTABLE_LANES], folders = [], browserOrigins = [] } = {}) {
     this.stopRequested = false;
-    this.ownerMode.grant({ lanes, folders });
+    this.ownerMode.grant({ lanes, folders, browserOrigins });
+    return this.describeAccessState();
+  }
+
+  /** Persist exact origins where MAJIN's browser may perform writes/submits. */
+  grantBrowserOrigins(origins) {
+    this.stopRequested = false;
+    this.ownerMode.grantBrowserOrigins(origins);
+    return this.describeAccessState();
+  }
+
+  /** Revoke browser write origins immediately; omitted input clears only those origins. */
+  revokeBrowserOrigins(origins = null) {
+    this.ownerMode.revokeBrowserOrigins(origins);
     return this.describeAccessState();
   }
 
   /** Revoke all or selected permissions immediately. */
-  revokePermissions({ lanes = null, folder = null } = {}) {
-    if (!lanes && !folder) {
+  revokePermissions({ lanes = null, folder = null, browserOrigins = null } = {}) {
+    if (!lanes && !folder && !browserOrigins) {
       this.ownerMode.revoke();
     } else {
       this.ownerMode.revoke({
         lanes: Array.isArray(lanes) ? lanes : null,
         folders: folder ? [folder] : null,
+        browserOrigins: Array.isArray(browserOrigins) ? browserOrigins : null,
       });
     }
     return this.describeAccessState();
@@ -346,7 +360,7 @@ export class FileAndAccessController {
   assertUntrustedDataCannotEscalate(source = {}) {
     const kind = String(source.sourceKind || 'data');
     if (['webpage', 'uploaded_file', 'imported_skill', 'job_ad', 'external_api'].includes(kind)) {
-      if (source.requestedLanes?.length || source.requestedFolders?.length || source.enableOwnerMode) {
+      if (source.requestedLanes?.length || source.requestedFolders?.length || source.requestedBrowserOrigins?.length || source.enableOwnerMode) {
         const err = new Error(`Untrusted data source (${kind}) attempted to escalate permissions.`);
         err.code = 'UNTRUSTED_PERMISSION_ESCALATION_BLOCKED';
         throw err;
@@ -364,6 +378,8 @@ export class FileAndAccessController {
       adminSeparationNote: 'Full file access in Owner Mode operates strictly within the OS user account and is distinct from OS Administrator/UAC elevation.',
       grantedLanes: view.lanes,
       grantedFolders: view.folders,
+      browserWriteOrigins: view.browserOrigins || [],
+      effectiveBrowserWriteOrigins: view.effectiveBrowserOrigins || [],
       stopRequested: this.stopRequested,
       uploadLimits: {
         v4DefaultBytes: V4_DEFAULT_UPLOAD_BYTES,

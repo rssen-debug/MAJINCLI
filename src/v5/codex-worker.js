@@ -5,5 +5,5 @@ const tools = await createDriverTools(JSON.parse(process.env.MAJIN_DRIVER_OPTION
 process.send({ ready: true, tools: [...tools.values()].map(({ run, ...t }) => t) });
 process.on('message', async ({ id, name, args }) => {
   try { process.send({ id, value: await tools.get(name).run(args) }); }
-  catch (error) { process.send({ id, value: { ok: false, error: { code: error.code || 'TOOL_FAILURE', message: error.message } } }); }
+  catch (error) { process.send({ id, value: { ok: false, error: { code: error.code || 'TOOL_FAILURE', message: error.message, ...(error.meta ? { meta: error.meta } : {}), ...(error.details ? { details: error.details } : {}) } } }); }
 });

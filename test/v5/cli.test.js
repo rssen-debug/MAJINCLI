@@ -7,6 +7,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ProviderManager } from '../../src/v5/providers.js';
+import { browserBinary } from '../../src/v4/tools/host.js';
 
 const BIN = fileURLToPath(new URL('../../bin/majin-v5.mjs', import.meta.url));
 
@@ -202,11 +203,34 @@ test('CLI grants persist, doctor reports parity, and tools call executes through
   assert.deepEqual(new Set(grantJson.grantedLanes), new Set(['files', 'sys', 're']));
   assert.ok(grantJson.grantedFolders.includes(fx.workspace));
 
+  const originGranted = await runCli([
+    'grants', 'browser-origin', 'grant', 'https://Employer.Example:443/apply?job=1',
+    '--data-dir', fx.dataDir, '--json',
+  ], fx);
+  assert.equal(originGranted.status, 0, originGranted.stderr);
+  const originJson = parseJson(originGranted);
+  assert.deepEqual(originJson.browserWriteOrigins, ['https://employer.example']);
+  assert.ok(originJson.grantedLanes.includes('browser'), 'a persisted browser origin implies the browser lane');
+
+  const credentialOrigin = await runCli([
+    'grants', 'browser-origin', 'grant', 'https://user:secret@employer.example/apply',
+    '--data-dir', fx.dataDir, '--json',
+  ], fx);
+  assert.equal(credentialOrigin.status, 1);
+  assert.match(credentialOrigin.stderr, /embedded credentials are not allowed/);
+
+  const originList = await runCli(['grants', 'browser-origin', 'list', '--data-dir', fx.dataDir, '--json'], fx);
+  assert.equal(originList.status, 0, originList.stderr);
+  assert.deepEqual(parseJson(originList).browserWriteOrigins, ['https://employer.example']);
+  assert.equal(parseJson(originList).browserLaneGranted, true);
+
   const doctor = await runCli(['doctor', '--data-dir', fx.dataDir, '--json'], fx);
   assert.equal(doctor.status, 0, doctor.stderr);
   const doctorJson = parseJson(doctor);
   assert.equal(doctorJson.toolParity.universe, 155);
   assert.ok(doctorJson.toolParity.available >= 35, `expected bridge lanes in doctor parity, got ${doctorJson.toolParity.available}`);
+  assert.deepEqual(doctorJson.browser.writeOrigins, ['https://employer.example']);
+  assert.equal(doctorJson.browser.visible, true);
   assert.equal(doctorJson.provider.activeModelId, null);
 
   fs.writeFileSync(path.join(fx.workspace, 'sample.bin'), 'cli proof');
@@ -225,6 +249,14 @@ test('CLI grants persist, doctor reports parity, and tools call executes through
   const unavailable = await runCli(['tools', 'call', 'research_run', '--data-dir', fx.dataDir, '--json'], fx);
   assert.equal(unavailable.status, 1);
   assert.match(unavailable.stderr, /Tool is not available in this driver: research_run/);
+
+  const originRevoked = await runCli([
+    'grants', 'browser-origin', 'revoke', 'https://employer.example/apply',
+    '--data-dir', fx.dataDir, '--json',
+  ], fx);
+  assert.equal(originRevoked.status, 0, originRevoked.stderr);
+  assert.deepEqual(parseJson(originRevoked).browserWriteOrigins, []);
+  assert.ok(parseJson(originRevoked).grantedLanes.includes('browser'), 'revoking an origin does not remove browser read access');
 });
 
 test('CLI run refuses to fake a free-form goal when no provider model is configured', async (t) => {
@@ -326,6 +358,108 @@ test('CLI model commands configure from env, discover a live catalog, and never 
   assert.equal(status.status, 0, status.stderr);
   assert.match(status.stdout, /Active model: opencode-go\/deepseek-v4-flash/);
   assert.doesNotMatch(status.stdout, /local-test-key/);
+});
+
+test('CLI chat persists and clears exact browser write origins without accepting URL credentials', async (t) => {
+  const fx = fixture(t);
+  const session = startCliSession(['chat', '--data-dir', fx.dataDir], fx);
+  await session.waitFor('Type a goal');
+
+  session.write('/browser-origin grant https://Employer.Example:443/apply?job=1');
+  await session.waitFor('Browser write origins (1): https://employer.example');
+  await session.waitFor('Exact origin grant is effective immediately');
+
+  session.write('/browser-origin grant https://user:secret@employer.example/apply');
+  await session.waitFor('embedded credentials are not allowed', 'stderr');
+
+  session.write('/status');
+  await session.waitFor('Browser write origins (1): https://employer.example');
+
+  session.write('/browser-origin clear');
+  await session.waitFor('Browser write origins (0): (none; browser writes/submits blocked)');
+
+  session.write('/browser-origin grant https://portal.example/form');
+  await session.waitFor('Browser write origins (1): https://portal.example');
+  const closed = await session.exit();
+  assert.equal(closed.status, 0, `${closed.stdout}\n${closed.stderr}`);
+
+  const listed = await runCli(['grants', 'browser-origin', 'list', '--data-dir', fx.dataDir, '--json'], fx);
+  assert.equal(listed.status, 0, listed.stderr);
+  assert.deepEqual(parseJson(listed).browserWriteOrigins, ['https://portal.example']);
+});
+
+test('CLI chat grants a blocked browser origin in the same host and resumes the retained filled page to portal receipt', async (t) => {
+  const browserPath = await browserBinary();
+  if (!browserPath) { t.skip('No installed Chromium/Edge on this runner'); return; }
+  const fx = fixture(t);
+  const marker = `chat-retained-${Date.now()}`;
+  const submissions = [];
+  const portal = http.createServer(async (req, res) => {
+    if (req.method === 'POST') {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      submissions.push(Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString('utf8'))));
+      res.setHeader('content-type', 'text/html');
+      res.end('<h1>CHAT PORTAL RECEIVED</h1>');
+      return;
+    }
+    res.setHeader('content-type', 'text/html');
+    res.end(`<h1>Chat application portal</h1><form method="post" action="/submit">
+      <label>Name <input name="name" required></label>
+      <label>Marker <input name="marker" required></label>
+      <button type="submit">Send application</button>
+    </form>`);
+  });
+  await new Promise((resolve) => portal.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${portal.address().port}`;
+  t.after(async () => {
+    portal.closeAllConnections();
+    await new Promise((resolve) => portal.close(resolve));
+  });
+
+  let completions = 0;
+  const provider = await fakeProvider(t, () => {
+    completions += 1;
+    if (completions === 1) return toolCall('chat-open-portal', 'browser_open', { url: origin });
+    if (completions === 2) return toolCall('chat-fill-name', 'browser_fill', { selector: 'input[name="name"]', value: 'Chat User' });
+    if (completions === 3) return toolCall('chat-fill-marker', 'browser_fill', { selector: 'input[name="marker"]', value: marker });
+    if (completions === 4) return toolCall('chat-submit-blocked', 'browser_click', { selector: 'button[type="submit"]' });
+    if (completions === 5) return toolCall('chat-inspect-retained', 'browser_inspect', {});
+    if (completions === 6) return toolCall('chat-submit-granted', 'browser_click', { selector: 'button[type="submit"]' });
+    if (completions === 7) return toolCall('chat-inspect-receipt', 'browser_inspect', {});
+    if (completions === 8) return toolCall('chat-write-receipt', 'fs_write', { path: 'chat-browser-receipt.txt', content: `Chat portal receipt ${marker}` });
+    return { role: 'assistant', content: 'Submitted the retained chat form and observed the receipt.' };
+  });
+  await configureProvider(fx.dataDir, provider.baseUrl);
+  const criteria = JSON.stringify([{ kind: 'file', path: 'chat-browser-receipt.txt', contains: marker }]);
+
+  const session = startCliSession([
+    'chat', '--data-dir', fx.dataDir, '--criteria', criteria,
+    '--lanes', 'files,browser', '--browser-headless',
+  ], { ...fx, env: { MAJIN_V4_BROWSER: browserPath } });
+  await session.waitFor('Type a goal');
+  session.write(`Open ${origin}, fill it for Chat User with marker ${marker}, submit it, and save chat-browser-receipt.txt`);
+  await session.waitFor('Status: WAITING_USER');
+  await session.waitFor('Browser handoff: BROWSER_ORIGIN');
+  await session.waitFor(`Exact origin: ${origin}`);
+  await session.waitFor('Browser session retained at handoff: yes');
+  assert.deepEqual(submissions, [], 'the blocked chat submit must not reach the portal');
+  assert.equal(completions, 4);
+
+  session.write(`/browser-origin grant ${origin}/submit`);
+  await session.waitFor(`Browser write origins (1): ${origin}`);
+  await session.waitFor('Exact origin grant is effective immediately');
+
+  session.write('/resume');
+  await session.waitFor('Status: COMPLETED');
+  session.write('/status');
+  await session.waitFor('resumes: 1');
+  const closed = await session.exit();
+
+  assert.equal(closed.status, 0, `${closed.stdout}\n${closed.stderr}`);
+  assert.deepEqual(submissions, [{ name: 'Chat User', marker }], 'resume submitted the already-filled page exactly once');
+  assert.equal(fs.readFileSync(path.join(fx.workspace, 'chat-browser-receipt.txt'), 'utf8'), `Chat portal receipt ${marker}`);
+  assert.equal(completions, 9);
 });
 
 test('CLI chat steers the live provider goal before its stale tool batch can execute', async (t) => {

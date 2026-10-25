@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { OwnerMode, OwnerModeError, GRANTABLE_LANES, SENSITIVE_LANES, normaliseFolder } from '../../src/v4/owner-mode.js';
+import { OwnerMode, OwnerModeError, GRANTABLE_LANES, SENSITIVE_LANES, normaliseFolder, normaliseBrowserOrigin } from '../../src/v4/owner-mode.js';
 import { tempHome } from './helpers.mjs';
 
 const mode = (home, opts = {}) => new OwnerMode({ file: path.join(home, 'owner-mode.json'), ...opts });
@@ -84,6 +84,51 @@ test('owner-mode: folders are expanded and normalised', () => {
   assert.equal(normaliseFolder(folder), path.resolve(folder));
   assert.throws(() => normaliseFolder(''), OwnerModeError);
   assert.throws(() => normaliseFolder('a\0b'), OwnerModeError);
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+test('owner-mode: browser origins are canonical exact origins, persisted, and cannot carry credentials', () => {
+  const home = tempHome();
+  const m = mode(home);
+
+  assert.equal(normaliseBrowserOrigin('HTTPS://Employer.Example:443/apply?job=1#form'), 'https://employer.example');
+  assert.equal(normaliseBrowserOrigin('http://127.0.0.1:43123/portal'), 'http://127.0.0.1:43123');
+  for (const bad of [
+    'https://user:password@employer.example/apply',
+    'https://user@employer.example/apply',
+    'javascript:alert(1)',
+    'file:///tmp/form.html',
+    'not a url',
+    '',
+  ]) assert.throws(() => normaliseBrowserOrigin(bad), OwnerModeError, bad);
+
+  m.grantBrowserOrigins(['https://employer.example/apply', 'https://employer.example/other', 'http://localhost:3000/form']);
+  assert.deepEqual(m.browserOrigins(), ['http://localhost:3000', 'https://employer.example']);
+  assert.ok(m.activeLanes().includes('browser'), 'granting an origin implies the browser lane');
+  assert.deepEqual(mode(home).browserOrigins(), ['http://localhost:3000', 'https://employer.example'], 'the grant survives a restart');
+
+  // Invalid entries already on disk (including credentials) are ignored on load.
+  const file = path.join(home, 'owner-mode.json');
+  const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
+  stored.browserOrigins.push('https://user:pass@evil.example', 'javascript:alert(1)');
+  fs.writeFileSync(file, JSON.stringify(stored));
+  assert.deepEqual(mode(home).browserOrigins(), ['http://localhost:3000', 'https://employer.example']);
+
+  m.revokeBrowserOrigins(['https://employer.example/apply']);
+  assert.deepEqual(m.browserOrigins(), ['http://localhost:3000']);
+  assert.ok(m.activeLanes().includes('browser'), 'revoking only an origin leaves browser reads available');
+  m.revoke({ lanes: ['browser'] });
+  assert.deepEqual(m.browserOrigins(), [], 'revoking the browser lane also removes every write origin');
+
+  const otherProcess = mode(home);
+  m.grantBrowserOrigins(['https://dynamic.example/apply']);
+  assert.deepEqual(otherProcess.browserOrigins(), ['https://dynamic.example'], 'a running host sees an origin granted by another owner process');
+  otherProcess.grant({ lanes: ['shell'] });
+  assert.deepEqual(mode(home).browserOrigins(), ['https://dynamic.example'], 'an unrelated save from the other process does not erase the dynamic origin');
+  m.revokeBrowserOrigins(['https://dynamic.example/apply']);
+  assert.deepEqual(otherProcess.view().browserOrigins, [], 'a running host also sees the revocation immediately');
+  otherProcess.grant({ lanes: ['web'] });
+  assert.deepEqual(mode(home).browserOrigins(), [], 'an unrelated later save does not resurrect a revoked origin');
   fs.rmSync(home, { recursive: true, force: true });
 });
 
