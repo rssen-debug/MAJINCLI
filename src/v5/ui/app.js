@@ -364,10 +364,15 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
     if (busy || (!goalText && pendingFiles.length === 0)) return;
     busy = true;
     const run = ++generation;
+    // Snapshot this request immediately. Never leave a sent message stuck in the composer.
+    const submittedFiles = pendingFiles.slice();
+    if (wishInput) wishInput.value = '';
+    pendingFiles = [];
+    if (fileInput) fileInput.value = '';
+    if (attachmentsPreview) { attachmentsPreview.hidden = true; attachmentsPreview.innerHTML = ''; }
 
-    appendMessage('user', goalText || pendingFiles.map((f) => f.name).join(', '));
-    // Retain input and attachments until the server accepts the request.
-    if (sendBtn) sendBtn.disabled = true;
+    appendMessage('user', goalText || submittedFiles.map((f) => f.name).join(', '));
+    if (sendBtn) { sendBtn.hidden = true; sendBtn.disabled = true; }
     if (stopBtn) stopBtn.hidden = false;
 
     setActivityStatus('working', t5('ux10'), { verifiedLearning: false });
@@ -375,7 +380,7 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
     if (typeof fetchImpl === 'function') {
       try {
         const files = [];
-        for (const file of pendingFiles) {
+        for (const file of submittedFiles) {
           setActivityStatus('working', `Uploading ${file.name}…`, { verifiedLearning: false });
           const uploaded = await request('/api/v5/uploads', {
             method: 'POST', headers: { 'content-type': file.type || 'application/octet-stream', 'x-file-name': encodeURIComponent(file.name) }, body: file,
@@ -390,10 +395,7 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
           body: JSON.stringify({ goalText, files }),
         });
         if (run !== generation) return;
-        if (wishInput) wishInput.value = '';
-        pendingFiles = [];
-        if (fileInput) fileInput.value = '';
-        if (attachmentsPreview) attachmentsPreview.hidden = true;
+        // New text typed while the request ran must remain untouched.
         const xpGain = data?.xp_award?.totalXpAwarded || 0;
         const pSkill = data?.xp_award?.primarySkill;
         if (pSkill) {
@@ -424,7 +426,7 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
         setActivityStatus('idle', t5('statusFailed'), { verifiedLearning: false });
         appendMessage('agent', error.message, t5('ux11'));
       } finally {
-        if (run === generation) { busy = false; syncSend(); if (stopBtn) stopBtn.hidden = true; }
+        if (run === generation) { busy = false; if (sendBtn) sendBtn.hidden = false; if (stopBtn) stopBtn.hidden = true; syncSend(); }
       }
     }
 
@@ -433,6 +435,7 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
   stopBtn?.addEventListener('click', async () => {
     generation++;
     busy = false;
+    if (sendBtn) sendBtn.hidden = false;
     syncSend();
     setActivityStatus('idle', t5('statusCancelled'), { verifiedLearning: false });
     if (stopBtn) stopBtn.hidden = true;
