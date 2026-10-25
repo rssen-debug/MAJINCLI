@@ -108,7 +108,14 @@ function topIndex(s, ch) {
 export function toSchema(params, run = null) {
   const properties = {};
   const required = [];
-  const trulyRequired = run ? requiredFromRun(run) : null;
+  /* BUNDLE-PROOF (R1, real-world audit 2026-10-20): required-ness is derived
+     ONLY from the declaration markers (? / (optional) / default: / valfritt…).
+     run.toString() survives neither bundling nor native code — the installed
+     exe reported nonsense required-lists (shell.run → [], fs.write → append).
+     requiredFromRun stays exported for diagnostics/tests of the SOURCE shape
+     but is never consulted here. `run` remains an accepted (ignored) argument
+     so existing def() calls compile unchanged. */
+  void run;
   for (const [k, v] of Object.entries(params)) {
     if (typeof v === 'string') {
       const m = /^(\w+)(\?)?:\s*(.+?)(?:\s+\[(.+)\])?$/s.exec(v.trim());
@@ -116,10 +123,10 @@ export function toSchema(params, run = null) {
       properties[k] = { type, description: (m?.[3] || v).trim() };
       if (m?.[4]) properties[k].enum = m[4].split('|').map((x) => x.trim());
       const optional = m?.[2] === '?' || /\?\s*:|\(valfritt\)|\(optional\)|\boptional\b|default:|standard:|endast om|om det anges|valfritt/i.test(v);
-      if (!optional && (!trulyRequired || trulyRequired.includes(k))) required.push(k);
+      if (!optional) required.push(k);
     } else {
       properties[k] = v;
-      if (!v.optional && (!trulyRequired || trulyRequired.includes(k))) required.push(k);
+      if (v.required === true || (v.optional !== true && v.required !== false)) required.push(k);
     }
   }
   return { type: 'object', properties, required: required.filter(Boolean), additionalProperties: false };
@@ -131,6 +138,66 @@ function guess(desc) {
   if (/\bsant\b|\bosant\b|boolean|true\/false|bool/i.test(desc)) return 'boolean';
   if (/\{\}|objekt|json-objekt/i.test(desc)) return 'object';
   return 'string';
+}
+
+/*
+ * GENESIS OMEGA fas 1 — capability-kontrakt + dynamisk verktygskoppling.
+ * Verktygen ÄR redan capabilityn; detta lager märker dem bara maskinläsbart
+ * (samma pipeline som list()/schemas() — ingen andra sanningar) och gör
+ * träffsärkningen som hittat rätt segment av 100+ verktyg utan ett enda
+ * modellanrop. Determiniskt = billigt = GENESIS ZERO:s zero-token-regel.
+ */
+export const CAP_CONTRACT = 'cap/1';
+
+export const RISK_SIDEEFFECTS = {
+  read: 'none',
+  write: 'local',
+  exec: 'process',
+  destructive: 'destructive',
+};
+
+export function capabilityTags(t) {
+  return [...new Set([t.group, ...String(t.name).split(/[._-]/), ...(t.tags || [])]
+    .map((x) => String(x).toLowerCase())
+    .filter(Boolean))];
+}
+
+export function capabilityOf(t) {
+  return {
+    contract: CAP_CONTRACT,
+    id: t.name,
+    group: t.group,
+    desc: t.desc,
+    sideEffects: RISK_SIDEEFFECTS[t.risk] || 'none',
+    tags: capabilityTags(t),
+    inputs: t.parameters,
+  };
+}
+
+/* Tokeniserar både punkt-separerade namn och löptext — engelska i kärnan,
+   svenska accenttecken tillåts så frågan kan låta som användaren låter. */
+const TOKENS = /[a-z0-9åäöéü]+/g;
+
+export function capabilityScore(t, tokens) {
+  const tags = capabilityTags(t);
+  const nameSegs = tags.slice(1);
+  const group = String(t.group).toLowerCase();
+  const nameText = String(t.name).toLowerCase();
+  const descText = String(t.desc).toLowerCase();
+  let named = 0, desc = 0;
+  for (const tok of tokens) {
+    if (tok.length < 3) continue;
+    /* namn/tag/grupp är "seed"-träffar: en description-stava aldrig ensam
+       fram ett verktyg (annars drunknar träfflistan i löst prat) */
+    if (nameSegs.includes(tok)) named += 6;
+    else if (nameSegs.some((seg) => (seg.length >= 5 && tok.length >= 5 && seg.slice(0, 5) === tok.slice(0, 5)) || (seg.length >= 4 && tok.length >= 4 && (seg.startsWith(tok) || tok.startsWith(seg))))) named += 3;
+    if (tags.includes(tok)) named += 4;
+    if (group === tok) named += 3;
+    if (new RegExp(`(^|[^a-z])${tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z]|$)`).test(descText)) desc += 1;
+  }
+  if (tokens.join(' ') && tokens.join(' ').length >= 5 && nameText.includes(tokens.join(' '))) named += 10;
+  if (named === 0) return 0;
+  return named + desc;
 }
 
 export class Registry {
@@ -172,6 +239,43 @@ export class Registry {
 
   has(name) {
     return this.byName.has(name);
+  }
+
+  register(tool) {
+    if (!tool?.name || this.byName.has(tool.name)) throw new Error(`tool already exists or has no name: ${tool?.name || '(missing)'}`);
+    this.tools.push(tool);
+    this.byName.set(tool.name, tool);
+    return tool;
+  }
+
+  unregister(name) {
+    const tool = this.byName.get(name);
+    if (!tool) return false;
+    this.byName.delete(name);
+    this.tools = this.tools.filter((item) => item.name !== name);
+    return true;
+  }
+
+  /** Typade kontrakt för allt som är synligt i just denna yta. */
+  capabilities(opts = {}) {
+    return this.visible(opts).map(capabilityOf);
+  }
+
+  /*
+   * Dynamisk verktygsplockning ("dynamic tool retrieval"): den generella sökvägen
+   * in i hela kapacitetsregistret. Deterministisk = noll tokens, samma ranking
+   * varje gång (bevisbart i test). Återlämnar manifests + score, inget annat.
+   */
+  search(q, { limit = 6, readOnly = false } = {}) {
+    const tokens = String(q || '').toLowerCase().match(TOKENS) || [];
+    if (!tokens.length) return [];
+    const out = [];
+    for (const t of this.visible({ readOnly })) {
+      const score = capabilityScore(t, tokens);
+      if (score > 0) out.push({ ...capabilityOf(t), score });
+    }
+    out.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+    return out.slice(0, Math.max(1, Number(limit) || 6));
   }
 
   async exec(name, args = {}, { session = 'desktop', step = 0, readOnly = false } = {}) {

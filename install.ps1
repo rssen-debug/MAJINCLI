@@ -1,4 +1,4 @@
-<#
+﻿<#
   MAJIN — installation on Windows.
   Needs no admin rights, no build toolchain, no npm churn for the core.
 
@@ -15,12 +15,43 @@ param(
   [switch]$NoPath,
   [switch]$NoTask,
   [switch]$Uninstall,
+  [switch]$Legacy,
   [string]$Home = "$env:LOCALAPPDATA\MAJIN"
 )
 
 $ErrorActionPreference = 'Stop'
 $Repo = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Bin = Join-Path $Home 'bin'
+
+# V4 packages must never install the old V1 server by accident.
+if (-not $Legacy) {
+  if ($WhatsApp -or $Dataset) { throw 'These V1 installer switches require -Legacy. V4 channel/dataset setup must use its own authenticated configuration.' }
+  $env:MAJIN_HOME = $Home
+  & (Join-Path $Repo 'scripts\v4\install-v4-windows.ps1') -AutoStart:(-not $NoTask) -Uninstall:$Uninstall
+  if (-not $?) { exit 1 }
+  if (-not $Uninstall) {
+    New-Item -ItemType Directory -Force -Path $Bin | Out-Null
+    $entry = Join-Path $Repo 'bin\majin.mjs'
+    foreach ($launcher in @(@{ Name = 'majin.cmd'; Command = '' }, @{ Name = 'majin-start.cmd'; Command = 'start' }, @{ Name = 'majin-serve.cmd'; Command = 'serve' })) {
+      $launcherPath = Join-Path $Bin $launcher.Name
+      if ((Test-Path -LiteralPath $launcherPath) -and -not (Test-Path -LiteralPath "$launcherPath.pre-v4")) {
+        Copy-Item -LiteralPath $launcherPath -Destination "$launcherPath.pre-v4"
+      }
+      $launchCommand = $launcher.Command
+      @"
+@echo off
+if "%MAJIN_HOME%"=="" set "MAJIN_HOME=$Home"
+node "$entry" $launchCommand %*
+"@ | Set-Content -LiteralPath $launcherPath -Encoding ASCII
+    }
+    if (-not $NoPath) {
+      $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+      if ($Bin -notin ($userPath -split ';')) { [Environment]::SetEnvironmentVariable('Path', "$Bin;$userPath", 'User') }
+    }
+    Write-Host 'V4 host installed. Install the V4 desktop package to use majin start/window; majin serve runs the shared host.'
+  }
+  exit 0
+}
 
 function Write-Step([string]$m) { Write-Host "  · $m" -ForegroundColor DarkGray }
 function Write-Ok([string]$m) { Write-Host "✔ $m" -ForegroundColor Green }
@@ -50,15 +81,15 @@ Write-Host "data + config: $Home`n" -ForegroundColor DarkCyan
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) {
   Write-Bad 'Node was not found in PATH.'
-  Write-Host '  Install the LTS (>= 20.11): winget install OpenJS.NodeJS.LTS' -ForegroundColor Yellow
+  Write-Host '  Install the LTS (>= 22): winget install OpenJS.NodeJS.LTS' -ForegroundColor Yellow
   Write-Host '  Restart PowerShell and run install.ps1 again.' -ForegroundColor Yellow
   exit 1
 }
 $ver = (& node -v) -replace '^v', ''
 $parts = $ver.Split('.')
-$okNode = ([int]$parts[0] -gt 20) -or ([int]$parts[0] -eq 20 -and ([int]$parts[1] -gt 11 -or ([int]$parts[1] -eq 11 -and [int]$parts[2] -ge 0)))
+$okNode = [int]$parts[0] -ge 22
 if (-not $okNode) {
-  Write-Bad "Node $ver is too old — MAJIN needs 20.11 or later (fetch, structuredClone, --test)."
+  Write-Bad "Node $ver is too old — MAJIN requires Node.js 22 or later."
   exit 1
 }
 Write-Ok "Node $ver ($($node.Source))"
@@ -83,7 +114,7 @@ $cmd = @"
 rem MAJIN — start the agent (server + window)
 setlocal
 if "%MAJIN_HOME%"=="" set "MAJIN_HOME=$Home"
-where node >nul 2>nul || (echo Node is missing - install Node LTS 20.11+ from nodejs.org & exit /b 1)
+where node >nul 2>nul || (echo Node is missing - install Node LTS 22+ from nodejs.org & exit /b 1)
 pushd "$Repo"
 node "src\cli\majin.js" start %*
 popd

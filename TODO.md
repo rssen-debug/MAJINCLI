@@ -1,110 +1,151 @@
 # TODO
 
-Priority order. `P0` = do next, `P1` = important, `P2` = worth doing, `P3` = nice to have.
-Everything here is *not* done — verified against the code, not against memory.
+Read me in order. Everything here is *not* done — verified against the code, not against memory.
+Roadmap phases come from the owner's master brief (2026-10-18, "FINAL PRODUCTION BUILD" + the
+autopilot/teamwork/dashboard additions).
 
-## P0
+## Hög prioritet
 
-- **Windows host verification.** `install.ps1`, the `.lnk`/icon, the Task Scheduler entry and
-  `majin-win-x64.exe` have never been run on a Windows machine (the sandbox has no PowerShell, no
-  wine, no mingw). Needs one real run on Windows, then delete this line.
-- **Browser verification of the UI.** `src/ui/{index.html,app.js,panels.js}` is validated by
-  `node --check`, the HTTP suite and status/type assertions — never rendered. Needs a human (or a
-  headless browser) to click through: composer + SSE stream, panel edits, approval prompt, RE drop
-  zone, theme toggle, voice button — and since 2026-10-17 the new provider picker: the preset list from
-  `state.presets`, the key box (refused when empty), the address box, the *get a key ↗* link, and the
-  one-sentence provider errors arriving as a toast instead of a stack of codes.
-- **`re.disasm` quality.** It now says which engine answered (`meta.engine`: `rizin` | `objdump` |
-  `none`), so a silent fallback is impossible — but the decoder itself is still a subset and objdump
-  is missing on a stock Windows box. Ship a pure-JS x64 decoder worth its name, or bundle `rizin`
-  with the `.exe`.
-- **Kilo Gateway against the real endpoint.** The provider is wired and covered against the
-  documented contract (local stand-in that validates the Bearer JWT, 401/402, `:free` ids, `/models`),
-  but this sandbox has no egress to `ai-gateway.kilo.ai`, so nobody has seen a byte from Kilo itself.
-  Needs one `majin doctor --full` on a machine with internet.
+- **Completion matrix: 69/100** (`docs/COMPLETION_MATRIX.md`). Del 1D + 2C + 3C + 3D + 4A + 4C
+  + 6A SHIPPED — **Del 2 complete (12/12)**. Next in point-density order: **Del 3E** and **6C**
+  (live model benchmarks — BLOCKED: no live provider key), **Del 7B/7C** (skill compiler
+  adapter validation + failure tracking, sandbox-ready), **Del 10C/10E** (prompt-injection +
+  adversarial regression, sandbox-ready).
 
-## P1
+- ~~**opencode-free-PLC test**~~ **VERIFIERAT 2026-10-18 kväll** — båda
+  free-modellerna (longcat-2.5-preview-free, beam-free) svarade genom
+  MAJIN (direct 7856/551 ms, turns 7.6s/3.0s med korrekt aritmetik 17×3=51
+  och 51+9=60 kopplad över session-historik). Mission mot mån cloud-model
+  var OK. Brist fixad: `majin.provider add`-spåret bar inte preset-headers
+  → opencode via chat 400ade; nu plattger både UI- och verktygs-spår.
 
-- **The provider card cannot edit a model list or `kind`.** Picking a preset is enough for the big
-  providers, but a wrong or empty `models[]` still means the config file or a chat instruction. The
-  card has a preset, a key and an address — the row's own model list is the missing piece.
-- **`presets[].notes` is written but never shown.** Every preset has a one-line hint ("deepseek-flash
-  = V4.1 Flash (cheap/fast)…", "200+ models, one key. Good for MOA references.") and the card ignores
-  it, so the choice of model is a guess for someone who does not know the brands. One `kv` line under
-  the picker would use text that already exists.
-- **Dataset panel in the UI.** Recording is done (off by default, redacted, `majin dataset` +
-  `majin.dataset` + `GET/POST /api/dataset`), but the window has no block for it: a capture switch,
-  `N records · file`, export and purge buttons. Do it together with the browser verification above so
-  the first claim about the panel is a rendered one.
-- **Ratings from the chat channels.** A verdict-only message (`good`, `👎`, `fel`) labels the newest
-  record; Telegram/WhatsApp have no inline buttons, so a stray "thanks" in a chat is a label. Needs
-  per-channel handling (buttons, or ignoring verdicts from chats that never asked).
-- **Redaction is regex-based, not semantic.** It catches keys, tokens, JWTs, cards, home paths and
-  usernames; it will not catch "my password is swordfish" or a path under `D:\work`. Needs a
-  redaction corpus from real-ish Windows machines (usernames with dots, OneDrive paths, `%USERPROFILE%`
-  variants, env-var names) and a rule that a *file body* a tool read is never copied into a record.
-- **Channel end-to-end.** Telegram (`getUpdates` long polling) and WhatsApp (Baileys) are wired and
-  unit-covered for config/allow-lists; `whatsapp` now backs off and gives up instead of reconnecting
-  forever, but no real bot token / QR pairing has been exercised from here (no egress). Needs a live
-  run with a throwaway bot.
-- **`readOnly` switch in the schedule card.** The flag works (`majin.schedule add … readOnly:true`,
-  `schedule.readOnlyDefault`) and `POST /api/schedule` accepts it, but the panel's schedule form has
-  no checkbox, so today it is a CLI/agent-only feature. Same commit as the dataset panel.
-- **Cost truth.** `pricing` only has DeepSeek entries. Every other provider reports `$0` by design
-  (we refuse to guess). Ship a small, curated price table + `majin config` guidance for the
-  common ones, and surface "no price known" in the UI chip instead of silently showing $0. The Kilo
-  and OpenRouter-style `/models` responses already carry per-model `pricing` — import it while
-  discovering models (`majin provider models <name>`) instead of curating a table by hand.
-- **Long-file RE.** `re.analyze` reads the whole file into memory (`tools.re.maxFileBytes` =
-  256 MB). A 2 GB sample OOMs the process. Needs streaming/sampled reads for strings+entropy and a
-  guard that says "too big, use re.scan windows".
+- ~~**Persistent Session & Agent Handoff Engine**~~ **SHIPPED 2026-10-18 kväll**
+  (agent.js handoff/consumeHandoff/planSnapshot + disk-first history-load,
+  `<sid>.plan.json`/`<sid>.handoff.json` bredvid historikfilen).
+  Proof: handoff.test 4/4 (röd före, grön efter), fullsvit 319/0/7.
+  Remaining: UI-yta för "byt modell mitt i samtalet" (väljs automatiskt av
+  handoff-flödet), handoff-knapp i chat, restart-welcome efter krasch.
+  *(källa: användarklagan 2026-10-18 — modellen glömde tidigare meddelanden)*
 
-## P2
+- ~~**GRAND ARCHITECT mission compiler + chat-wired HYPERSWARM**~~
+  **SHIPPED 2026-10-18** (`src/core/mission.js`, agent gate, work-conserving
+  runSwarm with transitive blocked propagation, diagnostics skeleton).
+  Proof: mission 5/5, swarm 10/10, diag 5/5, live qwen3:0.6b 3/3 workers,
+  live opencode Go free 3/3 workers (mission gate med inline-listor).
+  Remaining: mission gate coverage of inline lists (solved 2026-10-18),
+  REALITY ENGINE step 1: verify-repair mot fil-artefakter SHIPPED 2026-10-18 (mission.test 8+9),
 
-- **Swedish in comments and test titles only.** Strings are gated now: `npm run i18n`
-  (`scripts/i18n-check.mjs`) fails on any Swedish literal in `src/`, `scripts/`, `install.ps1`,
-  `start-majin.cmd` — word list *and* `åäö` — with an allowlist for the lines that are Swedish on
-  purpose (`routes.js` job keywords, `agent.js` `JOBS_SV`, `schedule.js` weekday abbreviations, the
-  `glöm`/`ja`/`nej` and `godkänn/avslå` chat aliases) so Swedish still works as *input*.
-  `test/i18n.test.js` asserts both directions, including that the input matchers are not
-  "translated away". Comments in `binary/*.js`, `tools/*.js`, `agent.js`, `scripts/bench.mjs` are
-  still Swedish: translate them while touching the file, never as a sweep.
-- **`serveFlags` deserves a unit test.** The `majin start` → `_serve` flag forwarding bug (dropped
-  `--host`, ignored `--no-channels`) was only findable by spawning a real server. Extract the
-  flag→runtime-options mapping into a pure function and test it; keep one spawn test as a smoke test.
-- **Cost history before the streaming fix is understated.** `openaiStream` returned raw
-  `{prompt_tokens,completion_tokens}` where the tally reads `input`/`output`, so every streamed turn
-  recorded 0 tokens. Fixed, but old `usage.json` months are wrong and cannot be rebuilt — a
-  `majin usage --explain` note, or just let them age out at month boundaries.
-- **`--json` for every CLI command** (`majin status --json`, `config get --json` is already JSON) so
-  the CLI composes in scripts, and `majin dataset --json` for the same reason.
-- **Session management UI.** `/api/sessions` + `/api/session/clear` exist; the rail lists sessions but
-  cannot rename/export one.
-- **`majin doctor --full`** should also verify the *sandbox escape* assumptions it claims: that
-  `fs.delete` refuses a root, that `neverOn` blocks, that the token is required from a remote host.
-  Those are in the test suite but not in doctor, so an installed exe cannot self-check them.
-- **Scheduled-job isolation.** Jobs share `tasks.concurrency`; a runaway job can starve the queue.
-  Needs a per-job timeout + error backoff (currently a failing cron fires every tick).
-- **`parseIntent` is a regex pile with tested Swedish/English examples.** It works and is covered
-  (selfconfig + dataset cases), but two of its behaviours just bit: a mentioned key used to be
-  saved, and "do not save this" used to flip capture off. Before adding more rules, extract a table
-  of (pattern → patch) with one test per row, or it will keep growing unreviewable.
+  mission with REAL cloud models (needs Go plan or other key),
+  UI mission surface (worker trace row in rail - UI lane), and Reality
+  Engine verification loop (execute→test→repair).
+  *(kaella: GRAND ARCHITECT brief den 2026-10-18 - prioritet 1)*
+- ~~**Update-chain root-cause + linux/mac answers + opencode provider**~~
+  **SHIPPED 2026-10-18**: status field in every update answer, honest
+  windows_only+releaseUrl path, preset header plumbing (x-opencode-session),
+  monotonic bump script wired to the already-auto release workflow.
+  Remaining: real paid call via the Go key (needs an active plan), an
+  About-surface binding for st.update.status (UI lane), full
+  Windows-to-Windows A-F upgrade matrix on real hardware, and the
+  privacy-first diagnostics system (LIVE DELIVERY section 7-11, not started).
+  *(kaella: master brief den 2026-10-18 - MAJIN LIVE DELIVERY 2.0)*
+- ~~**HYPERSWARM: parallel-worker choice in code, judged by tests**~~
+  **SHIPPED 2026-10-18** (`src/core/swarm.js`): analyzer picks 3 workers for
+  3 independent jobs, 1 for a chain, 1 when overhead eats the win - all
+  deterministic, no model asked. Scheduler runs the DAG with real overlaps,
+  dependency unlocking, typed honest endings (ok/fail/blocked + reason) and
+  `subagentWorker` executes real `sub:` turns. Proof: `test/swarm.test.js`
+  8/8, `bench --swarm` 66% shorter wall with simulated latency clearly
+  labeled. Remaining: wire into a mission compiler so real goals WITH measured
+  estMs feed the analyzer; today the API is proven but nothing calls it from
+  a user-facing path yet.
+  *(kaella: master brief den 2026-10-18 - "valjer MAJIN ratt i bada fallen")*
+- ~~**Autopilot UI follow-up surface**~~ **SHIPPED 2026-10-18** (reply-to-this-agent rows,
+  ⏸/▶ per card via `/api/tasks/action`, live "agents at work" deck — see CHANGELOG).
+  Remaining: human click-through in the Windows round below; resumed runs now stream
+  onto the card they were paused from, by design.
+  *(källa: master brief §"TRUE PARALLEL AUTOPILOT")*
+- **Browser-use — foundation done 2026-10-18.** CDP, six tools, slot pool, loop guard,
+  evidence-everywhere, all deterministic parts tested (189/0). Remaining for the full claim:
+  (1) `browser.upload` ✅, (2) smarttab (follow the spawned tab) ✅, (3) recovery cookbook ✅.
+  Remaining: CI live step must print green across consecutive runs, then flip
+  `continue-on-error` to a hard gate; checkbox/radio semantics beyond click (tristate ARIA),
+  and a scrollIntoView-iframes note for big job portals.
+  *(källa: master brief §2B — the live harness is the remaining proof)*
+- ~~**Cost truth.**~~ **SLICE SHIPPED 2026-10-18**: pricing imports itself from the
+  provider's own `/models` answer (gaps only, provenance in `pricingMeta`), `budget.mode
+  'cap'` now actually stops paid calls before they cost (free = 0/0, mock, own server;
+  unknown-price remote counts as paid, honestly), and `usage.summary()` carries
+  `unpricedCount/unpricedRefs` so a silently-$0 month is impossible to miss. Remaining:
+  slice-2's per-task cost chip in the UI, and eur/sek display.
+  *(källa: master brief §2E)*
+- **GENESIS OMEGA — universal capability-composition.** Phase 1 SHIPPED 2026-10-18
+  (cap/1 manifests, Registry.search, tools.search). **Phase 2 SHIPPED 2026-10-18:
+  loop sends the measured-relevant subset — -97% schema chars, parity 7/7, flipped
+  to default.** Next: (3) mission compiler above the existing loop, (4) model
+  capability profiler, (5) skill compiler, (6) watch real-model turns for
+  tools.search escape-hatch frequency — if it fires constantly, tune the selector,
+  don't refund the feature. Do NOT build a parallel engine — extend this one.
+  *(källa: master brief §GENESIS OMEGA directive)*
+- **Windows/browser human round on top of the CI smoke.** CI now installs/runs/uninstalls on
+  real Windows every build — and, as of the config-race fix (commit f6869bc, run 39134332080),
+  it VERIFIES every build that a write from outside the process survives a restart. A
+  human still has to click: provider picker, key box, first real model call, update chip →
+  relaunch, Quit — and the new parallel task cards (send a second message mid-run, stop only that one). One run with notes, then this item dissolves.
 
-## P3
+## Medel
+
+- ~~**Natural-language agent routing**~~ **SHIPPED 2026-10-18** (deterministic parse over live
+  refs: stop/pause/resume/assist/status, zero model calls — see CHANGELOG). Remaining: compound
+  sentences ("pausa hemsidan OCH hjälp jobbsökningen" in one line), LLM tiebreak behind the
+  single-model rule (today ambiguity is an honest error sentence, never a guess).
+- ~~**ETA engine on real telemetry**~~ **SHIPPED 2026-10-18 end-to-end**: per-tool ms from
+  real `tool_result` events (wire bug fixed same day), intervals after 2 runs; task cards
+  show elapsed + tool count + self-measured avg — no predicted totals, ever. Remaining:
+  live `/api/tasks` deck for CHANNEL-started tasks (registry telemetry is already in the
+  payload), and surfacing the global per-tool interval on cards when n is decent.
+  *(källa: master brief §"LIVE VISUAL AGENT DASHBOARD & SMART ETA")*
+- **Job-search agent — pipeline + submit SLICES SHIPPED 2026-10-18** (state machine,
+  dedupe = pipeline file, deterministic CV match, Platsbanken live-verified,
+  `jobs.prepare` form-fill with exact preview + validity flags, `jobs.send`
+  destructive-gated with mandatory proof — no confirmation words, no
+  "submitted"), all CI-oBserved on the Windows live gate (run 39 126 567 525).
+  94 tools. Remaining:
+  pipeline status cards in the UI, Seek/AU adapters, the email-application path
+  (currently refused honestly), the scheduled autonomous round on schedule.js,
+  and checkbox/privacy-consent field roles in the form classifier.
+  *(källa: master brief §"VIKTIGT TILLÄGG" — 10 requirements; ships inside the
+  Windows installer by construction)*
+- **Imagination Engine slices 2–4** (cost chip per task, Living Canvas, Preview/Working/Verified
+  labels) and slices 5–8 longer scope — gates: cheap-model E2E, keyboard pass, CPU/mem budget,
+  all prior tests green. Spec `docs/IMAGINATION.md`.
+- The provider card cannot edit a model list/`kind`; show `presets[].notes` under the picker;
+  dataset panel + `readOnly` checkbox in the UI; ratings from chat channels; redaction is
+  regex-based not semantic; channel end-to-end with a throwaway bot; long-file RE (streaming);
+  `serveFlags` unit test; `--json` everywhere in the CLI; session rename/export UI;
+  `majin doctor --full` sandbox-escape self-check; scheduled-job isolation (per-job timeout);
+  `parseIntent` table-ization before it grows unreviewable; old understated cost history note.
+
+## Låg
 
 - Voice: barge-in, wake-word false-positive tuning, TTS voice picking from `ui.voice.ttsVoice`.
-- `screen.capture` → vision model loop is one-shot; needs a crop/zoom follow-up when the model asks.
-- Skill editor in the panel (today skills are only harvested automatically; `majin.skill` can write).
-- Packaging: a `.msi`/winget manifest if we ever ship beyond a single exe.
-- Multi-machine: config sync is deliberately absent; if wanted, do it as an explicit, encrypted,
-  user-pulled file — not a background service.
-- `majin dataset import` (move a captured set to another machine) — deliberately absent until the
-  format and trust question is settled.
+- `screen.capture` → vision model loop is one-shot; needs crop/zoom follow-up.
+- Skill editor in the panel.
+- Packaging: `.msi`/winget manifest if we ever ship beyond a single exe.
+- Cost history before the streaming fix is understated (let it age out, or a `--explain` note).
 
-## Deliberately not planned
+## Idéer (med källa)
 
-- Silent telemetry, key mirroring to any server, or "improvement" uploads without a stored opt-in.
-  Dataset capture has **no upload code path at all**: `dataset.upload` is rejected by config
-  validation, and sharing means exporting the JSONL yourself.
-- Rewriting MAJIN's own source at runtime (self-config edits *config*, with backup + diff, only).
-- Anything that needs Windows Defender/firewall/service mutation.
+- **Living Missions / Future Engine** — one persistent goal ("flytta till Australien") holding
+  many cooperating agents, alternative paths compared before acting, decision points requiring
+  the user, proof-based completion. Build only when browser-use + parallel agents + verification
+  are done. *(källa: master brief §"MAJIN Future Engine", 7777-blocket)*
+- **Zero-key read backends** (Jina-reader-style url→text, RSS) as tools; YouTube captions via the
+  yt-dlp pattern. *(källa: Agent-Reach, loxholm — patterns, not imports)*
+- **Multi-machine config sync** — only as an explicit, encrypted, user-pulled file, never a
+  background service. *(källa: internal review)*
+- **`majin dataset import`** (move captured data to another machine) — on hold until the format
+  and trust question settles. *(källa: internal review)*
+- **Deliberately not planned:** silent telemetry or key mirroring; "improvement" uploads without
+  stored opt-in (dataset capture has *no upload code path at all*); rewriting MAJIN's own source
+  at runtime (self-config edits config only, with backup + diff); anything needing Windows
+  Defender/firewall/service mutation. *(källa: repo principle, see DECISIONS.md)*

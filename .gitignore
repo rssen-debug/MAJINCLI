@@ -1,16 +1,16 @@
 node_modules/
-.lent/
-data/
-lent.config.json
-*.log
-*.pyc
-__pycache__/
-.DS_Store
-coverage/
 dist/
-.env
+out/
+*.log
+.DS_Store
 
-.pkg-cache/
-memory/
-skills/
+# MAJIN runtime state never belongs in git
+.majin/
+.majin-*/
 majin.config.json
+*.bundle
+!assets/*.bundle
+
+# local V4 data if someone points MAJIN_HOME into the repo
+v4-data/
+desktop/stage/

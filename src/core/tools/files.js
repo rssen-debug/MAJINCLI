@@ -9,6 +9,35 @@ import { spawn } from 'node:child_process';
 import { def } from './registry.js';
 import { entropy, strings as extract } from '../binary/strings.js';
 import { dirs } from '../paths.js';
+import { fileLocks } from '../tasks.js';
+import { bus } from '../log.js';
+
+/* Two tasks, one file: whoever asks second QUEUES on that file alone (FIFO,
+   30 s guard against a crashed owner) — the rest of the autopilot keeps
+   running. Writes go tmp-then-rename so a reader never meets a torn file and
+   a killed task never leaves one. Owner = the task's session id, which the
+   runtime already passes through ctx on every tool call. */
+async function locked(abs, session, fn) {
+  const owner = session || 'process';
+  const release = await fileLocks.acquire(abs, owner);
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
+export async function writeAtomic(abs, data, {signal = null} = {}) {
+  signal?.throwIfAborted();
+  const tmp = `${abs}.tmp-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    await fsp.writeFile(tmp, data, signal ? {signal} : {});
+    signal?.throwIfAborted();
+    await fsp.rename(tmp, abs);
+  } finally {
+    try {await fsp.unlink(tmp);}catch(error){if(error.code!=='ENOENT')bus.warn('file.temp_cleanup_failed',{error:error.message});}
+  }
+}
 
 const IGNORE = new Set(['node_modules', '.git', 'dist', 'build', '.next', '__pycache__', '.venv', 'target', '.cache', 'Library', 'AppData', '$RECYCLE.BIN', 'System Volume Information', '.pnpm-store', 'venv']);
 
@@ -49,7 +78,7 @@ export const fileTools = [
     group: 'files',
     risk: 'read',
     desc: 'List a directory: names, sizes, dates. Use `kind` to get only executables or only folders.',
-    params: { path: 'string: folder to list (workspace-relative or absolute)' },
+    params: { path: 'string: folder to list (workspace-relative or absolute) (optional)' },
     examples: ['fs.list({path:"downloads"})'],
     async run({ path: p = '.' }, ctx) {
       const { abs } = resolveIn(ctx, p, { allowEmpty: true });
@@ -76,7 +105,7 @@ export const fileTools = [
     group: 'files',
     risk: 'read',
     desc: 'Read a file. Returns numbered lines (or a hex dump for binary files) plus entropy and a file hash when it is binary.',
-    params: { path: 'string: file to read', maxBytes: 'number: how much to read (default 200000)', mode: 'string: auto | text | hex | strings [auto|text|hex|strings]' },
+    params: { path: 'string: file to read', maxBytes: 'number: how much to read (default: 200000)', mode: 'string: auto | text | hex | strings, optional (default: auto) [auto|text|hex|strings]' },
     async run({ path: p, maxBytes = 200000, mode = 'auto' }, ctx) {
       const { abs } = resolveIn(ctx, p);
       const cap = ctx.cfg.get('tools.files.maxReadBytes') || 4000000;
@@ -115,14 +144,17 @@ export const fileTools = [
     group: 'files',
     risk: 'write',
     desc: 'Write a file (missing folders are created). Overwrites — for small edits use fs.patch.',
-    params: { path: 'string: target file', content: 'string: the full file content', append: 'boolean: append instead of overwriting' },
+    params: { path: 'string: target file', content: 'string: the full file content', append: 'boolean: append instead of overwriting (optional)' },
     async run({ path: p, content = '', append = false }, ctx) {
       const { abs } = resolveIn(ctx, p);
-      await fsp.mkdir(path.dirname(abs), { recursive: true });
-      await fsp.writeFile(abs, String(content), { flag: append ? 'a' : 'w' });
-      const size = sizeOf(abs);
-      ctx.bus?.emit?.('file.write', { path: abs, bytes: size });
-      return { result: `wrote ${abs} (${size} bytes)`, meta: { path: abs, bytes: size }, summary: `wrote ${path.basename(abs)}` };
+      return locked(abs, ctx.session, async () => {
+        await fsp.mkdir(path.dirname(abs), { recursive: true });
+        if (append) await fsp.writeFile(abs, String(content), { flag: 'a' });
+        else await writeAtomic(abs, String(content));
+        const size = sizeOf(abs);
+        ctx.bus?.emit?.('file.write', { path: abs, bytes: size, session: ctx.session || null, taskId: ctx.taskId || null });
+        return { result: `wrote ${abs} (${size} bytes)`, meta: { path: abs, bytes: size }, summary: `wrote ${path.basename(abs)}` };
+      });
     },
   }),
 
@@ -134,12 +166,16 @@ export const fileTools = [
     params: {
       path: 'string: file',
       edits: 'array: [{"find":"old text","replace":"new text"}] — exact match, line boundaries respected',
-      dry: 'boolean: show what would happen without writing',
+      dry: 'boolean: show what would happen without writing (optional)',
     },
     async run({ path: p, edits = [], dry = false }, ctx) {
       const { abs } = resolveIn(ctx, p);
-      const before = await fsp.readFile(abs, 'utf8');
-      let after = before;
+      /* the whole read-modify-write runs under the file's lock: two agents
+         patching the same file can never interleave their diffs. A dry run
+         touches nothing, so it stays lock-free. */
+      const applyAll = async () => {
+        const before = await fsp.readFile(abs, 'utf8');
+        let after = before;
       const log = [];
       for (const e of edits) {
         const find = String(e.find ?? e.old ?? '');
@@ -153,9 +189,11 @@ export const fileTools = [
         after = after.split(find).join(replace);
         log.push({ find: find.slice(0, 60), replace: replace.slice(0, 60), count });
       }
-      if (!dry) await fsp.writeFile(abs, after);
-      const diff = simpleDiff(before, after);
-      return { result: `${dry ? 'DRY-RUN ' : ''}${path.basename(abs)}: ${log.map((l) => `${l.count}× "${l.find}"`).join(', ')}\n${diff}`, meta: { edits: log, applied: !dry }, summary: `${edits.length} edits${dry ? ' (dry run)' : ''} in ${path.basename(abs)}` };
+        if (!dry) await writeAtomic(abs, after);
+        const diff = simpleDiff(before, after);
+        return { result: `${dry ? 'DRY-RUN ' : ''}${path.basename(abs)}: ${log.map((l) => `${l.count}× "${l.find}"`).join(', ')}\n${diff}`, meta: { edits: log, applied: !dry }, summary: `${edits.length} edits${dry ? ' (dry run)' : ''} in ${path.basename(abs)}` };
+      };
+      return dry ? applyAll() : locked(abs, ctx.session, applyAll);
     },
   }),
 
@@ -167,10 +205,10 @@ export const fileTools = [
     params: {
       path: 'string: root to search in (default: workspace)',
       pattern: 'string: regex (javascript), or a plain word when regex:false',
-      glob: 'string: filter file names, e.g. *.ts, *.py, *.dll',
-      ignoreCase: 'boolean: case sensitive? default true = insensitive',
-      maxFiles: 'number: maximum files with hits (default 60)',
-      regex: 'boolean: treat the pattern as regex (default true)',
+      glob: 'string: filter file names, e.g. *.ts, *.py, *.dll (optional, default * = all files)',
+      ignoreCase: 'boolean: case sensitive? optional (default: true = insensitive)',
+      maxFiles: 'number: maximum files with hits (default: 60)',
+      regex: 'boolean: treat the pattern as regex (default true) (optional)',
     },
     async run({ path: root = '.', pattern = '', glob = '', ignoreCase = true, maxFiles = 60, regex = true }, ctx) {
       const { abs } = resolveIn(ctx, root);
@@ -216,7 +254,7 @@ export const fileTools = [
     group: 'files',
     risk: 'read',
     desc: 'Fast content search in ONE file (or every file under a folder) with context. Good for following flow in logs or source.',
-    params: { path: 'string: file or folder', pattern: 'string: regex or word', context: 'number: lines around each hit (default 2)', limit: 'number: max hits (default 30)' },
+    params: { path: 'string: file or folder', pattern: 'string: regex or word', context: 'number: lines around each hit (default: 2)', limit: 'number: max hits (default: 30)' },
     async run({ path: p, pattern = '', context = 2, limit = 30 }, ctx) {
       const { abs } = resolveIn(ctx, p);
       if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) {
@@ -281,12 +319,14 @@ export const fileTools = [
     group: 'files',
     risk: 'write',
     desc: 'Copy a file or folder (recursive).',
-    params: { from: 'string: source', to: 'string: destination', overwrite: 'boolean: overwrite what exists' },
+    params: { from: 'string: source', to: 'string: destination', overwrite: 'boolean: overwrite what exists (optional)' },
     async run({ from, to, overwrite = false }, ctx) {
       const a = resolveIn(ctx, from);
       const b = resolveIn(ctx, to);
-      await fsp.cp(a.abs, b.abs, { recursive: true, force: Boolean(overwrite), errorOnExist: !overwrite });
-      return { result: `kopierrade ${a.abs} → ${b.abs}`, summary: `kopierrade ${a.bare}` };
+      return locked(b.abs, ctx.session, async () => {
+        await fsp.cp(a.abs, b.abs, { recursive: true, force: Boolean(overwrite), errorOnExist: !overwrite });
+        return { result: `kopierrade ${a.abs} → ${b.abs}`, summary: `kopierrade ${a.bare}` };
+      });
     },
   }),
 
@@ -295,7 +335,7 @@ export const fileTools = [
     group: 'files',
     risk: 'destructive',
     desc: 'Delete a file or folder. Moves to the recycle bin where possible (Win/mac), otherwise permanent. Always goes through the guard.',
-    params: { path: 'string: path', permanent: 'boolean: true = erase now, no recycle bin' },
+    params: { path: 'string: path', permanent: 'boolean: true = erase now, no recycle bin (optional)' },
     async run({ path: p, permanent = false }, ctx) {
       const { abs } = resolveIn(ctx, p, { never: [ctx.cfg.get('workspace'), dirs.root, dirs.memory, dirs.sessions] });
       const st = await fsp.stat(abs);
@@ -311,6 +351,77 @@ export const fileTools = [
       }
       await fsp.rm(abs, { recursive: true, force: true });
       return { result: `deleted permanently ${abs}`, summary: `deleted ${path.basename(abs)} (permanent)` };
+    },
+  }),
+
+  def({
+    name: 'fs.find',
+    group: 'files',
+    risk: 'read',
+    desc: 'Find files by name under a folder, recursively. Use this to locate a document you only know the name or extension of (e.g. a CV or an invoice) before reading it. Matches the file name, not the content.',
+    params: {
+      path: 'string: folder to search in (default: workspace)',
+      name: 'string: part of the file name, case-insensitive, e.g. "cv" (optional: omit to match by glob only)',
+      glob: 'string: optional name filter, e.g. *.pdf, *.docx (default * = all files)',
+      maxResults: 'number: maximum hits (optional, default: 50)',
+      maxDepth: 'number: how deep to descend (optional, default: 6)',
+      maxEntries: 'number: safety cap on visited entries (optional, default: 20000)',
+    },
+    examples: ['fs.find({path:"C:\\Users\\du\\Documents", name:"cv", glob:"*.pdf"})'],
+    // One argument, destructured in the body: V1 derives "required" parameters
+    // from the run signature, and a renamed binding (`path: root = "."`) made
+    // that heuristic treat every parameter as required.
+    async run(input = {}, ctx) {
+      const { path: root = '.', name = '', glob = '', maxResults = 50, maxDepth = 6, maxEntries = 20000 } = input || {};
+      const { abs } = resolveIn(ctx, root);
+      const needle = String(name || '').trim().toLowerCase();
+      const re = glob ? globToRe(glob) : null;
+      const hits = [];
+      let visited = 0;
+      let truncated = false;
+      async function step(dir, depth) {
+        if (hits.length >= maxResults || depth > maxDepth || visited >= maxEntries) {
+          if (hits.length >= maxResults || visited >= maxEntries) truncated = true;
+          return;
+        }
+        let ents = [];
+        try {
+          ents = await fsp.readdir(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const e of ents) {
+          if (hits.length >= maxResults || visited >= maxEntries) {
+            truncated = true;
+            return;
+          }
+          if (IGNORE.has(e.name) || e.name.startsWith('.')) continue;
+          visited += 1;
+          const full = path.join(dir, e.name);
+          if (e.isDirectory()) {
+            await step(full, depth + 1);
+            continue;
+          }
+          if (needle && !e.name.toLowerCase().includes(needle)) continue;
+          if (re && !re.test(e.name)) continue;
+          let st = null;
+          try {
+            st = await fsp.stat(full);
+          } catch {
+            /* unreadable file: still a real match by name */
+          }
+          hits.push({ path: full, name: e.name, size: st?.size ?? null, mtime: st?.mtime?.toISOString?.()?.slice(0, 19) ?? null });
+        }
+      }
+      await step(abs, 0);
+      // Newest first: a document someone edited lately is the likely target.
+      hits.sort((a, b) => String(b.mtime || '').localeCompare(String(a.mtime || '')));
+      return {
+        ok: true,
+        result: `${abs} — ${hits.length} match(es)${truncated ? ' (stopped at the search cap)' : ''}\n${hits.map((h) => `${String(h.size ?? '?').padStart(10)} ${h.mtime || ''}  ${h.path}`).join('\n')}`,
+        meta: { root: abs, count: hits.length, visited, truncated, hits },
+        summary: `${hits.length} file(s) matching "${needle || glob || '*'}" in ${path.basename(abs)}`,
+      };
     },
   }),
 
@@ -351,7 +462,7 @@ export const fileTools = [
     group: 'files',
     risk: 'write',
     desc: 'Pack or unpack with the system tar (built into Windows 10+). Use it to move a folder around or extract an archive.',
-    params: { op: 'string: create | extract [create|extract]', archive: 'string: archive file .tar.gz/.zip', path: 'string: folder or file to work on', cwd: 'string: working directory' },
+    params: { op: 'string: create | extract [create|extract]', archive: 'string: archive file .tar.gz/.zip', path: 'string: folder or file to work on (optional)', cwd: 'string: working directory (optional)' },
     async run({ op, archive, path: p = '.', cwd }, ctx) {
       const { spawnSync } = await import('node:child_process');
       const a = resolveIn(ctx, archive);

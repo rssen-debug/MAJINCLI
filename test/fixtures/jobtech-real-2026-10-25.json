@@ -1,0 +1,160 @@
+{
+  "schema": "majin.v5.job-training-corpus/v1",
+  "source": {
+    "api": "https://jobsearch.api.jobtechdev.se",
+    "fetchedAt": "2026-10-25",
+    "method": "Arena fetch_page against live JobTech endpoints",
+    "trimmed": true,
+    "note": "Real API fields and exact requirement excerpts; unrelated fields and personal contact details omitted. Labels are Arena-reviewed gold labels, not model self-grading."
+  },
+  "cases": [
+    {
+      "id": "real-jobtech-31635810",
+      "family": "real-api-unstructured-tech",
+      "difficulty": "advanced",
+      "ad": {
+        "id": "31635810",
+        "webpage_url": "https://arbetsformedlingen.se/platsbanken/annonser/31635810",
+        "headline": "Utvecklare",
+        "description": {
+          "text": "Utvecklingsmiljön omfattar bland annat Red Hat, OCP, Java, Spring Boot, Angular och React.\nI det här jobbet ska du:\nuttrycka dig väl i tal och skrift på svenska.\nDu ska även ha:\nrelevant högskoleutbildning inom it alternativt flerårig relevant arbetslivserfarenhet inom området som arbetsgivaren bedömer likvärdig\nflerårig relevant och aktuell arbetslivserfarenhet som systemutvecklare inom programmering"
+        },
+        "employer": { "name": "Skatteverket", "workplace": "Skatteverket" },
+        "workplace_address": { "municipality": "Östersund", "city": "Solna", "country": "Sverige" },
+        "must_have": { "skills": [], "languages": [] },
+        "nice_to_have": { "skills": [], "languages": [], "work_experiences": [{ "label": "Systemutvecklare/Programmerare" }] }
+      },
+      "cvFacts": {
+        "skills": ["java", "react", "angular", "linux"],
+        "languages": ["svenska", "engelska"],
+        "roles": ["software engineer"],
+        "experienceYears": 5,
+        "certificates": []
+      },
+      "criteria": {},
+      "teacher": {
+        "requiredSkills": [
+          { "name": "Svenska", "evidence": "uttrycka dig väl i tal och skrift på svenska." },
+          { "name": "relevant högskoleutbildning inom it alternativt flerårig relevant arbetslivserfarenhet", "evidence": "relevant högskoleutbildning inom it alternativt flerårig relevant arbetslivserfarenhet inom området som arbetsgivaren bedömer likvärdig" },
+          { "name": "flerårig relevant och aktuell arbetslivserfarenhet som systemutvecklare inom programmering", "evidence": "flerårig relevant och aktuell arbetslivserfarenhet som systemutvecklare inom programmering" }
+        ],
+        "preferredSkills": [],
+        "minExperienceYears": null,
+        "experienceEvidence": null,
+        "noRequirements": false,
+        "noRequirementsEvidence": null
+      },
+      "expected": {
+        "matched": false,
+        "needsReview": true,
+        "reason": "Education/experience alternatives need semantic review; never auto-reject or auto-apply."
+      }
+    },
+    {
+      "id": "real-jobtech-31637450",
+      "family": "real-api-nursing",
+      "difficulty": "advanced",
+      "ad": {
+        "id": "31637450",
+        "webpage_url": "https://arbetsformedlingen.se/platsbanken/annonser/31637450",
+        "headline": "Sjuksköterska",
+        "description": {
+          "text": "KVALIFIKATIONER\nVi söker dig som är legitimerad sjuksköterska. Önskvärt är att du har erfarenhet från vård av äldre och/eller personer med funktionsnedsättning. Vi ser gärna att du har vidareutbildning inom geriatrik, demensvård, psykiatri eller särskild kunskap inom LSS men vi välkomnar även dig som är nyutexaminerad. Körkort är ett krav. Surahammars kommun är finskt förvaltningsområde och det är meriterande med kompetens i finska i tal och skrift."
+        },
+        "employer": { "name": "Surahammars kommun", "workplace": "Surahammars kommun, Sjuksköterskor" },
+        "application_details": { "url": "https://recruit.visma.com/spa/public/apply?guidAssignment=bd288c7c-9ff6-4345-8445-a56b3b68cbe6&publishCode=PB&TK=d5958f1c-02af-46c8-8083-6a77c574302e" },
+        "driving_license_required": true,
+        "driving_license": null,
+        "workplace_address": { "municipality": "Surahammar", "city": "Surahammar", "country": "Sverige" },
+        "must_have": { "skills": [], "languages": [] },
+        "nice_to_have": { "skills": [], "languages": [] }
+      },
+      "cvFacts": {
+        "skills": ["legitimerad sjuksköterska", "sjuksköterska", "geriatrik", "b-körkort"],
+        "languages": ["svenska", "engelska"],
+        "roles": [],
+        "experienceYears": 2,
+        "certificates": []
+      },
+      "criteria": { "locations": ["Surahammar"] },
+      "teacher": {
+        "requiredSkills": [
+          { "name": "legitimerad sjuksköterska", "evidence": "legitimerad sjuksköterska" },
+          { "name": "Körkort", "evidence": "Körkort är ett krav." }
+        ],
+        "preferredSkills": [
+          { "name": "geriatrik", "evidence": "geriatrik" },
+          { "name": "demensvård", "evidence": "demensvård" },
+          { "name": "psykiatri", "evidence": "psykiatri" },
+          { "name": "LSS", "evidence": "LSS" },
+          { "name": "finska", "evidence": "finska i tal och skrift" }
+        ],
+        "minExperienceYears": null,
+        "experienceEvidence": null,
+        "noRequirements": false,
+        "noRequirementsEvidence": null
+      },
+      "expected": {
+        "matched": true,
+        "needsReview": false,
+        "requiredMet": ["körkort", "legitimerad sjuksköterska"],
+        "requiredMissing": [],
+        "preferredMet": ["geriatrik"],
+        "preferredMissing": ["demensvård", "finska", "lss", "psykiatri"]
+      }
+    },
+    {
+      "id": "real-jobtech-31543854",
+      "family": "real-api-commercial-driver",
+      "difficulty": "advanced",
+      "ad": {
+        "id": "31543854",
+        "webpage_url": "https://arbetsformedlingen.se/platsbanken/annonser/31543854",
+        "headline": "Lastbilsförare",
+        "application_deadline": "2026-10-31T23:59:59",
+        "number_of_vacancies": 2,
+        "description": {
+          "text": "First Rider AB söker en erfaren lastbilschaufför för fjärrkörning med bil och släp.\nDu som söker ska vara ansvarstagande, kunna arbeta självständigt och ha god erfarenhet av att köra ekipage med släp.\nkrav :\nCE-Behörighet\nGiltigt YKB\nDigitalt förarkort"
+        },
+        "employer": { "name": "First Rider AB", "workplace": "Göteborg" },
+        "experience_required": true,
+        "driving_license_required": true,
+        "driving_license": [{ "label": "C" }, { "label": "CE" }],
+        "workplace_address": { "municipality": null, "city": null, "country": "Sverige" },
+        "must_have": { "skills": [], "languages": [] },
+        "nice_to_have": {
+          "skills": [{ "label": "Yrkeskompetensbevis för förare (YKB)" }],
+          "languages": [{ "label": "Engelska" }, { "label": "Svenska" }]
+        }
+      },
+      "cvFacts": {
+        "skills": ["c-körkort", "ce-körkort", "ykb", "digitalt förarkort"],
+        "languages": ["svenska", "engelska"],
+        "roles": [],
+        "experienceYears": 4,
+        "certificates": []
+      },
+      "criteria": {},
+      "teacher": {
+        "requiredSkills": [
+          { "name": "CE-körkort", "evidence": "CE-Behörighet" },
+          { "name": "YKB", "evidence": "Giltigt YKB" },
+          { "name": "digitalt förarkort", "evidence": "Digitalt förarkort" }
+        ],
+        "preferredSkills": [],
+        "minExperienceYears": null,
+        "experienceEvidence": null,
+        "noRequirements": false,
+        "noRequirementsEvidence": null
+      },
+      "expected": {
+        "matched": true,
+        "needsReview": false,
+        "requiredMet": ["c-körkort", "ce-körkort", "digitalt förarkort", "ykb"],
+        "requiredMissing": [],
+        "preferredMet": ["engelska", "svenska"],
+        "preferredMissing": []
+      }
+    }
+  ]
+}

@@ -155,10 +155,9 @@ instance), `http.allowPrivate` (fetching localhost/LAN; set false to fence the a
 network), `re.maxFileBytes`, `re.external: "auto"`, `re.yaraRules: []` (extra `.yar` files or
 directories).
 
-`agent.maxSteps` (60) bounds one turn; `contextTokens` (48000) triggers compaction;
-`subagents.{enabled,maxParallel:3,maxSteps:14,shareMemory:true}` back `agent.delegate`;
-`historyInPrompt` (40) how many turns of the session travel with the prompt; `stepJob` (`tasks`)
-is the job used when the classifier did not pick one.
+`agent.maxSteps` (60) bounds one turn; the last budgeted step is reserved for a tool-free final answer; `contextTokens` (48000) triggers compaction. `subagents.{enabled,maxParallel:3,maxSteps:14,shareMemory:true}` back `agent.delegate`.
+`historyInPrompt` (40) controls how many turns travel with the prompt; `stepJob` (`same`) keeps the initial specialist route for follow-up steps (or set a job such as `tasks` explicitly).
+Tool batches run in parallel only when every tool is read-only and stateless; writes and browser actions are serialized. Exact failed calls are blocked from being retried unchanged.
 
 `tasks.concurrency` (3) limits parallel tool work; `tasks.approvalTimeoutMs` the approval queue.
 

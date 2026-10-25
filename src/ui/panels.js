@@ -3,6 +3,13 @@ async function paintHeader(st) {
   const ui = st.config.ui || {};
   document.title = (ui.title || st.name || 'MAJIN') + ' · agent';
   $('brand').textContent = (ui.title || st.name || 'MAJIN').toUpperCase();
+  // Always show the version reported by the running backend, not the
+  // requested download version. Useful after an interrupted update.
+  const versionBadge = $('v-tag');
+  if (versionBadge) {
+    versionBadge.textContent = st.version ? 'v' + String(st.version).replace(/^v/, '') : 'Version unknown';
+    versionBadge.title = 'Installed and running MAJIN version: ' + (st.version || 'unknown');
+  }
   $('tagline').textContent = ui.tagline || '';
   $('c-tools').innerHTML = 'tools <b>' + (st.tools.count || (st.tools || []).length) + '</b>';
   $('c-moa').innerHTML = 'MOA <b>' + (st.moa.policy === 'off' ? 'off' : st.moa.width + '→' + String(st.moa.aggregator || '').split('/').pop()) + '</b>';
@@ -15,13 +22,118 @@ async function paintHeader(st) {
   led('led-wa', wa.online ? 'g' : wa.state === 'pairing' ? 'y' : wa.state === 'missing-dep' || wa.state === 'error' ? 'r' : '');
   $('c-tg').title = 'telegram: ' + (tg.state || '?') + (tg.lastError ? ' · ' + tg.lastError : '') + (tg.pairingCode ? ' · code ' + tg.pairingCode : '');
   $('c-wa').title = 'whatsapp: ' + (wa.state || '?') + (wa.transport ? ' · ' + wa.transport : '') + (wa.lastError ? ' · ' + wa.lastError : '');
-  const mode = MODE_LABEL[st.guard.mode] || 'approval';
+  const cu = $('c-update');
+  if (cu) {
+    const configUpdate = st.config?.updates || {};
+    const enabled = configUpdate.check !== false;
+    // The CLI and the UI share persisted version metadata, but the old UI
+    // ignored this cache until its delayed background check completed.
+    const semver = (value) => {
+      const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(String(value || '').replace(/^v/, ''));
+      return match ? { parts: match.slice(1, 4).map(Number), prerelease: match[4] || null } : null;
+    };
+    const isNewer = (latest, installed) => {
+      const a = semver(latest), b = semver(installed);
+      if (!a || !b) return false;
+      for (let i = 0; i < 3; i++) {
+        if (a.parts[i] !== b.parts[i]) return a.parts[i] > b.parts[i];
+      }
+      // A final release supersedes the corresponding prerelease.
+      if (!a.prerelease) return Boolean(b.prerelease);
+      if (!b.prerelease) return false;
+      const ap = a.prerelease.split('.'), bp = b.prerelease.split('.');
+      for (let i = 0; i < Math.max(ap.length, bp.length); i++) {
+        if (i >= ap.length) return false;
+        if (i >= bp.length) return true;
+        const x = ap[i], y = bp[i];
+        if (x === y) continue;
+        const nx = /^\d+$/.test(x), ny = /^\d+$/.test(y);
+        if (nx && ny) return BigInt(x) > BigInt(y);
+        if (nx !== ny) return !nx;
+        return x > y;
+      }
+      return false;
+    };
+    const state = st.update || {};
+    const latest = String(state.latest || configUpdate.latest || '').replace(/^v/, '');
+    const available = enabled && isNewer(latest, st.version);
+    const releaseUrl = String(state.url || configUpdate.url || 'https://github.com/rssen-debug/MAJINCLI/releases/latest');
+    // A permanently visible Check updates action avoids a catch-22 where
+    // people must leave the app for CMD because a check was slow/offline.
+    cu.hidden = !enabled;
+    if (!enabled) {
+      cu.onclick = null;
+      cu.dataset.arm = '';
+    } else if (!cu.dataset.installing) {
+      const target = available ? latest : '';
+      if (cu.dataset.target !== target) {
+        cu.dataset.arm = '';
+        cu.dataset.target = target;
+      }
+      cu.disabled = false;
+      cu.innerHTML = available
+        ? (cu.dataset.arm ? 'Install <b>' + latest + '</b>?' : 'Update <b>' + latest + '</b>')
+        : 'Check updates';
+      cu.title = available
+        ? 'MAJIN ' + latest + ' is available. Click twice to confirm installation.'
+        : (state.error ? 'Last check failed: ' + state.error + '. Click to retry.' : 'Check for MAJIN updates now');
+      cu.setAttribute('aria-label', available ? 'Update MAJIN to ' + latest : 'Check for MAJIN updates');
+      cu.onclick = async () => {
+        if (cu.dataset.installing) return;
+        if (!available) {
+          cu.disabled = true;
+          cu.textContent = 'Checking…';
+          try {
+            const reply = await api('/update', { method: 'POST', body: { action: 'check', force: true } });
+            if (reply?.error) throw new Error(typeof reply.error === 'object' ? reply.error.message : reply.error);
+          } catch (error) {
+            note('Could not check for updates: ' + String(error?.message || error).slice(0, 140));
+          } finally {
+            cu.disabled = false;
+            await window.refresh?.(true);
+          }
+          return;
+        }
+        if (!cu.dataset.arm) {
+          cu.dataset.arm = '1';
+          cu.innerHTML = 'Install <b>' + latest + '</b>?';
+          cu.title = 'Click again to confirm: MAJIN will install the verified Windows update and restart.';
+          return;
+        }
+        cu.dataset.arm = '';
+        cu.dataset.installing = '1';
+        cu.disabled = true;
+        cu.innerHTML = 'Installing <b>' + latest + '</b>…';
+        try {
+          const reply = await api('/update', { method: 'POST', body: { action: 'install' } });
+          if (reply?.ok) {
+            note('Installing MAJIN ' + latest + '. The app will restart; your data remains in its existing location.');
+            cu.innerHTML = 'Restarting…';
+          } else if (reply?.error === 'windows_only') {
+            window.open(reply.releaseUrl || releaseUrl, '_blank', 'noopener');
+            note('The installer is Windows-only. Opened the release page.');
+            cu.dataset.installing = '';
+            cu.disabled = false;
+          } else {
+            throw new Error(typeof reply?.error === 'object' ? reply.error.message : (reply?.error || 'Installer could not start'));
+          }
+        } catch (error) {
+          cu.dataset.installing = '';
+          cu.disabled = false;
+          cu.textContent = 'Update failed · Retry';
+          note('Update failed: ' + String(error?.message || error).slice(0, 140) + '. Download the installer from ' + releaseUrl);
+        }
+      };
+    }
+  }
+
+  const mode = ({ strict: 'assist', confirm: 'approval', off: 'full auto' })[st.guard.mode] || 'approval';
   const bm = $('b-mode');
   if (bm) {
     bm.textContent = mode;
     bm.title = 'Permission mode: ' + mode + ' (guard.mode=' + st.guard.mode + ')';
   }
-  if (st.needsSetup) note('No API key yet — demo mode answers with a mock. Paste a key in the Providers panel, or just tell me: "use the key sk-… for deepseek".');
+
 }
 
 function led(id, cls) {
@@ -31,24 +143,11 @@ function led(id, cls) {
 }
 
 async function paintRail(st) {
-  const s = await api('/sessions').catch(() => ({ sessions: [] }));
-  const box = $('sessions');
-  box.innerHTML = '';
-  const list = [{ id: 'desktop', messages: 0, lastText: 'this device' }, ...(s.sessions || [])];
-  const seen = new Set();
-  for (const it of list) {
-    if (seen.has(it.id)) continue;
-    seen.add(it.id);
-    const n = el('div', 'sess' + (it.id === S.session ? ' act' : ''), esc(it.id.length > 22 ? it.id.slice(0, 21) + '…' : it.id) + ' <span class="kv">' + (it.messages || 0) + '</span>');
-    n.title = (it.lastText || '') + '\n' + (it.mtime || '');
-    n.onclick = () => {
-      S.session = it.id;
-      box.querySelectorAll('.sess').forEach((x) => x.classList.remove('act'));
-      n.classList.add('act');
-      loadHistory();
-    };
-    box.append(n);
-  }
+  /* P0 repair: MAJIN_CHATS (src/ui/chats.js) owns the conversation list with
+     durable server-side index (rename/archive/delete/activity-sort). This rail
+     hook only keeps studio filters + the non-chat subsections in sync. */
+  if (window.MAJIN_CHATS) window.MAJIN_CHATS.render();
+  if (window.MAJIN_STUDIO) window.MAJIN_STUDIO.filterChats();
   if (st.schedule && st.schedule.length) {
     $('sched').innerHTML = st.schedule
       .map((j) => `<div><b>${esc(j.name || j.id)}</b> · ${esc(j.when || '')}<br><span class="kv">next ${esc(j.nextRunHuman || '')}${j.paused ? ' · paused' : ''}${j.lastStatus ? ' · ' + esc(j.lastStatus) : ''}</span></div>`)
@@ -236,7 +335,7 @@ async function paintPanel(st) {
       const r2 = await api('/provider', { method: 'POST', body });
       if (!r2 || r2.ok === false) throw new Error([r2 && r2.error, r2 && r2.hint].filter(Boolean).join(' - ') || 'the provider was not saved');
       const routes = {};
-      const st2 = await api('/state&tools=0');
+      const st2 = await api('/state?tools=0');
       for (const row2 of st2.routes || []) routes[row2.job] = `${r2.provider}/${(r2.status?.models || [''])[0]}`;
       await api('/config', { method: 'PATCH', body: { models: { provider: r2.provider, routes } } });
       toast(p.needsKey === false ? `${p.label} saved - press test on its row to check that it answers` : `${p.label} saved. Say something and I will answer for real.`);

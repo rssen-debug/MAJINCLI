@@ -1,0 +1,41 @@
+name: MAJIN V5 current JobTech snapshot
+
+on:
+  push:
+    paths:
+      - .github/workflows/jobtech-live-snapshot.yml
+      - scripts/v5/fetch-jobtech-live.mjs
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Number of distinct current ads (max 2000)
+        required: false
+        default: '500'
+      query:
+        description: Optional JobTech free-text query
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  fetch-current-ads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TARGET: ${{ inputs.target || '500' }}
+      QUERY: ${{ inputs.query || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Fetch current public ads without contact fields
+        run: node scripts/v5/fetch-jobtech-live.mjs --target "$TARGET" --query "$QUERY" --output ".majin/v5/jobtech-live-$TARGET.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jobtech-live-${{ env.TARGET }}
+          path: .majin/v5/jobtech-live-${{ env.TARGET }}.json
+          if-no-files-found: error
+          retention-days: 7

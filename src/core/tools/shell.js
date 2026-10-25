@@ -3,19 +3,18 @@
  * Auto-detekterar skallet (pwsh > powershell > cmd på Windows, bash/zsh annars) och
  * kör med tyst timeout + output-cap. Alltid på. Farliga mönster går via guarden.
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { def } from './registry.js';
 import { bus } from '../log.js';
+import { dirs } from '../paths.js';
 
 const WIN = process.platform === 'win32';
 let chosen = null;
 
-export function shell() {
-  if (chosen) return chosen;
-  const pref = process.env.MAJIN_SHELL || 'auto';
-  const candidates = WIN
+export function selectShell({ windows = WIN, pref = process.env.MAJIN_SHELL || 'auto', probe = (cmd, args) => spawnSync(cmd, [...args, 'exit 0'], { windowsHide: true, stdio: 'ignore', timeout: 5000 }).status === 0 } = {}) {
+  const candidates = windows
     ? pref === 'cmd'
       ? [['cmd.exe', '/d', '/c']]
       : [
@@ -26,8 +25,13 @@ export function shell() {
     : pref === 'sh'
       ? [['/bin/sh', '-c']]
       : [['bash', '-lc'], ['zsh', '-lc'], ['/bin/sh', '-c']];
-  chosen = { cmd: candidates[0][0], args: candidates[0].slice(1), name: path.basename(candidates[0][0]) };
-  return chosen;
+  const candidate = candidates.find(([cmd, ...args]) => probe(cmd, args));
+  if (!candidate) throw new Error('No supported system shell found');
+  return { cmd: candidate[0], args: candidate.slice(1), name: path.basename(candidate[0]) };
+}
+
+export function shell() {
+  return chosen ||= selectShell();
 }
 
 function quotePowerShell(cmd) {
@@ -110,8 +114,8 @@ export const shellTools = [
     params: {
       command: 'string: command run in the system shell (PowerShell on Windows)',
       cwd: 'string: working directory (optional)',
-      timeoutSec: 'number: seconds before it is killed (default 150)',
-      env: 'object: extra environment variables',
+      timeoutSec: 'number: seconds before it is killed (default: 150)',
+      env: 'object: extra environment variables (optional)',
     },
     examples: ['shell.run({command:"git -C . status -s"})', 'shell.run({command:"Get-Process | sort CPU | select -last 5"})'],
     async run({ command, cwd, timeoutSec = 150, env }, ctx) {
@@ -123,7 +127,12 @@ export const shellTools = [
       const out = `${r.stdout || ''}${r.stderr ? `\n-- stderr --\n${r.stderr}` : ''}`.trim();
       const status = r.ok ? 'ok' : `exit ${r.exitCode}${r.killed ? ' (killed after timeout)' : ''}`;
       return {
-        ok: true,
+        // An exited program with non-zero code must NOT be reported as tool success.
+        // Otherwise the agent can claim it rendered a Blender file / ran a script
+        // even after Blender or the command failed.
+        ok: r.ok,
+        ...(r.ok ? {} : { error: { code: r.killed ? 'shell_timeout' : 'shell_exit_nonzero',
+          message: `Command exited ${r.exitCode}${r.killed ? ' after timeout' : ''}. ${String(r.stderr || r.stdout || '').slice(0, 260)}` } }),
         result: `$ ${command}\n[${status} · ${r.ms}ms · ${r.shell}${out.length ? ` · ${out.length} tecken` : ''}]\n${out || '(ingen output)'}`,
         meta: { exitCode: r.exitCode, ms: r.ms, killed: r.killed, cwd: dir, outChars: out.length },
         summary: `${path.basename(command.split(/\s+/)[0] || 'shell')} → ${status}`,
@@ -136,7 +145,7 @@ export const shellTools = [
     group: 'shell',
     risk: 'exec',
     desc: 'Start a long-running job in the background and get an id. Use for servers, watchers, ghidra-headless, captures.',
-    params: { command: 'string: command', name: 'string: label (optional)', cwd: 'string: directory' },
+    params: { command: 'string: command', name: 'string: label (optional)', cwd: 'string: directory (optional)' },
     async run({ command, name, cwd }, ctx) {
       const id = name || `bg-${Date.now().toString(36)}`;
       const dir = cwd ? path.resolve(String(cwd)) : ctx.cfg.get('workspace') || process.cwd();
@@ -165,7 +174,7 @@ export const shellTools = [
     group: 'shell',
     risk: 'read',
     desc: 'List background jobs and their latest output. Use to follow servers and captures.',
-    params: { id: 'string: filter on one job id', tail: 'number: output lines per job (default 30)' },
+    params: { id: 'string: filter on one job id (optional)', tail: 'number: output lines per job (default 30) (optional)' },
     async run({ id = '', tail = 30 }) {
       const list = [...jobs.values()].filter((j) => !id || j.id === id);
       if (!list.length) return { result: 'no background jobs', summary: '0 jobb' };

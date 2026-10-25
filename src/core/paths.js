@@ -50,6 +50,8 @@ export const dirs = {
   memory: path.join(D, 'memory'),
   sessions: path.join(D, 'sessions'),
   skills: path.join(D, 'skills'),
+  adapters: path.join(D, 'adapters'),
+  plugins: path.join(D, 'plugins'),
   rules: path.join(D, 'rules'),
   logs: path.join(D, 'logs'),
   out: path.join(D, 'out'),
@@ -99,6 +101,7 @@ export function rel(p) {
 export function safeJoin(root, target) {
   const abs = path.resolve(expand(root), target ?? '.');
   const r = path.relative(path.resolve(root), abs);
-  const outside = r.startsWith('..') || path.isAbsolute(r);
+  // V1: a sibling path starts with '..' plus a separator; '..backup' is inside.
+  const outside = r === '..' || r.startsWith('..' + path.sep) || path.isAbsolute(r);
   return { abs, outside, root: path.resolve(root) };
 }

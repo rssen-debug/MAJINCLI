@@ -68,15 +68,25 @@ export async function compact({ cfg, messages, brief }) {
   const now = messagesTokens(messages);
   if (now < cap * 0.72) return { messages, brief, compacted: false, tokens: now };
   const keepFrom = Math.max(0, messages.length - keep);
-  const head = messages.slice(0, keepFrom).filter((m) => m.role !== 'tool' || true);
+  const head = messages.slice(0, keepFrom);
   const tail = messages.slice(keepFrom);
   if (!head.length) return { messages, brief, compacted: false, tokens: now };
-  const route = cfg.resolveModel(cfg.get('models.routes.summarize'), 'summarize');
+  // The full tool/safety instructions and original user goal cannot disappear
+  // just because a weak model has used many steps. Preserve them as an anchor.
+  const originalSystem = messages.find((m) => m.role === 'system' &&
+    !/^(?:WORKING MEMORY BRIEF|ARBETSMINNESBRIEF|ACTIVE GOAL)/.test(String(m.content || '')));
+  const originalGoal = messages.find((m) => m.role === 'system' &&
+    String(m.content || '').startsWith('ACTIVE GOAL:'));
+  const anchors = [originalSystem, originalGoal].filter(Boolean);
+  const anchoredTail = tail.filter((m) => !anchors.includes(m));
   const dialog = head
     .map((m) => `${m.role}: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '').slice(0, 900)}`)
     .join('\n')
     .slice(-24000);
   try {
+    // Summarizer route resolution can itself fail (missing key/model). Even then
+    // compaction must keep the working system prompt and goal, not abort the turn.
+    const route = cfg.resolveModel(cfg.get('models.routes.summarize'), 'summarize');
     const res = await complete({
       route,
       job: 'summarize',
@@ -91,14 +101,17 @@ export async function compact({ cfg, messages, brief }) {
     const nextBrief = (res.text || '').trim();
     bus.info('context.compacted', { before: now, headDropped: head.length, briefChars: nextBrief.length });
     return {
-      messages: [{ role: 'system', content: `WORKING MEMORY BRIEF (from MAJIN, compressed history):\n${nextBrief}` }, ...tail],
+      messages: [...anchors, { role: 'system', content: `WORKING MEMORY BRIEF (from MAJIN, compressed history):\n${nextBrief}` }, ...anchoredTail],
       brief: nextBrief,
       compacted: true,
-      tokens: messagesTokens(tail) + estimateTokens(nextBrief),
+      tokens: messagesTokens(anchors) + messagesTokens(anchoredTail) + estimateTokens(nextBrief),
     };
   } catch (err) {
     bus.warn('context.compact.failed', { error: err.message });
-    return { messages: tail, brief, compacted: true, tokens: messagesTokens(tail) };
+    // V1: keep the existing working-memory brief if the summarizer fails.
+    const fallbackBrief = brief ? [{ role: 'system', content: `WORKING MEMORY BRIEF (from MAJIN, previous summary):\n${brief}` }] : [];
+    const fallbackMessages = [...anchors, ...fallbackBrief, ...anchoredTail];
+    return { messages: fallbackMessages, brief, compacted: true, tokens: messagesTokens(fallbackMessages) };
   }
 }
 
@@ -110,12 +123,19 @@ export function historyPath(sessionId, dir = dirs.sessions) {
   return path.join(dir, `${sessionId.replace(/[^\w-]/g, '_')}.jsonl`);
 }
 
+/* History stays best-effort, but silently swallowing disk errors hid the very
+   outages the UI-agent handover (2026-10-19) flagged: callers now get the truth
+   (true/false) plus the last error, and may decide to surface it. */
+export const historyErrors = [];
 export function appendHistory(sessionId, msg, dir = dirs.sessions) {
   try {
     fs.mkdirSync(dir, { recursive: true });
     fs.appendFileSync(historyPath(sessionId, dir), JSON.stringify({ ...msg, ts: new Date().toISOString() }) + '\n');
-  } catch {
-    /* history is a nice-to-have, never fatal */
+    return true;
+  } catch (err) {
+    historyErrors.push({ sessionId, message: String(err?.message || err), code: err?.code || 'write_failed', when: new Date().toISOString() });
+    if (historyErrors.length > 50) historyErrors.splice(0, historyErrors.length - 50);
+    return false;
   }
 }
 

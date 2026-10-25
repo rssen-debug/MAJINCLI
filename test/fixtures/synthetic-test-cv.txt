@@ -1,0 +1,13 @@
+SYNTHETIC TEST CV — NOT A REAL PERSON — DO NOT SUBMIT
+Test Testsson
+Stockholm, Göteborg, Malmö
+8 års erfarenhet
+Software engineer, fullstack developer, backend developer, data engineer
+Python, SQL, PostgreSQL, Power BI, Excel, Azure, AWS, GCP
+JavaScript, TypeScript, Node.js, React, Angular, Java, C#, .NET
+Docker, Kubernetes, Terraform, Git, Linux, REST, GraphQL
+Testing, CI/CD, Scrum
+Svenska och engelska i tal och skrift
+B-körkort, C-körkort, CE-körkort, YKB, digitalt förarkort
+Legitimerad sjuksköterska, geriatrik, demensvård, psykiatri, LSS
+This CV is synthetic and is only for local MAJIN V5 matching tests.

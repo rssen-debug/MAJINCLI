@@ -5,6 +5,7 @@
  * as tiebreak only when the two are close. Never blocks a turn.
  */
 import path from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
 import { bus } from './log.js';
 import { complete } from './provider/chat.js';
 
@@ -35,6 +36,7 @@ const JOB_HINTS = [
   { job: 'code', weight: 0.45, re: /(^|\n)[ \t]{2,}\S/ },
   { job: 'research', weight: 0.6, re: /(s[oö]k|googl|webb|hitta|research|nyheter|k[aä]llor|vad kostar|priset|j[aä]mf[oö]r (med )?modell|latest|version of|docs)/i },
   { job: 'plan', weight: 0.55, re: /(plan|arkitektur|designa|hur b[oä]r|strategi|v[aä]lj|tradeoff|steg f[oö]r steg|scaffolds?|b[oö]rja|roadmap)/i },
+  { job: 'tasks', weight: 0.6, re: /\b(create|write|edit|update|delete|remove|move|copy|rename|make|save|install|run|execute)\b/i },
   { job: 'tasks', weight: 0.5, re: /(fil|mapp|katalog|d[oö]p om|rename|flytta|kopiera|ta bort|rensa|st[aä]da|batch|zip|packa|omorganisera|sortera|backup)/i },
   { job: 'analysis', weight: 0.5, re: /(analysera|rapport|sammanfatt|statistik|m[aä]t|benchmark|logga|json-data|csv|excel)/i },
   { job: 'chat', weight: 0.4, re: /^(tack|okej|ok|ja|nej|jo|nah|hej|hall[aå]|hmm|lol|test)\b[\s.!]*$/i },
@@ -129,18 +131,48 @@ export async function llmClassify(text, { cfg, candidates = ['code', 're', 'task
   }
 }
 
+// OpenCode Go requires a stable, conversation-specific header. Never send raw
+// conversation IDs or expose them to the gateway. Auxiliary routes within the
+// same conversation reuse this ID for consistent routing and prompt caching.
+const noSessionId = 'ses_' + randomUUID().replaceAll('-', '');
+function attachGoSession(route, session) {
+  if (route?.providerName !== 'opencode') return route;
+  const id = session ? 'ses_' + createHash('sha256').update(String(session)).digest('hex').slice(0, 32) : noSessionId;
+  return { ...route, extraHeaders: { ...(route.extraHeaders || {}), 'x-opencode-session': id, 'user-agent': 'MAJIN-coding-agent/1.0' } };
+}
+
 /** route ref for a job, with key availability respected. */
-export function routeFor(cfg, job) {
+export function routeFor(cfg, job, opts = {}) {
+  /* P0 (UI-agent handover 2026-10-19): a chat may PIN its own route so a
+     provider switch in chat A never reroutes chat B. Session routes live at
+     models.sessionRoutes = { <sessionId>: { <job>: "provider/model" } } and
+     are an EXPLICIT user choice — no silent fallback when the key is missing;
+     the missing-key error surfaces in that chat instead. */
+  const session = opts.session ? String(opts.session) : null;
+  if (session) {
+    const bound = (cfg.get('models.sessionRoutes') || {})[session] || {};
+    const bref = bound[job] || bound.tasks;
+    if (bref) {
+      const r = safeResolve(cfg, job, bref);
+      if (r) return attachGoSession(r, session);
+      bus.warn('route.session-bad', { session, job, ref: bref, why: 'unresolvable — falling back to the global table' });
+    }
+  }
   const routes = cfg.get('models.routes') || {};
   const ref = routes[job] || routes.tasks || routes.chat;
   const r = safeResolve(cfg, job, ref);
-  if (r && r.apiKey) return r;
+  if (r && r.apiKey) return attachGoSession(r, session);
+  // Explicit OpenCode Go / Zen selection must NEVER silently reroute to
+  // DeepSeek or the demo model because its key is missing. Preserve the
+  // intended provider so the user sees the correct authentication error.
+  // This also covers global (non-session) selections from the model picker.
+  if (r && (r.providerName === 'opencode' || r.providerName === 'opencodezen')) return attachGoSession(r, session);
   const fb = fallback(cfg, job);
   if (fb) {
     bus.warn('route.fallback', { job, wanted: ref, used: fb.ref, why: 'no key for the requested provider' });
-    return fb;
+    return attachGoSession(fb, session);
   }
-  return r;
+  return attachGoSession(r, session);
 }
 
 function safeResolve(cfg, job, ref) {
@@ -168,10 +200,13 @@ function fallback(cfg, job) {
 }
 
 /** Which provider/model actually serves this turn, plus escalation state. */
-export function plan(cfg, decision) {
+export function plan(cfg, decision, opts = {}) {
   const job = decision.job;
-  const route = routeFor(cfg, job);
-  const finalRoute = routeFor(cfg, 'final');
+  /* P1: the TURN-level plan must see the same per-chat binding the loop
+     does — otherwise the route event, MOA routing and served-route tracking
+     all describe a different model than the one actually serving the chat. */
+  const route = routeFor(cfg, job, opts);
+  const finalRoute = routeFor(cfg, 'final', opts);
   const moa = cfg.moaConfig();
   const useMoa = moa.enabled && (moa.policy === 'always' || moa.hardJobs.includes(job));
   const width = useMoa ? moaWidth(moa, job) : 1;
