@@ -1,0 +1,44 @@
+/**
+ * MAJIN V5 — Localization & UI copy (Swedish product interface).
+ */
+export const V5_STRINGS = Object.freeze({
+  brandName: 'MAJIN',
+  brandVersion: 'V5 · GRAND ARCHITECT',
+  heroSubtitle: 'Beskriv målet. Majin utför arbetet och blir bättre genom verifierade resultat.',
+  inputPlaceholder: 'Beskriv ditt mål, släpp ditt CV eller tryck på mikrofonen…',
+  sendLabel: 'Utför',
+  stopLabel: 'Stoppa',
+  attachLabel: 'Bifoga fil eller CV',
+  micIdleLabel: 'Aktivera röst (endast på begäran)',
+  micListeningLabel: 'Lyssnar — klicka för att stoppa',
+  micSpeakingLabel: 'Läser upp — klicka för att avbryta',
+  skillTreeToggleLabel: 'Öppna eller stäng skillträdet (1–99)',
+  skillTreeTitle: 'Skillträd · Nivå 1–99',
+  skillTreeSubtitle: 'Varje grön prick motsvarar oberoende verifierad förmåga. Befintlig kod ger aldrig automatiskt hög nivå.',
+  aggregateLabel: 'Sammanvägd vy av aktiva skills (ej universell intelligens)',
+  statusIdle: 'Redo för ditt mål',
+  statusReadingCv: 'Läser CV',
+  statusCheckingMatches: 'Kontrollerar matchningar',
+  statusUploadingCv: 'Laddar upp CV',
+  statusConfirmingApplication: 'Bekräftar mottagen ansökan',
+  statusBuildingSkill: 'Bygger och verifierar ny skill',
+  statusBuildingPage: 'Bygger och verifierar sida',
+  statusFixingFile: 'Öppnar och reparerar fil',
+  statusResumingGoal: 'Återupptar arbete från checkpoint',
+  statusCompleted: 'Verifierat klart',
+  statusPartial: 'Delvis klart',
+  statusBlocked: 'Blockerat — väntar på åtgärd',
+  statusCancelled: 'Avbrutet',
+  statusFailed: 'Kunde inte slutföras',
+  statusWaitingUser: 'Väntar på ditt svar',
+  providerTitle: 'Provider & Modell',
+  providerSavedNotVerified: 'Konfiguration sparad (anslutning ej verifierad ännu)',
+  providerVerified: 'Verifierad anslutning',
+  level99Mastered: 'Nivå 99 · Kvalitetsgrindar uppfyllda för denna skillversion',
+  level98Gated: 'Nivå 98/99 · Kräver samtliga 5 kvalitetsgrindar för nivå 99',
+  staleWarning: 'STALE · Miljö eller målwebbplats har ändrats sedan senaste verifiering',
+});
+
+export function t5(key, fallback = '') {
+  return V5_STRINGS[key] ?? fallback ?? key;
+}
