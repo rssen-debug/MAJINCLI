@@ -132,7 +132,7 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
     const state = dotCanvas.update(spec);
     if (xpTicker) xpTicker.textContent = state.tickerText;
     if (skillNumericStatus) {
-      skillNumericStatus.textContent = `${state.numericLabel} · ${state.statusTextLabel} · ${t5('aggregateLabel')}`;
+      skillNumericStatus.textContent = `Level ${state.numericLabel} · ${state.lastXpGain ? `+${state.lastXpGain} XP verified` : state.statusTextLabel}`;
     }
     renderDotStrip(state);
     return state;
@@ -376,12 +376,14 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
       try {
         const files = [];
         for (const file of pendingFiles) {
+          setActivityStatus('working', `Uploading ${file.name}…`, { verifiedLearning: false });
           const uploaded = await request('/api/v5/uploads', {
             method: 'POST', headers: { 'content-type': file.type || 'application/octet-stream', 'x-file-name': encodeURIComponent(file.name) }, body: file,
           });
           files.push(uploaded.upload);
         }
         if (run !== generation) return;
+        setActivityStatus('working', 'Working on your request…', { verifiedLearning: false });
         const data = await request('/api/v5/goal', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -444,7 +446,7 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
   // Initial state render
   applySkillMatrixState({
     skillId: 'untrained',
-    displayName: 'Formulär', // input vocabulary, never rendered
+    displayName: 'Skills', // default view before saved state loads
     level: 1,
     xp: 0,
     lastXpGain: 0,
