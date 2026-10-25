@@ -154,10 +154,10 @@ export function createV5Server({
       if (method === 'POST' && pathname === '/api/v5/provider') {
         const body = await readJsonBody(req);
         const providerId = body.providerId || 'opencode-go';
-        if (body.apiKey || body.baseUrl) {
+        if (body.apiKey || body.baseUrl || !architect.providers.getPublicState().providers[providerId]) {
           await architect.providers.configureProvider({
             providerId,
-            apiKey: body.apiKey,
+            apiKey: body.apiKey || undefined,
             baseUrl: body.baseUrl,
             discover: Boolean(body.verifyConnection),
           });
