@@ -358,6 +358,41 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
     finally { providerSaveBtn.disabled = false; }
   });
 
+  // Show observed host tool progress, never fabricated model reasoning.
+  let progressTimer = null;
+  let progressNode = null;
+  function endLiveProgress() {
+    if (progressTimer !== null) clearInterval(progressTimer);
+    progressTimer = null;
+    if (progressNode) progressNode.remove();
+    progressNode = null;
+  }
+  function beginLiveProgress() {
+    endLiveProgress();
+    if (!conversation || typeof fetchImpl !== 'function') return;
+    progressNode = doc.createElement('div');
+    progressNode.className = 'v5-tool-progress';
+    progressNode.setAttribute('role', 'status');
+    progressNode.textContent = 'Starting…';
+    conversation.appendChild(progressNode);
+    const tick = async () => {
+      try {
+        const response = await fetchImpl('/api/v5/goal/progress');
+        if (!response.ok || !progressNode) return;
+        const state = await response.json();
+        if (!progressNode) return;
+        const tools = state.recentTools || [];
+        const latest = tools[tools.length - 1];
+        progressNode.textContent = state.toolCount
+          ? `${state.toolCount} tool steps · ${latest?.tool || 'working'} · ${latest?.ok ? 'OK' : 'check error'}`
+          : 'Working · awaiting first tool result…';
+        if (state.blocker) progressNode.textContent += ` · ${state.blocker}`;
+      } catch { /* host may be restarting */ }
+    };
+    progressTimer = setInterval(tick, 1200);
+    tick();
+  }
+
   wishForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const goalText = wishInput?.value.trim() || '';
@@ -376,6 +411,7 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
     if (stopBtn) stopBtn.hidden = false;
 
     setActivityStatus('working', t5('ux10'), { verifiedLearning: false });
+    beginLiveProgress();
 
     if (typeof fetchImpl === 'function') {
       try {
@@ -426,7 +462,7 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
         setActivityStatus('idle', t5('statusFailed'), { verifiedLearning: false });
         appendMessage('agent', error.message, t5('ux11'));
       } finally {
-        if (run === generation) { busy = false; if (sendBtn) sendBtn.hidden = false; if (stopBtn) stopBtn.hidden = true; syncSend(); }
+        if (run === generation) { endLiveProgress(); busy = false; if (sendBtn) sendBtn.hidden = false; if (stopBtn) stopBtn.hidden = true; syncSend(); }
       }
     }
 
@@ -434,6 +470,7 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
 
   stopBtn?.addEventListener('click', async () => {
     generation++;
+    endLiveProgress();
     busy = false;
     if (sendBtn) sendBtn.hidden = false;
     syncSend();

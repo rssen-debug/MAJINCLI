@@ -144,6 +144,23 @@ export function createV5Server({
         });
       }
 
+      // Live, read-only progress feed: no model call and no access changes.
+      if (method === 'GET' && pathname === '/api/v5/goal/progress') {
+        const goal = providerAgent.getGoalState();
+        return sendJson(res, 200, {
+          ok: true,
+          goalId: goal?.goal_id || null,
+          status: goal?.status || 'IDLE',
+          summary: goal?.summaryText || '',
+          blocker: goal?.blocker || null,
+          toolCount: goal?.tool_results?.length || 0,
+          recentTools: (goal?.tool_results || []).slice(-12).map(item => ({
+            tool: item.tool, ok: item.ok, status: item.status,
+            errorCode: item.errorCode || null, blocker: item.blocker || null,
+          })),
+        });
+      }
+
       // Skill tree endpoints
       if (method === 'GET' && pathname === '/api/v5/skills') {
         return sendJson(res, 200, {
