@@ -33,17 +33,18 @@ export function buildMessages(route, messages) {
   for (const m of messages) {
     if (!m) continue;
     if (m.role === 'tool') {
-      out.push({ role: 'tool', tool_call_id: m.tool_call_id, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '') });
+      out.push({ role: 'tool', tool_call_id: m.tool_call_id, ...(m.name ? { name: m.name } : {}), content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '') });
       continue;
     }
     if (m.role === 'assistant' && m.tool_calls?.length) {
       out.push({
         role: 'assistant',
         content: m.content ? String(m.content) : null,
+        ...(/deepseek/i.test(route.model || '') && m.reasoning_content ? { reasoning_content: String(m.reasoning_content) } : {}),
         tool_calls: m.tool_calls.map((tc) => ({
           id: tc.id,
           type: 'function',
-          function: { name: tc.name, arguments: typeof tc.args === 'string' ? tc.args : JSON.stringify(tc.args ?? {}) },
+          function: { name: tc.name || tc.function?.name, arguments: tc.function?.arguments ?? (typeof tc.args === 'string' ? tc.args : JSON.stringify(tc.args ?? {})) },
         })),
       });
       continue;

@@ -5,6 +5,8 @@ Repo philosophy measured: ONE runtime dep today (chokidar). Every new dep must e
 
 ## Adopted
 
+ADOPTED: `playwright-core` @1.64.1 — Apache-2.0. V5's deterministic browser tools require the client in installed production builds. Move the existing optional client to an exact production pin; desktop staging omits optional and dev packages. This package installs no browser binary: tools discover the owner's installed Chromium/Edge and report a concrete missing-browser blocker. Reuses the existing browser adapter instead of adding another automation stack.
+
 | Component | Choice | License | Why this one (evidence 2026-10-21) | Footprint |
 |---|---|---|---|---|
 | Scheduler concurrency | **p-queue** (sindresorhus) | MIT | 4.3k stars, ~30M weekly npm downloads, v10.0.0 released within days, two tiny deps (eventemitter3, p-timeout), ESM, Node>=20. Mean-reversion alternative = hand-rolled concurrency with subtle race risk (the exact spot agents get wrong). | +1 dep (~100 KB bundled) |

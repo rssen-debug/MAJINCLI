@@ -156,3 +156,20 @@ test('Responses refuses empty and failed results rather than claiming success', 
     );
   }finally{globalThis.fetch=original;}
 });
+
+test('Go GPT reasoning model omits unsupported temperature and replays serialized tool arguments', async () => {
+  const original = globalThis.fetch;
+  let body;
+  globalThis.fetch = async (_url, options) => {
+    body = JSON.parse(options.body);
+    return new Response(JSON.stringify({ status: 'completed', output_text: 'Done' }), { status: 200 });
+  };
+  try {
+    await complete({ route: routeFor(config('gpt-6-luna'), 'chat'), stream: false, retries: 0,
+      messages: [{ role: 'user', content: 'Continue' },
+        { role: 'assistant', tool_calls: [{ id: 'call1', name: 'fs_read', argsJson: '{"path":"proof.txt"}' }] },
+        { role: 'tool', tool_call_id: 'call1', content: 'proof' }] });
+    assert.equal('temperature' in body, false);
+    assert.equal(body.input.find(row => row.type === 'function_call').arguments, '{"path":"proof.txt"}');
+  } finally { globalThis.fetch = original; }
+});

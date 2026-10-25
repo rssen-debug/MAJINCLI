@@ -32,7 +32,8 @@ export function checkedPath(root, raw) {
   return resolved;
 }
 
-export async function createDriverTools({ workspace, desktop = false, browser = false, processAccess = false, skillsDir } = {}) {
+export async function createDriverTools({ workspace, desktop = false, browser = false, processAccess = false, skillsDir,
+  allowedFolders = [], controller = 'codex', grantedLanes = null } = {}) {
   fs.mkdirSync(workspace, { recursive: true });
   const ctx = { session: 'codex-driver', cfg: { get: (key) => key === 'workspace' ? workspace : undefined } };
   const definitions = fileTools.filter(t => ['fs.list','fs.read','fs.write','fs.patch','fs.search','fs.grep','fs.stat','fs.mkdir','fs.find'].includes(t.name));
@@ -42,12 +43,21 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
   if (interactive) definitions.push(...winControlTools.filter(t => t.name.startsWith('control.')), ...desktopAppTools,
     netTools.find(t => t.name === 'screen.capture'));
   let browserAvailable = false;
+  let browserExecutable = null;
   if (browser) {
-    try { await import('playwright-core'); browserAvailable = Boolean(await browserBinary()); } catch { /* report unavailable */ }
+    try { await import('playwright-core'); browserExecutable = await browserBinary(); browserAvailable = Boolean(browserExecutable); } catch { /* report unavailable */ }
     if (browserAvailable) definitions.push(...browserTools);
   }
   const tools = new Map();
+  const resolveToolPath = raw => {
+    for (const root of [workspace, ...allowedFolders]) {
+      try { return checkedPath(root, raw); } catch { /* try the next owner-granted root */ }
+    }
+    throw Object.assign(new Error('Path outside workspace and owner-granted folders'), { code: 'PATH_DENIED' });
+  };
   for (const t of definitions) {
+    if (grantedLanes && t.name.startsWith('web.') && !grantedLanes.some(l => ['web','research'].includes(l))) continue;
+    if (grantedLanes && ['screen.capture','desktop.capture_window'].includes(t.name) && !grantedLanes.includes('screen')) continue;
     const schema = structuredClone(t.parameters);
     schema.additionalProperties = false;
     // Legacy toSchema guesses from prose and loses explicit number/default declarations.
@@ -72,12 +82,13 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
       name: t.name.replaceAll('.', '_'), source: t.name, description: t.desc, inputSchema: schema,
       async run(args) {
         const parsed = validator.parse(args);
+        if (t.name === 'browser.open') parsed.executablePath = browserExecutable;
         // All path-bearing inputs of the allowlisted tools pass the same realpath boundary.
-        for (const key of ['path', 'filePath', 'cwd']) if (parsed[key] != null) parsed[key] = checkedPath(workspace, parsed[key]);
+        for (const key of ['path', 'filePath', 'cwd']) if (parsed[key] != null) parsed[key] = resolveToolPath(parsed[key]);
         if (t.name === 'screen.capture' && !parsed.path) parsed.path = checkedPath(workspace, `captures/${Date.now()}.png`);
         const result = await t.run(t.name === 'screen.capture' ? { ...parsed, then: 'save' } : parsed, ctx);
         if (['screen.capture', 'desktop.capture_window'].includes(t.name) && result.ok !== false) {
-          const abs = checkedPath(workspace, result.meta.path);
+          const abs = resolveToolPath(result.meta.path);
           const bytes = fs.readFileSync(abs);
           if (bytes.length > 20 * 1024 * 1024) throw new Error('Screenshot exceeds 20 MB');
           result.image = { type: 'image', mimeType: 'image/png', data: bytes.toString('base64') };
@@ -91,7 +102,7 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
   });
   add('documents_extract', 'Extract text from a workspace PDF/DOCX/text file. Reports extraction confidence.',
     z.object({ path: z.string() }).strict(), ({ path: raw }) => {
-      const abs = checkedPath(workspace, raw);
+      const abs = resolveToolPath(raw);
       if (fs.statSync(abs).size > MAX_EXTRACT_BYTES) throw new Error('Document exceeds extraction limit');
       return { result: extractText(fs.readFileSync(abs), { fileName: abs }) };
     });
@@ -106,9 +117,10 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
       fs.writeFileSync(file, JSON.stringify([...seen]));
       return { result: { total: result.total, jobs, fetchedAt: new Date().toISOString(), source: 'https://jobsearch.api.jobtechdev.se/search' } };
     });
-  add('jobs_match', 'Deterministic keyword comparison; Codex assesses suitability from the evidence. No application actions.',
+  add('jobs_match', 'Deterministic keyword comparison; the agent assesses suitability from the evidence. No application actions.',
     z.object({ cv: z.string(), title: z.string(), description: z.string(), mustHave: z.array(z.string()).default([]), niceToHave: z.array(z.string()).default([]) }).strict(),
     ({ cv, ...job }) => ({ result: scoreCv(cv, job) }));
+  if (grantedLanes && !grantedLanes.some(l => ['jobs','web'].includes(l))) tools.delete('jobs_search');
   const availableSkills = () => usableSkills({
     skills: discoverSkills(skillsDir || path.join(workspace, 'skills')).skills,
     grantedLanes: ['files', ...(interactive ? ['desktop', 'screen'] : []), ...(browserAvailable ? ['browser'] : [])],
@@ -125,7 +137,7 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
       return { result: { name: skill.name, body: skill.body, trusted: false } };
     });
   add('driver_status', 'Actual host, capabilities and limitations. No provider inference is used.', z.object({}).strict(), () => ({ result: {
-    mode: 'CODEX_DRIVER', hostname: os.hostname(), platform: process.platform, workspace,
+    mode: controller === 'provider' ? 'PROVIDER_TOOLS' : 'CODEX_DRIVER', hostname: os.hostname(), platform: process.platform, workspace,
     interactiveWindows: Boolean(interactive), browserAvailable, processAccess, providerInference: false,
     toolSources: [...tools.values()].map(t => ({ name: t.name, source: t.source || 'deterministic adapter' })),
     unavailable: ['computer.use (requires Majin LLM)', 'learning approval/XP mutation', 'external accounts require owner-authorized credentials or sessions'],

@@ -1,0 +1,15 @@
+# V5 provider tool execution
+
+The normal V5 goal endpoint uses the selected provider/model to drive deterministic tools when a model is configured. CODEX DRIVER remains a separate optional controller. Existing explicitly supplied action workflows keep their original path.
+
+OpenCode Go uses `https://opencode.ai/zen/go/v1`: this is the Go endpoint, even though its path contains `zen`. Model IDs come from the live catalog. New Go configurations prefer a discovered DeepSeek model; selecting a different supported model works without replacing the execution engine. OpenAI chat, Anthropic and Responses dialects use the existing provider transports. Models without function calling cannot execute this tool loop; models without image input cannot interpret screenshots.
+
+Missing catalog capability metadata no longer silently disables tools. An explicit `tools: false` remains respected. Go requests identify MAJIN with its own user agent and a stable conversation session header. DeepSeek continuation reasoning stays in private protocol history.
+
+Owner grants control files, browser, desktop and process tools outside model instructions. The agent persists conversation and operation IDs before effects, observes tool failures and can recover after state changes. Cancellation aborts the provider and the worker. Restart does not automatically replay uncertain actions. Repeated identical failures are blocked.
+
+Model prose is not independent verification. Without caller acceptance checks, a final answer has status PARTIAL. Caller-supplied file criteria containing `contains` or `hash` are verified by the real file verifier before COMPLETED or learning/XP eligibility. No model-created quality gates are accepted.
+
+Live acceptance on Windows used the owner's Go account: DeepSeek V4 Pro, GLM 5.3 Flash, MiniMax M3 (Anthropic dialect) and GPT 6 Luna (Responses dialect) each wrote a nonce file, read it back, and passed independent content verification. GPT recovered after one malformed read call. GPT reasoning models omit unsupported temperature parameters. No key or private account state is included in this repository. `scripts/v5/provider-live-check.mjs` reproduces the coding-tool check with `MAJIN_GO_TEST_KEY` and an isolated `MAJIN_LIVE_STATE` directory. It makes paid provider calls. Test fixtures also cover actual HTTP transport, recovery, session persistence and non-fabricated XP.
+
+Go account/model availability is controlled by OpenCode. A successful catalog call does not guarantee inference availability. HTTP 403 access policy is distinct from HTTP 401 invalid credentials. DeepSeek may require Global regions in the owner's OpenCode privacy settings; the application never changes those settings.

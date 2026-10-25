@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GrandArchitect } from './architect.js';
 import { getV5InventorySummary } from './inventory.js';
+import { ProviderAgent } from './provider-agent.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.join(__dirname, 'ui');
@@ -81,6 +82,9 @@ export function createV5Server({
     completeImpl,
     portalAdapter,
   });
+  const providerAgent = new ProviderAgent({ architect });
+  const useProviderAgent = body => Boolean(architect.providers.state.activeModelId) &&
+    body.actions == null && body.jobAds == null && !body.synthesizeMissingSkill && !body.blocker && !body.requireUserConfirmation;
 
   // Safe mobile-to-host pairing tokens (Section 8 & 13)
   const pairedMobileClients = new Map();
@@ -92,6 +96,9 @@ export function createV5Server({
     const method = (req.method || 'GET').toUpperCase();
 
     try {
+      if (method === 'POST' && req.headers.origin && req.headers.origin !== url.origin) {
+        return sendJson(res, 403, { ok: false, code: 'CROSS_ORIGIN_WRITE_BLOCKED' });
+      }
       // Static Black Box UI assets
       if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
         return serveStaticFile(res, path.join(UI_DIR, 'index.html'), 'text/html; charset=utf-8');
@@ -129,7 +136,7 @@ export function createV5Server({
           provider: architect.providers.getPublicState(),
           skills: architect.skillTree.list(),
           aggregateSkills: architect.skillTree.aggregateSummary(),
-          activeGoal: architect.getGoalState(),
+          activeGoal: providerAgent.getGoalState() || architect.getGoalState(),
           voice: architect.voice.describeStatus(),
           access: architect.files.describeAccessState(),
           inventory: getV5InventorySummary(),
@@ -187,7 +194,7 @@ export function createV5Server({
       // Execute goal on host
       if (method === 'POST' && pathname === '/api/v5/goal') {
         const body = await readJsonBody(req);
-        const goalState = await architect.executeGoal(body);
+        const goalState = useProviderAgent(body) ? await providerAgent.execute(body) : await architect.executeGoal(body);
         return sendJson(res, 200, {
           ok: true,
           goal: goalState,
@@ -198,21 +205,21 @@ export function createV5Server({
       // Steer active goal mid-flight
       if (method === 'POST' && pathname === '/api/v5/goal/steer') {
         const body = await readJsonBody(req);
-        const steered = await architect.steerActiveGoal(body);
+        const steered = providerAgent.active ? providerAgent.steer(body.instruction || body.goalText) : await architect.steerActiveGoal(body);
         return sendJson(res, 200, { ok: true, ...steered });
       }
 
       // Cancel active goal
       if (method === 'POST' && pathname === '/api/v5/goal/cancel') {
         const body = await readJsonBody(req);
-        const cancelled = architect.cancelGoal(body.goalId);
+        const cancelled = providerAgent.active ? await providerAgent.cancel() : architect.cancelGoal(body.goalId);
         return sendJson(res, 200, { ok: true, goal: cancelled });
       }
 
       // Resume goal from checkpoint
       if (method === 'POST' && pathname === '/api/v5/goal/resume') {
         const body = await readJsonBody(req);
-        const resumed = await architect.resumeGoal(body);
+        const resumed = providerAgent.getGoalState() ? await providerAgent.execute({ goalText: body.goalText || 'Continue from the saved observations; inspect uncertain operations before acting.', criteria: body.criteria || [], resume: true }) : await architect.resumeGoal(body);
         return sendJson(res, 200, { ok: true, goal: resumed });
       }
 
@@ -239,10 +246,12 @@ export function createV5Server({
         const body = await readJsonBody(req);
         if (body.action === 'stop_all') {
           const stopped = architect.files.triggerEmergencyStop();
+          await providerAgent.cancel();
           architect.cancelGoal();
           return sendJson(res, 200, { ok: true, ...stopped });
         }
         if (body.action === 'revoke') {
+          await providerAgent.cancel();
           const state = architect.files.revokePermissions({ lanes: body.lane ? [body.lane] : null, folder: body.folder || null });
           return sendJson(res, 200, { ok: true, access: state });
         }
@@ -294,7 +303,7 @@ export function createV5Server({
           return sendJson(res, 401, { ok: false, code: 'UNPAIRED_MOBILE_CLIENT' });
         }
         const body = await readJsonBody(req);
-        const goalState = await architect.executeGoal(body);
+        const goalState = useProviderAgent(body) ? await providerAgent.execute(body) : await architect.executeGoal(body);
         return sendJson(res, 200, {
           ok: true,
           executedOnHost: true,
@@ -317,6 +326,7 @@ export function createV5Server({
 
   return {
     architect,
+    providerAgent,
     server,
     getPairingCode: () => currentPairingCode,
     async start() {
@@ -333,6 +343,7 @@ export function createV5Server({
       };
     },
     async stop() {
+      await providerAgent.cancel();
       await new Promise((resolve) => server.close(() => resolve()));
     },
   };
