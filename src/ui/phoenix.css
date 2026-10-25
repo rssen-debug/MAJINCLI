@@ -105,6 +105,17 @@ footer { flex:none; background:var(--bg); border:0; padding:12px max(24px,calc((
 #send .send-arrow { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; transform-origin:center; transition:transform .28s cubic-bezier(.2,.8,.2,1.4),opacity .18s; }
 #send .send-stop { fill:currentColor; opacity:0; transform:scale(.35) rotate(-45deg); transform-origin:center; transition:transform .28s cubic-bezier(.2,.8,.2,1.4),opacity .18s; }
 #send:disabled { opacity:.28; cursor:default; box-shadow:none; }
+/* Aurora: visible keyboard focus without adding noise to pointer interaction. */
+#send:focus-visible {
+  outline:3px solid var(--cy);
+  outline-offset:4px;
+  box-shadow:0 0 0 8px var(--cysoft),0 0 28px var(--cysoft);
+}
+#send.busy:focus-visible { outline-color:var(--warn,#ffd479); }
+@media (forced-colors: active) {
+  #send:focus-visible { outline:3px solid Highlight; box-shadow:none; }
+}
+
 #send:not(:disabled):hover { background:#fff; box-shadow:0 0 0 5px #eaa0c30a,0 0 24px #eaa0c31c; }
 #send:not(:disabled):hover .send-arrow { transform:translateY(-2px); }
 #send:not(:disabled):active svg { transform:scale(.9); }
