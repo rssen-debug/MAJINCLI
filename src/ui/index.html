@@ -741,6 +741,9 @@ body[data-voice-mode="speaking"] #composer .composer-talk::after{
 /* Rebased progress visibility: gentle amber edge, no extra panel. */
 #composer #work-progress[data-phase="stagnation"]{border-top-color:rgba(255,187,113,.36)}
 @media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="stagnation"] *{animation:none!important}}
+/* Refined recovery contrast, with no additional panel. */
+#composer #work-progress[data-phase="recover"]{border-top-color:rgba(218,158,249,.42)}
+@media(prefers-reduced-motion:reduce){#composer #work-progress[data-phase="recover"] *{animation:none!important}}
 </style>
 <link rel="stylesheet" href="/phoenix.css" />
 </head>
