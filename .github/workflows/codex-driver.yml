@@ -4,6 +4,7 @@ on:
     paths:
       - 'src/v5/codex-*.js'
       - 'src/v5/provider*.js'
+      - 'src/v5/procedure-tools.js'
       - 'src/v5/document-extract.js'
       - 'src/core/tools/browser.js'
       - 'src/v5/server.js'
@@ -16,6 +17,7 @@ on:
       - 'scripts/v5/*codex*'
       - 'test/v5/codex-*.test.js'
       - 'test/v5/provider-agent.test.js'
+      - 'test/v5/procedure-tools.test.js'
       - 'test/v5/browser-submit.test.js'
       - 'test/v5/document-extract.test.js'
       - '.github/workflows/codex-driver.yml'
@@ -36,5 +38,5 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --ignore-scripts --omit=dev --omit=optional --no-audit --no-fund
-      - run: node --test test/v5/codex-driver.test.js test/v5/codex-host.test.js test/v5/provider-agent.test.js test/v5/browser-submit.test.js test/v5/document-extract.test.js test/wincontrol.test.js
+      - run: node --test test/v5/codex-driver.test.js test/v5/codex-host.test.js test/v5/provider-agent.test.js test/v5/procedure-tools.test.js test/v5/browser-submit.test.js test/v5/document-extract.test.js test/wincontrol.test.js
       - run: npm run check

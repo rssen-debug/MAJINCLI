@@ -217,6 +217,12 @@ export function createV5Server({
         return sendJson(res, 200, { ok: true, goal: cancelled });
       }
 
+      // Pause preserves provider checkpoints and aborts in-flight inference/tools.
+      if (method === 'POST' && pathname === '/api/v5/goal/pause') {
+        await readJsonBody(req);
+        return sendJson(res, 200, { ok: true, goal: await providerAgent.pause() });
+      }
+
       // Resume goal from checkpoint
       if (method === 'POST' && pathname === '/api/v5/goal/resume') {
         const body = await readJsonBody(req);
