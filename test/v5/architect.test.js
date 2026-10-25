@@ -174,7 +174,7 @@ test('GrandArchitect synthesizes a missing skill on the fly via SkillBuilder and
     },
   });
 
-  assert.equal(goalWithSynthesis.status, TASK_STATUS.COMPLETED);
+  assert.equal(goalWithSynthesis.status, TASK_STATUS.COMPLETED, goalWithSynthesis.error);
   assert.equal(goalWithSynthesis.used_skills.primary_skill, 'career.rate-calculator');
   assert.equal(goalWithSynthesis.xp_award.awarded, true);
 
