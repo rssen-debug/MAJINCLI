@@ -51,13 +51,13 @@ const ALLOW = [
 
 // Localization resources hold the product copy by design; they are data, not
 // logic, and are reviewed as translations rather than scanned as literals.
-const LOCALIZATION = [/src[\\/]v4[\\/]ui[\\/]strings\.js$/];
+const LOCALIZATION = [/src[\\/]v[45][\\/]ui[\\/]strings\.js$/];
 // Benchmark scenarios are Swedish *input* text: they exist to prove the
 // assistant understands the language users actually type.
 // Acceptance checks send Swedish input text for the same reason benchmarks do:
 // they prove the assistant handles what users actually type. The local job-form
 // acceptance also keeps Swedish field labels as fixture input, not shipped UI.
-const BENCHMARK_INPUT = /scripts[\\/]v4[\\/](benchmark|accept|learn-accept|setup|approvals|job-form-accept)\.mjs$/;
+const BENCHMARK_INPUT = /scripts[\\/]v[45][\\/](benchmark|accept|learn-accept|setup|approvals|job-form-accept)\.mjs$/;
 
 const TARGETS = [];
 for (const root of ['src', 'scripts']) if (fs.existsSync(root)) for (const f of walk(root)) if (/\.(js|mjs|cjs)$/.test(f)) TARGETS.push(f);

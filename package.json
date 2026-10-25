@@ -9,7 +9,8 @@
   },
   "bin": {
     "majin": "./bin/majin.mjs",
-    "majin-v2": "./bin/majin-v2.mjs"
+    "majin-v2": "./bin/majin-v2.mjs",
+    "majin-v5": "./bin/majin-v5.mjs"
   },
   "main": "./src/core/runtime.js",
   "exports": {
@@ -66,7 +67,12 @@
     "v4:release": "node ./scripts/v4/release.mjs",
     "v4:inventory": "node ./scripts/v4/inventory.mjs",
     "v4:learn-accept": "node ./scripts/v4/learn-accept.mjs",
-    "v4:approvals": "node ./scripts/v4/approvals.mjs"
+    "v4:approvals": "node ./scripts/v4/approvals.mjs",
+    "v5:serve": "node ./bin/majin-v5.mjs serve",
+    "v5:test": "node --test test/v5/*.test.js",
+    "v5:accept": "node ./scripts/v5/accept.mjs",
+    "v5:build": "node ./scripts/v5/build-package.mjs",
+    "v5:screenshots": "node ./scripts/v5/render-screenshots.mjs"
   },
   "optionalDependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
