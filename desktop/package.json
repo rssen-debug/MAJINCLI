@@ -53,10 +53,9 @@
       "artifactName": "MAJIN-V5-Setup.${ext}"
     },
     "nsis": {
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": false,
       "allowElevation": false,
-      "allowToChangeInstallationDirectory": true,
       "createStartMenuShortcut": true,
       "createDesktopShortcut": "always",
       "shortcutName": "MAJIN V5",

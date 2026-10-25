@@ -10,6 +10,20 @@ param(
 $ErrorActionPreference = "Stop"
 New-Item -ItemType Directory -Force -Path "docs\v5" | Out-Null
 
+function Wait-HealthyV5Host([int]$Port, [int]$TimeoutSeconds = 25) {
+    $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $Deadline) {
+        try {
+            $res = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/health" -TimeoutSec 2
+            if ($res -and $res.ok -eq $true -and $res.version -eq "5.0.0") {
+                return $res
+            }
+        } catch {}
+        Start-Sleep -Milliseconds 500
+    }
+    throw "Timed out waiting for MAJIN V5 host on port $Port"
+}
+
 try {
     if (-not (Test-Path $SetupExe)) {
         throw "Setup.exe not found at: $SetupExe"
@@ -37,12 +51,9 @@ try {
     }
     "V4 installation intact" | Set-Content -Path $V4MarkerFile -Encoding UTF8
 
-    # 2. Run NSIS Setup.exe silently (/S)
+    # 2. Run NSIS Setup.exe silently (/S) without blocking on child process handles
     Write-Host "==> [1/6] Running NSIS installer: $SetupFull /S" -ForegroundColor Cyan
-    $InstallProc = Start-Process -FilePath $SetupFull -ArgumentList "/S" -Wait -PassThru
-    if ($InstallProc.ExitCode -ne 0) {
-        throw "MAJIN-V5-Setup.exe exited with code $($InstallProc.ExitCode)"
-    }
+    $InstallProc = Start-Process -FilePath $SetupFull -ArgumentList "/S" -PassThru
 
     $ProgramsDir = Join-Path $env:LOCALAPPDATA "Programs"
     $CandidateDirs = @(
@@ -50,19 +61,18 @@ try {
         (Join-Path $ProgramsDir "MAJIN V5")
     )
     $InstalledDir = $null
-    for ($i = 0; $i -lt 30; $i++) {
+    for ($i = 0; $i -lt 90; $i++) {
         foreach ($cand in $CandidateDirs) {
-            if (Test-Path (Join-Path $cand "MAJIN V5.exe")) {
+            if (
+                (Test-Path (Join-Path $cand "MAJIN V5.exe")) -and
+                (Test-Path (Join-Path $cand "Uninstall MAJIN V5.exe")) -and
+                (Test-Path (Join-Path $cand "resources\host\src\v5\server.js"))
+            ) {
                 $InstalledDir = $cand
                 break
             }
         }
         if ($InstalledDir) { break }
-        $found = Get-ChildItem -Path $ProgramsDir -Filter "MAJIN V5.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($found) {
-            $InstalledDir = $found.DirectoryName
-            break
-        }
         Start-Sleep -Milliseconds 500
     }
 
@@ -70,6 +80,7 @@ try {
         $progList = (Get-ChildItem -Path $ProgramsDir -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name) -join ", "
         throw "Installed MAJIN V5.exe not found under $ProgramsDir (contents: $progList)"
     }
+    Start-Sleep -Seconds 2
 
     $InstalledExe = Join-Path $InstalledDir "MAJIN V5.exe"
     $UninstallerExe = Join-Path $InstalledDir "Uninstall MAJIN V5.exe"
@@ -94,7 +105,6 @@ try {
     $DesktopShortcut = $DesktopShortcutCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
     $StartMenuShortcut = Get-ChildItem -Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs" -Filter "*MAJIN V5*.lnk" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
 
-    # If silent NSIS (/S) skipped the finish-page desktop shortcut creation on headless Server runner, verify WScript.Shell shortcut creation with InstalledExe & icon
     if (-not $DesktopShortcut) {
         $TargetLnk = Join-Path $UserDesktop "MAJIN V5.lnk"
         $WshShell = New-Object -ComObject WScript.Shell
@@ -115,15 +125,8 @@ try {
     $env:MAJIN_V5_PORT = "$TestPort"
     $env:MAJIN_V5_DESKTOP_URL = "http://127.0.0.1:$TestPort"
 
-    $BgProc1 = Start-Process -FilePath $InstalledExe -ArgumentList "--background" -Wait -PassThru
-    if ($BgProc1.ExitCode -ne 0) {
-        throw "Installed MAJIN V5.exe --background failed with exit code $($BgProc1.ExitCode)"
-    }
-
-    $Health1 = Invoke-RestMethod -Uri "http://127.0.0.1:$TestPort/api/health" -TimeoutSec 5
-    if (-not $Health1.ok -or $Health1.version -ne "5.0.0") {
-        throw "Unexpected /api/health response: $($Health1 | ConvertTo-Json -Compress)"
-    }
+    $BgProc1 = Start-Process -FilePath $InstalledExe -ArgumentList "--background" -PassThru
+    $Health1 = Wait-HealthyV5Host -Port $TestPort -TimeoutSeconds 25
 
     $ProvBody = @{
         providerId = "opencode-go"
@@ -142,14 +145,13 @@ try {
         $HostInfo = Get-Content $HostJsonPath -Raw | ConvertFrom-Json
         if ($HostInfo.pid) {
             Stop-Process -Id $HostInfo.pid -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 1
         }
     }
+    Get-Process -Name "MAJIN V5" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
 
-    $BgProc2 = Start-Process -FilePath $InstalledExe -ArgumentList "--background" -Wait -PassThru
-    if ($BgProc2.ExitCode -ne 0) {
-        throw "Second launch of MAJIN V5.exe --background failed with exit code $($BgProc2.ExitCode)"
-    }
+    $BgProc2 = Start-Process -FilePath $InstalledExe -ArgumentList "--background" -PassThru
+    $Health2 = Wait-HealthyV5Host -Port $TestPort -TimeoutSeconds 25
 
     $StateAfterRestart = Invoke-RestMethod -Uri "http://127.0.0.1:$TestPort/api/v5/state" -TimeoutSec 5
     if ($StateAfterRestart.provider.activeProvider -ne "opencode-go" -or $StateAfterRestart.provider.activeModelId -ne "GLM-5.3") {
@@ -169,8 +171,8 @@ try {
 
     # 6. Run Uninstaller (/S) and verify clean removal + data/V1-V4 preservation
     Write-Host "==> [5/6] Running Uninstaller and verifying clean removal + data preservation..." -ForegroundColor Cyan
-    $UninstallProc = Start-Process -FilePath $UninstallerExe -ArgumentList "/S" -Wait -PassThru
-    for ($i = 0; $i -lt 40; $i++) {
+    $UninstallProc = Start-Process -FilePath $UninstallerExe -ArgumentList "/S" -PassThru
+    for ($i = 0; $i -lt 50; $i++) {
         if (-not (Test-Path $InstalledExe)) { break }
         Start-Sleep -Milliseconds 500
     }
