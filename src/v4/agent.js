@@ -36,9 +36,11 @@ import { publicGoal, newId } from './store.js';
 import { explainModelError } from './model.js';
 import { t } from './ui/strings.js';
 import { hasApprovalContinuation } from './approval-continuation.js';
+import { superviseFailure, supervisorInstruction } from './autonomous-diagnosis.js';
+import { checkpointForFailure, shouldResume, resumeGuidance } from './goal-supervisor.js';
 
 const SYSTEM_PROMPT = `You are MAJIN, a private assistant running on the owner's own Windows machine.
-You speak in the language the user writes in (Swedish or English) and you are brief.
+You speak in the language the user writes in (Swedish or English). DEFAULT: reply in 1–3 short, direct sentences. Lead with the outcome and explicit completion status; no long diagnostics, repeated CV details, tool lists or multi-section reports unless the owner requests details. While working, use factual tool events and verifiable previews, never invent or reveal hidden chain-of-thought.
 You have tools. The exact list is in this request; use whatever is offered. Always the
 workspace tools: workspace_write (create a NEW text file), workspace_read, workspace_list,
 memory_save (durable preference) and memory_search. The workspace is a flat, create-only
@@ -51,6 +53,19 @@ Choosing tools:
 - To find a file you only know the name of, use fs_find with the folder as its path argument.
   Do not assume the workspace is the only place the owner keeps things.
 - A tool call that returns failure is a failure. Never describe it as done.
+- For unreadable PDFs: if document_read reports partial confidence, invalid glyphs
+  or a missing text layer, do not repeat the same extraction. Search the actual
+  available tools for a distinct extractor, PDF renderer, OCR or vision capability.
+  Verify recovered text against the document before using it; preserve the source
+  file and do not invent contact details or experience. If no alternate capability
+  is installed, report the specific blocker instead of burning the tool budget.
+- For browser automation ALWAYS start with browser_open (the registered browser.open adapter), with headless=false when the owner wants to see the page. The browser tool launches Chrome/Edge and its own debugging port. NEVER call exec_start, shell, PowerShell or CMD with a bare --remote-debugging-port flag (it is an argument, not a program). Do not declare a blocked CDP port without checking the actual browser_open error and diagnostics. If the preferred browser cannot start, let browser_open try its installed alternate browser before asking the owner to do anything.
+- For ambiguous browser controls: re-observe the DOM and choose a grounded unique
+  target using its label, container or stable attributes. Never blindly retry the
+  same ambiguous click and never submit external forms with guessed values.
+- If any registered tool repeatedly fails, diagnose the subsystem rather than repeating identical calls. Discover available diagnostic tools, inspect source/logs and use an alternate approach; when a verified MAJIN code defect is found, prepare a tested isolated PR only with granted permissions. Do not auto-merge, deploy, install untrusted code or restart the active host.
+- When reaching execution limits, preserve completed receipts and useful artifacts.
+  Report a concrete next step, not a false success; do not restart finished work.
 - Forms: browser_form, browser_form_fill, browser_form_submit. Observe changes,
   verify receipts; hand off authentication/CAPTCHA. Tool descriptions explain recovery.
 - The tool list can be partial on a large host. If the capability you need is not listed, call
@@ -511,8 +526,12 @@ export function createAgent({
     const avoided = (turn?.learned || []).flatMap((skill) => (skill.learned?.avoid || [])
       .filter((a) => a.action === `${toolName}${argsShape ? `(${argsShape})` : ''}` || a.action === toolName)
       .map((a) => ({ ...a, skill: skill.name })));
-    if (avoided.length && !turn?.allowAvoided) {
-      const first = avoided[0];
+    // An UNKNOWN, timeout or transient failure is not proof that a tool is
+    // intrinsically broken. Never permanently block a browser capability on
+    // unrelated tasks merely because a previous Chrome startup timed out.
+    const deterministicAvoid = avoided.filter(a => !/^(UNKNOWN|TIMEOUT|TOOL_TIMEOUT|TRANSIENT|RATE_LIMIT|MODEL_BUDGET|TOOL_BUDGET|NO_PROGRESS)$/i.test(String(a.failedWith || '')));
+    if (deterministicAvoid.length && !turn?.allowAvoided) {
+      const first = deterministicAvoid[0];
       traceStep.ok = false;
       traceStep.cls = 'LEARNED_AVOID';
       emit('tool_result', {
@@ -537,13 +556,20 @@ export function createAgent({
     if (!nested) goal.transition(STATES.WAITING_FOR_TOOL, `tool ${toolName}`);
     let result;
     try {
+      // Chrome launch has TWO bounded startup attempts (up to 10s + 15s
+      // plus retry delay/CDP setup). A 20s generic tool timeout aborts the
+      // recovery mid-start and leaves blank Chrome windows on Windows.
+      // Scope the longer deadline to browser_open, never every tool.
+      const toolTimeoutMs = toolName === 'browser_open'
+        ? Math.max(config.limits.toolTimeoutMs, 45_000)
+        : config.limits.toolTimeoutMs;
       const runOnce = () => runTool(
         { tool: toolName, input: args, callId: call.id },
         {
-          registry: registryForCall(signal, config.limits.toolTimeoutMs),
+          registry: registryForCall(signal, toolTimeoutMs),
           approvals,
           mode: 'balanced',
-          timeoutMs: config.limits.toolTimeoutMs,
+          timeoutMs: toolTimeoutMs,
           events: bus,
         },
       );
@@ -788,6 +814,12 @@ export function createAgent({
       return replayOf(conversation.id, prior.messageId, found);
     }
 
+    const resumedCheckpoint = shouldResume(message, conversation.supervisorCheckpoint)
+      ? conversation.supervisorCheckpoint : null;
+    if (!resumedCheckpoint && conversation.supervisorCheckpoint) {
+      conversation.supervisorCheckpoint = null;
+      conversations.save(conversation);
+    }
     conversations.appendMessage(conversation.id, { role: 'user', content: message });
     emit('user', { content: message });
 
@@ -796,12 +828,14 @@ export function createAgent({
     // as a revision of it so history shows one thread instead of orphans.
     const priorGoalId = lastGoal.get(conversation.id) || null;
     const priorGoal = priorGoalId ? goals.get(priorGoalId) : null;
-    const lineage = priorGoal && looksLikeCorrection(message, priorGoal)
-      ? { revisionOf: priorGoal.id, revision: (priorGoal.revision || 0) + 1 }
-      : null;
+    const lineage = resumedCheckpoint
+      ? { revisionOf: resumedCheckpoint.goalId, revision: 1 }
+      : priorGoal && looksLikeCorrection(message, priorGoal)
+        ? { revisionOf: priorGoal.id, revision: (priorGoal.revision || 0) + 1 }
+        : null;
 
     const goal = goals.track(new Goal({
-      objective: message.slice(0, 500),
+      objective: (resumedCheckpoint?.originalObjective || message).slice(0, 500),
       acceptance: [],
       risk: 'low',
       permissions: ['workspace.file:create', 'workspace.file:read', 'memory.preference:write'],
@@ -849,6 +883,10 @@ export function createAgent({
     };
     const packed = historyFor(conversations.get(conversation.id), message, learnedForTurn);
     const modelMessages = packed.messages;
+    if (resumedCheckpoint && modelMessages[0]?.role === 'system') {
+      modelMessages[0].content += '\n\n' + resumeGuidance(resumedCheckpoint);
+      emit('recovery', { action: 'resume_saved_goal', attempt: 1, failureClass: resumedCheckpoint.failureClass, advice: [] });
+    }
     if (voiceTurn && modelMessages[0]?.role === 'system') {
       modelMessages[0].content += '\nThis is a spoken conversation. Reply in the language the user just spoke. Usually use one short natural sentence, around 20 words, unless the task needs detail. Do not recite capabilities or menus. Keep all tool and verification rules.';
     }
@@ -872,6 +910,22 @@ export function createAgent({
     let lastOutcome = null;
     let lastRefusal = null;
     let finishedReasoning = false;
+    let automaticReplanUsed = false;
+    const failedToolCounts = new Map();
+    // A bounded continuation is permitted only after a successful tool outcome.
+    // A stuck agent must not burn unlimited provider calls on repeated failures.
+    let roundLimit = config.limits.maxModelRounds;
+    let toolLimit = config.limits.maxToolCallsPerTurn;
+    let extended = false;
+    const maybeExtend = () => {
+      if (extended || !lastOutcome?.ok || toolCallsUsed === 0 || signal?.aborted) return false;
+      extended = true;
+      roundLimit += Math.min(8, Math.max(1, config.limits.maxModelRounds));
+      toolLimit += Math.min(16, Math.max(1, config.limits.maxToolCallsPerTurn));
+      emit('recovery', { action: 'continue_verified_progress', attempt: 1, failureClass: 'STEP_BUDGET', advice: [] });
+      record('budget.continue', { goalId: goal.id, rounds, toolCallsUsed, roundLimit, toolLimit });
+      return true;
+    };
 
     try {
       if (!continuation) {
@@ -880,7 +934,7 @@ export function createAgent({
       }
       goals.save(goal);
 
-      while (continuation || rounds < config.limits.maxModelRounds) {
+      while (continuation || rounds < roundLimit || maybeExtend()) {
         let response, toolMessages = [], startAt = 0;
         if (continuation) {
           response = continuation.response;
@@ -892,7 +946,7 @@ export function createAgent({
           if (signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'ABORTED' });
 
           emit('state', { state: 'thinking', round: rounds });
-          const budgetNote = `\nExecution budget for this response: ${config.limits.maxModelRounds - rounds + 1} model responses including this one, ${config.limits.maxToolCallsPerTurn - toolCallsUsed} tool calls left. Batch independent, already-grounded actions when useful; tools execute in order. Re-observe after actions that change control identities. Correct named schema arguments before retrying. Reserve a response to verify and report the actual outcome. Never repeat an irreversible action merely because verification failed.`;
+          const budgetNote = `\nExecution budget for this response: ${roundLimit - rounds + 1} model responses including this one, ${toolLimit - toolCallsUsed} tool calls left. Batch independent, already-grounded actions when useful; tools execute in order. Re-observe after actions that change control identities. Correct named schema arguments before retrying. Reserve a response to verify and report the actual outcome. Never repeat an irreversible action merely because verification failed.`;
           const requestMessages = modelMessages.map((message, index) => index === 0 && message.role === 'system'
             ? { ...message, content: message.content + budgetNote } : message);
           response = await model.chat({
@@ -922,10 +976,35 @@ export function createAgent({
           if (response.text) finalText += response.text;
           if (response.refused) lastRefusal = response.refused;
 
-          if (!response.toolCalls?.length) { finishedReasoning = true; break; }
+          if (!response.toolCalls?.length) {
+            // A model sometimes stops and declares defeat after a recoverable
+            // tool failure. Give it ONE automatic diagnostic/replan opportunity
+            // rather than forcing the owner to type "lös det" again.
+            // No failed tool is replayed by this supervisor.
+            if (lastOutcome && !lastOutcome.ok && !lastOutcome.waiting
+                && !automaticReplanUsed && !signal?.aborted
+                && (rounds < roundLimit || maybeExtend())) {
+              automaticReplanUsed = true;
+              const failureClass = String(lastOutcome.code || 'TOOL_FAILURE').slice(0, 100);
+              emit('recovery', { action: 'autonomous_replan', attempt: 1, failureClass, advice: [] });
+              modelMessages.push({ role: 'assistant', content: response.text || 'Previous attempt was blocked.' });
+              modelMessages.push({ role: 'user', content:
+                'SUPERVISOR: Your previous step failed (' + failureClass + '). The user goal is still unfinished. '
+                + 'Diagnose the actual failure with the available tools, find a DIFFERENT safe strategy, '
+                + 'inspect live state first, and continue toward the original goal without asking the user '
+                + 'to repeat the instruction. Never repeat an external submission or destructive action. '
+                + 'If no grounded alternative exists, state the blocker precisely.' });
+              continue;
+            }
+            finishedReasoning = true;
+            break;
+          }
         }
-        if (toolCallsUsed + response.toolCalls.length - startAt > config.limits.maxToolCallsPerTurn) {
-          throw Object.assign(new Error(`tool budget exceeded (${config.limits.maxToolCallsPerTurn})`), { code: 'TOOL_BUDGET' });
+        if (toolCallsUsed + response.toolCalls.length - startAt > toolLimit && !maybeExtend()) {
+          throw Object.assign(new Error(`tool budget exceeded (${toolLimit})`), { code: 'TOOL_BUDGET' });
+        }
+        if (toolCallsUsed + response.toolCalls.length - startAt > toolLimit) {
+          throw Object.assign(new Error(`tool budget exceeded (${toolLimit})`), { code: 'TOOL_BUDGET' });
         }
         for (const [index, call] of response.toolCalls.entries()) {
           if (index < startAt) continue;
@@ -936,6 +1015,23 @@ export function createAgent({
           emit('goal', publicGoal(goal));
 
           lastOutcome = outcome;
+          if (outcome.ok) failedToolCounts.delete(call.name);
+          if (!outcome.ok && !outcome.waiting) {
+            const n = (failedToolCounts.get(call.name) || 0) + 1;
+            failedToolCounts.set(call.name, n);
+            const diagnostics = superviseFailure({
+              tool: call.name, code: outcome.code || 'UNKNOWN', repeats: n - 1,
+              available: exposure.schemas().map(schema => schema.name),
+            });
+            const guidance = supervisorInstruction(diagnostics);
+            // Attach the diagnosis to the normal tool result for the model;
+            // no extra model call and no secrets in the persistent checkpoint.
+            outcome.supervisorGuidance = guidance;
+            if (diagnostics.repairCode) emit('recovery', {
+              action: 'diagnose_subsystem', attempt: n,
+              failureClass: diagnostics.code, advice: [],
+            });
+          }
           if (outcome.ok && (call.name === 'tools_activate' || call.name === 'tools_search' || call.name === 'agent_delegate')) {
             emit('tool_note', {
               tool: call.name,
@@ -974,7 +1070,10 @@ export function createAgent({
           toolMessages.push({
             role: 'tool',
             tool_call_id: call.id,
-            content: safeJson(outcome.ok ? { ok: true, data: outcome.data } : { ok: false, error: outcome.error }),
+            content: safeJson(outcome.ok ? { ok: true, data: outcome.data } : {
+              ok: false, error: outcome.error,
+              supervisor: outcome.supervisorGuidance || '',
+            }),
           });
         }
 
@@ -988,8 +1087,8 @@ export function createAgent({
         // own reads like a defect rather than a limit.
         throw Object.assign(
           new Error(
-            `The step budget for one turn (${config.limits.maxModelRounds} model rounds, `
-            + `${config.limits.maxToolCallsPerTurn} tool calls) ran out before the task finished. `
+            `The bounded execution budget (${roundLimit} model rounds, `
+            + `${toolLimit} tool calls) ran out before the task finished. `
             + 'Nothing was reported as done that was not verified. Retry with a narrower goal, or raise '
             + 'MAJIN_V4_MAX_MODEL_ROUNDS / MAJIN_V4_MAX_TOOL_CALLS on the host.',
           ),
@@ -1049,6 +1148,10 @@ export function createAgent({
 
       goal.complete();
       goals.save(goal);
+      if (conversation.supervisorCheckpoint) {
+        conversation.supervisorCheckpoint = null;
+        conversations.save(conversation);
+      }
 
       /**
        * EXTRACT SKILL → STORE.
@@ -1148,6 +1251,14 @@ export function createAgent({
         record('task.result', { action: 'learning:failure-error', result: 'failure', errorCls: 'UNKNOWN', taskId: String(err?.message || err).slice(0, 60) });
       }
 
+      if (!aborted) {
+        conversation.supervisorCheckpoint = checkpointForFailure({
+          objective: goal.objective, goalId: goal.id, trace: turn?.trace || [],
+          code: err?.cls || err?.code || 'UNKNOWN',
+        });
+        conversations.save(conversation);
+        emit('recovery', { action: 'checkpoint_saved', failureClass: conversation.supervisorCheckpoint.failureClass, attempt: 1, advice: [] });
+      }
       const note = aborted
         ? t('msg.cancelled')
         : t('agent.failed', { reason });
@@ -1311,7 +1422,7 @@ export function createAgent({
     finally {
       endTurn(key, controller);
       const goal = goalId ? goals.get(goalId) : null;
-      if (goal && goal.state !== STATES.WAITING_FOR_APPROVAL) await closeFor(hostSessionId('v4', { goal }), { wait: true, headlessOnly: true });
+      if (goal && goal.state !== STATES.WAITING_FOR_APPROVAL) await closeFor(hostSessionId('v4', { goal, conversationId }), { wait: true, headlessOnly: true });
     }
   }
 

@@ -7,8 +7,8 @@
     "jitterMs": 15,
     "seed": 62
   },
-  "speedupMedian": 6.58,
-  "serialMedianMs": 474,
+  "speedupMedian": 6.57,
+  "serialMedianMs": 473,
   "parallelMedianMs": 72,
   "theoreticalMax": 6.25,
   "overlap": {
@@ -35,7 +35,7 @@
     {
       "kind": "serial",
       "rep": 0,
-      "wallMs": 474,
+      "wallMs": 473,
       "okCount": 8,
       "failCount": 0,
       "overlap": 0,
@@ -55,7 +55,7 @@
     {
       "kind": "serial",
       "rep": 1,
-      "wallMs": 489,
+      "wallMs": 488,
       "okCount": 8,
       "failCount": 0,
       "overlap": 0,

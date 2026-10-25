@@ -208,6 +208,14 @@ export function cdpRpc(ws) {
 /* --------------------------- browser session ----------------------------- */
 
 const sess = new Map(); // sessionId (agent session) → live browser, own window + own profile
+const launches = new Map(); // single-flight per session: concurrent calls share one startup
+const failedLaunches = new Map(); // short circuit breaker: stop Chrome spawn storms
+const BROWSER_START_COOLDOWN_MS = 60_000;
+export function browserLaunchState(session) {
+  const key = String(session || 'default');
+  return { active: sess.has(key), launching: launches.has(key),
+    retryAfterMs: Math.max(0, (failedLaunches.get(key) || 0) - Date.now()) };
+}
 
 function profileFor(session) {
   return path.join(dirs.cache, 'browser-' + String(session).replace(/[^\w.-]/g, '_'));
@@ -224,7 +232,9 @@ async function httpJson(url, { timeoutMs = 5000, signal = null } = {}) {
 // Browser-owned sign-in/sync pages may appear after startup. A new page alone
 // is not evidence that the user's click opened it: require the current opener.
 export function isChildTarget(target, browser) {
-  return target.type === 'page' && target.openerId === browser.targetId && target.targetId !== browser.targetId && !target.attached && !browser.knownTabs.has(target.targetId);
+  return target.type === 'page' && target.url !== 'about:blank'
+    && target.openerId === browser.targetId && target.targetId !== browser.targetId
+    && !target.attached && !browser.knownTabs.has(target.targetId);
 }
 
 export async function waitForNavigation(navigation, read, { attempts = 150, delayMs = 100, wait = ms => new Promise(resolve => setTimeout(resolve, ms)), signal = null } = {}) {
@@ -243,16 +253,54 @@ export async function waitForNavigation(navigation, read, { attempts = 150, dela
 
 /** Launch (or reuse) the browser for ONE agent session and navigate it. */
 export async function openFor({ session, url = null, headless = true, cfgGet = null, pool = null, exe = null, wsFactory = null, signal = null } = {}) {
+  session = String(session || 'default');
+  const pending = launches.get(session);
+  if (pending) {
+    const browser = await pending;
+    if (url && url !== 'about:blank' && await browser.eval('location.href', { signal }) !== String(url))
+      await browser.goto(url, { signal });
+    return browser;
+  }
+  const delay = (failedLaunches.get(session) || 0) - Date.now();
+  if (delay > 0 && !sess.has(session))
+    throw new Error('Chrome startup failed recently; retry in ' + Math.ceil(delay / 1000)
+      + ' seconds. MAJIN will not spawn more Chrome windows during the cooldown.');
+  const launching = (async () => {
+    try {
+      const browser = await openForOnce({ session, url, headless, cfgGet, pool, exe, wsFactory, signal });
+      failedLaunches.delete(session);
+      return browser;
+    } catch (error) {
+      if (!signal?.aborted) failedLaunches.set(session, Date.now() + BROWSER_START_COOLDOWN_MS);
+      throw error;
+    }
+  })();
+  launches.set(session, launching);
+  try { return await launching; }
+  finally { if (launches.get(session) === launching) launches.delete(session); }
+}
+
+async function openForOnce({ session, url = null, headless = true, cfgGet = null, pool = null, exe = null, wsFactory = null, signal = null } = {}) {
   signal?.throwIfAborted();
   session = String(session || 'default');
   const existing = sess.get(session);
   if (existing) {
-    /* reuse = obtain the handle, NOT navigate. Ever since f022c04 this
-       defaulted to 'about:blank' and raced the user's page away — tool
-       chaining (open → read → fill → click) lived or died on eval-vs-navigate
-       luck. Pinned by test: no goto here without an explicit url. */
-    if (url && url !== 'about:blank') await existing.goto(url, {signal});
-    return existing;
+    // Reuse the live tab, including a partially completed application form.
+    // Reopening an identical URL destroys field contents and causes repeated
+    // loading spinners on client-rendered sites such as Teamtailor.
+    try {
+      const current = await existing.eval('location.href', { signal });
+      if (url && url !== 'about:blank' && current !== String(url)) {
+        await existing.goto(url, { signal });
+      }
+      return existing;
+    } catch (error) {
+      signal?.throwIfAborted();
+      // Chrome may have been closed manually; never keep an unusable CDP
+      // handle in the pool. A new browser is legitimate only after this.
+      try { await existing.close?.(); } catch { /* already closed */ }
+      sess.delete(session);
+    }
   }
   const thePool = pool || createBrowserPool({ max: Number(cfgGet?.('browser.maxInstances')) || 3 });
   const slot = await thePool.claim(session);
@@ -266,13 +314,28 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
   signal?.addEventListener('abort',onAbort,{once:true});
   try {
   signal?.throwIfAborted();
-  const bin = exe || findBrowser();
+  // If the preferred browser is blocked by policy, try a DISTINCT installed
+  // browser (Edge vs Chrome) once. Never retry the same visible executable
+  // repeatedly: this caused the reported blank-tab storms.
+  const candidates = exe ? [exe] : browserCandidates().filter(candidate => fs.existsSync(candidate));
+  // Different install locations of msedge.exe are not separate fallbacks.
+  const families = new Set();
+  const binaries = candidates.filter(candidate => {
+    const family = path.basename(candidate).toLowerCase();
+    if (families.has(family)) return false;
+    families.add(family);
+    return true;
+  });
+  const bin = binaries[0] || null;
   if (!bin) {
     thePool.release(session);
     throw new Error('found no Chrome or Edge on this machine — install one of them and MAJIN can drive it');
   }
-  const profile = profileFor(`${session}-s${slot}`);
-  fs.mkdirSync(profile, { recursive: true });
+  // Every fresh launch needs an exclusive profile. Reusing a stale directory
+  // owned by a zombie Chrome triggers Windows single-instance handoff instead
+  // of starting a new CDP port. In-memory sessions still reuse their tab.
+  fs.mkdirSync(dirs.cache, { recursive: true });
+  let profile = fs.mkdtempSync(path.join(dirs.cache, 'browser-run-'));
   let version = null;
   let lastErr = null;
   /* Del 5ABE flake-hardening (CI evidence: runs 39261715303 + 39265517682):
@@ -280,18 +343,30 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
      Edge for ~10 s — one shot of luck was the difference between green and a
      red suite. Bounded retry: attempt 1 as before, attempt 2 with a fresh
      random port + longer deadline. Honest: the final error text is unchanged. */
-  for (let attempt = 1; attempt <= 2 && !version; attempt++) {
+  // A visible Chrome launch with an already-running user-data-dir can hand
+  // the command to that process and exit. Retrying spawns blank tabs in the
+  // existing window instead of creating a CDP endpoint. Only headless CI
+  // launches may take the second bounded startup attempt.
+  const maxLaunchAttempts = binaries.length > 1 ? 2 : headless === false ? 1 : 2;
+  for (let attempt = 1; attempt <= maxLaunchAttempts && !version; attempt++) {
     signal?.throwIfAborted();
     if (proc && !proc.killed) { try { proc.kill(); } catch { /* gone */ } }
+    if (attempt > 1) {
+      // Never attach a second browser binary to the prior process's profile.
+      profile = fs.mkdtempSync(path.join(dirs.cache, 'browser-run-'));
+    }
     const port = randomPort();
     const args = [
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${profile}`,
-      '--no-first-run', '--no-default-browser-check', '--disable-popup-blocking',
+      '--no-first-run', '--no-default-browser-check', '--disable-session-crashed-bubble',
     ];
     if (headless !== false) args.push('--headless=new');
-    args.push('about:blank');
-    proc = spawn(bin, args, { detached: false, stdio: 'ignore' });
+    // Never pass about:blank as a launch URL. With a locked/active Chrome
+    // profile Windows forwards that argument to the existing instance,
+    // creating one extra blank tab on EVERY failed attempt.
+    const launchBin = binaries[Math.min(attempt - 1, binaries.length - 1)];
+    proc = spawn(launchBin, args, { detached: false, stdio: 'ignore' });
     let spawnError = null;
     proc.once('error',error=>{spawnError=error;});
     const base = `http://127.0.0.1:${port}`;
@@ -299,6 +374,20 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     while (Date.now() < deadline) {
       signal?.throwIfAborted();
       if(spawnError)throw spawnError;
+      // Existing Chrome may accept the launch request and immediately exit
+      // the child (single-instance handoff). Do not launch again against the
+      // same profile; the original instance is not ours to kill.
+      if (proc.exitCode !== null || proc.signalCode !== null) {
+        // A real process failure is evidence to try the OTHER browser, not
+        // evidence that the user needs to open Chrome or enter CLI flags.
+        if (attempt < maxLaunchAttempts) break;
+        /* An instant exit is a PROFILE fact, not a form fact: another Chrome or
+           Edge is holding this profile, so the new process hands the launch to
+           it and dies. Saying "both strategies failed" leaves the user staring
+           at the page wondering what they did wrong. Name the lock. */
+        throw new Error('Chrome/Edge exited before its debug port came up — the browser profile may already be in use by another Chrome or Edge window. '
+          + 'Close the other browser window (or let MAJIN use its own profile) and run it again; nothing about your page or form was wrong.');
+      }
       try {
         version = await httpJson(`${base}/json/version`, { timeoutMs: 1200, signal });
         break;
@@ -310,12 +399,15 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     }
     if (version?.webSocketDebuggerUrl) break;
     version = null;
-    if (attempt < 2) await new Promise((r) => setTimeout(r, 1500));
+    if (attempt < maxLaunchAttempts) await new Promise((r) => setTimeout(r, 1500));
   }
   if (!version || !version.webSocketDebuggerUrl) {
     try { if (proc && !proc.killed) proc.kill(); } catch { /* gone */ }
     thePool.release(session);
-    throw new Error('the browser debug port never came up — the browser may be blocked by a policy on this machine');
+    /* Same honesty for the slow path: an unreachable port has two real causes,
+       and blaming only a policy hides the common one. */
+    throw new Error('the browser debug port never came up. Either a policy on this machine blocks it, or the profile may already be in use by another Chrome/Edge window. '
+      + 'Close other browser windows and try again — this is not a problem with the page or the form.');
   }
     signal?.throwIfAborted();
     ws = await wsConnect(version.webSocketDebuggerUrl, wsFactory, signal);
@@ -329,8 +421,10 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
   // about:blank tab/window. A fallback target is needed for locked-down
   // policies and mocked browsers without an initial page.
   const { targetInfos: initialTabs = [] } = await cdp('Target.getTargets');
+  // Reuse an existing populated page in this agent-owned profile first.
+  const existingPage = initialTabs.find(t => t.type === 'page' && t.url && t.url !== 'about:blank' && !t.attached);
   const startupTab = initialTabs.find(t => t.type === 'page' && t.url === 'about:blank' && !t.attached);
-  const targetId = startupTab?.targetId ||
+  const targetId = existingPage?.targetId || startupTab?.targetId ||
     (await cdp('Target.createTarget', { url: 'about:blank' })).targetId;
   const { sessionId } = await cdp('Target.attachToTarget', { targetId, flatten: true });
   // Keep the original tab IDs pinned so followNewTarget never switches back
@@ -347,6 +441,12 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
       try { await cdp('Browser.close', {}, { timeoutMs: 3000 }); } catch { /* already gone */ }
       try { ws.close(); } catch { /* gone */ }
       try { if (!proc.killed) proc.kill(); } catch { /* gone */ }
+      // Best effort, after owned process has exited. Never delete a live or
+      // unrelated Chrome profile just to make cleanup appear successful.
+      try {
+        if (proc.exitCode !== null || proc.signalCode !== null)
+          fs.rmSync(profile, { recursive: true, force: true });
+      } catch { /* Windows may still hold files */ }
     })();
     return b.closed;
   };
@@ -371,9 +471,22 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     if (r.exceptionDetails) throw new Error(String(r.exceptionDetails.text || 'evaluate threw'));
     return r.result ? r.result.value : undefined;
   };
-  await b.goto(url, {signal});
+  // Attaching without a URL must not erase an in-progress application.
+  if (url && url !== 'about:blank') {
+    const currentUrl = await b.eval('location.href', {signal}).catch(() => null);
+    if (currentUrl !== String(url)) await b.goto(url, {signal});
+  }
   signal?.throwIfAborted();
   sess.set(session, b);
+  // Chrome may restore surplus blank tabs in MAJIN's dedicated profile.
+  // Never close populated pages, or the active target.
+  try {
+    const { targetInfos: tabs = [] } = await cdp('Target.getTargets');
+    for (const tab of tabs) {
+      if (tab.type !== 'page' || tab.targetId === b.targetId || tab.url !== 'about:blank') continue;
+      await cdp('Target.closeTarget', { targetId: tab.targetId }, { timeoutMs: 1500 });
+    }
+  } catch { /* best-effort cleanup */ }
 
   /* smarttab: a click that opens a NEW page target must not strand the agent
      in the old, empty tab. 1.5 s window to catch the spawn, then re-attach. */
@@ -407,6 +520,10 @@ export async function openFor({ session, url = null, headless = true, cfgGet = n
     try { if (proc && !proc.killed) proc.kill(); } catch { /* gone */ }
     thePool.release(session);
     sess.delete(session);
+    try {
+      if (proc?.exitCode !== null || proc?.signalCode !== null)
+        fs.rmSync(profile, { recursive: true, force: true });
+    } catch { /* Windows process still owns files */ }
     throw e;
   } finally { signal?.removeEventListener('abort',onAbort); }
 }
@@ -431,5 +548,7 @@ export function closeFor(session, { wait = false, headlessOnly = false } = {}) {
 export function _resetBrowser() {
   for (const b of sess.values()) { try { b.close?.(); } catch { /* gone */ } }
   sess.clear();
+  launches.clear();
+  failedLaunches.clear();
   journal.bySession.clear();
 }

@@ -83,6 +83,7 @@ const els = {
   newChat: $('#new-chat'),
   logout: $('#logout'),
   historyBtn: $('#history-btn'),
+  historySettings: $('#history-settings'),
   history: $('#history'),
   historyBackdrop: $('#history-backdrop'),
   historyClose: $('#history-close'),
@@ -506,7 +507,10 @@ function renderPreview(name) {
   frame.src = url;
 
   node.append(head, frame);
-  els.thread.append(node);
+  // Keep preview inside the same expandable work row while the task runs.
+  // Only actual verified HTML artifacts are previewable here; do not invent
+  // screenshots or expose hidden model reasoning.
+  (progressCard && !progressTerminal ? progressCard.detail : els.thread).append(node);
   setHero(false);
   scrollDown(true);
 }
@@ -567,13 +571,23 @@ function endAssistantBubble(meta = '') {
 }
 
 function toolLabel(name) {
-  return {
-    workspace_write: t('tool.workspace_write'),
-    workspace_read: t('tool.workspace_read'),
-    workspace_list: t('tool.workspace_list'),
-    memory_save: t('tool.memory_save'),
-    memory_search: t('tool.memory_search'),
-  }[name] || name;
+  /* The copy lives in strings.js, the repository's declared localization
+     resource. Keeping it inline here made the app the one shipped module the
+     i18n gate flags, and the words were then invisible to review as product
+     language. Same labels, same fallback — only the location changed. */
+  const label = t(`tool.${name}`);
+  if (label !== `tool.${name}`) return label;
+  return String(name || t('tool.working')).replaceAll('_', ' ');
+}
+
+/** Only show a short, non-secret hint from the server's redacted input. */
+function activityHint(input) {
+  if (!input || typeof input !== 'object') return '';
+  const value = input.fileName || input.filename || input.name || input.url || input.path;
+  if (typeof value !== 'string') return '';
+  const clean = value.replace(/[\r\n\t]/g, ' ').trim();
+  if (!clean || /(?:token|secret|password|api[_-]?key|bearer)=/i.test(clean)) return '';
+  return clean.length > 72 ? clean.slice(0, 69) + '…' : clean;
 }
 
 function addToolCard(name, input) {
@@ -605,10 +619,54 @@ function addToolCard(name, input) {
 }
 
 const activeTools = new Map();
+let progressCard = null;
+let progressStart = 0;
+let progressCount = 0;
+let progressErrors = 0;
+let progressTerminal = false;
+
+/** One live row per turn; precise receipts remain in the expandable details. */
+function updateProgress(label, { failed = false, complete = false, step = false } = {}) {
+  if (progressTerminal && !complete) return;
+  if (!progressCard) {
+    progressCard = addToolCard('Arbetar', {});
+    progressCard.node.open = false;
+    progressCard.node.classList.add('tool-progress');
+    progressCard.node.querySelector('.tool-name').textContent = 'Arbetar';
+    progressCard.detail.textContent = '';
+    progressStart = Date.now();
+    progressCount = 0;
+    progressErrors = 0;
+  }
+  if (failed) progressErrors += 1;
+  if (step) progressCount += 1;
+  const elapsed = Math.max(0, Math.round((Date.now() - progressStart) / 1000));
+  progressCard.node.dataset.state = complete ? (progressErrors ? 'failed' : 'verified') : 'running';
+  const activity = progressCard.node.querySelector('.tool-name');
+  if (activity) activity.textContent = complete ? 'Arbetade' : (label || 'Arbetar');
+  progressCard.sum.textContent = complete
+    ? `${elapsed} s · ${progressCount} steg${progressErrors ? ` · ${progressErrors} fel` : ''}`
+    : `${progressCount} steg · detaljer`;
+  if (label && step) {
+    const line = document.createElement('div');
+    line.textContent = `${progressCount}. ${label}${failed ? t('progress.failedSuffix') : ''}`;
+    progressCard.detail.append(line);
+  }
+  scrollDown();
+}
+
+function finishProgress() {
+  if (progressCard) updateProgress('', { complete: true });
+  progressCard = null;
+  activeTools.clear();
+}
+
 
 /** Rebuild the transcript from server messages and their durable tool receipts. */
 function renderConversationMessages(conversation) {
   activeTools.clear();
+  progressCard = null;
+  progressTerminal = true;
   const goals = new Map((conversation.goals || []).map((goal) => [goal.id, goal]));
   const rendered = new Set();
   for (const message of conversation.messages) {
@@ -621,18 +679,27 @@ function renderConversationMessages(conversation) {
         if (receipt.at && message.at && receipt.at > message.at) continue;
         rendered.add(receipt.id);
         const name = receipt.action.slice(5);
-        const card = addToolCard(name, {});
-        const ok = receipt.result === 'success';
-        card.node.dataset.state = ok ? (receipt.verified ? 'verified' : 'ok') : 'failed';
-        card.node.dataset.historical = 'true';
-        card.node.dataset.receiptId = receipt.id;
-        card.node.querySelector('.tool-name').textContent = `${toolLabel(name)} · ${t('history.recorded')}`;
-        card.sum.textContent = receipt.target || name;
-        const status = ok ? (receipt.verified ? t('history.previouslyVerified') : t('state.done')) : t('state.failed');
-        card.detail.textContent = `${status} · ${t('state.receipt')} ${receipt.id}`
-          + (receipt.at ? ` · ${receipt.at}` : '')
+        // Group all receipts under one collapsed work row, not one chat block
+        // per tool. The exact receipt IDs and failure classes are still visible.
+        if (!goal._receiptCard) {
+          goal._receiptCard = addToolCard('Arbetade', {});
+          goal._receiptCard.node.open = false;
+          goal._receiptCard.node.dataset.historical = 'true';
+          goal._receiptCard.node.dataset.state = 'verified';
+          goal._receiptCard.node.querySelector('.tool-name').textContent = 'Arbetade';
+          goal._receiptCard.detail.textContent = '';
+          goal._receiptCount = 0;
+        }
+        const card = goal._receiptCard;
+        if (receipt.result !== 'success') card.node.dataset.state = 'failed';
+        goal._receiptCount += 1;
+        card.sum.textContent = t('goal.receipts', { n: goal._receiptCount });
+        const line = document.createElement('div');
+        line.textContent = `${toolLabel(name)} · ${receipt.result === 'success' ? (receipt.verified ? t('history.previouslyVerified') : t('state.done')) : t('state.failed')}`
+          + (receipt.target ? ` · ${receipt.target}` : '')
           + (receipt.errorClass ? ` · ${receipt.errorClass}` : '')
-          + `\n${t('history.receiptTime')}`;
+          + ` · ${t('state.receipt')} ${receipt.id}`;
+        card.detail.append(line);
       }
     }
     addMessage(message.role === 'user' ? 'user' : 'assistant', message.content, {
@@ -1107,6 +1174,11 @@ async function tryReattach({ attempts = 3 } = {}) {
 }
 
 function startStream(mode = 'thinking') {
+  progressCard = null;
+  progressStart = 0;
+  progressCount = 0;
+  progressErrors = 0;
+  progressTerminal = false;
   state.streaming = true;
   els.send.hidden = true;
   els.stop.hidden = false;
@@ -1115,10 +1187,13 @@ function startStream(mode = 'thinking') {
   spirit.set(mode);
   els.hint.textContent = '';
   state.controller = new AbortController();
+  updateProgress(t('progress.thinking'));
   return state.controller;
 }
 
 function finishStream() {
+  progressTerminal = true;
+  finishProgress();
   state.streaming = false;
   state.controller = null;
   els.stop.hidden = true;
@@ -1199,9 +1274,9 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'state':
-      if (data.state === 'thinking') spirit.set('thinking');
-      else if (data.state === 'working') spirit.set('working');
-      else if (data.state === 'verifying') spirit.set('working');
+      if (data.state === 'thinking') { spirit.set('thinking'); updateProgress(t('progress.thinkingNext')); }
+      else if (data.state === 'working') { spirit.set('working'); if (!progressCount) updateProgress(t('progress.preparing')); }
+      else if (data.state === 'verifying') { spirit.set('working'); updateProgress('Verifierar resultatet…'); }
       break;
 
     case 'delta':
@@ -1210,8 +1285,8 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'tool_start': {
-      const card = addToolCard(data.name, data.input);
-      activeTools.set(data.id || data.name, card);
+      const hint = activityHint(data.input);
+      updateProgress(`${toolLabel(data.name)}${hint ? ' · ' + hint : '…'}`, { step: true });
       spirit.set('working');
       break;
     }
@@ -1222,13 +1297,15 @@ function viewIntents(event, data, intents) {
         const fileName = String(data.summary).split(' · ')[0].trim();
         if (fileName) offerPreview(fileName);
       }
-      const card = activeTools.get(data.id || data.name) || [...activeTools.values()].pop();
-      if (card) {
-        card.node.dataset.state = data.ok ? (data.verified ? 'verified' : 'ok') : 'failed';
-        card.sum.textContent = data.summary || '';
-        card.detail.textContent = data.ok
-          ? `${data.verified ? t('state.verified') : t('state.done')}${data.receiptId ? ` · ${t('state.receipt')} ${data.receiptId}` : ''}`
-          : t('state.failed');
+      if (progressCard) {
+        const activity = progressCard.node.querySelector('.tool-name');
+        if (activity) activity.textContent = `${data.ok ? t('progress.done') : t('progress.problem')} · ${toolLabel(data.name)}`;
+        const line = document.createElement('div');
+        line.textContent = `${toolLabel(data.name)} · ${data.ok ? (data.verified ? t('state.verified') : t('state.done')) : t('state.failed')}`
+          + (data.summary ? ` · ${data.summary}` : '')
+          + (data.receiptId ? ` · ${t('state.receipt')} ${data.receiptId}` : '');
+        progressCard.detail.append(line);
+        if (!data.ok) progressErrors += 1;
       }
       spirit.set('working');
       break;
@@ -1242,6 +1319,7 @@ function viewIntents(event, data, intents) {
     case 'recovery': {
       // The host is retrying on its own; say so instead of looking frozen.
       spirit.set('working');
+      updateProgress(t('progress.recovering'));
       const reason = data.failureClass || t('common.unknownError');
       if (data.action && data.action !== 'none') {
         els.hint.textContent = t('state.recovering', { attempt: data.attempt || 1, reason });
@@ -1267,11 +1345,15 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'error':
+      progressTerminal = true;
+      finishProgress();
       addMessage('assistant', data.message || t('msg.genericError'), { error: true, meta: timeLabel() });
       spirit.set('error');
       break;
 
     case 'cancelled':
+      progressTerminal = true;
+      finishProgress();
       addMessage('assistant', t('msg.cancelledShort'), { error: true, meta: timeLabel() });
       break;
 
@@ -1295,6 +1377,8 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'done': {
+      progressTerminal = true;
+      finishProgress();
       const text = endAssistantBubble(timeLabel());
       const finalText = text || '';
       if (data.status === 'already_handled' && !finalText) {
@@ -2090,6 +2174,12 @@ function bindEvents() {
     els.input.focus();
   });
   els.historyBtn.addEventListener('click', openHistory);
+  els.historySettings.addEventListener('click', () => {
+    closeHistory();
+    openSheet();
+    els.approvalAuto.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    els.approvalAuto.focus({ preventScroll: true });
+  });
   els.historyClose.addEventListener('click', closeHistory);
   els.historyBackdrop.addEventListener('click', closeHistory);
   els.historyTabActive.addEventListener('click', () => {

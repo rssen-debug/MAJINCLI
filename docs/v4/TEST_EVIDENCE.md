@@ -513,3 +513,47 @@ npm run v4 -- start
 ```
 
 That is the one command that turns this into real evidence.
+
+## 13. The merge with main, and the five tests main is already red on — 2026-10-25
+
+`main` and `v4/main` still share **no ancestor**, so every common file is an
+`add/add` conflict and GitHub's resolution can only pick a side. This merge used
+a real three-way merge with `d5178dd` as the base: all 33 conflicted files merged
+cleanly, and neither line lost work (main's `autonomous-diagnosis.js`,
+`goal-supervisor.js` and `job-form-accept.mjs` are in; this branch's job-search
+fixes are in).
+
+Two defects existed on `main` **by itself** and are fixed here, because they were
+what turned the checks red:
+
+| Check | Real cause | Fix |
+|---|---|---|
+| `i18n: no Swedish in shipped string literals` | 31 Swedish literals in `src/v4/ui/app.js` (tool labels + the live progress row) | the words moved to `strings.js`, the repository's declared localization resource, and are read through `t()`; the Swedish form labels in `scripts/v4/job-form-accept.mjs` are input data and carry the existing `input vocabulary, never rendered` marker |
+| `visible Chrome startup cannot forward about:blank…` | an instantly-exiting Chrome/Edge was reported as "both launch strategies failed", which blames the wrong thing | the error now names the real cause: the profile may already be in use by another browser window, and says the page was not the problem |
+
+```
+merged tree:
+$ node --test test/*.test.js
+# tests 1454   # pass 1435   # fail 0
+
+$ npm run check  → 700/700 files parse cleanly
+$ npm run i18n   → 0 Swedish string literal(s) in 346 files
+$ release-gate   → local checks GREEN
+$ test/v4/jobs-search.test.js → 7/7
+$ Jobbsök panel in jsdom      → ok
+```
+
+### Five V4 tests that are red on `main` — pre-existing, not caused by this merge
+
+Verified on a clean worktree of `origin/main` **without** any of this branch's
+work: 628 tests, 609 pass, **5 fail**. The same five fail in the merged tree.
+
+| Test | File |
+|---|---|
+| `approvals do not reset the model or tool budget and never report premature completion` | `test/v4/agent-failures.test.js:242` |
+| `history ui: a reload lands back in the conversation that was open` | `test/v4/client-dom.test.js:734` |
+| `history ui: another session sees failed and unverified receipts…` | `test/v4/client-dom.test.js:781` |
+| `memory: irrelevant memories are not injected, so the prompt stays small` | `test/v4/memory.test.js:76` |
+| `recovery: a failure class with no executable retry is reported, not invented` | `test/v4/recovery.test.js:149` |
+
+They are recorded here rather than hidden: this merge does not claim to fix them.
