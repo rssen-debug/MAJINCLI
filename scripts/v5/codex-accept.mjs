@@ -5,6 +5,7 @@ import readline from 'node:readline';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { VERSION } from '../../src/core/version.js';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const output = path.resolve(process.argv[2] || path.join(os.tmpdir(), `majin-codex-accept-${randomUUID()}`));
@@ -36,7 +37,7 @@ async function call(name, args = {}) {
   return response.structuredContent;
 }
 try {
-  report.initialize = await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'majin-codex-accept', version: '0.1.0' } });
+  report.initialize = await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'majin-codex-accept', version: VERSION } });
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   report.tools = (await request('tools/list', {})).tools.map(t => t.name);
   await call('driver_status'); report.protocolVerified = true;

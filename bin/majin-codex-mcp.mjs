@@ -2,6 +2,7 @@
 import path from 'node:path';
 import readline from 'node:readline';
 import { CodexDriver } from '../src/v5/codex-driver.js';
+import { VERSION } from '../src/core/version.js';
 
 console.log = (...args) => console.error(...args);
 const args = process.argv.slice(2);
@@ -32,7 +33,7 @@ async function dispatch(msg) {
     if (method === 'initialize') {
       initialized = true;
       result = { protocolVersion: ['2024-11-05','2025-03-26','2025-06-18'].includes(params.protocolVersion) ? params.protocolVersion : '2025-06-18',
-        serverInfo: { name: 'majin-codex-driver', version: '0.1.0' }, capabilities: { tools: {} } };
+        serverInfo: { name: 'majin-codex-driver', version: VERSION }, capabilities: { tools: {} } };
     } else if (!initialized) throw new Error('initialize required');
     else if (method === 'ping') result = {};
     else if (method === 'tools/list') result = { tools: [...driver.list(), ...controls] };

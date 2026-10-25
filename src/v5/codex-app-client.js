@@ -5,6 +5,7 @@ import { EventEmitter } from 'node:events';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { VERSION } from '../core/version.js';
 
 const mcpFile = fileURLToPath(new URL('../../bin/majin-codex-mcp.mjs', import.meta.url));
 
@@ -55,7 +56,7 @@ export class CodexAppClient extends EventEmitter {
         if (p) { this.pending.delete(message.id); clearTimeout(p.timer); message.error ? p.reject(new Error(message.error.message)) : p.resolve(message.result); }
       }
     });
-    this.initialize = await this.request('initialize', { clientInfo: { name: 'majin_v5', title: 'MAJIN V5 CODEX DRIVER', version: '0.1.0' } });
+    this.initialize = await this.request('initialize', { clientInfo: { name: 'majin_v5', title: 'MAJIN V5 CODEX DRIVER', version: VERSION } });
     this.write({ method: 'initialized', params: {} });
     this.connected = true;
     return this.initialize;

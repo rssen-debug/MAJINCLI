@@ -66,8 +66,8 @@ test('schema: gyllene mängder mot det verkliga bältet (d04-sanning nu ägd)', 
   }
 });
 
-test('schema: the integrated tool layer has 147 unique tools, including control and power surfaces', () => {
-  assert.equal(ALL_TOOLS.length, 147, 'registered tool count changed; review additions or removals deliberately');
+test('schema: the integrated tool layer has 149 unique tools, including control and power surfaces', () => {
+  assert.equal(ALL_TOOLS.length, 149, 'registered tool count changed; review additions or removals deliberately');
   assert.equal(new Set(ALL_TOOLS.map((tool) => tool.name)).size, ALL_TOOLS.length, 'each tool name has one implementation');
   const groups = [...new Set(ALL_TOOLS.map((t) => t.group))];
   assert.ok(groups.includes('control'), 'control-gruppen måste vara shipped');
