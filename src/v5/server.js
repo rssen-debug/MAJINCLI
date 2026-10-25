@@ -220,7 +220,7 @@ export function createV5Server({
       // Resume goal from checkpoint
       if (method === 'POST' && pathname === '/api/v5/goal/resume') {
         const body = await readJsonBody(req);
-        const resumed = providerAgent.getGoalState() ? await providerAgent.execute({ goalText: body.goalText || 'Continue from the saved observations; inspect uncertain operations before acting.', criteria: body.criteria || [], resume: true }) : await architect.resumeGoal(body);
+        const resumed = providerAgent.getGoalState() ? await providerAgent.execute({ goalText: body.goalText, criteria: body.criteria, resume: true }) : await architect.resumeGoal(body);
         return sendJson(res, 200, { ok: true, goal: resumed });
       }
 

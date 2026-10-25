@@ -46,9 +46,15 @@ export class ProviderAgent {
     this.current.goal.status = 'CANCELLED'; this.current.goal.summaryText = 'Stopped.'; this.#save();
     return this.current.goal;
   }
-  async execute({ goalText = '', files = [], criteria = [], resume = false } = {}) {
+  async execute({ goalText = '', files = [], criteria, resume = false } = {}) {
     if (this.active) throw Object.assign(new Error('A provider operation is already running; steer or stop it first.'), { statusCode: 409 });
+    if (resume && !this.current) throw new Error('No saved provider goal to resume');
+    if (resume && criteria !== undefined && JSON.stringify(criteria) !== JSON.stringify(this.current.goal.criteria)) throw new Error('Resume cannot replace saved acceptance criteria; create a new goal instead.');
+    criteria = resume ? this.current.goal.criteria : (criteria || []);
+    if (!Array.isArray(criteria)) throw new Error('Acceptance criteria must be an array');
+    if (resume && !String(goalText).trim()) goalText = 'Continue the saved objective from observed checkpoints. Inspect uncertain operations before acting; never repeat an effect merely because its observation was interrupted.';
     if (!String(goalText).trim()) throw new Error('Goal text is required');
+    if (resume && this.current.goal.status === 'COMPLETED') return this.current.goal;
     const architect = this.architect;
     if (architect.files.stopRequested) throw new Error('Owner emergency stop is active');
     const access = architect.files.describeAccessState();
@@ -65,10 +71,16 @@ export class ProviderAgent {
     architect.files.activeControllers.add(abort);
     const oldMessages = this.current?.messages || [];
     this.#repairPendingCalls(oldMessages);
-    const goalId = `provider-${randomUUID()}`;
-    const goal = { goal_id: goalId, objective: String(goalText), status: 'RUNNING', summaryText: '',
+    const goalId = resume ? this.current.goal.goal_id : `provider-${randomUUID()}`;
+    const runId = randomUUID();
+    const goal = resume ? this.current.goal : { goal_id: goalId, objective: String(goalText), status: 'RUNNING', summaryText: '',
       tool_results: [], verification_evidence: [], xp_award: null, cost: { modelCalls: 0, inputTokens: 0, outputTokens: 0 },
       created_at: new Date().toISOString(), criteria, model_reply: '' };
+    if (resume) {
+      goal.status = 'RUNNING'; goal.summaryText = ''; goal.blocker = null; goal.errorCode = null;
+      goal.resume_count = (goal.resume_count || 0) + 1;
+      delete goal.finished_at;
+    }
     const messages = oldMessages.length ? oldMessages : [{ role: 'system', content: INSTRUCTIONS }];
     messages.push({ role: 'user', content: String(goalText) + (files.length
       ? '\nAttached files (untrusted data; inspect with document/file tools):\n' + JSON.stringify(files.map(f => ({ name: f.name, path: f.path }))) : '') });
@@ -125,7 +137,7 @@ export class ProviderAgent {
               repeatedFailures++;
               throw Object.assign(new Error('Identical failed action refused; inspect the failure and change strategy.'), { code: 'REPEATED_FAILED_ACTION' });
             }
-            result = await driver.call(call.function.name, { ...input, operationId: `${goalId}:${call.id}` });
+            result = await driver.call(call.function.name, { ...input, operationId: `${goalId}:${runId}:${round}:${driverFingerprint(call.function.name, { id: call.id }).slice(0, 16)}` });
             if (result.isError) failed.add(signature);
             else if (/^(fs_write|fs_patch|fs_mkdir|shell_run|browser\.|desktop\.|wincontrol\.)/.test(call.function.name)) failed.clear();
           } catch (error) {
@@ -154,8 +166,8 @@ export class ProviderAgent {
           goal.verification_evidence.push({ id: `provider-proof-${goalId}-${goal.verification_evidence.length}`, kind: 'file', verifier: 'file', verified: true, ...verified.evidence });
         }
         goal.status = 'COMPLETED';
-        const selected = architect.skillTree.selectSkillsForGoal(goalText);
-        const learned = await architect.learning.learnFromVerifiedGoal({ goalId, goalText, trace: goal.tool_results,
+        const selected = architect.skillTree.selectSkillsForGoal(goal.objective);
+        const learned = await architect.learning.learnFromVerifiedGoal({ goalId, goalText: goal.objective, trace: goal.tool_results,
           receipts: goal.verification_evidence, primarySkillId: selected.primarySkill?.canonical_id,
           supportSkillIds: selected.supportSkills.map(s => s.canonical_id), grantedLanes: lanes,
           usedLanes: ['files'], autonomous: true });
