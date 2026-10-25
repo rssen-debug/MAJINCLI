@@ -127,6 +127,7 @@ export function createDotMatrixCanvas(canvas, { reducedMotion = false } = {}) {
   let current = computeDotMatrixState();
   let rafId = null;
   let phase = 0;
+  let lastFrame = 0;
 
   function draw() {
     if (!ctx) return;
@@ -154,6 +155,18 @@ export function createDotMatrixCanvas(canvas, { reducedMotion = false } = {}) {
     ctx.arc(cx, cy, w * 0.46, 0, Math.PI * 2);
     ctx.fill();
 
+    // A calm living emerald halo; working uses cyan/violet/amber without claiming earned XP.
+    ctx.save();
+    const pulse = reducedMotion ? 0.55 : (0.55 + 0.25 * Math.sin(phase * 1.4));
+    ctx.strokeStyle = current.activityState === 'working' ? `rgba(82, 185, 255, ${pulse})` : `rgba(27, 233, 164, ${pulse})`;
+    ctx.shadowColor = current.activityState === 'working' ? '#60bbff' : '#0de6a2';
+    ctx.shadowBlur = 14;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(cx, cy, w * 0.265, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
     // Cohesive Level 99 emerald ring
     if (current.cohesiveMastery99) {
       ctx.save();
@@ -168,7 +181,7 @@ export function createDotMatrixCanvas(canvas, { reducedMotion = false } = {}) {
     // Distinct outer activity ring when working (never lights green XP dots)
     if (current.activityState === 'working') {
       ctx.save();
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)';
+      ctx.strokeStyle = reducedMotion ? 'rgba(56, 189, 248, 0.8)' : `hsla(${205 + Math.sin(phase * 0.5) * 57}, 90%, 68%, 0.83)`;
       ctx.lineWidth = 2;
       const startAngle = reducedMotion ? 0 : phase;
       ctx.beginPath();
@@ -181,7 +194,9 @@ export function createDotMatrixCanvas(canvas, { reducedMotion = false } = {}) {
     const radii = [w * 0.29, w * 0.35, w * 0.41];
     for (const dot of current.dots) {
       const idxInRing = (dot.index - 1) % 33;
-      const angle = -Math.PI / 2 + (idxInRing / 33) * Math.PI * 2;
+      // All green dots are earned, never simulated; only their positions move.
+      const orbit = reducedMotion ? 0 : phase * (dot.ring % 2 === 0 ? 0.14 : -0.1);
+      const angle = -Math.PI / 2 + (idxInRing / 33) * Math.PI * 2 + orbit;
       const r = radii[dot.ring];
       const x = cx + Math.cos(angle) * r;
       const y = cy + Math.sin(angle) * r;
@@ -203,17 +218,16 @@ export function createDotMatrixCanvas(canvas, { reducedMotion = false } = {}) {
     }
   }
 
-  function tick() {
-    phase += 0.04;
+  function tick(timestamp = 0) {
+    if (lastFrame && timestamp && timestamp - lastFrame < 32) { rafId = raf(tick); return; }
+    lastFrame = timestamp || 0;
+    phase += current.activityState === 'working' ? 0.075 : 0.022;
     draw();
-    if (!reducedMotion && current.activityState === 'working') {
-      rafId = raf(tick);
-    } else {
-      rafId = null;
-    }
+    rafId = reducedMotion ? null : raf(tick);
   }
 
   draw();
+  if (!reducedMotion) rafId = raf(tick);
 
   return {
     update(nextSpec = {}) {
@@ -223,7 +237,7 @@ export function createDotMatrixCanvas(canvas, { reducedMotion = false } = {}) {
         `${current.displayName}: ${current.numericLabel} (${current.statusTextLabel})`,
       );
       draw();
-      if (!reducedMotion && current.activityState === 'working' && !rafId) {
+      if (!reducedMotion && !rafId) {
         rafId = raf(tick);
       }
       return current;
