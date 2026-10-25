@@ -11,11 +11,12 @@ const mcpFile = fileURLToPath(new URL('../../bin/majin-codex-mcp.mjs', import.me
 
 // Official local Codex app-server protocol. No Majin provider or token-file access.
 export class CodexAppClient extends EventEmitter {
-  constructor({ workspace, stateDir, codexCommand = 'codex', desktop = false, browser = false, processAccess = false } = {}) {
+  constructor({ workspace, stateDir, codexCommand = 'codex', desktop = false, browser = false, processAccess = false, browserWriteOrigins = [] } = {}) {
     super();
     this.workspace = path.resolve(workspace); this.stateDir = path.resolve(stateDir);
     this.command = codexCommand; this.desktop = desktop; this.browser = browser;
     this.processAccess = processAccess;
+    this.browserWriteOrigins = browserWriteOrigins;
     this.pending = new Map(); this.serverRequests = new Set(); this.sequence = 0;
     this.threadId = null; this.turnId = null; this.child = null; this.connected = false;
     this.inferenceVerified = false;
@@ -25,7 +26,8 @@ export class CodexAppClient extends EventEmitter {
   async start() {
     if (this.child) throw new Error('App server already started');
     const mcpArgs = [mcpFile, '--workspace', this.workspace, '--state-dir', path.join(this.stateDir, 'operations'),
-      ...(this.desktop ? ['--desktop'] : []), ...(this.browser ? ['--browser'] : []), ...(this.processAccess ? ['--process'] : [])];
+      ...(this.desktop ? ['--desktop'] : []), ...(this.browser ? ['--browser'] : []), ...(this.processAccess ? ['--process'] : []),
+      ...this.browserWriteOrigins.flatMap(origin => ['--submit-origin', origin])];
     const config = { 'mcp_servers.majin.command': process.execPath, 'mcp_servers.majin.args': mcpArgs,
       'mcp_servers.majin.required': true, 'mcp_servers.majin.enabled': true };
     const args = ['app-server', '--listen', 'stdio://', ...Object.entries(config).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`])];

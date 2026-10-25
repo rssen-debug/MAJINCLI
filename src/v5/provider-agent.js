@@ -9,8 +9,9 @@ const INSTRUCTIONS = `You are MAJIN, the owner's general-purpose agent. The sele
 
 /** One selected provider drives the same deterministic tool runtime as Codex. */
 export class ProviderAgent {
-  constructor({ architect, maxRounds = 32 } = {}) {
+  constructor({ architect, maxRounds = 32, browserWriteOrigins = [] } = {}) {
     this.architect = architect; this.maxRounds = maxRounds; this.active = null;
+    this.browserWriteOrigins = [...browserWriteOrigins];
     this.dir = path.join(architect.dataDir, 'provider-agent'); fs.mkdirSync(this.dir, { recursive: true });
     this.currentFile = path.join(this.dir, 'current.json');
     this.current = fs.existsSync(this.currentFile) ? JSON.parse(fs.readFileSync(this.currentFile, 'utf8')) : null;
@@ -56,6 +57,7 @@ export class ProviderAgent {
       allowedFolders: access.grantedFolders, grantedLanes: lanes, controller: 'provider',
       browser: lanes.includes('browser'), desktop: lanes.includes('desktop') || lanes.includes('computer'),
       processAccess: lanes.includes('shell') || lanes.includes('shelltools'),
+      browserWriteOrigins: this.browserWriteOrigins,
       timeoutMs: 120000,
     });
     const abort = new AbortController();

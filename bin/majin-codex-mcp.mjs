@@ -9,7 +9,8 @@ const args = process.argv.slice(2);
 const arg = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
 const workspace = path.resolve(arg('--workspace', process.cwd()));
 const driver = new CodexDriver({ workspace, stateDir: path.resolve(arg('--state-dir', path.join(workspace, '.codex-driver'))),
-  desktop: args.includes('--desktop'), browser: args.includes('--browser'), processAccess: args.includes('--process'), skillsDir: arg('--skills-dir', undefined) });
+  desktop: args.includes('--desktop'), browser: args.includes('--browser'), processAccess: args.includes('--process'), skillsDir: arg('--skills-dir', undefined),
+  browserWriteOrigins: args.flatMap((value, index) => value === '--submit-origin' ? [args[index + 1]] : []) });
 await driver.start();
 const write = message => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\n');
 let initialized = false;

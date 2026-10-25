@@ -5,6 +5,8 @@ Repo philosophy measured: ONE runtime dep today (chokidar). Every new dep must e
 
 ## Adopted
 
+ADOPTED: `pdf2json` @4.1.0 — Apache-2.0, pure JavaScript, zero transitive dependencies. V5 document extraction falls back to its PDF.js-based font/ToUnicode decoder after the simple extractor reports partial/no-text output. A real owner-authorized CV exposed incorrect custom-font bytes. This deliberate ninth production dependency replaces the need for a Python/Poppler installation in installed V5 builds; the dependency ceiling is raised from eight to nine for this reviewed adoption. V5's packaged Node runtime satisfies the engine requirement (Node >=22.23.2); legacy synchronous extractors remain unchanged.
+
 ADOPTED: `playwright-core` @1.64.1 — Apache-2.0. V5's deterministic browser tools require the client in installed production builds. Move the existing optional client to an exact production pin; desktop staging omits optional and dev packages. This package installs no browser binary: tools discover the owner's installed Chromium/Edge and report a concrete missing-browser blocker. Reuses the existing browser adapter instead of adding another automation stack.
 
 | Component | Choice | License | Why this one (evidence 2026-10-21) | Footprint |
