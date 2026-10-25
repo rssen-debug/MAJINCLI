@@ -190,6 +190,30 @@ test('failure: model-round exhaustion reports actual rounds and tool calls, not 
   }
 });
 
+test('failure: successful but unverified search results do not extend the bounded round budget', async () => {
+  const search = {
+    name: 'search', description: 'returns unverified candidate data', tier: 'read',
+    inputSchema: z.object({ query: z.string() }),
+    outputSchema: z.object({ results: z.array(z.string()) }),
+    execute: async ({ query }) => ({ results: [query] }),
+  };
+  const modelScript = ['first', 'second', 'third'].map((query, index) => ({
+    toolCalls: [{ id: `search_success_${index}`, name: 'search', argsJson: JSON.stringify({ query }) }],
+  }));
+  const h = build({ toolDef: search, modelScript });
+  h.config.limits.maxModelRounds = 2;
+  h.config.limits.maxToolCallsPerTurn = 10;
+  try {
+    const res = await h.agent.runTurn({ text: 'search and verify candidates' });
+    assert.equal(res.status, 'failed');
+    const assistant = [...h.conversations.get(res.conversationId).messages].reverse().find((m) => m.role === 'assistant');
+    assert.match(assistant.content, /2\/2 model rounds and 2\/10 tool calls/);
+    assert.match(assistant.content, /Review the tool trace/);
+  } finally {
+    h.cleanup();
+  }
+});
+
 test('failure: strict policy pauses for approval and executes nothing until answered', async () => {
   const h = build({
     policy: 'strict',

@@ -912,7 +912,7 @@ export function createAgent({
     let finishedReasoning = false;
     let automaticReplanUsed = false;
     const failedToolCounts = new Map();
-    // A bounded continuation is permitted only after a successful tool outcome.
+    // A bounded continuation is permitted only after an independently verified successful outcome.
     // A stuck agent must not burn unlimited provider calls on repeated failures.
     let roundLimit = config.limits.maxModelRounds;
     let toolLimit = config.limits.maxToolCallsPerTurn;
