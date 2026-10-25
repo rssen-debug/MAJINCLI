@@ -27,12 +27,18 @@ const FORBIDDEN_CODE_PATTERNS = [
   { id: 'UNSAFE_EVAL', re: /\b(?:eval\s*\(|exec\s*\(\s*input|child_process\.execSync\s*\(\s*`)/i },
 ];
 
-/** Check if python3 is available on this host. */
-export function detectPythonBinary() {
+/** Resolve the interpreter, not a Windows launcher that depends on the user's environment. */
+export function detectPythonBinary({ spawn = spawnSync, exists = fs.existsSync } = {}) {
   for (const bin of ['python3', 'python']) {
     try {
-      const res = spawnSync(bin, ['--version'], { encoding: 'utf8', timeout: 3000, windowsHide: true });
-      if (res.status === 0) return bin;
+      const res = spawn(bin, ['-c', 'import json, sys; print(json.dumps(sys.executable))'], {
+        encoding: 'utf8', timeout: 3000, windowsHide: true,
+      });
+      if (res.status !== 0 || res.error) continue;
+      const executable = JSON.parse(String(res.stdout || '').trim());
+      if (typeof executable === 'string' && path.isAbsolute(executable) && exists(executable)) {
+        return executable;
+      }
     } catch { /* try next */ }
   }
   return null;
@@ -357,6 +363,8 @@ export class SkillBuilder {
       TMP: workDir,
       PYTHONIOENCODING: 'utf-8',
       LC_ALL: 'C.UTF-8',
+      ...(process.platform === 'win32' && process.env.SystemRoot
+        ? { SystemRoot: process.env.SystemRoot } : {}),
     };
 
     const proc = spawnSync(bin, [scriptPath], {
