@@ -61,6 +61,37 @@ test('actual HTTP transport advertises tools, executes a failure/recovery loop a
   assert.equal(responsesInput([assistant])[0].arguments, '{"path":"result.txt"}');
   assert.deepEqual(toAnthropic([assistant]).messages[0].content[0].input, { path: 'result.txt' });
 });
+test('progressive tool exposure caps the advertised catalog and activates discovered bridge tools on demand', async t => {
+  const { requests, server } = await setup(t, (_body, count) => {
+    if (count === 1) return tool('search-hash', 'tools_search', { query: 're.hash', limit: 5 });
+    if (count === 2) return tool('hash-before-activation', 're_hash', { path: 'sample.bin' });
+    if (count === 3) return tool('activate-hash', 'tools_activate', { names: ['re.hash'] });
+    if (count === 4) return tool('hash-sample', 're_hash', { path: 'sample.bin' });
+    if (count === 5) return tool('write-proof', 'fs_write', { path: 'exposure-proof.txt', content: 'verified exposure' });
+    return { role: 'assistant', content: 'Activated and used re.hash, then created the proof.' };
+  });
+  fs.writeFileSync(path.join(server.architect.workspaceDir, 'sample.bin'), 'progressive exposure sample');
+  server.architect.files.enableOwnerMode({ folders: [server.architect.workspaceDir] });
+
+  const result = await server.providerAgent.execute({
+    goalText: 'Hash sample.bin and create exposure-proof.txt',
+    criteria: [{ kind: 'file', path: 'exposure-proof.txt', contains: 'verified exposure' }],
+  });
+
+  assert.equal(result.status, 'COMPLETED', JSON.stringify(result));
+  assert.equal(requests.length, 6);
+  const advertised = (request) => new Set(request.body.tools.map((item) => item.function?.name || item.name));
+  assert.ok(requests[0].body.tools.length <= 64, `first catalog must be capped, got ${requests[0].body.tools.length}`);
+  assert.ok(advertised(requests[0]).has('tools_search'));
+  assert.ok(advertised(requests[0]).has('tools_activate'));
+  assert.ok(advertised(requests[0]).has('fs_write'));
+  assert.equal(advertised(requests[0]).has('re_hash'), false, 'non-core bridge tools start hidden in a large catalog');
+  assert.ok(advertised(requests[3]).has('re_hash'), 'activation must expose re_hash in the next model round');
+  assert.deepEqual(result.toolExposure.activated, ['re_hash']);
+  assert.ok(result.tool_results.some((row) => row.tool === 're_hash' && !row.ok && row.errorCode === 'TOOL_NOT_ACTIVATED'));
+  assert.ok(result.tool_results.some((row) => row.tool === 're_hash' && row.ok), 'same args may run after activation');
+});
+
 test('a successful write and model claim do not fabricate task verification or XP', async t => {
   const { server } = await setup(t, (_body, count) => count === 1
     ? tool('write', 'fs_write', { path: 'unverified.txt', content: 'anything' })

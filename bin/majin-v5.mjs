@@ -21,6 +21,7 @@ let [command = 'serve', ...args] = process.argv.slice(2);
 const KNOWN_COMMANDS = new Set([
   'serve', 'start', 'tools', 'status', 'url', 'window', 'ui', 'app', 'version', '--version', '-v',
   'help', '--help', '-h', 'run', 'goal', 'ask', 'resume', 'grants', 'access', 'doctor', 'logs', 'history',
+  'model', 'models', 'provider',
 ]);
 
 // A non-technical owner should be able to write a bare instruction:
@@ -123,6 +124,60 @@ function runtimeFromLanes(lanes) {
   };
 }
 
+const DEFAULT_API_KEY_ENV = Object.freeze({
+  'opencode-go': 'OPENCODE_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  xai: 'XAI_API_KEY',
+  deepseek: 'DEEPSEEK_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+  ollama: '',
+});
+
+function apiKeyFromCli(providerId) {
+  if (args.includes('--api-key')) {
+    throw new Error('Refusing --api-key in argv (shell history/process lists leak secrets). Use --api-key-env <VAR> or --api-key-stdin.');
+  }
+  if (args.includes('--api-key-stdin')) {
+    return fs.readFileSync(0, 'utf8').trim();
+  }
+  if (args.includes('--no-key')) return null;
+  const envName = readArg('--api-key-env', DEFAULT_API_KEY_ENV[providerId] || 'MAJIN_PROVIDER_API_KEY');
+  if (!envName) return null;
+  const value = String(process.env[envName] || '').trim();
+  if (!value && providerId !== 'ollama') {
+    throw new Error(`Environment variable ${envName} is not set. Export it first, use --api-key-env <VAR>, --api-key-stdin, or --no-key to save only endpoint/provider settings.`);
+  }
+  return value || null;
+}
+
+function printProviderState(state, extra = null) {
+  if (args.includes('--json')) {
+    console.log(JSON.stringify(extra ? { ...extra, provider: state } : state, null, 2));
+    return;
+  }
+  console.log(`Active model: ${state.canonicalSelection || '(none selected)'}`);
+  console.log(`Saved config: ${state.savedConfig ? 'yes' : 'no'} · connection verified: ${state.connectionVerified ? 'yes' : 'no'}`);
+  if (state.lastVerifiedAt) console.log(`Last verified: ${state.lastVerifiedAt}${state.lastVerifiedModelId ? ` (${state.lastVerifiedModelId})` : ''}`);
+  const providers = Object.values(state.providers || {});
+  if (providers.length) {
+    console.log('Configured providers:');
+    for (const provider of providers) {
+      const models = provider.discoveredModels || [];
+      console.log(`  ${provider.id} — ${provider.label || provider.id} · key: ${provider.hasKey ? (provider.maskedKey || 'saved') : 'missing'} · verified: ${provider.connectionVerified ? 'yes' : 'no'} · models: ${models.length}${models.length ? ` (${models.slice(0, 8).join(', ')}${models.length > 8 ? ', …' : ''})` : ''}`);
+      if (provider.lastError) console.log(`    last error: ${provider.lastError.code || 'PROVIDER_ERROR'} — ${provider.lastError.message || ''}`);
+    }
+  } else {
+    console.log('Configured providers: (none)');
+  }
+  const presets = state.presets || [];
+  if (presets.length) console.log(`Available presets: ${presets.map((preset) => preset.id).join(', ')}`);
+  if (extra?.discovery) {
+    if (extra.discovery.ok) console.log(`Discovery: ok (${extra.discovery.models?.length || 0} models)`);
+    else console.log(`Discovery: failed (${extra.discovery.error?.code || 'PROVIDER_ERROR'} — ${extra.discovery.error?.message || 'unknown error'})`);
+  }
+}
+
 function printAccess(access, ownerView = null) {
   if (args.includes('--json')) {
     console.log(JSON.stringify(ownerView ? { ...access, ownerMode: ownerView } : access, null, 2));
@@ -191,7 +246,7 @@ async function executeGoalCommand({ resume = false } = {}) {
   const hasActiveModel = Boolean(srv.architect.providers.state.activeModelId);
   const needsProvider = resume ? Boolean(srv.providerAgent.getGoalState()) : true;
   if (needsProvider && !hasActiveModel && !args.includes('--allow-deterministic')) {
-    throw new Error('No active provider model is configured for free-form V5 goals. Configure/select a model in the V5 UI, run `majin-v5 doctor` to inspect provider state, or use `majin-v5 tools call <tool>` for deterministic tool execution. Pass --allow-deterministic only for scripted GrandArchitect flows.');
+    throw new Error('No active provider model is configured for free-form V5 goals. Configure one with `majin-v5 model configure --provider opencode-go --api-key-env OPENCODE_API_KEY --discover`, inspect state with `majin-v5 doctor`, or use `majin-v5 tools call <tool>` for deterministic tool execution. Pass --allow-deterministic only for scripted GrandArchitect flows.');
   }
 
   // Explicit lanes/folders on a local owner CLI run are a persistent owner
@@ -287,6 +342,14 @@ async function main() {
         '  grants grant [--all-lanes|--lanes <csv>] [--folder <dir>] [--json]',
         '                                                            Persist owner lanes/folders (default: all user-level lanes)',
         '  grants revoke [--lanes <csv>] [--folder <dir>] [--json]   Revoke selected lanes/folders, or all grants',
+        '  model [status] [--json]                                   Show secret-safe provider/model state',
+        '  model configure [--provider <id>] [--base-url <url>] [--kind openai|anthropic] [--label <name>]',
+        '                  [--api-key-env <VAR>|--api-key-stdin|--no-key] [--discover] [--model <id>] [--json]',
+        '                                                            Save provider config; raw --api-key in argv is refused',
+        '  model list [--provider <id>] [--refresh] [--json]         List presets/configured providers and discovered models',
+        '  model select <model-id> [--provider <id>] [--require-discovered] [--json]',
+        '                                                            Select the active model (explicit CLI IDs may be manual fallbacks)',
+        '  model verify [--provider <id>] [--json]                   Refresh the live provider catalog and verification state',
         '  tools [--search <text>] [--json] [--all-lanes] [--lanes <csv>] [--data-dir <dir>]',
         '                                                            List/search the full V5 tool universe and unavailable reasons',
         '  tools call <tool_name> [--args <json>|--args-file <file>] [--operation-id <id>] [--timeout-ms <n>] [--all-lanes|--lanes <csv>] [--json]',
@@ -347,6 +410,95 @@ async function main() {
       return;
     }
     throw new Error(`Unknown grants command: ${subcommand} (use show, grant, or revoke)`);
+  }
+
+  if (['model', 'models', 'provider'].includes(command)) {
+    const dataDir = readArg('--data-dir', resolveV5DataDir());
+    const valueFlags = new Set([
+      '--data-dir', '--provider', '--base-url', '--kind', '--label', '--api-key', '--api-key-env', '--model', '--timeout-ms',
+    ]);
+    const positionals = positionalsFor(valueFlags);
+    const subcommand = positionals[0] || 'status';
+    const providers = new ProviderManager({ dataDir });
+
+    if (subcommand === 'status' || subcommand === 'show') {
+      printProviderState(providers.getPublicState());
+      return;
+    }
+
+    if (subcommand === 'list') {
+      const providerId = readArg('--provider', providers.state.activeProvider || 'opencode-go');
+      let discovery = null;
+      if (args.includes('--refresh')) {
+        discovery = await providers.discoverCatalog(providerId, { timeoutMs: Number(readArg('--timeout-ms', '8000')) || 8000 });
+        if (!discovery.ok) {
+          printProviderState(providers.getPublicState(), { discovery });
+          process.exitCode = 1;
+          return;
+        }
+      }
+      printProviderState(providers.getPublicState(), discovery ? { discovery } : null);
+      return;
+    }
+
+    if (subcommand === 'verify') {
+      const providerId = readArg('--provider', providers.state.activeProvider || 'opencode-go');
+      const discovery = await providers.discoverCatalog(providerId, { timeoutMs: Number(readArg('--timeout-ms', '8000')) || 8000 });
+      printProviderState(providers.getPublicState(), { discovery });
+      if (!discovery.ok) process.exitCode = 1;
+      return;
+    }
+
+    if (subcommand === 'configure' || subcommand === 'connect') {
+      const providerId = String(readArg('--provider', 'opencode-go')).trim().toLowerCase();
+      const apiKey = apiKeyFromCli(providerId);
+      const discover = args.includes('--discover') || args.includes('--refresh');
+      const timeoutMs = Number(readArg('--timeout-ms', '8000')) || 8000;
+      const configured = await providers.configureProvider({
+        providerId,
+        apiKey,
+        baseUrl: readArg('--base-url', '') || null,
+        kind: readArg('--kind', '') || null,
+        label: readArg('--label', '') || null,
+        discover,
+        timeoutMs,
+      });
+      const discovery = discover ? configured : null;
+      if (discovery && !discovery.ok) {
+        printProviderState(providers.getPublicState(), { discovery });
+        process.exitCode = 1;
+        return;
+      }
+      const modelId = readArg('--model', positionals[1] || '');
+      if (modelId) {
+        providers.selectModel({
+          providerId,
+          modelId,
+          allowManualFallback: !args.includes('--require-discovered'),
+        });
+      }
+      printProviderState(providers.getPublicState(), discovery ? { discovery } : null);
+      return;
+    }
+
+    if (subcommand === 'select' || subcommand === 'use') {
+      const providerId = readArg('--provider', providers.state.activeProvider || 'opencode-go');
+      const modelId = readArg('--model', positionals[1] || '');
+      if (!modelId) throw new Error('Model ID is required. Example: majin-v5 model select deepseek-v4-pro');
+      providers.selectModel({
+        providerId,
+        modelId,
+        allowManualFallback: !args.includes('--require-discovered'),
+      });
+      const state = providers.getPublicState();
+      printProviderState(state);
+      if (!args.includes('--json') && state.manualModelFallback) {
+        console.log('Note: this exact model ID was accepted as an explicit manual fallback; run `majin-v5 model verify` or a goal to prove the live connection.');
+      }
+      return;
+    }
+
+    throw new Error(`Unknown model command: ${subcommand} (use status, list, configure, select, or verify)`);
   }
 
   if (command === 'doctor') {
@@ -414,7 +566,7 @@ async function main() {
       console.log(`Tool parity: ${report.toolParity.available}/${report.toolParity.universe} (${report.toolParity.coveragePercent}%) · driver tools: ${report.driverTools}`);
       console.log(`Browser available: ${report.checks.browserAvailable ? 'yes' : 'no'} · interactive Windows: ${report.checks.interactiveWindows ? 'yes' : 'no'}`);
       if (!access.grantedLanes.length) console.log('Next: run `majin-v5 grants grant --all-lanes` or add --all-lanes to a run command to enable the full owner tool surface.');
-      if (!report.checks.providerConfigured) console.log('Next: configure/select a provider model in the V5 UI before expecting free-form model-driven goals; deterministic tools still work via `tools call`.');
+      if (!report.checks.providerConfigured) console.log('Next: run `majin-v5 model configure --provider opencode-go --api-key-env OPENCODE_API_KEY --discover`, then `majin-v5 model select <model-id>`; deterministic tools still work via `tools call`.');
     }
     return;
   }
