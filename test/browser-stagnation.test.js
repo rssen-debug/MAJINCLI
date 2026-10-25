@@ -91,3 +91,11 @@ test('large form changes in middle and inserted fields are detected',()=>{
  noteBrowserAction(s);assert.equal(observeBrowserPage(s,{...state,controls:[...controls.slice(0,25),{selector:'#extra',label:'Extra'},...controls.slice(25)]}).stagnant,false);
  clearBrowserStagnation(s);
 });
+
+test('malformed session identifiers never invoke implicit conversion',()=>{
+ const hostile={toString(){throw Error('unsafe conversion')}};
+ observeBrowserPage(hostile,page());
+ noteBrowserAction(hostile);
+ assert.equal(observeBrowserPage(hostile,page()).unchangedActions,1);
+ clearBrowserStagnation(hostile);
+});
