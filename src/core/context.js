@@ -142,11 +142,14 @@ export function appendHistory(sessionId, msg, dir = dirs.sessions) {
 export function readHistory(sessionId, cap = 400, dir = dirs.sessions) {
   try {
     const lines = fs.readFileSync(historyPath(sessionId, dir), 'utf8').trim().split('\n').filter(Boolean);
-    return lines.slice(-cap).map((l) => {
+    // V1: a truncated/corrupt JSONL line must not become a null message.
+    // Preserve the existing tail cap and ordering, then discard invalid records.
+    return lines.slice(-cap).flatMap((l) => {
       try {
-        return JSON.parse(l);
+        const parsed = JSON.parse(l);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? [parsed] : [];
       } catch {
-        return null;
+        return [];
       }
     });
   } catch {
