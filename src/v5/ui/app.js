@@ -423,6 +423,9 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
         await refreshState();
       } catch (error) {
         if (run !== generation) return;
+        // Restore failed text without replacing a newer draft.
+        if (wishInput && !wishInput.value.trim()) wishInput.value = goalText;
+        if (!pendingFiles.length && submittedFiles.length) pendingFiles = submittedFiles.slice();
         setActivityStatus('idle', t5('statusFailed'), { verifiedLearning: false });
         appendMessage('agent', error.message, t5('ux11'));
       } finally {
