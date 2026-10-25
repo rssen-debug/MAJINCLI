@@ -37,10 +37,11 @@
         <img src="/logo.png" alt="MAJIN logga" class="v5-logo-img" id="majin-logo-img" width="96" height="96" />
       </button>
 
+      <h1 class="v5-hero-title">Vad vill du få gjort?</h1><p class="v5-hero-caption">En önskan. Nästa steg är Majins.</p>
       <div class="v5-xp-bar-wrap" aria-live="polite">
-        <p class="v5-xp-ticker" id="xp-ticker">Formulär 18/99 · +24 XP</p>
-        <p class="v5-skill-meta" id="skill-numeric-status">Nivå 18 av 99 · VERIFIED · Sammanvägd vy av aktiva skills</p>
-        <div class="v5-dot-strip" id="dot-segments" role="progressbar" aria-valuemin="1" aria-valuemax="99" aria-valuenow="18" aria-label="99-prickars nivåindikator"></div>
+        <p class="v5-xp-ticker" id="xp-ticker">Dina skills växer med varje verifierat resultat</p>
+        <p class="v5-skill-meta" id="skill-numeric-status">Nivå 1 av 99 · Otränad</p>
+        <div class="v5-dot-strip" id="dot-segments" role="progressbar" aria-valuemin="1" aria-valuemax="99" aria-valuenow="1" aria-label="99-prickars nivåindikator"></div>
       </div>
 
       <div class="v5-live-status" id="live-status-row" role="status" aria-live="polite" data-state="idle">
@@ -72,10 +73,11 @@
       <label class="sr-only" for="wish-input">Beskriv ditt mål till MAJIN</label>
       <textarea id="wish-input" rows="1" placeholder="Beskriv ditt mål, släpp ditt CV eller tryck på mikrofonen…" enterkeyhint="send" maxlength="10000"></textarea>
 
-      <button type="submit" class="v5-send-btn" id="send-btn" aria-label="Utför mål" disabled>
+      <button type="submit" class="v5-send-btn" id="send-btn" aria-label="Skicka mål" title="Skicka (Enter). Ny rad med Shift+Enter." disabled>
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
           <path d="M12 19V5M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
+        <span>Skicka</span>
       </button>
       <button type="button" class="v5-stop-btn" id="stop-btn" aria-label="Stoppa pågående arbete" hidden>
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -120,15 +122,18 @@
       </select>
     </div>
     <div class="v5-form-group">
-      <label for="provider-key-input">API-nyckel (lagras säkert 0600)</label>
+      <label for="provider-key-input">API-nyckel</label>
       <input type="password" id="provider-key-input" placeholder="oc_sk_… eller sk-…" autocomplete="off" />
     </div>
     <div class="v5-form-group">
-      <label for="model-id-input">Modell-ID (från katalog eller exakt manuellt ID)</label>
+      <button type="button" class="v5-pill" id="provider-discover-btn">Hämta tillgängliga modeller</button>
+      <label for="model-select">Välj modell</label>
+      <select id="model-select"><option value="">Anslut för att hämta modeller</option></select>
+      <label for="model-id-input">Exakt modell-ID (valfritt manuellt val)</label>
       <input type="text" id="model-id-input" placeholder="t.ex. glm-5.3-flash eller grok-4.7" autocomplete="off" />
     </div>
     <div class="v5-drawer-actions">
-      <button type="button" class="v5-btn-primary" id="provider-save-btn">Spara & Anslut</button>
+      <button type="button" class="v5-btn-primary" id="provider-save-btn">Använd modell</button>
     </div>
   </aside>
 
