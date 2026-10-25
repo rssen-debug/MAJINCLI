@@ -3,7 +3,7 @@
   "product": "MAJIN V5 — GRAND ARCHITECT",
   "version": "5.0.0",
   "gitSha": "e59794988795b97b40ec5a90d71e8d1fa71f0d69",
-  "packageTreeSha256": "dad025fb941b2c8ebdbd6de7cf7b74a8953e6a09a21576a88c86aae624746af1",
+  "packageTreeSha256": "0a41347d12c42cbe6cfc2c9914a0115f237e3243eb9d395846fb87d74220dc1a",
   "windowsInstallerScript": "scripts/v5/install-majin-v5-windows.ps1",
   "filesCount": 45,
   "files": {
@@ -172,8 +172,8 @@
       "sha256": "57f3e35ce4ef601da92a22fbec5a8e823d90ac4db3a9de6cb7d02332db23214b"
     },
     "docs/v5/HANDOVER.md": {
-      "bytes": 11467,
-      "sha256": "b89b412182da211320400312895c42a6dca508132ff6c175098e16fb5c7012e3"
+      "bytes": 14672,
+      "sha256": "adb950c45de3d87233a0bf78491fb41b605194a505bbcffec8e18b2e5e6e842f"
     },
     "assets/majin.png": {
       "bytes": 50304,
