@@ -70,6 +70,10 @@
     "v4:approvals": "node ./scripts/v4/approvals.mjs",
     "v5:serve": "node ./bin/majin-v5.mjs serve",
     "v5:test": "node --test test/v5/*.test.js",
+    "v5:train:jobs": "node ./scripts/v5/train-job-search.mjs",
+    "v5:benchmark:jobs": "node ./scripts/v5/benchmark-job-batch.mjs",
+    "v5:deepseek:jobs": "node ./scripts/v5/run-deepseek-jobs.mjs",
+    "v5:replay:500": "node ./scripts/v5/replay-live-500.mjs",
     "v5:accept": "node ./scripts/v5/accept.mjs",
     "v5:build": "node ./scripts/v5/build-package.mjs",
     "v5:screenshots": "node ./scripts/v5/render-screenshots.mjs"

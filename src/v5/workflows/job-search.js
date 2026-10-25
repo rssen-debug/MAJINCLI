@@ -25,15 +25,16 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  LANGUAGE_SKILL_IDS,
+  canonicalSkillName,
+  extractSkillMentions,
+  isKnownSkillId,
+  normalizeJobAd,
+  skillSatisfied,
+} from '../job-ad.js';
 
 export const JOB_WORKFLOW_SCHEMA = 'majin.v5.job-workflow/v1';
-
-const KNOWN_SKILLS = [
-  'javascript', 'typescript', 'node.js', 'nodejs', 'python', 'react', 'vue', 'sql',
-  'postgresql', 'docker', 'kubernetes', 'aws', 'azure', 'gcp', 'git', 'linux',
-  'windows', 'c#', '.net', 'java', 'go', 'golang', 'rust', 'graphql', 'rest',
-  'playwright', 'testing', 'ci/cd', 'scrum', 'agile', 'figma', 'css', 'html',
-];
 
 const KNOWN_LANGUAGES = [
   { id: 'svenska', patterns: /\b(svenska|swedish|modersmål)\b/i }, // input vocabulary, never rendered
@@ -69,10 +70,7 @@ export function extractVerifiableCvFacts(cvText = '', { cvFileName = 'cv.pdf', c
     }
   }
 
-  const skills = KNOWN_SKILLS.filter((s) => {
-    const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`(?:^|[^\\w])${escaped}(?:$|[^\\w])`, 'i').test(lower);
-  }).map((s) => (s === 'nodejs' ? 'node.js' : s));
+  const skills = extractSkillMentions(raw).filter((id) => !LANGUAGE_SKILL_IDS.includes(id));
 
   const languages = KNOWN_LANGUAGES.filter((l) => l.patterns.test(raw)).map((l) => l.id);
   const locations = KNOWN_LOCATIONS.filter((loc) => lower.includes(loc));
@@ -141,8 +139,9 @@ export function deduplicateJobListings(ads = []) {
   const unique = [];
   const duplicates = [];
 
-  for (const ad of Array.isArray(ads) ? ads : []) {
-    if (!ad || typeof ad !== 'object') continue;
+  for (const rawAd of Array.isArray(ads) ? ads : []) {
+    if (!rawAd || typeof rawAd !== 'object') continue;
+    const ad = normalizeJobAd(rawAd);
     const employer = String(ad.employer || ad.company || 'unknown').toLowerCase().trim().replace(/\s+/g, ' ');
     const title = String(ad.title || '').toLowerCase().trim().replace(/\s+/g, ' ');
     const location = String(ad.location || ad.city || '').toLowerCase().trim().replace(/\s+/g, ' ');
@@ -208,9 +207,14 @@ function normalizeLocationToken(loc = '') {
  * 5 & 6. Evaluate match with motivation, strictly separating REQUIRED (`krav`)
  * from PREFERRED (`meriterande`) skills!
  */
-export function evaluateJobMatch(ad, cvFacts, criteria = {}) {
-  const cvSkills = new Set((cvFacts?.skills || []).map((s) => s.toLowerCase()));
-  const cvLangs = new Set((cvFacts?.languages || []).map((l) => l.toLowerCase()));
+export function evaluateJobMatch(inputAd, cvFacts, criteria = {}) {
+  const ad = normalizeJobAd(inputAd);
+  const available = new Set([
+    ...(cvFacts?.skills || []),
+    ...(cvFacts?.languages || []),
+    ...(cvFacts?.roles || []),
+    ...(cvFacts?.certificates || []),
+  ].map(canonicalSkillName).filter(Boolean));
 
   // Geography filter (supports mid-flight steering like "bara jobb i Köpenhamn")
   const requiredLocations = (Array.isArray(criteria.locations) ? criteria.locations : [])
@@ -220,6 +224,7 @@ export function evaluateJobMatch(ad, cvFacts, criteria = {}) {
   if (requiredLocations.length > 0 && !requiredLocations.includes(adLocation)) {
     return {
       matched: false,
+      needsReview: false,
       score: 0,
       reason: `Location "${ad.location || 'unknown'}" does not match filter (${requiredLocations.join(', ')})`,
       requiredSkills: { met: [], missing: [] },
@@ -228,40 +233,56 @@ export function evaluateJobMatch(ad, cvFacts, criteria = {}) {
     };
   }
 
-  // Separate required vs preferred qualifications
-  const requiredList = Array.isArray(ad.requiredSkills)
-    ? ad.requiredSkills.map((s) => String(s).toLowerCase())
-    : [];
-  const preferredList = Array.isArray(ad.preferredSkills)
-    ? ad.preferredSkills.map((s) => String(s).toLowerCase())
-    : [];
+  // Separate required vs preferred qualifications and fold documented aliases.
+  const requiredList = [...new Set((ad.requiredSkills || []).map(canonicalSkillName).filter(Boolean))];
+  const preferredList = [...new Set((ad.preferredSkills || []).map(canonicalSkillName).filter(Boolean))];
 
-  const requiredMet = requiredList.filter((req) => cvSkills.has(req) || cvLangs.has(req));
-  const requiredMissing = requiredList.filter((req) => !cvSkills.has(req) && !cvLangs.has(req));
+  const requiredMet = requiredList.filter((req) => skillSatisfied(req, available));
+  const requiredMissing = requiredList.filter((req) => !skillSatisfied(req, available));
+  const preferredMet = preferredList.filter((pref) => skillSatisfied(pref, available));
+  const preferredMissing = preferredList.filter((pref) => !skillSatisfied(pref, available));
 
-  const preferredMet = preferredList.filter((pref) => cvSkills.has(pref) || cvLangs.has(pref));
-  const preferredMissing = preferredList.filter((pref) => !cvSkills.has(pref) && !cvLangs.has(pref));
+  // Empty API tags mean "not supplied", not "everybody qualifies". An LLM may
+  // structure the description later, but an unreviewed ad must never auto-apply.
+  if (!requiredList.length && !ad.noRequirements) {
+    return {
+      matched: false,
+      needsReview: true,
+      score: null,
+      reason: 'REQUIREMENTS_UNSTRUCTURED',
+      requiredSkills: { total: 0, met: [], missing: [] },
+      preferredSkills: { total: preferredList.length, met: preferredMet, missing: preferredMissing },
+      yearsOk: null,
+      requirementsSource: ad.requirementsSource || 'unstructured',
+      motivation: 'Requirements need grounded review before this ad can be matched.',
+    };
+  }
 
   // Experience requirement check
   const minYears = Number(ad.minExperienceYears) || 0;
-  const yearsOk = minYears === 0
-    || (cvFacts?.experienceYears !== null && cvFacts.experienceYears >= minYears);
+  const cvYears = Number(cvFacts?.experienceYears);
+  const yearsOk = minYears === 0 || (Number.isFinite(cvYears) && cvYears >= minYears);
 
   // Required skills must be met (or at least criteria.minRequiredRatio, default 1.0)
   const minRequiredRatio = criteria.minRequiredRatio ?? 1.0;
   const reqRatio = requiredList.length === 0 ? 1.0 : requiredMet.length / requiredList.length;
   const prefRatio = preferredList.length === 0 ? 0.5 : preferredMet.length / preferredList.length;
 
-  const matched = yearsOk && reqRatio >= minRequiredRatio;
+  const needsReview = requiredMissing.some((id) => !isKnownSkillId(id));
+  const matched = !needsReview && yearsOk && reqRatio >= minRequiredRatio;
   const score = Number(((reqRatio * 0.7 + prefRatio * 0.3) * 100).toFixed(1));
 
-  const motivation = matched
-    ? `Uppfyller samtliga ${requiredMet.length}/${requiredList.length} skall-krav (${requiredMet.join(', ') || 'grundkrav'}) samt ${preferredMet.length}/${preferredList.length} meriterande kompetenser (${preferredMet.join(', ') || 'inga angivna'}) i ${ad.location || 'angiven ort'}.` // input vocabulary, never rendered
-    : `Saknar obligatoriska krav: ${requiredMissing.join(', ') || (!yearsOk ? `${minYears} års erfarenhet` : 'kriterier')}.`; // input vocabulary, never rendered
+  const motivation = needsReview
+    ? `Unresolved required qualifications need review: ${requiredMissing.filter((id) => !isKnownSkillId(id)).join(', ')}.`
+    : matched
+      ? `Uppfyller samtliga ${requiredMet.length}/${requiredList.length} skall-krav (${requiredMet.join(', ') || 'grundkrav'}) samt ${preferredMet.length}/${preferredList.length} meriterande kompetenser (${preferredMet.join(', ') || 'inga angivna'}) i ${ad.location || 'angiven ort'}.` // input vocabulary, never rendered
+      : `Saknar obligatoriska krav: ${requiredMissing.join(', ') || (!yearsOk ? `${minYears} års erfarenhet` : 'kriterier')}.`; // input vocabulary, never rendered
 
   return {
     matched,
+    needsReview,
     score,
+    requirementsSource: ad.requirementsSource || 'structured',
     requiredSkills: {
       total: requiredList.length,
       met: requiredMet,
@@ -346,6 +367,7 @@ export class JobApplicationWorkflow {
     dataDir,
     skillTree = null,
     portalAdapter = null,
+    jobMatcher = null,
     concurrency = 4,
     rateLimitDelayMs = 5,
   } = {}) {
@@ -354,6 +376,7 @@ export class JobApplicationWorkflow {
     this.stateFile = path.join(dataDir, 'job-workflow-state.json');
     this.skillTree = skillTree;
     this.portalAdapter = portalAdapter;
+    this.jobMatcher = jobMatcher;
     this.concurrency = Math.max(1, Math.min(8, Number(concurrency) || 4));
     this.rateLimitDelayMs = Math.max(0, Number(rateLimitDelayMs) || 0);
     fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
@@ -388,6 +411,7 @@ export class JobApplicationWorkflow {
         confirmed: 0,
         blocked: 0,
         failed: 0,
+        needsReview: 0,
       },
       items: {}, // jobId -> durable item record
       submissionLedger: {}, // idempotencyKey -> { submittedAt, confirmed, confirmationId, receipt }
@@ -412,6 +436,7 @@ export class JobApplicationWorkflow {
     const confirmed = items.filter((i) => i.confirmed === true).length;
     const blocked = items.filter((i) => i.status === 'BLOCKED').length;
     const failed = items.filter((i) => i.status === 'FAILED').length;
+    const needsReview = items.filter((i) => i.needsReview === true).length;
 
     this.state.counters = {
       found: Number(this.state.counters.found) || items.length,
@@ -422,6 +447,7 @@ export class JobApplicationWorkflow {
       confirmed,
       blocked,
       failed,
+      needsReview,
     };
   }
 
@@ -455,7 +481,12 @@ export class JobApplicationWorkflow {
       roles: Array.isArray(criteria.roles) ? [...criteria.roles] : [],
       minRequiredRatio: criteria.minRequiredRatio ?? 1.0,
     };
-    this.state.mandate = { allowSubmit: Boolean(mandate?.allowSubmit) };
+    this.state.mandate = {
+      allowSubmit: Boolean(mandate?.allowSubmit),
+      // Submission always needs preparation. Search/match-only callers can
+      // explicitly avoid even local draft creation with allowSubmit:false.
+      prepareApplications: Boolean(mandate?.allowSubmit) || mandate?.prepareApplications !== false,
+    };
     this.state.status = 'RUNNING';
 
     emit('Läser CV'); // input vocabulary, never rendered
@@ -469,19 +500,37 @@ export class JobApplicationWorkflow {
     // Respect the 500 ceiling on unique ads evaluated
     const cappedUnique = dedup.unique.slice(0, this.state.maxTarget);
     for (const ad of cappedUnique) {
-      const match = evaluateJobMatch(ad, cvFacts, this.state.criteria);
+      const match = this.jobMatcher
+        ? await this.jobMatcher({ ad, cvFacts, criteria: this.state.criteria, signal, sessionId: `${this.state.workflowId}:${ad.id}` })
+        : evaluateJobMatch(ad, cvFacts, this.state.criteria);
+      const groundedAd = match.extraction ? (() => {
+        const requiredSkills = [...ad.requiredSkills, ...match.extraction.requiredSkills.map((x) => x.name)];
+        const requiredCanonical = new Set(requiredSkills.map(canonicalSkillName));
+        return {
+          ...ad,
+          requiredSkills,
+          preferredSkills: [...ad.preferredSkills, ...match.extraction.preferredSkills.map((x) => x.name)]
+            .filter((name) => !requiredCanonical.has(canonicalSkillName(name))),
+          minExperienceYears: match.extraction.minExperienceYears,
+          noRequirements: match.extraction.noRequirements,
+          requirementsSource: match.provenance || 'model',
+        };
+      })() : ad;
       this.state.items[ad.id] = {
         jobId: ad.id,
-        ad,
+        ad: groundedAd,
         matched: match.matched,
+        needsReview: Boolean(match.needsReview),
         score: match.score,
         requiredSkills: match.requiredSkills,
         preferredSkills: match.preferredSkills,
         motivation: match.motivation,
+        provenance: match.provenance || match.requirementsSource || 'structured',
+        modelCalls: match.modelCalls || 0,
         prepared: false,
         submitted: false,
         confirmed: false,
-        status: match.matched ? 'MATCHED' : 'SKIPPED_UNMATCHED',
+        status: match.needsReview ? 'NEEDS_REVIEW' : (match.matched ? 'MATCHED' : 'SKIPPED_UNMATCHED'),
         application: null,
         blocker: null,
         error: null,
@@ -489,6 +538,14 @@ export class JobApplicationWorkflow {
       };
     }
     this.save();
+
+    if (!this.state.mandate.prepareApplications) {
+      this.state.status = Object.values(this.state.items).some((i) => i.status === 'BLOCKED' || i.status === 'NEEDS_REVIEW')
+        ? 'PARTIAL'
+        : 'COMPLETED';
+      this.save();
+      return this.getSummary();
+    }
 
     // Prepare and (if mandated) submit only the matched items
     await this.#processQueue({ signal, emit });
@@ -522,7 +579,7 @@ export class JobApplicationWorkflow {
     this.save();
 
     if (!this.state.mandate.allowSubmit) {
-      this.state.status = Object.values(this.state.items).some((i) => i.status === 'BLOCKED')
+      this.state.status = Object.values(this.state.items).some((i) => i.status === 'BLOCKED' || i.status === 'NEEDS_REVIEW')
         ? 'PARTIAL'
         : 'COMPLETED';
       this.save();
@@ -556,7 +613,7 @@ export class JobApplicationWorkflow {
 
     if (signal?.aborted) {
       this.state.status = 'CANCELLED';
-    } else if (Object.values(this.state.items).some((i) => i.status === 'BLOCKED')) {
+    } else if (Object.values(this.state.items).some((i) => i.status === 'BLOCKED' || i.status === 'NEEDS_REVIEW')) {
       this.state.status = 'PARTIAL';
     } else {
       this.state.status = 'COMPLETED';

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -78,6 +79,44 @@ test('ProviderManager supports OpenCode Go headers, manual model ID fallback, re
   assert.equal(classifyProviderError(new Error('Rate limit reached'), 429).code, 'QUOTA_EXCEEDED');
   assert.equal(classifyProviderError(new Error('Model not found'), 404).code, 'MODEL_NOT_FOUND');
   assert.equal(classifyProviderError(new Error('ECONNREFUSED'), 503).code, 'NETWORK_FAILURE');
+});
+
+test('ProviderManager default DeepSeek transport reaches the real OpenAI-compatible route and returns text', async (t) => {
+  const dir = tmpDir();
+  let seen = null;
+  const server = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    seen = {
+      url: req.url,
+      authorization: req.headers.authorization,
+      body: JSON.parse(Buffer.concat(chunks).toString('utf8')),
+    };
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      id: 'chat-test',
+      choices: [{ message: { role: 'assistant', content: 'grounded-ok' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 12, completion_tokens: 3 },
+    }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const address = server.address();
+  const pm = new ProviderManager({ dataDir: dir });
+  await pm.configureProvider({
+    providerId: 'deepseek',
+    apiKey: 'ds_test_not_a_real_secret',
+    baseUrl: `http://127.0.0.1:${address.port}/v1`,
+  });
+  pm.selectModel({ providerId: 'deepseek', modelId: 'deepseek-chat', allowManualFallback: true });
+  const result = await pm.complete({ messages: [{ role: 'user', content: 'Return grounded-ok' }], maxRetries: 0 });
+  assert.equal(result.ok, true, JSON.stringify(result.error));
+  assert.equal(result.response.text, 'grounded-ok');
+  assert.equal(seen.url, '/v1/chat/completions');
+  assert.equal(seen.authorization, 'Bearer ds_test_not_a_real_secret');
+  assert.equal(seen.body.model, 'deepseek-chat');
+  assert.equal(seen.body.stream, false);
+  assert.equal(pm.state.connectionVerified, true);
 });
 
 test('FileAndAccessController handles >6 MB streaming uploads, verifies external portal uploads, enforces revocable Owner Mode, and blocks untrusted prompt-injection escalation', async () => {

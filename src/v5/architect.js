@@ -38,6 +38,7 @@ import { LearningEngine } from './learning-engine.js';
 import { ProviderManager } from './providers.js';
 import { FileAndAccessController } from './files-access.js';
 import { JobApplicationWorkflow } from './workflows/job-search.js';
+import { createProviderJobMatcher } from './job-matcher.js';
 import { VoiceController } from './voice-controller.js';
 import { ExecutionLoopGuard, V5OpsManager, atomicWriteJson } from './ops.js';
 
@@ -97,10 +98,12 @@ export class GrandArchitect {
       workspaceDir: this.workspaceDir,
       fetchImpl,
     });
+    this.jobMatcher = createProviderJobMatcher(this.providers);
     this.jobWorkflow = new JobApplicationWorkflow({
       dataDir,
       skillTree: this.skillTree,
       portalAdapter,
+      jobMatcher: this.jobMatcher,
     });
     this.voice = new VoiceController();
     this.ops = new V5OpsManager({ dataDir });
@@ -406,7 +409,9 @@ export class GrandArchitect {
       for (const rcpt of wfSummary.verifiedReceipts || []) {
         goal.verification_evidence.push(rcpt);
       }
-      if (wfSummary.counters.matched > 0 && goal.verification_evidence.length === 0) {
+      if (!goal.verification_evidence.some((receipt) => String(receipt?.id || '').startsWith('rcpt-jobreport-'))) {
+        // Every job run gets its own outcome artifact, even with zero matches
+        // or when the CV upload already contributed a separate file receipt.
         // Persist a verified match report artifact in the workspace
         const reportPath = path.join(this.workspaceDir, `job-matches-${goal.goal_id}.json`);
         const reportBytes = Buffer.from(JSON.stringify(wfSummary, null, 2), 'utf8');

@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { discoverModels as discoverProviderCatalog } from '../core/provider/catalog.js';
 import { complete as completeV1 } from '../core/provider/chat.js';
+import { chatUrl } from '../core/presets.js';
 
 export const PROVIDER_STATE_SCHEMA = 'majin.v5.provider-state/v1';
 
@@ -515,6 +516,8 @@ export class ProviderManager {
     signal = null,
     timeoutMs = 20_000,
     maxRetries = 1,
+    maxTokens = 4096,
+    temperature = 0.1,
   } = {}) {
     const providerId = this.state.activeProvider;
     const modelId = this.state.activeModelId;
@@ -534,6 +537,8 @@ export class ProviderManager {
       signal,
       timeoutMs,
       maxRetries,
+      maxTokens,
+      temperature,
     });
 
     if (primaryRes.ok) {
@@ -566,6 +571,8 @@ export class ProviderManager {
           signal,
           timeoutMs,
           maxRetries: 0,
+          maxTokens,
+          temperature,
         });
         return {
           ...fbRes,
@@ -587,6 +594,8 @@ export class ProviderManager {
     signal,
     timeoutMs,
     maxRetries,
+    maxTokens,
+    temperature,
   }) {
     const p = this.state.providers[providerId] || PROVIDER_PRESETS[providerId];
     if (!p) {
@@ -636,20 +645,48 @@ export class ProviderManager {
       const timer = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
-        const callFn = this.completeImpl || completeV1;
-        const response = await callFn({
-          provider: {
-            name: providerId,
-            kind: p.kind || 'openai',
-            baseUrl: p.baseUrl,
-            apiKey,
-            headers,
-          },
-          model: modelId,
-          messages: adaptedMessages,
-          tools: adaptedTools,
-          signal: controller.signal,
-        });
+        let response;
+        if (this.completeImpl) {
+          response = await this.completeImpl({
+            provider: {
+              name: providerId,
+              kind: p.kind || 'openai',
+              baseUrl: p.baseUrl,
+              apiKey,
+              headers,
+            },
+            model: modelId,
+            messages: adaptedMessages,
+            tools: adaptedTools,
+            signal: controller.signal,
+            maxTokens,
+            temperature,
+          });
+        } else {
+          const kind = p.kind || 'openai';
+          response = await completeV1({
+            route: {
+              providerName: providerId,
+              label: p.label || providerId,
+              kind,
+              baseUrl: p.baseUrl,
+              endpoint: chatUrl({ kind, baseUrl: p.baseUrl }),
+              apiKey: apiKey || (providerId === 'ollama' ? 'ollama' : ''),
+              model: modelId,
+              extraHeaders: headers,
+              maxTokens,
+              temperature,
+            },
+            messages: adaptedMessages,
+            tools: adaptedTools,
+            signal: controller.signal,
+            stream: false,
+            retries: 0,
+            maxTokens,
+            temperature,
+            job: 'v5:chat',
+          });
+        }
 
         // Mark connection verified ONLY after a real call succeeds!
         const verifiedAt = new Date().toISOString();

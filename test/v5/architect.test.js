@@ -211,3 +211,25 @@ test('GrandArchitect synthesizes a missing skill on the fly via SkillBuilder and
   assert.equal(resumed.queued_steps[0].status, 'SKIPPED_CHECKPOINTED');
   assert.equal(resumed.queued_steps[1].status, 'COMPLETED');
 });
+
+test('GrandArchitect gives uploaded-CV job runs a separate verified match report', async () => {
+  const dir = tmpDir();
+  const architect = new GrandArchitect({ dataDir: dir });
+  const cv = 'Test Testsson\n5 års erfarenhet\nTypeScript och svenska\n'; // input vocabulary, never rendered
+  const goal = await architect.executeGoal({
+    goalText: 'Match one job with the uploaded test CV',
+    files: [{ name: 'test-cv.txt', type: 'text/plain', data: Buffer.from(cv).toString('base64') }],
+    jobAds: [{ id: 'job-report-1', title: 'TypeScript role', employer: 'Example', location: 'Stockholm', requiredSkills: ['typescript'] }],
+    criteria: { maxTarget: 500 },
+    mandate: { allowSubmit: false, prepareApplications: false },
+  });
+  const reportReceipt = goal.verification_evidence.find((receipt) => String(receipt.id).startsWith('rcpt-jobreport-'));
+  assert.ok(reportReceipt, 'match report receipt must exist alongside the CV receipt');
+  assert.equal(reportReceipt.verified, true);
+  assert.equal(fs.existsSync(reportReceipt.path), true);
+  assert.equal(goal.verification_evidence.filter((receipt) => receipt.kind === 'file').length, 2);
+  const report = JSON.parse(fs.readFileSync(reportReceipt.path, 'utf8'));
+  assert.equal(report.counters.found, 1);
+  assert.equal(report.counters.matched, 1);
+  assert.equal(report.counters.prepared, 0);
+});

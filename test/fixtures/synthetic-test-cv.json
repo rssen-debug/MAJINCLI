@@ -1,0 +1,75 @@
+{
+  "cvFacts": {
+    "verifiableOnly": true,
+    "inventedFactsCount": 0,
+    "cvFileName": "synthetic-test-cv-4.txt",
+    "cvSha256": "f2b35bea7c2467fe25ab3184e8bb95129924cc2571b5f3d382798263bb46e003",
+    "fullName": "Test Testsson",
+    "email": null,
+    "phone": null,
+    "skills": [
+      "javascript",
+      "typescript",
+      "node.js",
+      "react",
+      "angular",
+      "python",
+      "java",
+      "c#",
+      ".net",
+      "sql",
+      "postgresql",
+      "docker",
+      "kubernetes",
+      "terraform",
+      "aws",
+      "azure",
+      "gcp",
+      "git",
+      "linux",
+      "graphql",
+      "rest",
+      "testing",
+      "ci/cd",
+      "scrum",
+      "körkort",
+      "b-körkort",
+      "c-körkort",
+      "ce-körkort",
+      "ykb",
+      "digitalt förarkort",
+      "legitimerad sjuksköterska",
+      "sjuksköterska",
+      "geriatrik",
+      "demensvård",
+      "psykiatri",
+      "lss",
+      "excel",
+      "power bi"
+    ],
+    "roles": [
+      "fullstack developer",
+      "backend developer",
+      "data engineer",
+      "software engineer"
+    ],
+    "languages": [
+      "svenska",
+      "engelska"
+    ],
+    "locations": [
+      "stockholm",
+      "göteborg",
+      "malmö"
+    ],
+    "experienceYears": 8,
+    "education": [],
+    "certificates": [],
+    "workPermit": null
+  },
+  "criteria": {
+    "locations": [],
+    "roles": [],
+    "minRequiredRatio": 1
+  }
+}

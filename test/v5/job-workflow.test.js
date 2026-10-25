@@ -156,6 +156,26 @@ test('JobApplicationWorkflow enforces 500 ceiling, tracks all 8 counters, verifi
   assert.equal(portalSubmitCalls, callsAfterFirstRun, 'Restart recovery must never re-submit already submitted/confirmed applications');
 });
 
+test('JobApplicationWorkflow explicit match-only mode creates no application drafts', async () => {
+  const dir = tmpDir();
+  const wf = new JobApplicationWorkflow({ dataDir: dir });
+  const summary = await wf.run({
+    cvText: SAMPLE_CV,
+    jobAds: [
+      { id: 'match-only-1', title: 'TypeScript role', employer: 'One', location: 'Stockholm', requiredSkills: ['typescript'] },
+      { id: 'match-only-2', title: 'Rust role', employer: 'Two', location: 'Stockholm', requiredSkills: ['rust'] },
+    ],
+    mandate: { allowSubmit: false, prepareApplications: false },
+  });
+  assert.equal(summary.counters.found, 2);
+  assert.equal(summary.counters.matched, 1);
+  assert.equal(summary.counters.prepared, 0);
+  assert.equal(summary.counters.submitted, 0);
+  assert.equal(summary.counters.confirmed, 0);
+  assert.equal(summary.mandate.prepareApplications, false);
+  assert.ok(summary.items.every((item) => item.application === null && item.prepared === false));
+});
+
 test('JobApplicationWorkflow supports mid-flight steering ("Nej vänta, bara jobb i Köpenhamn", "Öppna de fyra bästa") and V5 tool adapter preserves extra job fields', async () => {
   const dir = tmpDir();
   const wf = new JobApplicationWorkflow({ dataDir: dir });
