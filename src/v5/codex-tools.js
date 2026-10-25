@@ -13,6 +13,7 @@ import { discoverSkills, usableSkills } from '../v4/skills.js';
 import { interactiveWindowsSession, browserBinary } from '../v4/tools/host.js';
 import { z } from 'zod';
 import { shellTools } from '../core/tools/shell.js';
+import { sysTools } from '../core/tools/sys.js';
 import { webTools } from '../core/tools/web.js';
 import { searchPlatsbanken } from '../core/jobs/platsbanken.js';
 import { scoreCv } from '../core/jobs/model.js';
@@ -46,6 +47,9 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
   const definitions = fileTools.filter(t => ['fs.list','fs.read','fs.write','fs.patch','fs.search','fs.grep','fs.stat','fs.mkdir','fs.find'].includes(t.name));
   definitions.push(...webTools.filter(t => ['web.search', 'web.fetch'].includes(t.name)));
   if (processAccess) definitions.push(shellTools.find(t => t.name === 'shell.run'));
+  // Reuse a verified legacy read-only process inventory only with explicit system lane.
+  if (grantedLanes?.includes('sys')) definitions.push(...sysTools.filter(t => t.name === 'sys.ps'));
+
   const interactive = desktop && await interactiveWindowsSession();
   if (interactive) definitions.push(...winControlTools.filter(t => t.name.startsWith('control.')), ...desktopAppTools,
     netTools.find(t => t.name === 'screen.capture'));
