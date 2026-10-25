@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { createHash } from 'node:crypto';
-import { CodexDriver } from '../../src/v5/codex-driver.js';
+import { CodexDriver, driverFingerprint } from '../../src/v5/codex-driver.js';
 import { createDriverTools, checkedPath } from '../../src/v5/codex-tools.js';
 
 function fixture(t) {
@@ -36,7 +35,7 @@ test('real file operations, observed failure and changed strategy; replay surviv
   assert.equal(failed.structuredContent.status, 'failed');
   assert.equal((await call('fs_write', 'write', { path: 'report.txt', content: 'one', append: true })).isError, false);
   await driver.close(); driver = new CodexDriver(options); await driver.start();
-  await call('fs_write', 'write', { path: 'report.txt', content: 'one', append: true });
+  await call('fs_write', 'write', { append: true, content: 'one', path: 'report.txt' });
   assert.equal(fs.readFileSync(path.join(options.workspace, 'report.txt'), 'utf8'), 'one');
   await assert.rejects(() => call('fs_write', 'write', { path: 'report.txt', content: 'two' }), /different arguments/);
   assert.match((await call('documents_extract', 'extract', { path: 'report.txt' })).content[0].text, /one/);
@@ -46,7 +45,7 @@ test('real file operations, observed failure and changed strategy; replay surviv
 test('incomplete journal record becomes uncertain and is never replayed', async t => {
   const options = fixture(t); const driver = new CodexDriver(options);
   const operationId = 'crashed';
-  const record = { operationId, fingerprint: createHash('sha256').update(JSON.stringify({ name: 'fs_write', input: { path: 'x', content: 'x' } })).digest('hex'),
+  const record = { operationId, fingerprint: driverFingerprint('fs_write', { path: 'x', content: 'x' }),
     status: 'running', evidence: [] };
   driver.save(record);
   await driver.close();
@@ -83,4 +82,15 @@ test('process lane resolves Node and cancellation prevents a delayed child write
   await new Promise(resolve => setTimeout(resolve, 400)); await driver.cancel('delay'); await pending;
   await new Promise(resolve => setTimeout(resolve, 2300));
   assert(!fs.existsSync(path.join(options.workspace, 'late.txt')));
+});
+test('unexpected worker death remains uncertain and a fresh operation can recover', async t => {
+  const options = fixture(t); const driver = new CodexDriver(options); t.after(() => driver.close());
+  await driver.start();
+  fs.writeFileSync(path.join(options.workspace, 'slow.txt'), 'a'.repeat(80) + '!');
+  const pending = driver.call('fs_grep', { operationId: 'crash', path: 'slow.txt', pattern: '(a+)+$' });
+  await new Promise(resolve => setTimeout(resolve, 100)); driver.worker.kill('SIGKILL');
+  const result = await pending;
+  assert.equal(result.structuredContent.status, 'uncertain');
+  assert.equal(result.structuredContent.errorCode, 'WORKER_EXIT');
+  assert.equal((await driver.call('driver_status', { operationId: 'recover' })).isError, false);
 });

@@ -7,7 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { scrubMcpEnv } from '../v4/mcp.js';
 
 const workerFile = fileURLToPath(new URL('./codex-worker.js', import.meta.url));
-const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const hash = value => createHash('sha256').update(JSON.stringify(value, (_key, item) =>
+  item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item)).digest('hex');
+export const driverFingerprint = (name, input) => hash({ name, input });
 export class CodexDriver {
   constructor(options) {
     this.options = options;
@@ -51,7 +54,7 @@ export class CodexDriver {
     worker.on('message', msg => {
       if (msg.id && this.active?.id === msg.id) this.active.resolve(msg.value);
     });
-    await new Promise((resolve, reject) => {
+    try { await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Tool worker startup timeout')), 15000);
       worker.once('error', error => { clearTimeout(timer); reject(error); });
       worker.once('exit', () => { clearTimeout(timer); reject(new Error('Tool worker exited during startup')); });
@@ -59,10 +62,13 @@ export class CodexDriver {
         clearTimeout(timer); this.catalog = msg.tools; worker.off('message', onMessage); resolve();
       } };
       worker.on('message', onMessage);
-    });
+    }); } catch (error) {
+      if (this.worker === worker) this.worker = null;
+      worker.kill(); throw error;
+    }
     worker.on('exit', () => {
       if (this.worker === worker) this.worker = null;
-      this.active?.resolve({ ok: false, error: { code: 'WORKER_EXIT', message: 'Worker exited; inspect state before retrying' } });
+      if (this.active?.worker === worker) this.active.resolve({ ok: false, error: { code: 'WORKER_EXIT', message: 'Worker exited; inspect state before retrying' } });
     });
   }
   list() {
@@ -76,7 +82,7 @@ export class CodexDriver {
     if (this.closed) throw new Error('Driver closed');
     const { operationId, ...input } = args;
     if (typeof operationId !== 'string' || !operationId.length || operationId.length > 160) throw new Error('operationId (1–160 chars) is required');
-    const fingerprint = hash({ name, input });
+    const fingerprint = driverFingerprint(name, input);
     const previous = this.operations.get(operationId);
     if (previous) {
       if (previous.fingerprint !== fingerprint) throw new Error('Operation ID already belongs to different arguments');
@@ -92,12 +98,12 @@ export class CodexDriver {
     const id = randomUUID();
     let timer;
     try {
-      const pending = new Promise(resolve => { this.active = { id, record, resolve }; });
+      const pending = new Promise(resolve => { this.active = { id, record, worker: this.worker, resolve }; });
       timer = setTimeout(() => { this.cancel(operationId, 'TIMEOUT').catch(e => console.error(e.message)); }, this.options.timeoutMs || 60000);
       this.worker.send({ id, name, args: input });
       const value = await pending;
       if (record.status === 'running') {
-        record.status = value.ok === false ? 'failed' : 'completed';
+        record.status = value.error?.code === 'WORKER_EXIT' ? 'uncertain' : value.ok === false ? 'failed' : 'completed';
         record.errorCode = value.error?.code || null; record.blocker = value.error?.message || null;
         const { image, ...data } = value; record.result = data;
         if (image) {
@@ -106,6 +112,8 @@ export class CodexDriver {
           record.evidence.push({ type: 'image', mimeType: 'image/png', file: filename });
         }
       }
+    } catch (error) {
+      record.status = 'uncertain'; record.errorCode = 'IPC_FAILURE'; record.blocker = error.message;
     } finally {
       clearTimeout(timer); this.active = null; this.busy = false; record.finishedAt = new Date().toISOString(); this.save(record);
     }
