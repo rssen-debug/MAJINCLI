@@ -1,6 +1,6 @@
 {
   "schema": "majin.v5.acceptance-matrix/v1",
-  "generatedAt": "2026-10-25T14:35:30.289Z",
+  "generatedAt": "2026-10-25T14:35:31.655Z",
   "version": "5.0.0",
   "gitSha": "e59794988795b97b40ec5a90d71e8d1fa71f0d69",
   "packageTreeSha256": "41f1a3dac50cfa234f22fcc2bc94d39f9b5bbf9340d216eb0cbfc8b4d972e29b",
@@ -28,7 +28,7 @@
       "title": "Läsa en uppladdad CV-fil och extrahera verifierbara fakta",
       "passed": true,
       "status": "COMPLETED",
-      "receiptId": "rcpt-docread-8b2a3327e5425a51-1792938929118",
+      "receiptId": "rcpt-docread-8b2a3327e5425a51-1792938930559",
       "xpAwarded": 24,
       "evidence": {
         "fullName": "Maja Bergström",
@@ -65,7 +65,7 @@
         "blocked": 0,
         "failed": 0
       },
-      "receiptId": "rcpt-docread-8b2a3327e5425a51-1792938929152"
+      "receiptId": "rcpt-docread-8b2a3327e5425a51-1792938930596"
     },
     {
       "id": "FLOW-4-BUILD-AND-VERIFY-PAGE",
@@ -81,7 +81,7 @@
       "passed": true,
       "status": "COMPLETED",
       "synthesizedSkillId": "career.application-stats-py",
-      "receiptId": "rcpt-synth-94da552bfa9fd122-1792938929596"
+      "receiptId": "rcpt-synth-94da552bfa9fd122-1792938930987"
     },
     {
       "id": "FLOW-6-LOCAL-FILE-REPAIR-OWNER-MODE",
