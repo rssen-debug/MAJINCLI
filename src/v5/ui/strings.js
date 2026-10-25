@@ -2,6 +2,18 @@
  * MAJIN V5 — Localization & UI copy (Swedish product interface).
  */
 export const V5_STRINGS = Object.freeze({
+  ux0: 'Anropet misslyckades. Försök igen.',
+  ux1: 'Välj en modell…',
+  ux2: 'Hämta modeller med din API-nyckel',
+  ux3: 'Nyckel sparad · lämna tomt för att behålla',
+  ux4: 'Klistra in din API-nyckel',
+  ux5: 'Hämtar modellkatalog…',
+  ux6: 'Modeller hämtade. Välj en modell nedan.',
+  ux7: 'Ingen katalog tillgänglig. Ange ett exakt modell-ID.',
+  ux8: 'Dina skills visas här när registret har laddats.',
+  ux9: 'Välj en modell eller ange ett exakt modell-ID.',
+  ux10: 'Arbetar med ditt mål…',
+  ux11: 'Försök igen',
   brandName: 'MAJIN',
   brandVersion: 'V5 · GRAND ARCHITECT',
   heroSubtitle: 'Beskriv målet. Majin utför arbetet och blir bättre genom verifierade resultat.',
