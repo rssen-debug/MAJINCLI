@@ -7,12 +7,15 @@ import { shellTools } from './shell.js';
 import { sysTools } from './sys.js';
 import { netTools } from './net.js';
 import { webTools } from './web.js';
+import { browserTools } from './browser.js';
+import { mediaTools } from './media.js';
+import { pluginTools } from './plugins.js';
 import { reTools } from './re.js';
 import { majinTools } from './majin.js';
 import { agentTools } from './agent.js';
 import { approvals } from '../guard.js';
 
-export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...reTools, ...majinTools, ...agentTools];
+export const ALL_TOOLS = [...fileTools, ...shellTools, ...sysTools, ...netTools, ...webTools, ...browserTools, ...mediaTools, ...reTools, ...majinTools, ...pluginTools, ...agentTools];
 
 export function buildRegistry(ctx) {
   if (!ctx.approvals) ctx.approvals = approvals;

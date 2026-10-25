@@ -136,8 +136,8 @@ function guess(desc) {
 export class Registry {
   constructor(tools, ctx) {
     this.ctx = ctx;
-    this.tools = tools;
-    this.byName = new Map(tools.map((t) => [t.name, t]));
+    this.tools = [...tools];
+    this.byName = new Map(this.tools.map((t) => [t.name, t]));
   }
 
   get allow() {
@@ -172,6 +172,21 @@ export class Registry {
 
   has(name) {
     return this.byName.has(name);
+  }
+
+  register(tool) {
+    if (!tool?.name || this.byName.has(tool.name)) throw new Error(`tool already exists or has no name: ${tool?.name || '(missing)'}`);
+    this.tools.push(tool);
+    this.byName.set(tool.name, tool);
+    return tool;
+  }
+
+  unregister(name) {
+    const tool = this.byName.get(name);
+    if (!tool) return false;
+    this.byName.delete(name);
+    this.tools = this.tools.filter((item) => item.name !== name);
+    return true;
   }
 
   async exec(name, args = {}, { session = 'desktop', step = 0, readOnly = false } = {}) {

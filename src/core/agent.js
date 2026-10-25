@@ -65,8 +65,13 @@ export class Agent {
       readOnly
         ? 'THIS TURN IS READ-ONLY: you may inspect anything, but every tool that changes state is refused. Say so plainly if the task actually needs a write.'
         : `TOOLS: all ${tools.length} are always on — there is nothing to enable. Groups: ${groups.join(', ')}.`,
-      'Use tools instead of guessing. Independent calls in one answer run in parallel — batch them. On error: read the message, fix the arguments, run again (after two failures in a row the model escalates automatically).',
-      'Paths: absolute or workspace-relative. Never overwrite something you have not read, and never delete something you did not create.',
+      'PRIMARY RULE: finish the user’s requested outcome, not merely explain how to do it. If the goal is clear and safe, inspect the situation, act with tools, verify the result, then report what actually happened. A plan is not completion unless the user asked only for a plan.',
+      'For multi-part work (more than 3 meaningful actions), call agent.plan with a short ordered checklist, then update it as work progresses. Do not spend a tool step planning simple requests.',
+      'When something fails: understand the error, change the arguments or approach, and retry only when the retry is meaningfully different. Never repeat the same failed tool call unchanged. Try a useful alternative before declaring defeat; if blocked, state the exact blocker and the smallest action needed from the user.',
+      'Before ending, check the requested outcome: read back changed files, inspect the browser form state, or verify the command/result as appropriate. Never claim success unless a tool confirms it. If the step budget is nearly used, stop starting new work and summarize verified progress plus what remains.',
+      'Do not ask for information that is already in the conversation, attachments, workspace, config, or a safe read-only tool. Ask only when a consequential choice or genuinely missing information cannot be inferred safely.',
+      'Use the best matching tools: web.fetch for static pages, browser.* for interactive pages, fs.* for files, shell.run for commands, screen.capture + vision for visual state. Independent read-only calls may run together; state-changing calls are serialized.',
+      'Paths: absolute or workspace-relative. Read before overwriting; never delete something you did not create. Respect approval prompts and report when a requested action is intentionally blocked.',
       'RE: re.analyze = headers, sections+entropy, imports with risk flags, YARA, IOC strings, opcode patterns and "next steps". re.strings/re.search/re.yara/re.diff are the microscope. re.tool hooks up ghidra/rizin/objdump when they are installed on the machine.',
       'If the user describes a setting in natural language ("use X for Y always", "run moa on everything", "stop asking") → run majin.configure with the intent, or state exactly what you changed.',
       '',
@@ -216,7 +221,7 @@ export class Agent {
       const trivial = decision.job === 'chat' && !toolsUsed && (res.text || '').length < 200;
       let finalText = res.text;
       let moaInfo = null;
-      if (turnPlan.moa.enabled && !res.aborted && !trivial) {
+      if (turnPlan.moa.enabled && !res.aborted && !res.finalizedAtLimit && !trivial) {
         const evidence = summarizeRun(res, messages);
         const moaRes = await moaRun({
           cfg,
@@ -260,6 +265,7 @@ export class Agent {
         moa: moaInfo,
         escalated: res.escalated,
         incomplete: res.incomplete,
+        finalizedAtLimit: res.finalizedAtLimit,
         error: res.error,
         errorKind: res.errorKind,
         errorHint: res.errorHint,

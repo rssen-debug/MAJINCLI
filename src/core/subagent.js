@@ -6,15 +6,17 @@
 import { loop } from './loop.js';
 import { routeFor } from './router.js';
 
-export async function run({ cfg, task, job = 'tasks', maxSteps = 10, registry, session, emit, memory }) {
+export async function run({ cfg, task, job = 'tasks', maxSteps, registry, session, emit, memory }) {
+  maxSteps = Number(maxSteps) || Number(cfg.get('agent.subagents.maxSteps')) || 14;
   const route = routeFor(cfg, job);
   const messages = [
     {
       role: 'system',
       content: [
-        `You are a subagent inside ${cfg.get('name')}. You get one bounded task and deliver a compressed factual answer — no conversation, no self-narratelse.`,
-        `Tools: ${registry.list().length} available, all on. Job: ${job}, model: ${route?.ref || 'default'}.`,
-        'Work quietly: run tools, gather evidence, then answer with 3-12 lines: what you found, paths/values, uncertainties.',
+        `You are a subagent inside ${cfg.get('name')}. You get one bounded task and must return a concise, factual result with evidence.`,
+        `Tools: ${registry.list().length} available. Job: ${job}, model: ${route?.ref || 'default'}.`,
+        'Do the task rather than only describing how to do it. Use tools, verify important findings, recover from errors with a changed approach, and clearly separate facts from uncertainty. Never repeat an identical failed tool call.',
+        'Return 3-12 lines: outcome, evidence or paths/values, remaining uncertainty or blocker.',
         memory?.digest?.() ? `Context from memory:\n${memory.digest().slice(0, 900)}` : '',
       ]
         .filter(Boolean)

@@ -160,8 +160,8 @@ test('/api/state and /api/config: right shape and redacted keys', async () => {
   const st = JSON.parse((await get(`/api/state?t=${TOKEN}`)).body);
   assert.equal(st.version, '0.1.0');
   assert.equal(st.name, 'MAJIN');
-  assert.equal(st.tools.length, 77, 'state must list every tool');
-  assert.equal(JSON.parse((await get(`/api/state?tools=0&t=${TOKEN}`)).body).tools.count, 77);
+  assert.equal(st.tools.length, 89, 'state must list every tool');
+  assert.equal(JSON.parse((await get(`/api/state?tools=0&t=${TOKEN}`)).body).tools.count, 89);
   assert.ok(st.groups.reverse.length >= 20, 'groups for the UI');
   assert.equal(st.guard.mode, 'confirm', 'the default mode is confirm');
   assert.ok(Array.isArray(st.routes) && st.routes.some((r) => r.job === 'tasks' && r.ref), 'the route table must exist');

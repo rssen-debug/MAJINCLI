@@ -141,6 +141,92 @@ test('memory and usage: the turn saves and counts', async () => {
   assert.ok(hist.some((f) => f.includes('t5')), 'the session must be saved to disk');
 });
 
+test('loop reserves the last budget step for a final answer', async () => {
+  const previous = rt.cfg.get('agent.maxSteps');
+  rt.cfg.patch({ agent: { maxSteps: 2 } });
+  scriptAll([
+    { text: 'I will write the file.', toolCalls: [{ name: 'fs.write', args: { path: 'final-step.txt', content: 'verified' } }] },
+    { text: 'The file was written and verified.' },
+  ]);
+  setScript('main:final', [{ text: 'The file was written and verified.' }]);
+  const c = collect();
+  const r = await rt.agent.turn({ input: 'write verified to final-step.txt', session: 't-final-step', onEvent: c.onEvent });
+  assert.equal(fs.readFileSync(path.join(WS, 'final-step.txt'), 'utf8'), 'verified');
+  assert.ok(c.evs.some((e) => e.type === 'step' && e.finalizing), 'the last model call must be explicitly marked as finalizing');
+  assert.match(r.text, /written and verified/i);
+  assert.equal(r.incomplete, undefined);
+  assert.ok(!c.types().includes('moa:start'), 'do not rephrase a step-budget final answer through MOA');
+  rt.cfg.patch({ agent: { maxSteps: previous } });
+});
+
+test('loop blocks an identical retry after a failed tool call', async () => {
+  rt.cfg.patch({ routing: { escalateAfterErrors: 10 }, agent: { maxSteps: 5 } });
+  scriptAll([
+    { text: 'I will inspect the path.', toolCalls: [{ name: 'fs.read', args: { path: 'missing-repeat-test.txt' } }] },
+    { text: 'Retrying the same read.', toolCalls: [{ name: 'fs.read', args: { path: 'missing-repeat-test.txt' } }] },
+    { text: 'The file is missing, so I cannot read it.' },
+  ]);
+  const c = collect();
+  const r = await rt.agent.turn({ input: 'read missing-repeat-test.txt', session: 't-repeat', onEvent: c.onEvent });
+  const reads = c.evs.filter((e) => e.type === 'tool_result' && e.tool === 'fs.read');
+  assert.equal(reads.length, 2, 'both the actual failure and blocked retry must be reported');
+  assert.notEqual(reads[0].error?.code, 'repeat_blocked', 'the first call must reach the tool');
+  assert.equal(reads[1].error?.code, 'repeat_blocked', 'the unchanged retry must not reach the tool');
+  assert.match(r.text, /missing|cannot read/i);
+  rt.cfg.patch({ routing: { escalateAfterErrors: 2 }, agent: { maxSteps: 6 } });
+});
+
+test('loop never repeats an already successful state-changing call', async () => {
+  rt.cfg.patch({ routing: { escalateAfterErrors: 10 }, agent: { maxSteps: 5 }, moa: { policy: 'off' } });
+  scriptAll([
+    { text: 'Create the file once.', toolCalls: [{ name: 'fs.write', args: { path: 'repeat-write.txt', content: 'one write' } }] },
+    { text: 'Retrying the write.', toolCalls: [{ name: 'fs.write', args: { path: 'repeat-write.txt', content: 'one write' } }] },
+    { text: 'The existing write succeeded; no duplicate was made.' },
+  ]);
+  const c = collect();
+  const r = await rt.agent.turn({ input: 'write one write to repeat-write.txt', session: 't-repeat-write', onEvent: c.onEvent });
+  const writes = c.evs.filter((e) => e.type === 'tool_result' && e.tool === 'fs.write');
+  assert.equal(writes.length, 2);
+  assert.equal(writes[0].ok, true);
+  assert.equal(writes[1].error?.code, 'repeat_blocked');
+  assert.equal(fs.readFileSync(path.join(WS, 'repeat-write.txt'), 'utf8'), 'one write');
+  assert.match(r.text, /existing write succeeded|duplicate/i);
+  rt.cfg.patch({ routing: { escalateAfterErrors: 2 }, agent: { maxSteps: 6 }, moa: { policy: 'always' } });
+});
+
+test('loop serializes tool batches that can change state', async () => {
+  rt.cfg.patch({ agent: { maxSteps: 5 }, moa: { policy: 'off' } });
+  scriptAll([
+    {
+      text: 'Create both files.',
+      toolCalls: [
+        { name: 'fs.write', args: { path: 'batch-a.txt', content: 'a' } },
+        { name: 'fs.write', args: { path: 'batch-b.txt', content: 'b' } },
+      ],
+    },
+    { text: 'Both files were created.' },
+  ]);
+  const c = collect();
+  await rt.agent.turn({ input: 'create batch-a.txt and batch-b.txt', session: 't-serial-batch', onEvent: c.onEvent });
+  assert.ok(c.evs.some((e) => e.type === 'tool_batch' && e.parallel === false), 'write batches must never use Promise.all');
+  assert.equal(fs.readFileSync(path.join(WS, 'batch-a.txt'), 'utf8'), 'a');
+  assert.equal(fs.readFileSync(path.join(WS, 'batch-b.txt'), 'utf8'), 'b');
+  rt.cfg.patch({ agent: { maxSteps: 6 }, moa: { policy: 'always' } });
+});
+
+test('pause holds an active turn at a safe boundary until resumed', async () => {
+  scriptAll([{ text: 'Resumed and ready.' }]);
+  const c = collect();
+  rt.agent.pause();
+  const pending = rt.agent.turn({ input: 'say ready', session: 't-paused', onEvent: c.onEvent });
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.ok(c.types().includes('paused'), 'the UI should receive a paused event');
+  assert.ok(!c.types().includes('step'), 'no model step should start while paused');
+  rt.agent.resume();
+  const r = await pending;
+  assert.match(r.text, /resumed and ready/i);
+});
+
 test('abort: stop() unwinds without hanging', async () => {
   scriptAll(Array.from({ length: 6 }, () => ({ text: 'jobbar vidare …', toolCalls: [{ name: 'fs.list', args: { path: '.' } }] })));
   const c = collect();
@@ -154,7 +240,7 @@ test('abort: stop() unwinds without hanging', async () => {
 });
 
 test('registry + runtime: the promises kept', async () => {
-  assert.equal(rt.registry.list().length, 77, '77 tools, none disabled');
+  assert.equal(rt.registry.list().length, 89, '89 tools, none disabled');
   const names = rt.registry.list().map((t) => t.name);
   for (const must of ['fs.write', 'shell.run', 'web.fetch', 're.analyze', 'majin.configure', 'agent.delegate', 'agent.moa']) {
     assert.ok(names.includes(must), `${must} must exist`);
@@ -163,8 +249,8 @@ test('registry + runtime: the promises kept', async () => {
   assert.ok(Object.keys(groups).length >= 6, 'groups for the UI');
   assert.ok(groups.reverse.length >= 20, 'the RE group must be large');
   assert.equal(typeof rt.version, 'string');
-  assert.equal(rt.state({ includeTools: false }).tools.count, 77, 'state must report the tool count');
-  assert.equal(rt.state().tools.length, 77, 'full state lists every tool');
+  assert.equal(rt.state({ includeTools: false }).tools.count, 89, 'state must report the tool count');
+  assert.equal(rt.state().tools.length, 89, 'full state lists every tool');
   const st = rt.state();
   for (const k of ['config', 'routes', 'moa', 'guard', 'usage', 'channels', 'providers', 'memory']) {
     assert.ok(k in st, `state.${k} is missing`);

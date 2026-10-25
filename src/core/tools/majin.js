@@ -582,7 +582,7 @@ export const majinTools = [
       const stamp = new Date().toISOString().replace(/[:.]/g, '');
       if (action === 'export') {
         const out = path.join(dir, `majin-backup-${stamp}.tar.gz`);
-        const roots = [ctx.cfg.file, dirs.memory, dirs.skills, dirs.sessions, dirs.rules].filter((p) => fs.existsSync(p));
+        const roots = [ctx.cfg.file, dirs.memory, dirs.skills, dirs.plugins, dirs.sessions, dirs.rules].filter((p) => fs.existsSync(p));
         const r = spawnSync('tar', ['-czf', out, '-C', dirs.root, ...roots.map((p) => path.relative(dirs.root, p))], { encoding: 'utf8' });
         if (r.status !== 0) return { ok: false, error: { code: 'tar_failed', message: r.stderr || 'tar is not installed' } };
         return { result: `backupeade ${roots.length} delar → ${out} (${fs.statSync(out).size} byte)`, summary: 'backup klar' };

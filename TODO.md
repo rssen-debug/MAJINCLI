@@ -25,6 +25,9 @@ Everything here is *not* done — verified against the code, not against memory.
 
 ## P1
 
+- **Plugin sandbox.** `majin.plugin` can create and hot-load local custom tools, with hash checks and
+  `exec` risk/approval. Plugins still run in the MAJIN process and inherit its OS permissions; add an
+  optional isolated worker/container or permission model before treating third-party plugins as safe.
 - **The provider card cannot edit a model list or `kind`.** Picking a preset is enough for the big
   providers, but a wrong or empty `models[]` still means the config file or a chat instruction. The
   card has a preset, a key and an address — the row's own model list is the missing piece.
@@ -106,5 +109,4 @@ Everything here is *not* done — verified against the code, not against memory.
 - Silent telemetry, key mirroring to any server, or "improvement" uploads without a stored opt-in.
   Dataset capture has **no upload code path at all**: `dataset.upload` is rejected by config
   validation, and sharing means exporting the JSONL yourself.
-- Rewriting MAJIN's own source at runtime (self-config edits *config*, with backup + diff, only).
 - Anything that needs Windows Defender/firewall/service mutation.
