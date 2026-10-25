@@ -217,7 +217,7 @@ export const DEFAULT_CANONICAL_SKILLS = Object.freeze([
     required_tools: ['jobs.match'],
     preferred_tools: ['jobs.prepare'],
     relevance_criteria: ['match', 'fit', 'criteria', 'qualify', 'passar', 'matcha', 'kriterier', 'krav', 'meriterande'], // input vocabulary, never rendered
-    version: INITIAL_SKILL_VER,
+    version: '1.1.0',
     origin: 'builtin',
     verification_method: 'schema_assert',
     failure_strategies: {

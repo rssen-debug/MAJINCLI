@@ -86,6 +86,24 @@ npm run v5:deepseek:jobs -- \
 
 Use `--limit 10` first to control model cost. The three real-ad DeepSeek canaries must pass before production input is opened.
 
+## Fresh retraining with the real 500-ad oracle
+
+`src/v5/live500-training.js` builds independent expectations from the source taxonomy and a pinned synthetic-CV hash. It does not import the production skill catalog or use matcher output as gold. The 14 distinct mandatory source labels are explicitly mapped; uncertain AI/BI/C++ Builder/machine-learning labels remain review cases.
+
+```bash
+# Validate all 4,100 scenarios without writing XP.
+npm run v5:train:live500 -- --suite-only
+
+# Train a fresh state to Level 99.
+npm run v5:train:live500 -- --target-level 99 --data-dir .majin/v5-real500
+
+# Start V5 with that trained state and replay the same real fixture.
+npm run v5:serve -- --host 0.0.0.0 --port 4555 --data-dir .majin/v5-real500
+npm run v5:replay:500 -- --output .majin/v5-real500/live-500/replay-response.json
+```
+
+Recorded result: **4,100/4,100 scenarios passed before XP**, then 4,100 verified awards, 400 recoveries, `career.job-match` version 1.1.0 at Level 99 with 152,244 XP at training completion. An immediate repeat processed zero scenarios and awarded zero XP. The new state then returned the same live 500/61/438/1 outcome with zero drafts/submissions and two evidence receipts. Full V5 regression: **45/45 passed**.
+
 ## Corpus and independent oracles
 
 `test/fixtures/jobtech-real-2026-10-25.json` contains trimmed real JobTech API fields and exact requirement excerpts for:

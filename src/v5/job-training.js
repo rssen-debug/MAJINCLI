@@ -16,7 +16,7 @@ import { xpForLevel } from './xp-engine.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const REAL_JOB_CORPUS = path.resolve(HERE, '../../test/fixtures/jobtech-real-2026-10-25.json');
-export const JOB_TRAINING_SUITE_VERSION = 'job-match-2026.10.25-v1';
+export const JOB_TRAINING_SUITE_VERSION = 'job-match-2026.10.25-v2-real500';
 
 const TECH = ['node.js', 'typescript', 'react', 'postgresql', 'docker', 'java', 'python', 'kubernetes', 'graphql', 'aws'];
 const HEALTH = ['legitimerad sjuksköterska', 'geriatrik', 'demensvård', 'psykiatri', 'b-körkort', 'finska']; // input vocabulary, never rendered

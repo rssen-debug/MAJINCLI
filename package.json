@@ -71,6 +71,7 @@
     "v5:serve": "node ./bin/majin-v5.mjs serve",
     "v5:test": "node --test test/v5/*.test.js",
     "v5:train:jobs": "node ./scripts/v5/train-job-search.mjs",
+    "v5:train:live500": "node ./scripts/v5/train-live-500.mjs",
     "v5:benchmark:jobs": "node ./scripts/v5/benchmark-job-batch.mjs",
     "v5:deepseek:jobs": "node ./scripts/v5/run-deepseek-jobs.mjs",
     "v5:replay:500": "node ./scripts/v5/replay-live-500.mjs",
