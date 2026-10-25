@@ -251,6 +251,20 @@ export function createV5Server({
       // Access & Owner Mode control
       if (method === 'POST' && pathname === '/api/v5/access') {
         const body = await readJsonBody(req);
+        // A local owner can authorize an exact HTTPS browser-write origin without rebuilding
+        // or restarting the host. The model itself does not have access to this endpoint.
+        if (body.action === 'allow_browser_origin') {
+          const remote = req.socket.remoteAddress || '';
+          if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote)) {
+            return sendJson(res, 403, { ok: false, error: 'Browser origin approval requires a local owner connection.' });
+          }
+          try {
+            const approved = providerAgent.approveBrowserOrigin(body.origin);
+            return sendJson(res, 200, { ok: true, browserWriteOrigins: approved });
+          } catch (error) {
+            return sendJson(res, error.statusCode || 400, { ok: false, error: error.message });
+          }
+        }
         if (body.action === 'stop_all') {
           const stopped = architect.files.triggerEmergencyStop();
           await providerAgent.cancel();
