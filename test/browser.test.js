@@ -85,7 +85,8 @@ test('process-wide session helpers stay truthful without a browser', () => {
 
 test('click follows a spawned tab, and the recovery cookbook lives in the system prompt', async () => {
   const web = (await import('node:fs')).readFileSync(new URL('../src/core/tools/web.js', import.meta.url), 'utf8');
-  assert.match(web, /followNewTarget/, 'click must attach to a tab the click itself spawned');
+  assert.match(web, /snapshotTargets/, 'capture current tab ids before the click');
+  assert.match(web, /followNewTarget\(\{ windowMs: 1500, beforeTargets: targetsBeforeClick \}\)/, 'click follows only a target created by that action even when Edge omits openerId');
   assert.match(web, /new tab followed/, 'the agent is told what actually happened');
   const agent = (await import('node:fs')).readFileSync(new URL('../src/core/agent.js', import.meta.url), 'utf8');
   assert.match(agent, /browser\.read the page, try a narrower selector/, 'the recovery path is taught, deterministic order');
@@ -151,6 +152,12 @@ test('followNewTarget never follows the stale initial tab (the about:blank wire)
   assert.equal(isChildTarget({ type: 'page', targetId: 'edge-sync-dialog' }, browser), false, 'an unrelated browser-owned page must never receive the agent actions');
   assert.equal(isChildTarget({ type: 'page', targetId: 'other-popup', openerId: 'other-page' }, browser), false);
   assert.equal(isChildTarget({ type: 'page', targetId: 'our-popup', openerId: 'our-page' }, browser), true);
+  const beforeClick = new Set(['our-page', 'initial-blank']);
+  assert.equal(isChildTarget({ type: 'page', targetId: 'noopener-popup', url: 'https://fixture/new', openerId: null }, browser, beforeClick), true,
+    'a target created by this click is followed even if Edge omits openerId');
+  const afterUnrelated = new Set(['our-page', 'initial-blank', 'edge-sync-dialog']);
+  assert.equal(isChildTarget({ type: 'page', targetId: 'edge-sync-dialog', url: 'https://edge/sync' }, browser, afterUnrelated), false,
+    'an unrelated target already present before the click is not followed');
   browser.targetId = 'our-popup'; browser.knownTabs.add('our-popup');
   assert.equal(isChildTarget({ type: 'page', targetId: 'nested-popup', openerId: 'our-popup' }, browser), true, 'following a tab updates the opener for subsequent clicks');
 });

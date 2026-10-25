@@ -370,6 +370,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       const semanticTarget=JSON.stringify(semantic ? {role:String(role),name:String(accessibleName).trim()} : null);
       const expectedIdentity=JSON.stringify(identity);
       ctx.signal?.throwIfAborted();
+      const targetsBeforeClick = await b.snapshotTargets?.().catch(() => null);
       const hit = await b.eval(`(() => {
         // Playwright-MCP-style unique target selection: acting on the first
         // of multiple matching buttons is unsafe, especially Submit/Buy.
@@ -501,7 +502,7 @@ async run({ url, extract = 'text', maxChars = 24000, method = 'GET', headers = {
       noteBrowserAction(session);
       /* a click may spawn a NEW tab (target=_blank, window.open): follow it
          so the agent lands where the page actually went */
-      const fol = await (b.followNewTarget ? b.followNewTarget({ windowMs: 1500 }) : { followed: false });
+      const fol = await (b.followNewTarget ? b.followNewTarget({ windowMs: 1500, beforeTargets: targetsBeforeClick }) : { followed: false });
       const after = fol.followed ? { url: fol.url, title: fol.title } : await b.eval('(() => ({ url: location.href, title: document.title }))()');
       // Stagehand-inspired deterministic action + evidence. No extra model
       // call and no second click. Only poll the outcome on the live page.
