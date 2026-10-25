@@ -12,7 +12,7 @@ const cvName = path.basename(cvPath); fs.copyFileSync(cvPath, path.join(workspac
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const expectedHash = hash(fs.readFileSync(cvPath));
 let receipt = null; let submissions = 0;
-const page = `<!doctype html><html lang="sv"><title>Lokal CV-testportal</title><h1>Lokal testansökan — ingen arbetsgivare</h1>
+const page = `<!doctype html><html lang="sv"><title>Local CV test portal</title><h1>Local test application - no employer</h1>
 <form id="application" action="/receive" method="post" enctype="multipart/form-data">
 <label>Namn <input id="name" name="name" required></label><label>E-post (testadress) <input type="email" id="email" name="email" required></label>
 <fieldset><legend>Kontaktkanal (test)</legend><label><input type="radio" name="contact" id="contact-email" value="email" required>E-post</label><label><input type="radio" name="contact" id="contact-phone" value="phone">Telefon</label></fieldset>
@@ -25,8 +25,8 @@ const page = `<!doctype html><html lang="sv"><title>Lokal CV-testportal</title><
 <script>
 country.onchange=()=>{const on=country.value==='se';document.querySelector('#city-label').hidden=!on;city.disabled=!on;city.required=on;};
 for(const id of ['hybrid','office'])document.getElementById(id).onclick=()=>{for(const other of ['hybrid','office'])document.getElementById(other).setAttribute('aria-checked',String(id===other));mode.value=id;};
-cv.onchange=()=>selected.textContent='Vald fil: '+cv.files[0]?.name;
-application.onsubmit=async event=>{event.preventDefault();if(!application.reportValidity())return;submit.disabled=true;try{const response=await fetch('/receive',{method:'POST',body:new FormData(application)});const data=await response.json();confirmation.textContent=response.ok?'MOTTAGEN '+data.receiptId+' SHA256 '+data.sha256:'FEL '+data.error;}finally{submit.disabled=false;}};
+cv.onchange=()=>selected.textContent='Selected file: '+cv.files[0]?.name;
+application.onsubmit=async event=>{event.preventDefault();if(!application.reportValidity())return;submit.disabled=true;try{const response=await fetch('/receive',{method:'POST',body:new FormData(application)});const data=await response.json();confirmation.textContent=response.ok?'MOTTAGEN '+data.receiptId+' SHA256 '+data.sha256:'ERROR '+data.error;}finally{submit.disabled=false;}};
 </script></html>`;
 const fixture = http.createServer(async (req, res) => {
   try {
