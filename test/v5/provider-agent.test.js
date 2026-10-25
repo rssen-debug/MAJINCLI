@@ -86,6 +86,50 @@ test('repeated failed actions are observed and stopped rather than blindly execu
   assert.equal(result.status, 'BLOCKED');
   assert(result.tool_results.some(r => r.errorCode === 'REPEATED_FAILED_ACTION'));
 });
+
+test('resume after restart preserves identity, criteria, costs and observed effects; completed resume is idempotent', async t => {
+  const { server, requests } = await setup(t, (_body, count) => {
+    if (count === 1) return tool('same-provider-id', 'fs_write', { path: 'once.txt', content: 'once', append: true });
+    if (count === 2) return tool('same-provider-id', 'fs_write', { path: 'ready.txt', content: 'ready' });
+    return { role: 'assistant', content: 'Finished from the checkpoint.' };
+  });
+  server.providerAgent.maxRounds = 1;
+  const criteria = [{ kind: 'file', path: 'ready.txt', contains: 'ready' }];
+  const initial = await server.providerAgent.execute({ goalText: 'Append once and create ready.txt', criteria });
+  assert.equal(initial.status, 'BLOCKED');
+  const restored = new ProviderAgent({ architect: server.architect });
+  const result = await restored.execute({ resume: true });
+  assert.equal(result.goal_id, initial.goal_id);
+  assert.equal(result.objective, initial.objective);
+  assert.deepEqual(result.criteria, criteria);
+  assert.equal(result.status, 'COMPLETED');
+  assert.equal(result.tool_results.length, 2);
+  assert.equal(result.cost.modelCalls, 3);
+  assert.equal(result.resume_count, 1);
+  assert.equal(fs.readFileSync(path.join(server.architect.workspaceDir, 'once.txt'), 'utf8'), 'once');
+  assert.notEqual(result.tool_results[0].operationId, result.tool_results[1].operationId);
+  assert.equal(new Set(requests.map(r => r.headers['x-opencode-session'])).size, 1);
+  const completed = await restored.execute({ resume: true });
+  assert.equal(completed.goal_id, initial.goal_id);
+  assert.equal(requests.length, 3, 'completed resume makes no model or tool calls');
+  await assert.rejects(restored.execute({ resume: true, criteria: [] }), /cannot replace saved acceptance/);
+});
+
+test('HTTP resume retains saved acceptance checks when the request omits criteria', async t => {
+  const { server } = await setup(t, (_body, count) => count === 1
+    ? tool('write', 'fs_write', { path: 'proof.txt', content: 'proof' })
+    : { role: 'assistant', content: 'Read the saved result.' });
+  const { url } = await server.start();
+  server.providerAgent.maxRounds = 1;
+  const original = await server.providerAgent.execute({ goalText: 'Create proof.txt', criteria: [{ kind: 'file', path: 'proof.txt', contains: 'proof' }] });
+  server.providerAgent.maxRounds = 32;
+  const response = await fetch(url + '/api/v5/goal/resume', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  assert.equal(response.status, 200);
+  const { goal } = await response.json();
+  assert.equal(goal.goal_id, original.goal_id);
+  assert.equal(goal.status, 'COMPLETED');
+  assert.equal(goal.verification_evidence.length, 1);
+});
 test('403 access policy is distinguished from an invalid API key', () => {
   assert.equal(classifyProviderError(new Error('Region not allowed'), 403).code, 'ACCESS_DENIED');
   assert.equal(classifyProviderError(new Error('Invalid API key'), 401).code, 'AUTH_INVALID');
