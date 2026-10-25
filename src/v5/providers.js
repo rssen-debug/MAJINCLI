@@ -128,9 +128,86 @@ export class ProviderManager {
     this.secretsFile = path.join(dataDir, 'provider-secrets.json');
     this.fetchImpl = fetchImpl;
     this.completeImpl = completeImpl;
+    const hadStateFile = fs.existsSync(this.stateFile);
     fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
     this.state = this.#loadState();
     this.secrets = this.#loadSecrets();
+    if (!hadStateFile) {
+      this.#seedFromLegacyMajinIfPresent();
+    }
+  }
+
+  #seedFromLegacyMajinIfPresent() {
+    if (path.basename(this.dataDir) !== 'v5') return;
+    const majinRoot = path.dirname(this.dataDir);
+    // 1. Check V4 provider.json (read-only, never modify V4 files)
+    const v4ProviderFile = path.join(majinRoot, 'v4', 'provider.json');
+    if (fs.existsSync(v4ProviderFile)) {
+      try {
+        const v4 = JSON.parse(fs.readFileSync(v4ProviderFile, 'utf8'));
+        const provId = String(v4.provider || v4.activeProvider || 'opencode-go').toLowerCase();
+        const modelId = v4.model || v4.activeModelId || null;
+        if (provId) {
+          this.state.activeProvider = provId;
+          this.state.activeModelId = modelId;
+          this.state.savedConfig = true;
+          this.state.migratedFrom = 'v4';
+          this.state.providers[provId] = {
+            id: provId,
+            label: PROVIDER_PRESETS[provId]?.label || provId,
+            kind: v4.kind || PROVIDER_PRESETS[provId]?.kind || 'openai',
+            baseUrl: v4.baseUrl || PROVIDER_PRESETS[provId]?.baseUrl || 'https://opencode.ai/zen/go/v1',
+            savedConfig: true,
+            connectionVerified: false,
+            activeModelId: modelId,
+            discoveredModels: [],
+            modelCapabilities: {},
+            lastError: null,
+          };
+          if (v4.apiKey) {
+            this.secrets[provId] = v4.apiKey;
+            this.#saveSecrets();
+          }
+          this.#saveState();
+          return;
+        }
+      } catch { /* ignore corrupt legacy file */ }
+    }
+    // 2. Check V1 config.json (read-only, never modify V1 files)
+    const v1ConfigFile = path.join(majinRoot, 'config.json');
+    if (fs.existsSync(v1ConfigFile)) {
+      try {
+        const v1 = JSON.parse(fs.readFileSync(v1ConfigFile, 'utf8'));
+        const route = String(v1?.models?.routes?.chat || '');
+        const [rawProv, ...modelParts] = route.split('/');
+        const provId = (rawProv || '').trim().toLowerCase();
+        const modelId = modelParts.join('/').trim() || null;
+        if (provId) {
+          const v1Prov = v1?.providers?.[provId] || {};
+          this.state.activeProvider = provId;
+          this.state.activeModelId = modelId;
+          this.state.savedConfig = true;
+          this.state.migratedFrom = 'v1';
+          this.state.providers[provId] = {
+            id: provId,
+            label: PROVIDER_PRESETS[provId]?.label || provId,
+            kind: v1Prov.kind || PROVIDER_PRESETS[provId]?.kind || 'openai',
+            baseUrl: v1Prov.baseUrl || PROVIDER_PRESETS[provId]?.baseUrl || 'https://opencode.ai/zen/go/v1',
+            savedConfig: true,
+            connectionVerified: false,
+            activeModelId: modelId,
+            discoveredModels: [],
+            modelCapabilities: {},
+            lastError: null,
+          };
+          if (v1Prov.apiKey) {
+            this.secrets[provId] = v1Prov.apiKey;
+            this.#saveSecrets();
+          }
+          this.#saveState();
+        }
+      } catch { /* ignore */ }
+    }
   }
 
   #loadState() {

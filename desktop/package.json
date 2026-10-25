@@ -1,7 +1,8 @@
 {
-  "name": "majin-v4-desktop",
+  "name": "majin-v5-desktop",
   "version": "4.0.0-alpha.3",
-  "description": "MAJIN V4 Windows client for the shared private host",
+  "v5Version": "5.0.0",
+  "description": "MAJIN V5 — GRAND ARCHITECT Windows desktop application with local Black Box host",
   "author": "MAJIN contributors",
   "license": "MIT",
   "main": "main.cjs",
@@ -16,8 +17,12 @@
     "electron-builder": "26.15.3"
   },
   "build": {
-    "appId": "com.majin.v4",
-    "productName": "MAJIN V4",
+    "appId": "com.majin.v5",
+    "productName": "MAJIN V5",
+    "extraMetadata": {
+      "name": "majin-v5-desktop",
+      "version": "5.0.0"
+    },
     "directories": {
       "output": "dist"
     },
@@ -38,14 +43,14 @@
         "filter": ["**/*"]
       },
       {
-        "from": "../src/v4/ui/icons/icon-512.png",
+        "from": "../assets/majin.png",
         "to": "icon.png"
       }
     ],
     "win": {
       "target": "nsis",
       "icon": "stage/icon.ico",
-      "artifactName": "MAJIN-V4-${version}-Setup.${ext}"
+      "artifactName": "MAJIN-V5-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -53,7 +58,8 @@
       "allowElevation": false,
       "allowToChangeInstallationDirectory": true,
       "createStartMenuShortcut": true,
-      "createDesktopShortcut": false,
+      "createDesktopShortcut": "always",
+      "shortcutName": "MAJIN V5",
       "runAfterFinish": false,
       "deleteAppDataOnUninstall": false
     }

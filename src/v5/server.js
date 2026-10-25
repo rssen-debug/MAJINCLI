@@ -112,10 +112,11 @@ export function createV5Server({
         return serveStaticFile(res, LOGO_PATH, 'image/png');
       }
 
-      // Health & version endpoint
-      if (method === 'GET' && pathname === '/api/v5/health') {
+      // Health & version endpoint (supports both /api/v5/health and /api/health for Electron desktop)
+      if (method === 'GET' && (pathname === '/api/v5/health' || pathname === '/api/health')) {
         return sendJson(res, 200, {
           ok: true,
+          app: 'majin-v5',
           ...architect.ops.getVersionInfo(),
         });
       }

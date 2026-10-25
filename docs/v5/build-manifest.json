@@ -3,13 +3,33 @@
   "product": "MAJIN V5 — GRAND ARCHITECT",
   "version": "5.0.0",
   "gitSha": "e59794988795b97b40ec5a90d71e8d1fa71f0d69",
-  "packageTreeSha256": "41f1a3dac50cfa234f22fcc2bc94d39f9b5bbf9340d216eb0cbfc8b4d972e29b",
+  "packageTreeSha256": "56d38510ae1eb43bf89fa2766f448c693458d8ccaa4328a3a026b578e8c43b51",
   "windowsInstallerScript": "scripts/v5/install-majin-v5-windows.ps1",
-  "filesCount": 34,
+  "filesCount": 45,
   "files": {
     "bin/majin-v5.mjs": {
-      "bytes": 2017,
-      "sha256": "b6866ab4269a020b1c4e85cb591f511793a1edf24a2306b28941aaf065d71df2"
+      "bytes": 3454,
+      "sha256": "e36b6a6e08ecf5b4b3166beb5a69eab20c567d153d634acbf9814143cbe4478f"
+    },
+    "desktop/main.cjs": {
+      "bytes": 9228,
+      "sha256": "459bdc0a7125f9f0ff9e1b598461213991530424089d88be43edb66c5b9fced1"
+    },
+    "desktop/policy.cjs": {
+      "bytes": 2079,
+      "sha256": "64d497ab6ff36af42efc826ee17e217df3940a1ea541eaf7e01ecdde2dbe1229"
+    },
+    "desktop/stage-host.mjs": {
+      "bytes": 2701,
+      "sha256": "fa20127a217ea4ab29622b6c24fa19f0dda55e93e783cf0026c5311e816368c6"
+    },
+    "desktop/offline.html": {
+      "bytes": 1107,
+      "sha256": "782fb5619b6b36a3e04132fd7d360b173a9b5313009f5a6cf3fc4cdc147ce43f"
+    },
+    "desktop/package.json": {
+      "bytes": 1652,
+      "sha256": "94a7a63b2666c9a6dfe09847216c75dfabd363810407cf36bc003769e40b8fbb"
     },
     "src/v5/architect.js": {
       "bytes": 33405,
@@ -32,12 +52,12 @@
       "sha256": "c14f82fd9f95ea4255f0624e5e3f386742052644b1bebb5b04f5ffac85d03453"
     },
     "src/v5/providers.js": {
-      "bytes": 22486,
-      "sha256": "cfeced579662411ef864d65d69ba8736c94fff7246bce118956cf49a89e9ede0"
+      "bytes": 25617,
+      "sha256": "eb78da4b0c283be08c19aa1dcb99480f6e20a789ef2323f59baba8d083a9ebf3"
     },
     "src/v5/server.js": {
-      "bytes": 12412,
-      "sha256": "b24c7d83c52de71e8e368032d564f126675f91066793e3329bd501642dbef875"
+      "bytes": 12539,
+      "sha256": "efffc5e80767dd0a290831bdaae0e47ad84870052d4a0c24b85b39ecb7127eeb"
     },
     "src/v5/skill-builder.js": {
       "bytes": 14243,
@@ -83,6 +103,10 @@
       "bytes": 8093,
       "sha256": "b8f53dad4c7bc9927e771587ac17c3d9f649b574bc5226b2ad47a6249c1a33e5"
     },
+    "test/v5/desktop-v5.test.js": {
+      "bytes": 6246,
+      "sha256": "2a0cb4593ed7a42f4eb68fae713b71e3f5cfc8c185e3dd74a4059cc7f378fd62"
+    },
     "test/v5/job-workflow.test.js": {
       "bytes": 8840,
       "sha256": "93046408c12cc5931582004952b888c680158428d983be23c72756e2e306fee3"
@@ -107,6 +131,18 @@
       "bytes": 5987,
       "sha256": "d94ff5d9bffeb1f4077111c13a5df27b060e1a53e9c23bad4893110cbb380df6"
     },
+    "scripts/v5/desktop-host.mjs": {
+      "bytes": 2633,
+      "sha256": "6b031bfae7f20b8a4be4613aa729230cd342b846b1308ba9b28cece38c124191"
+    },
+    "scripts/v5/desktop-smoke.mjs": {
+      "bytes": 9041,
+      "sha256": "b3c505f1a316752b96ca0bee39502528c55bc02b769b678cedd8ada70e06d817"
+    },
+    "scripts/v5/desktop-installer-verify.ps1": {
+      "bytes": 8080,
+      "sha256": "fc851b86491f161ab5408a332eec6188b2991aa0b86fda2f73ee11da8099a50f"
+    },
     "scripts/v5/install-majin-v5-windows.ps1": {
       "bytes": 1718,
       "sha256": "7e4b214254cfecec66aa9a484abe86c54b8dfc3854138907a3e337b453461008"
@@ -116,8 +152,8 @@
       "sha256": "1dfa8cadb545635afc0e7ac4baff88452793e11dc0672778ca0b9af4c58d87bc"
     },
     "scripts/v5/build-package.mjs": {
-      "bytes": 3733,
-      "sha256": "46392935e1b9000af269ea65f64beb24b0af53b42fa5bcd5a5456a15dff5ffc7"
+      "bytes": 4035,
+      "sha256": "ee4b5609dc7955790c4937265775b20648b3ec04bbd5a39aa7c3815193fcba9b"
     },
     "docs/v5/REUSE_MATRIX.md": {
       "bytes": 13192,
@@ -138,6 +174,14 @@
     "docs/v5/HANDOVER.md": {
       "bytes": 11467,
       "sha256": "b89b412182da211320400312895c42a6dca508132ff6c175098e16fb5c7012e3"
+    },
+    "assets/majin.png": {
+      "bytes": 50304,
+      "sha256": "e98eb71ee69d05cbededf914a6954724c1bf71d9883c57e5efdc8ab5550bdfba"
+    },
+    "assets/majin.ico": {
+      "bytes": 41324,
+      "sha256": "c2a8ecde5a6726a363f6d9852b47ab9dadda089f4518a0a2def45b0b9705012c"
     },
     "assets/majin-transparent.png": {
       "bytes": 48246,
