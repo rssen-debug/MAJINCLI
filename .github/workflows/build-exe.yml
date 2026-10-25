@@ -153,7 +153,15 @@ jobs:
           MAJIN_BROWSER_LIVE: '1'
         run: |
           $env:MAJIN_HOME = "$env:GITHUB_WORKSPACE\.livedemo"
-          node --test --test-concurrency=1 test/browser.live.test.js test/jobs.live.test.js test/browser-domains.live.test.js
+          $log = "$env:RUNNER_TEMP\live.log"
+          node --test --test-concurrency=1 test/browser.live.test.js test/jobs.live.test.js test/browser-domains.live.test.js 2>&1 | Tee-Object -FilePath $log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content $log | Select-String -Pattern '^not ok' | Select-Object -First 10 | ForEach-Object {
+              Write-Output "::error title=live browser/jobs test failed::$($_.Line)"
+            }
+            Get-Content $log -Tail 25 | ForEach-Object { Write-Output "::error title=live log tail::$($_)" }
+            exit 1
+          }
 
       - name: the installer must install, run, survive a restart and uninstall
         # One verifier for CI and for a person's own laptop: the same script the
