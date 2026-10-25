@@ -608,3 +608,5 @@ button:focus-visible,textarea:focus-visible { outline:3px solid rgba(101,255,203
 .v5-msg p { overflow-wrap: anywhere; white-space: pre-wrap; }
 .v5-send-btn[hidden], .v5-stop-btn[hidden] { display: none !important; }
 @media (max-width: 640px) { .v5-composer { width: calc(100% - 20px); } .v5-composer-box { padding: 8px 10px; } }
+
+.v5-tool-progress { margin: 8px 0; padding: 10px 12px; color: #a9cfbf; font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; border-left: 2px solid #37bd91; background: rgba(20,110,82,.075); overflow-wrap: anywhere; }
