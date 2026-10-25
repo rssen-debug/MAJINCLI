@@ -396,6 +396,7 @@ export const fileTools = [
             return;
           }
           if (IGNORE.has(e.name) || e.name.startsWith('.')) continue;
+          if (e.isSymbolicLink()) continue;
           visited += 1;
           const full = path.join(dir, e.name);
           if (e.isDirectory()) {
@@ -539,6 +540,7 @@ export async function walk(root, { glob = '', limit = 5000, dirs = false } = {})
     for (const e of ents) {
       if (out.length >= limit) return;
       if (IGNORE.has(e.name) || e.name.startsWith('.')) continue;
+      if (e.isSymbolicLink()) continue;
       const full = path.join(cur, e.name);
       if (e.isDirectory()) {
         if (dirs) out.push(full);

@@ -1,0 +1,31 @@
+name: CODEX DRIVER backend
+on:
+  pull_request:
+    paths:
+      - 'src/v5/codex-*.js'
+      - 'src/core/tools/desktop-app.js'
+      - 'src/core/tools/wincontrol.js'
+      - 'src/core/tools/files.js'
+      - 'bin/majin-codex-*.mjs'
+      - 'scripts/v5/*codex*'
+      - 'test/v5/codex-*.test.js'
+      - '.github/workflows/codex-driver.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backend:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts --omit=dev --omit=optional --no-audit --no-fund
+      - run: node --test test/v5/codex-driver.test.js test/v5/codex-host.test.js test/wincontrol.test.js
+      - run: npm run check
