@@ -544,3 +544,56 @@ body { background: radial-gradient(ellipse at 50% 25%, #10201866, transparent 56
   .v5-send-btn { padding: 0 12px; }
   .v5-send-btn span { display: none; }
 }
+
+
+/* MAJIN V5 Living Minimal — progressive enhancement, no backend changes */
+:root { --bg-black:#030a09; --bg-surface:#071311; --bg-elevated:#0c1c19; --text-primary:#f3fff9; --text-secondary:#bed0c9; --xp-green:#14e5a1; --xp-green-bright:#43fbc4; --border-focus:#37ebae; --content-w:1160px; }
+html,body { background: radial-gradient(ellipse 50% 42% at 50% 40%,rgba(5,101,77,.17),transparent 82%),radial-gradient(ellipse 55% 28% at 50% 100%,rgba(12,74,67,.18),transparent 90%),#020807; color:var(--text-primary); }
+body { min-height:100dvh; }
+.v5-topbar { max-width:none; padding:clamp(16px,2vw,28px) clamp(20px,3.5vw,60px); position:relative; z-index:2; }
+.v5-brand { font-size:clamp(1.05rem,1.8vw,1.4rem); letter-spacing:.085em; gap:12px; }
+.v5-brand-dot { width:11px; height:11px; background:#14e5a1; box-shadow:0 0 15px rgba(20,229,161,.6); }
+.v5-brand-badge { padding:3px 12px; font-size:.83rem; background:rgba(16,195,136,.08); }
+.v5-pill { min-height:48px; padding:9px 18px; color:#e9f8f2; font-size:1rem; background:rgba(11,22,21,.65); border:1px solid rgba(203,255,237,.17); }
+.v5-pill:hover,.v5-pill:focus-visible { background:#132a25; }
+.v5-stage { max-width:1160px; justify-content:center; padding:0 24px 26px; min-height:0; }
+.v5-blackbox-hero { margin:0 0 clamp(16px,3vh,34px); }
+.v5-emblem-btn { width:clamp(200px,28vh,290px); height:clamp(200px,28vh,290px); isolation:isolate; filter:drop-shadow(0 0 30px rgba(15,209,145,.12)); }
+.v5-emblem-btn::before { content:""; position:absolute; inset:16%; border-radius:50%; background:radial-gradient(circle at 50% 35%,rgba(23,111,92,.13),rgba(3,16,13,.2) 60%,transparent); border:1px solid rgba(63,254,190,.34); box-shadow:inset 0 0 30px rgba(4,207,141,.12),0 0 26px rgba(4,207,141,.17); pointer-events:none; }
+.v5-emblem-btn::after { content:""; position:absolute; inset:6%; border-radius:50%; border:1px solid rgba(47,244,175,.08); box-shadow:0 0 60px rgba(8,223,154,.11); pointer-events:none; }
+.v5-logo-img { width:30%; height:30%; object-fit:contain; border-radius:0; filter:drop-shadow(0 0 12px rgba(132,255,215,.28)); }
+.v5-hero-title { margin:4px 0 0; font-size:clamp(1.65rem,3.5vw,2.45rem); letter-spacing:-.035em; line-height:1.25; font-weight:600; text-wrap:balance; }
+.v5-hero-caption { display:none; }
+.v5-xp-bar-wrap { margin-top:18px; gap:2px; }
+.v5-xp-ticker { color:#b0efdb; font-size:1rem; font-weight:500; }
+.v5-skill-meta { color:#a2c5b7; font-size:.9rem; }
+.v5-dot-strip { display:none; } /* 99 dots remain in the orb and the accessible skills drawer */
+.v5-live-status { margin-top:16px; font-size:1rem; }
+.v5-status-text { color:#c6e5d9; }
+.v5-composer { width:min(100% - 40px,1020px); max-width:1020px; margin:0 auto clamp(20px,3vh,36px); z-index:2; }
+.v5-composer-box { background:rgba(9,24,22,.9); border:1px solid rgba(52,240,175,.53); box-shadow:0 0 0 1px rgba(28,124,95,.1),0 10px 40px rgba(0,0,0,.25),0 0 30px rgba(0,225,158,.075); border-radius:999px; min-height:84px; padding:9px 16px; transition:box-shadow .25s,border-color .25s; }
+.v5-composer-box:focus-within { border-color:#54ffd0; box-shadow:0 0 0 3px rgba(56,241,181,.15),0 0 30px rgba(0,225,158,.11); }
+#wish-input { color:#f5fff9; font-size:clamp(1rem,1.5vw,1.14rem); line-height:1.45; }
+#wish-input::placeholder { color:#9fb8ad; opacity:1; }
+.v5-icon-btn,.v5-send-btn,.v5-stop-btn { min-width:48px; min-height:48px; }
+.v5-mic-btn { color:#d9fff0; }
+.v5-mic-btn[data-mic-state="listening"] { color:#04120c; background:#1ee6a7; box-shadow:0 0 22px rgba(30,230,167,.4); }
+.v5-conversation { max-width:880px; }
+body[data-activity="working"] .v5-emblem-btn::before { border-color:rgba(90,192,255,.8); box-shadow:0 0 34px rgba(55,176,255,.3),inset 0 0 28px rgba(74,191,255,.18); }
+body[data-learning="verified"] .v5-emblem-btn::after { border-color:rgba(87,255,178,.66); box-shadow:0 0 32px rgba(56,255,170,.26); }
+button:focus-visible,textarea:focus-visible { outline:3px solid rgba(101,255,203,.7); outline-offset:3px; }
+[hidden] { display:none !important; }
+@media (max-width:700px) {
+ .v5-topbar { padding:14px 16px; gap:10px; }
+ .v5-pill { min-height:46px; padding:8px 11px; font-size:.88rem; }
+ .v5-skill-pill { display:none; } /* tap the orb for skills */
+ .v5-stage { padding:0 16px 15px; }
+ .v5-emblem-btn { width:200px; height:200px; }
+ .v5-composer { width:calc(100% - 24px); margin-bottom:18px; }
+ .v5-composer-box { min-height:74px; padding:7px 10px; }
+ #wish-input { min-width:0; }
+ .v5-hero-title { font-size:1.65rem; }
+}
+@media (prefers-reduced-motion:reduce) {
+ .v5-emblem-btn,.v5-composer-box { animation:none!important; transition:none!important; }
+}
