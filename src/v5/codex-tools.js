@@ -10,7 +10,7 @@ import { browserTools } from '../core/tools/browser.js';
 import { MAX_EXTRACT_BYTES } from '../v4/extract.js';
 import { extractDriverDocument } from './document-extract.js';
 import { discoverSkills, usableSkills } from '../v4/skills.js';
-import { interactiveWindowsSession, browserBinary } from '../v4/tools/host.js';
+import { interactiveWindowsSession, browserBinary, V1_LANES } from '../v4/tools/host.js';
 import { z } from 'zod';
 import { shellTools } from '../core/tools/shell.js';
 import { webTools } from '../core/tools/web.js';
@@ -146,6 +146,11 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
   add('driver_status', 'Actual host, capabilities and limitations. No provider inference is used.', z.object({}).strict(), () => ({ result: {
     mode: controller === 'provider' ? 'PROVIDER_TOOLS' : 'CODEX_DRIVER', hostname: os.hostname(), platform: process.platform, workspace,
     interactiveWindows: Boolean(interactive), browserAvailable, processAccess, browserWriteOrigins: writeOrigins, providerInference: false,
+    legacyLaneAudit: {
+      catalogedV1Lanes: Object.keys(V1_LANES),
+      exposedTools: [...tools.keys()].filter(name => name !== 'driver_status'),
+      warning: 'V5 exposes a selected subset of legacy tools. Listed lanes are inventory only, not executable grants or test passes.',
+    },
     toolSources: [...tools.values()].map(t => ({ name: t.name, source: t.source || 'deterministic adapter' })),
     unavailable: ['computer.use (requires Majin LLM)', 'learning approval/XP mutation', 'external accounts require owner-authorized credentials or sessions'],
   } }));
