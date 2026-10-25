@@ -1727,6 +1727,10 @@ function renderModels(data) {
       const windows = usage.windows;
       els.sheetModelNote.textContent += ` · Go usage: 5h ${windows.rolling.percent}%, week ${windows.weekly.percent}%, month ${windows.monthly.percent}% · ${usage.at}${usage.stale ? ' · stale usage' : ''}`;
     }
+  } else if (active) {
+    els.modelLabel.textContent = t('model.selectionUnavailable');
+    els.sheetModel.textContent = t('model.selectionUnavailable');
+    els.sheetModelNote.textContent = t('model.error.unavailable');
   }
   const models = (data.models || []).filter((m) => m.configured && (!query || `${m.label} ${m.displayName || ''}`.toLowerCase().includes(query)) && (!els.modelIncluded?.checked || m.billing?.subscriptionIncluded === true));
   if (!models.length) {

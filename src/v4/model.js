@@ -189,7 +189,9 @@ export function createModelClient(config, { workspaceDir } = {}) {
       const route = routeForModel(modelId);
       const selection = readModelSelection({ home: config.paths.home });
       const requestedId = selection.persisted ? selection.modelId : modelId;
-      if (requestedId && !route) throw new Error('Selected model is unavailable. No fallback was attempted.');
+      if (requestedId && !route) {
+        throw Object.assign(new Error('Selected model is unavailable. No fallback was attempted.'), { code: 'MODEL_UNAVAILABLE' });
+      }
       if (route && requestedId) assertModelBillingAuthorized({ home: config.paths.home, modelId: requestedId, base: defaultRoute });
       const demo = !route;
       if (demo) {
@@ -235,6 +237,7 @@ export function createModelClient(config, { workspaceDir } = {}) {
 
 /** Friendly, honest sentence for a failed model call. */
 export function explainModelError(err) {
+  if (err?.code === 'MODEL_UNAVAILABLE') return t('model.error.unavailable');
   if (err?.majin?.human) return err.majin.human;
   if (err?.name === 'AbortError' || err?.code === 'ABORT_ERR') return 'Turn cancelled.';
   const msg = String(err?.message || err || 'unknown error');

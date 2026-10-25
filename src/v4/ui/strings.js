@@ -210,6 +210,8 @@ export const SV = {
   'model.status.configured': 'Konfigurerad (ej live-verifierad)',
   'model.status.verified': 'Live-verifierad i denna session',
   'model.status.unavailable': 'Tillfälligt otillgänglig',
+  'model.selectionUnavailable': 'Vald modell saknas — välj en tillgänglig modell',
+  'model.error.unavailable': 'Den valda modellen är inte längre tillgänglig eller saknar giltig konfiguration. Ingen modellförfrågan skickades och ingen annan modell valdes. Öppna modellväljaren, uppdatera listan och välj en konfigurerad modell.',
   'model.status.discovered': 'Hittad via providers /models',
   'model.envLabel': 'Miljövariabel',
   'model.discovered': 'hittad',

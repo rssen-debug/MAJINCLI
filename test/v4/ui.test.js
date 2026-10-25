@@ -63,6 +63,15 @@ test('layout: a fixed height floor is not used, so iOS keyboard and desktop agre
   assert.match(css, /env\(safe-area-inset-bottom/);
 });
 
+test('model selector explains an unavailable active choice without silently switching providers', () => {
+  const js = fs.readFileSync(path.join(UI, 'app.js'), 'utf8');
+  const strings = fs.readFileSync(path.join(UI, 'strings.js'), 'utf8');
+  assert.match(js, /else if \(active\)[\s\S]{0,250}model\.selectionUnavailable/);
+  assert.match(js, /model\.error\.unavailable/);
+  assert.match(strings, /Ingen modellförfrågan skickades och ingen annan modell valdes/);
+  assert.match(strings, /Öppna modellväljaren/);
+});
+
 test('pwa: manifest is valid and installable', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(UI, 'manifest.webmanifest'), 'utf8'));
   assert.equal(manifest.display, 'standalone');
