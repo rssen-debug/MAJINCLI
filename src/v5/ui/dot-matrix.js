@@ -122,7 +122,11 @@ export function createDotMatrixCanvas(canvas, { reducedMotion = false } = {}) {
     };
   }
   const ctx = canvas.getContext('2d');
-  const raf = globalThis.requestAnimationFrame || ((fn) => setTimeout(fn, 16));
+  const raf = globalThis.requestAnimationFrame || ((fn) => {
+    const timer = setTimeout(() => fn(Date.now()), 32);
+    timer.unref?.(); // A headless canvas must not keep a Node test/host alive.
+    return timer;
+  });
   const caf = globalThis.cancelAnimationFrame || clearTimeout;
   let current = computeDotMatrixState();
   let rafId = null;
@@ -227,7 +231,7 @@ export function createDotMatrixCanvas(canvas, { reducedMotion = false } = {}) {
   }
 
   draw();
-  if (!reducedMotion) rafId = raf(tick);
+  if (ctx && !reducedMotion) rafId = raf(tick);
 
   return {
     update(nextSpec = {}) {
@@ -237,7 +241,7 @@ export function createDotMatrixCanvas(canvas, { reducedMotion = false } = {}) {
         `${current.displayName}: ${current.numericLabel} (${current.statusTextLabel})`,
       );
       draw();
-      if (!reducedMotion && !rafId) {
+      if (ctx && !reducedMotion && !rafId) {
         rafId = raf(tick);
       }
       return current;
