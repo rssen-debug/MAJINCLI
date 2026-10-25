@@ -77,7 +77,21 @@ jobs:
           python -m pip install --quiet ziglang
           python -m ziglang version
       - name: unit and HTTP suite must pass on Windows
-        run: npm test
+        shell: pwsh
+        run: |
+          npm test *> windows-test.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            $failures = Select-String -Path windows-test.log -Pattern '^not ok ' -Context 0,12
+            if ($failures) {
+              $details = ($failures | ForEach-Object { $_.ToString() + "`n" + ($_.Context.PostContext -join "`n") }) -join "`n---`n"
+            } else {
+              $details = (Get-Content windows-test.log -Tail 50) -join "`n"
+            }
+            $details | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            Write-Output $details
+            throw "Windows unit and HTTP suite failed with exit $code"
+          }
       - name: build the exe
         shell: pwsh
         run: |
@@ -171,7 +185,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $f = [string][char]96 * 3
-          if (Test-Path build.log) { $log = (Get-Content build.log -Tail 60) -join "`n" } else { $log = "(no build.log)" }
+          if (Test-Path windows-test.log) {
+            $failures = Select-String -Path windows-test.log -Pattern '^not ok ' -Context 0,12
+            if ($failures) { $log = ($failures | ForEach-Object { $_.ToString() + "`n" + ($_.Context.PostContext -join "`n") }) -join "`n---`n" }
+            else { $log = (Get-Content windows-test.log -Tail 60) -join "`n" }
+          } elseif (Test-Path build.log) { $log = (Get-Content build.log -Tail 60) -join "`n" }
+          else { $log = "(no test or build log)" }
           $body = "run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID`n`n$f`n$log`n$f`n"
           $payload = @{ title = "build-exe failed on $($env:GITHUB_SHA.Substring(0,7))"; body = $body; labels = @('ci') } | ConvertTo-Json -Compress
           Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/issues" -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" } -Body $payload | ForEach-Object { "opened $($_.html_url)" }
