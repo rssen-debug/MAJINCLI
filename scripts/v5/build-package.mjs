@@ -62,6 +62,7 @@ export function buildV5PackageManifest() {
     'scripts/v5/desktop-host.mjs',
     'scripts/v5/desktop-smoke.mjs',
     'scripts/v5/desktop-installer-verify.ps1',
+    'scripts/v5/run-windows-bridge.mjs',
     'scripts/v5/install-majin-v5-windows.ps1',
     'scripts/v5/render-screenshots.mjs',
     'scripts/v5/build-package.mjs',

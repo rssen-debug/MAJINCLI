@@ -40,7 +40,24 @@ Arbetstillstånd: EU-medborgare
 
 export async function runV5Acceptance() {
   const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-v5-accept-'));
-  const srv = createV5Server({ dataDir: runDir, host: '127.0.0.1', port: 0 });
+  const controlledTestPortalAdapter = {
+    async submitApplication({ jobId, ad }) {
+      const clickOnly = ad.simulateClickWithoutConfirmation === true;
+      const confirmationId = clickOnly ? null : `testportal-conf-${jobId}`;
+      return {
+        submitted: true,
+        confirmed: Boolean(confirmationId),
+        confirmationId,
+        cvSha256Match: true,
+      };
+    },
+  };
+  const srv = createV5Server({
+    dataDir: runDir,
+    host: '127.0.0.1',
+    port: 0,
+    portalAdapter: controlledTestPortalAdapter,
+  });
   const { url } = await srv.start();
   const architect = srv.architect;
 

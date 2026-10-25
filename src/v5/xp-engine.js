@@ -48,6 +48,18 @@ const NON_OUTCOME_KINDS = new Set([
   'model.claim',
   'skill.file.write',
   'unverified',
+  'synthetic',
+  'mock',
+]);
+
+/** Synthetic trainer or mocked origins that must NEVER grant XP. */
+const NON_OUTCOME_ORIGINS = new Set([
+  'windows-live-trainer',
+  'synthetic',
+  'synthetic-trainer',
+  'mock',
+  'fake',
+  'manual-loop',
 ]);
 
 /** Build the deterministic 1..99 XP table for majin.v5.xp-curve/v1. */
@@ -158,8 +170,19 @@ export function isVerifiedOutcomeReceipt(receipt) {
   if (receipt.verified !== true) return false;
   const kind = String(receipt.kind || receipt.verifier || '').toLowerCase().trim();
   if (!kind || NON_OUTCOME_KINDS.has(kind)) return false;
+  const origin = String(receipt.origin || '').toLowerCase().trim();
+  if (origin && NON_OUTCOME_ORIGINS.has(origin)) return false;
   const id = String(receipt.id || receipt.receiptId || '').trim();
-  if (!id) return false;
+  if (!id || id.startsWith('win-live-')) return false;
+  // If a file path is attached on the current host, verify the file exists on disk and is non-empty
+  if ((kind === 'file' || kind === 'pixel') && typeof receipt.path === 'string' && receipt.path.trim()) {
+    try {
+      const st = fs.statSync(receipt.path);
+      if (!st.isFile() || st.size <= 0) return false;
+    } catch {
+      return false;
+    }
+  }
   return true;
 }
 

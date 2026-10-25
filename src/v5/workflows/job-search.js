@@ -634,14 +634,11 @@ export class JobApplicationWorkflow {
           signal,
         });
       } else {
-        // Default controlled test-portal execution: click submit + verify confirmation receipt
-        const clickOnly = item.ad.simulateClickWithoutConfirmation === true;
-        const confirmationId = clickOnly ? null : `conf-${item.jobId}-${Date.now()}`;
         portalRes = {
-          submitted: true,
-          confirmed: Boolean(confirmationId),
-          confirmationId,
-          cvSha256Match: true,
+          submitted: false,
+          confirmed: false,
+          confirmationId: null,
+          error: 'NO_PORTAL_ADAPTER: Refusing to mock application submission without an explicit portalAdapter.',
         };
       }
 

@@ -238,6 +238,7 @@ export class GrandArchitect {
     blocker = null,
     costEstimate = null,
     useDag = false,
+    awardXp = true,
   } = {}) {
     const startedAtPerf = performance.now();
 
@@ -483,7 +484,7 @@ export class GrandArchitect {
     }
 
     // 6. Finalize status based STRICTLY on independent verification evidence!
-    return this.#finalizeGoalOutcome(goal, { startedAtPerf });
+    return this.#finalizeGoalOutcome(goal, { startedAtPerf, awardXp });
   }
 
   async #executeActionSteps(goal, actions, { myEpoch, signal, useDag = false }) {
@@ -685,7 +686,7 @@ export class GrandArchitect {
     }
   }
 
-  async #finalizeGoalOutcome(goal, { startedAtPerf = performance.now() } = {}) {
+  async #finalizeGoalOutcome(goal, { startedAtPerf = performance.now(), awardXp = true } = {}) {
     const validEvidence = (goal.verification_evidence || []).filter(isVerifiedOutcomeReceipt);
     const anySucceeded = (goal.tool_results || []).some((r) => r.ok === true);
     const anyFailed = (goal.tool_results || []).some((r) => r.ok === false);
@@ -702,31 +703,35 @@ export class GrandArchitect {
         ? TASK_STATUS.PARTIAL
         : TASK_STATUS.COMPLETED;
 
-      const envFp = computeEnvironmentFingerprint({
-        grantedLanes: this.files.describeAccessState().grantedLanes,
-      });
-
-      const learnRes = await this.learning.learnFromVerifiedGoal({
-        goalId: goal.goal_id,
-        goalText: goal.objective,
-        trace: goal.tool_results,
-        receipts: validEvidence,
-        primarySkillId: goal.used_skills.primary_skill,
-        supportSkillIds: goal.used_skills.support_skills,
-        grantedLanes: this.files.describeAccessState().grantedLanes,
-        usedLanes: ['files'],
-        envFingerprint: envFp,
-      });
-
-      goal.xp_award = learnRes.xpResult || null;
-      if (learnRes.xpResult?.awarded) {
-        this.#emit('xp_awarded', {
-          goal_id: goal.goal_id,
-          activity: false,
-          learning: true, // Distinct verified learning event!
-          primarySkill: learnRes.xpResult.primarySkill,
-          grants: learnRes.xpResult.grants,
+      if (awardXp === false) {
+        goal.xp_award = { awarded: false, reason: 'XP_DISABLED_FOR_PROOF', totalXpAwarded: 0 };
+      } else {
+        const envFp = computeEnvironmentFingerprint({
+          grantedLanes: this.files.describeAccessState().grantedLanes,
         });
+
+        const learnRes = await this.learning.learnFromVerifiedGoal({
+          goalId: goal.goal_id,
+          goalText: goal.objective,
+          trace: goal.tool_results,
+          receipts: validEvidence,
+          primarySkillId: goal.used_skills.primary_skill,
+          supportSkillIds: goal.used_skills.support_skills,
+          grantedLanes: this.files.describeAccessState().grantedLanes,
+          usedLanes: ['files'],
+          envFingerprint: envFp,
+        });
+
+        goal.xp_award = learnRes.xpResult || null;
+        if (learnRes.xpResult?.awarded) {
+          this.#emit('xp_awarded', {
+            goal_id: goal.goal_id,
+            activity: false,
+            learning: true, // Distinct verified learning event!
+            primarySkill: learnRes.xpResult.primarySkill,
+            grants: learnRes.xpResult.grants,
+          });
+        }
       }
     } else if (anySucceeded) {
       // Tools ran or model replied, but NO independent verification receipt exists -> PARTIAL, never COMPLETED!

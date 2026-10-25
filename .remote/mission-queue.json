@@ -1,0 +1,18 @@
+{
+  "schema": "majin.v5.bridge-queue/v1",
+  "updatedAt": "2026-10-25T16:19:31.775Z",
+  "missions": [
+    {
+      "missionId": "MISSION-ARENA-NP-739204",
+      "kind": "notepad_proof",
+      "description": "Open Notepad in interactive Windows session, write MISSION-ARENA-NP-739204, verify via WM_GETTEXT, and capture screenshot via MAJIN screen.capture (0 XP).",
+      "awardXp": false,
+      "encryptedUpload": {
+        "alg": "AES-256-GCM",
+        "iv": "AEC2u1wv589wURAn",
+        "tag": "L5gCal0LXdc3vydpCqEB9Q==",
+        "ciphertext": "JQ5QtlUEAAw67c2u2fccS4e8UonPNucceRXGh62WgVN0mnBoElqS+KXRSUwnM91YI/exybdcmdOc81z4qbFrcSICqMZ4FgGGszmGcdtBUYZZbe5kT6jXGIIRwap781sz/jQ3NwbUX52UL6+UmsHM0MpLhRSP1wEw1TtIYflJLzfvtcrLm54v1bXj1CmxzFPNF7YdK17EpSlmx5/9XF0J2NY0yE1RHSY/gOF2FFwZwE963AOE90w5pJB7IMTbDOYU8M6WFUVEigyCiXyZg8HDVCTHRKiEXzTmRhpGtdfDS5PIEl56KXYmqvAR1OUT2/ogRjTmYChFBUZ5jMTFsJuYDJ1c7Dvpj3aBKuxS/KbqMTw60+JxbqFiVrcIT6yHcFIn39TDOoGKUThKwKH84XNmOPBhiVg/AOiQofhaYQltO0qDcmAzuGGX0MdgppgbZxATmVJJEzLkb+CLCHiTMfkp8fTFTSqfu23mMNcJQhaxziO/moGmwYUmEpGmaXXsF6e5LuakBrNYMGCYk/K3rmYfpQtOHiocxRXZckd9dsdG1EhMES9EGKFjIuJ9OA+op/ltsroKnTZm9Cp+SxYeUC/jQaE8kC0mAT8TJYOgxj/8gYWsGUjc/JJOqelGmfBzeyX6u3abZ7BEWTScG6Hc5xbHRRg2oog/wydvlw3h+lQ120D1etPAwk4fVk6eOtDk3lcDePj4DrhauGsYYTfXli4KsmeXvsVxwOoWOFVkECCYEH4t1Nnw4HqwfNeo1xRrmfjPi6BMC0ow5K2NtZqHWo7q+R0AWVvaH/7pNwMmyBZvz9VCaoSF543N6QGbAp4MuohJY3kaRBQuqtNVsxnWqPNkCH592t300kts+eYh/UnL+2FCjekRu8b5BkMZQr/7G3eYSTwGDhz44wf3ShBjRHGaJhx6E2KBDsiz/bI7CJ1BSyKNVmiPUUOs1F3ySOoueA=="
+      }
+    }
+  ]
+}
