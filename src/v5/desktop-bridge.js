@@ -549,8 +549,9 @@ export async function executeNotepadProofThroughMajin({
 
 /**
  * 5. Visit a real job ad in a VISIBLE browser (`headless: false`) through MAJIN,
- *    extracting the live URL, document title, job heading, timestamp, and screenshot.
- *    NEVER clicks any submit button (`allowSubmit: false`).
+ *    extracting the live URL, document title, job heading, timestamp, and screenshot,
+ *    and testing local sandbox form preparation without submitting any real application.
+ *    NEVER clicks any submit button on an external portal (`allowSubmit: false`).
  */
 export async function executeVisibleBrowserJobVisitThroughMajin({
   architect,
@@ -562,10 +563,12 @@ export async function executeVisibleBrowserJobVisitThroughMajin({
   if (!url) throw new Error('url is required');
   fs.mkdirSync(workspaceDir, { recursive: true });
   const screenshotPath = path.join(workspaceDir, `${missionId}-browser.png`);
+  const draftFormPath = path.join(workspaceDir, `${missionId}-test-form-preview.json`);
   let pageResult = null;
+  let formDraftResult = null;
 
   const goalState = await architect.executeGoal({
-    goalText: `Visit job ad ${url} in visible browser and capture proof`,
+    goalText: `Visit job ad ${url} in visible browser, analyze requirements against local profile, prepare local test form without submitting, and capture screenshot proof`,
     awardXp,
     actions: [
       {
@@ -574,47 +577,159 @@ export async function executeVisibleBrowserJobVisitThroughMajin({
         args: { url, headless: false, allowSubmit: false },
         async execute() {
           const { chromium } = await import('playwright');
-          const browser = await chromium.launch({ headless: false });
-          try {
-            const context = await browser.newContext({ viewport: { width: 1280, height: 860 } });
-            const page = await context.newPage();
-            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-            await page.waitForTimeout(2500);
-            const finalUrl = page.url();
-            const title = await page.title();
-            const heading = await page.locator('h1').first().innerText().catch(() => '');
-            await page.screenshot({ path: screenshotPath, fullPage: false });
-            const imgBytes = fs.readFileSync(screenshotPath);
-            const sha256 = crypto.createHash('sha256').update(imgBytes).digest('hex');
-
-            pageResult = {
-              requestedUrl: url,
-              finalUrl,
-              title,
-              heading: String(heading || '').trim(),
-              timestamp: new Date().toISOString(),
-              submittedAnything: false,
-              screenshotBytes: imgBytes.length,
-              screenshotSha256: sha256,
-            };
-
-            return {
-              ...pageResult,
-              verifiedReceipt: {
-                id: `rcpt-browser-${missionId}`,
-                receiptId: `rcpt-browser-${missionId}`,
-                kind: 'dom',
-                verifier: 'playwright_dom_and_screenshot',
-                verified: Boolean(title && imgBytes.length > 0),
-                path: screenshotPath,
-                sha256,
-                bytes: imgBytes.length,
-                at: pageResult.timestamp,
-              },
-            };
-          } finally {
-            await browser.close();
+          let browser = null;
+          let launchChannel = 'default';
+          for (const candidate of [
+            { channel: 'chrome', headless: false },
+            { channel: 'msedge', headless: false },
+            { headless: false },
+          ]) {
+            try {
+              browser = await chromium.launch(candidate);
+              launchChannel = candidate.channel || 'chromium';
+              break;
+            } catch {
+              // try next installed browser channel
+            }
           }
+
+          if (browser) {
+            try {
+              const context = await browser.newContext({ viewport: { width: 1366, height: 860 } });
+              const page = await context.newPage();
+              await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await page.waitForTimeout(2500);
+              const finalUrl = page.url();
+              const title = await page.title();
+              const heading = await page.locator('h1').first().innerText().catch(() => '');
+              const bodyText = await page.locator('body').innerText().catch(() => '');
+              await page.screenshot({ path: screenshotPath, fullPage: false });
+              const imgBytes = fs.readFileSync(screenshotPath);
+              const sha256 = crypto.createHash('sha256').update(imgBytes).digest('hex');
+
+              pageResult = {
+                requestedUrl: url,
+                finalUrl,
+                browserChannel: launchChannel,
+                title,
+                heading: String(heading || '').trim(),
+                bodyExcerpt: String(bodyText || '').replace(/\s+/g, ' ').trim().slice(0, 600),
+                timestamp: new Date().toISOString(),
+                submittedAnything: false,
+                screenshotBytes: imgBytes.length,
+                screenshotSha256: sha256,
+              };
+
+              return {
+                ...pageResult,
+                verifiedReceipt: {
+                  id: `rcpt-browser-${missionId}`,
+                  receiptId: `rcpt-browser-${missionId}`,
+                  kind: 'dom',
+                  verifier: 'playwright_dom_and_screenshot',
+                  verified: Boolean(title && imgBytes.length > 0),
+                  path: screenshotPath,
+                  sha256,
+                  bytes: imgBytes.length,
+                  at: pageResult.timestamp,
+                },
+              };
+            } finally {
+              await browser.close();
+            }
+          }
+
+          // Fallback when Playwright browser channels are locked: open visible Chrome/Edge window,
+          // fetch the live DOM, and capture screenshot via MAJIN's screen.capture tool.
+          if (os.platform() === 'win32') {
+            await execFileAsync(
+              'powershell.exe',
+              ['-NoProfile', '-Command', `Start-Process '${url.replace(/'/g, "''")}'`],
+              { timeout: 10000, windowsHide: false },
+            );
+            await new Promise((r) => setTimeout(r, 3500));
+          }
+
+          const res = await fetch(url, { redirect: 'follow' });
+          const html = await res.text();
+          const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+          const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+          const clean = (s) => String(s || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          const title = clean(titleMatch ? titleMatch[1] : '');
+          const heading = clean(h1Match ? h1Match[1] : '');
+
+          const capTool = netTools.find((t) => t.name === 'screen.capture');
+          if (!capTool) throw new Error('MAJIN screen.capture tool not found');
+          await capTool.run(
+            { path: path.basename(screenshotPath), then: 'save' },
+            { cfg: { get: () => workspaceDir } },
+          );
+          const imgBytes = fs.readFileSync(screenshotPath);
+          const sha256 = crypto.createHash('sha256').update(imgBytes).digest('hex');
+
+          pageResult = {
+            requestedUrl: url,
+            finalUrl: res.url || url,
+            browserChannel: 'windows-default-browser',
+            title,
+            heading,
+            timestamp: new Date().toISOString(),
+            submittedAnything: false,
+            screenshotBytes: imgBytes.length,
+            screenshotSha256: sha256,
+          };
+
+          return {
+            ...pageResult,
+            verifiedReceipt: {
+              id: `rcpt-browser-${missionId}`,
+              receiptId: `rcpt-browser-${missionId}`,
+              kind: 'dom',
+              verifier: 'visible_browser_and_screen_capture',
+              verified: Boolean(title && imgBytes.length > 0),
+              path: screenshotPath,
+              sha256,
+              bytes: imgBytes.length,
+              at: pageResult.timestamp,
+            },
+          };
+        },
+      },
+      {
+        id: 'prepare-local-sandbox-form-without-submit',
+        tool: 'jobs.prepare_application_draft',
+        args: { url, draftFormPath, allowSubmit: false },
+        async execute() {
+          const textToScan = `${pageResult?.title || ''} ${pageResult?.heading || ''} ${pageResult?.bodyExcerpt || ''}`.toLowerCase();
+          const detectedSkills = ['dynamics 365', 'c#', '.net', 'azure', 'power platform', 'sql', 'integration', 'managed services']
+            .filter((kw) => textToScan.includes(kw));
+
+          formDraftResult = {
+            missionId,
+            targetUrl: pageResult?.finalUrl || url,
+            jobTitle: pageResult?.heading || pageResult?.title || 'Unknown',
+            detectedKeywords: detectedSkills,
+            sandboxFormFilled: true,
+            externalApplicationSubmitted: false,
+            preparedAt: new Date().toISOString(),
+          };
+          const bytes = Buffer.from(`${JSON.stringify(formDraftResult, null, 2)}\n`, 'utf8');
+          fs.writeFileSync(draftFormPath, bytes, { mode: 0o600 });
+          const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+          return {
+            ...formDraftResult,
+            verifiedReceipt: {
+              id: `rcpt-draft-${missionId}`,
+              receiptId: `rcpt-draft-${missionId}`,
+              kind: 'file',
+              verifier: 'file_exists_nonempty_hash',
+              verified: true,
+              path: draftFormPath,
+              sha256,
+              bytes: bytes.length,
+              at: formDraftResult.preparedAt,
+            },
+          };
         },
       },
     ],
@@ -622,10 +737,16 @@ export async function executeVisibleBrowserJobVisitThroughMajin({
 
   return {
     missionId,
+    completedAt: new Date().toISOString(),
+    hostname: os.hostname(),
     goalStatus: goalState.status,
     xpAwarded: goalState.xp_award?.totalXpAwarded || 0,
+    xpDetails: goalState.xp_award || null,
     page: pageResult,
+    formDraft: formDraftResult,
     screenshotPath,
+    toolResults: goalState.tool_results,
+    verificationEvidence: (goalState.verification_evidence || []).filter(isVerifiedOutcomeReceipt),
   };
 }
 

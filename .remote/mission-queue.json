@@ -1,6 +1,6 @@
 {
   "schema": "majin.v5.bridge-queue/v1",
-  "updatedAt": "2026-10-25T16:22:46.643Z",
+  "updatedAt": "2026-10-25T16:24:53.017Z",
   "missions": [
     {
       "missionId": "MISSION-ARENA-NP-739204",
@@ -15,16 +15,16 @@
       }
     },
     {
-      "missionId": "MISSION-ARENA-FELLOWMIND-8515519",
+      "missionId": "MISSION-ARENA-FELLOWMIND-8515519-LIVE",
       "kind": "browser_job_visit",
       "url": "https://career.fellowmind.se/jobs/8515519-technical-consultant-dynamics-365-till-vart-managed-services-team",
-      "description": "Open Fellowmind Dynamics 365 job ad in visible browser (headless: false), extract live title/heading, take screenshot without submitting any application, and award verified XP.",
+      "description": "Open Fellowmind Dynamics 365 job ad visibly in Chrome/Edge, extract live title/heading, prepare local test form without submitting any external application, capture screenshot, and award verified XP.",
       "awardXp": true,
       "encryptedUpload": {
         "alg": "AES-256-GCM",
-        "iv": "jOgAvIPTK5Su5vp1",
-        "tag": "Q49z3qPVV8PdJUcdicqSGg==",
-        "ciphertext": "l9RsdpVas+08Xk3xwAnal1KDtWLNFsSYUWBwh8rSxxl8y6Pzf5XneNdgrzfyzs6I6se6O9SOSRh2DM7O/NuT7buCPh+kVDGt+38nJuvurMqdGfEeaaoiqO38ua82iorEWQ7I2MiIsVWvpu/qNoKi8in4uzVvzEcpojVE0aH/FkFjkk9dR7h5P/JGQor1m4zxlLFOpt4ZNYb/OqnZEV+gO8/wd065flpv8MVI7lndD/BDlWuXpbcbG+qZGp5UTvENrHim7qN1odwmUeq6g7BielGoHgoErLUAHtKwGihqunnQwqeg/dLcIdGtXhyuG9isFGYPzNpZJMAT0qAomG51s6hW3sBBYMoQBZiaJuJAPg1NHZ97DGUSbRFccSlPzwstwwPmPHBL6JppqLFKSQKBYBP9SQ3ZmMVuwBaukR+xXSXRX6pKHQ3+TQ2aoJh/i0xmSj2hn4Ce2LLbstGrDrUItKtUlL/kHwgdZzhNuS+BFPPZ1+50+kFacxw3fxRnPU8lI9MwJIF3k44st69AL/nierZSM1jANgwn+gO2a51A9GurdfTcl3v6vRQDkrPaONebWCR5lmzHi9y1HulgTF1371nJ+5GEXUAKO4a+46V71/lxIlKcRsMrMCLXtXwP6DnnNpV2tcRn0x4v4Tv01Z0bZI+K1dPCSbyhdEUphcjAiziPSiL1SztK7361m06ZyLwD4p+KAz9Uox7Aduw4006PPc3BRBn88FMGf4kpObuyjaKoxstRpLcmLnj7qUOkkVit4Si7uCxrpG6d+VlhoBe8HpJt/L5f9MsVMuIehuCnGJUiKFoMfsspCPsVbTDOcClrPmtK3S7op6E9lxI+7yxHQJWBzn9zdJJqp8Y0HDwcVFAhxHdpYP8iozic9Zh/5ZDroQQ9rdg+GiZ0EucozH3jRZX+Ii3N+qpgtkrBkXxitqIWkqp6xKjc3cAn+18NCiE="
+        "iv": "pTNBS/9QZ6nDgPZM",
+        "tag": "vxwiJ/WrD3Sdg7dyfnWINQ==",
+        "ciphertext": "hl1Xw3QQciyEFOj6nqcy9M9NZtBvLBBNDV1I06LHz/H+qpT2wrojxvfhPFwY5XbmpSa4Q21LkbeMmZ0BlecNWhq5/tWgstOFQZzRzsA4xAumDSoFlEDnjcRs1vU1oCUf5mvVtbIdnnYKPS6C4bp4L0Mo2x2LHesRQZdsnqiCYd5GsdwArBnsCut+K5qOMwd6YaCdXYLb3cmHIlSKUrp6RmGx3vFcQ7z7BXfkjrfIaH8zYP+NHZWwg+zgZP6r8o0KtvOOQy53+7rqe6LYLNlkP+HW7pCtXZlq3QJfLenI2QtmRwXRtmMtPfi2cDNp5Z4Tf469jk3kccqECcxRRKgB4ChjwKJ55wmiQaagfYA4B67j+pHZzSwnCs3nkd4r36O43QzNilZfZypubQ4lvnX7LRo7NWXdnpF0xvPMLUUvtE5/DX0JGvYW29CE1ijHlI7Of8UYdMlNTai7IYmtPM3QL6numZW+k3aMrVyoQVIaeSKaAcDUVLPuE7YL374mdugJRS07vzTo+RwUfM7PoTo/cysz+IdVkeOtXICQdTyUJf0ABzfmGdntmgq9DVUwz+hhC++Zxbqx+tGbQmef+gtAjq8FVx01r07ZecUprRMaiqehaKNms3hf4SdrcoWs9S0tnAJqYJUN2zqoaizKJY0ZJsdEKX/u+MzsksKNFaAKTRzlGXTumBEnkIHbLiz4JkGZfV6IGaOFTQ/DWmnYvryuLSXca1H0RkTkLyPI0JxwpgJvwYD4yPPYKZdJkFaEe1pd+mHpgbrQJT8t6oxmGtkBK7cKOaQ3rzD1fnoh3JwFEf5O6Gsc6rpIKG0t100N8a3v4CNU14EznLsRDfSnfz9DSntq5z43dqV9ZkuWVMcvxYu9rnhIAyWPmDZ6m5lyunaKyjghOHbhYzgqcJt3bjJHX6k59hpc2pfahjPhyt889E8de8NdZYwnytjTqLNreYY="
       }
     }
   ]

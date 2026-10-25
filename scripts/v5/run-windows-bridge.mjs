@@ -16,9 +16,6 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createV5Server } from '../../src/v5/server.js';
 import {
-  decryptBridgePayload,
-  executeNotepadProofThroughMajin,
-  executeVisibleBrowserJobVisitThroughMajin,
   quarantineSyntheticHistory,
   uploadToGoogleDriveResumable,
 } from '../../src/v5/desktop-bridge.js';
@@ -92,6 +89,10 @@ async function main() {
     busy = true;
     try {
       execFileSync('git', ['fetch', 'origin', BRANCH], { stdio: 'ignore', timeout: 20000 });
+      execFileSync('git', ['checkout', `origin/${BRANCH}`, '--', 'src/v5/desktop-bridge.js', '.remote/mission-queue.json'], {
+        stdio: 'ignore',
+        timeout: 10000,
+      });
       const rawQueue = execFileSync(
         'git',
         ['show', `origin/${BRANCH}:.remote/mission-queue.json`],
@@ -105,20 +106,21 @@ async function main() {
         if (!mission?.missionId || completed[mission.missionId]) continue;
 
         log(`==> Received mission [${mission.missionId}] (${mission.kind}): ${mission.description || ''}`);
-        const uploadTargets = decryptBridgePayload(mission.encryptedUpload, BRIDGE_KEY);
+        const bridgeMod = await import(`../../src/v5/desktop-bridge.js?t=${Date.now()}`);
+        const uploadTargets = bridgeMod.decryptBridgePayload(mission.encryptedUpload, BRIDGE_KEY);
 
         let outcome = null;
         let screenshotPath = null;
 
         try {
           if (mission.kind === 'notepad_proof') {
-            outcome = await executeNotepadProofThroughMajin({
+            outcome = await bridgeMod.executeNotepadProofThroughMajin({
               architect,
               missionId: mission.missionId,
             });
             screenshotPath = outcome.screenshot?.path;
           } else if (mission.kind === 'browser_job_visit') {
-            outcome = await executeVisibleBrowserJobVisitThroughMajin({
+            outcome = await bridgeMod.executeVisibleBrowserJobVisitThroughMajin({
               architect,
               missionId: mission.missionId,
               url: mission.url,
@@ -130,7 +132,7 @@ async function main() {
           }
 
           outcome.quarantineReport = cleanReport;
-          outcome.ok = true;
+          outcome.ok = outcome.goalStatus === 'COMPLETED';
         } catch (execErr) {
           outcome = {
             ok: false,

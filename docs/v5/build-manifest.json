@@ -3,7 +3,7 @@
   "product": "MAJIN V5 — GRAND ARCHITECT",
   "version": "5.0.0",
   "gitSha": "e59794988795b97b40ec5a90d71e8d1fa71f0d69",
-  "packageTreeSha256": "997d444dc1df78bc4c2f1920e46edcc1e0d7e2fc9f6d1fc5d7f8171542a6f829",
+  "packageTreeSha256": "71b2c6eaf32115e92fe99a6c0016046de42d0219ab0899d27f47977d9ac7825b",
   "windowsInstallerScript": "scripts/v5/install-majin-v5-windows.ps1",
   "filesCount": 49,
   "files": {
@@ -36,8 +36,8 @@
       "sha256": "88434987fc0eadc2a55acc2b8b3f3c1dbe326fcd53a541e00ec640ca64b021a5"
     },
     "src/v5/desktop-bridge.js": {
-      "bytes": 24165,
-      "sha256": "e3d002e6324d4e344d221404c00dacdc6a6cc47818e1894d4f13afeb6dc77dec"
+      "bytes": 29524,
+      "sha256": "6e22b51817d68ea73111a98a13c1dc6ae57f8af502693f1a6455968cf7938692"
     },
     "src/v5/files-access.js": {
       "bytes": 12744,
@@ -156,8 +156,8 @@
       "sha256": "404441d849c0a769e6ed14434ee4ef9102f1c28105804aad75f201d6723d5fbd"
     },
     "scripts/v5/run-windows-bridge.mjs": {
-      "bytes": 7538,
-      "sha256": "c6c32a9c3990fbd56e829cd560c8d2fb44e1ad18c9f06900311ba7b8d8e4f43f"
+      "bytes": 7769,
+      "sha256": "5f4c4589c88754fe5394cb9472bb9b8fd9807ff0cb82de5519bc6733a2acbba2"
     },
     "scripts/v5/install-majin-v5-windows.ps1": {
       "bytes": 1718,
