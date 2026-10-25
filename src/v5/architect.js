@@ -105,8 +105,9 @@ export class GrandArchitect {
     this.voice = new VoiceController();
     this.ops = new V5OpsManager({ dataDir });
 
-    this.goals = this.#loadGoalLedger();
-    this.activeGoalId = null;
+    const loaded = this.#loadGoalLedger();
+    this.goals = loaded.goals;
+    this.activeGoalId = loaded.activeGoalId;
     this.runEpoch = 0; // Monotonic epoch fencing out late responses from aborted runs
     this.activeAbortController = null;
     this.staleResponsesDropped = 0;
@@ -129,11 +130,14 @@ export class GrandArchitect {
       try {
         const parsed = JSON.parse(fs.readFileSync(this.ledgerFile, 'utf8'));
         if (parsed?.schema === 'majin.v5.goal-ledger/v1' && parsed.goals) {
-          return parsed.goals;
+          return {
+            goals: parsed.goals,
+            activeGoalId: parsed.activeGoalId || null,
+          };
         }
       } catch { /* fall through */ }
     }
-    return {};
+    return { goals: {}, activeGoalId: null };
   }
 
   #saveGoalLedger() {

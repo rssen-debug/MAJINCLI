@@ -52,8 +52,16 @@ export function buildV5PackageManifest() {
   // 2. Hash all V5 runtime, UI, test, script and documentation files
   const trackedPaths = [
     'bin/majin-v5.mjs',
+    'desktop/main.cjs',
+    'desktop/policy.cjs',
+    'desktop/stage-host.mjs',
+    'desktop/offline.html',
+    'desktop/package.json',
     ...walkFiles(path.join(REPO_ROOT, 'src', 'v5')),
     ...walkFiles(path.join(REPO_ROOT, 'test', 'v5')),
+    'scripts/v5/desktop-host.mjs',
+    'scripts/v5/desktop-smoke.mjs',
+    'scripts/v5/desktop-installer-verify.ps1',
     'scripts/v5/install-majin-v5-windows.ps1',
     'scripts/v5/render-screenshots.mjs',
     'scripts/v5/build-package.mjs',
@@ -62,6 +70,8 @@ export function buildV5PackageManifest() {
     'docs/v5/XP_RULES.md',
     'docs/v5/SKILL_REGISTRY.json',
     'docs/v5/HANDOVER.md',
+    'assets/majin.png',
+    'assets/majin.ico',
     'assets/majin-transparent.png',
   ].filter((rel) => fs.existsSync(path.join(REPO_ROOT, rel)));
 

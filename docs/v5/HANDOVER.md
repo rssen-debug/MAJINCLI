@@ -88,11 +88,31 @@ npm run i18n
 - `docs/v5/SKILL_REGISTRY.json` — Versioned canonical skill registry (`majin.v5.skill-registry/v1`).
 - `docs/v5/ACCEPTANCE_MATRIX.json` — Machine-readable acceptance matrix (`7/7` flows passed, `4/4` screenshots pixel-verified).
 - `docs/v5/build-manifest.json` & `scripts/v5/install-majin-v5-windows.ps1` — Reproducible build manifest with SHA-256 hashes and Windows 11 installer/rollback script.
+- `docs/v5/windows-desktop-smoke.json` & `docs/v5/windows-installer-evidence.json` — Real Windows (`windows-latest`) verification receipts for the packaged `MAJIN V5.exe` Electron application and the `MAJIN-V5-Setup.exe` NSIS installer.
 - `docs/v5/screenshots/` — Pixel-verified PNG screenshots (`v5-blackbox-home-level18.png`, `v5-skill-tree-open.png`, `v5-mastery-level99.png`, `v5-mobile-view.png`).
 
 ---
 
-## 4. Honest Environment Boundaries
+## 4. Windows Electron Desktop Application & `MAJIN-V5-Setup.exe`
+
+The Electron application in `desktop/` is integrated with MAJIN V5 (`5.0.0`) and verified end-to-end on Windows (`windows-latest`):
+
+1. **Automatic Local V5 Host & Native Black Box Window (`desktop/main.cjs`, `desktop/policy.cjs`, `scripts/v5/desktop-host.mjs`)**:
+   - Launches `scripts/v5/desktop-host.mjs` automatically when `MAJIN V5.exe` starts (using the bundled `resources\host\runtime\node.exe` in packaged Windows builds, requiring no system Node.js installation).
+   - Verifies `/api/v5/state` and `/api/health` (`app: 'majin-v5'`, `version: '5.0.0'`), renders the V5 Black Box UI (`#07080a`, 99-dot matrix, Majin icon) inside its own native `BrowserWindow` (`sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`), and falls back to `desktop/offline.html` while the host boots.
+2. **Majin Icon, Desktop Shortcut & NSIS `MAJIN-V5-Setup.exe` (`desktop/stage-host.mjs`, `desktop/package.json`)**:
+   - Generates `desktop/stage/icon.ico` and `icon.png` directly from `assets/majin.png` (the Majin M emblem) and copies `assets/` into `resources/host/assets/` so `/logo.png` (`assets/majin-transparent.png`) is served locally.
+   - Builds `MAJIN-V5-Setup.exe` (one-click/silent per-user NSIS installer, `appId: com.majin.v5`, `productName: MAJIN V5`, no administrator elevation required) with Desktop (`MAJIN V5.lnk`) and Start Menu shortcuts and `deleteAppDataOnUninstall: false`.
+3. **Persistence Across Restarts & V1–V4 Coexistence (`src/v5/providers.js`, `src/v5/architect.js`)**:
+   - Stores V5 desktop state in `%LOCALAPPDATA%\MAJIN\v5` (`provider-state.json`, `goal-ledger.json`, `xp-ledger.jsonl`, `desktop-window.json`) without modifying `%LOCALAPPDATA%\MAJIN\config.json` (V1) or `%LOCALAPPDATA%\MAJIN\v4` / `%LOCALAPPDATA%\Programs\majin-v4-desktop` (V4).
+   - Non-destructively seeds initial V5 provider configuration from existing V1/V4 config on first boot and preserves provider/model selection and goal history across restarts and updates.
+4. **Verified on Windows (`docs/v5/windows-desktop-smoke.json` & `docs/v5/windows-installer-evidence.json`)**:
+   - `scripts/v5/desktop-smoke.mjs` (`status: "PASS"`): Launched packaged `MAJIN V5.exe` via Playwright `_electron`, verified automatic V5 host startup, `/api/health` (`5.0.0`), 99-dot matrix rendering, renderer security flags, provider persistence (`opencode-go` / `Kimi K3.1 Pro`) and goal history persistence across full process restart, and V4 data preservation.
+   - `scripts/v5/desktop-installer-verify.ps1` (`status: "PASS"`): Executed `MAJIN-V5-Setup.exe /S`, verified `%LOCALAPPDATA%\Programs\majin-v5-desktop\MAJIN V5.exe`, bundled Majin icon, bundled `node.exe`, Desktop & Start Menu `.lnk` shortcuts, background host startup and provider persistence (`opencode-go` / `GLM-5.3`) across restart, clean uninstallation via `Uninstall MAJIN V5.exe /S`, and preservation of V1, V4, and V5 user data.
+
+---
+
+## 5. Honest Environment Boundaries
 
 In accordance with Section 13 ("Var ärlig med vad som faktiskt är testat i denna miljö och vad som inte kunde verifieras här"):
 - **Verified in this Linux container (`Node v22.22.3`, `Python 3.11.2`)**:
