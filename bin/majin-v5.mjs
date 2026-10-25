@@ -80,6 +80,7 @@ async function main() {
       host,
       port,
       dataDir,
+      browserWriteOrigins: args.flatMap((value, index) => value === '--submit-origin' ? [args[index + 1]] : []),
     });
     const bound = await srv.start();
     console.log(`MAJIN V5 (${V5_VERSION}) listening on ${bound.url}`);

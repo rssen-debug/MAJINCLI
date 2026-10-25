@@ -24,7 +24,8 @@ const journal = fs.readFileSync(path.join(REPO, 'docs', 'v2', 'DEPENDENCIES_AND_
 const prodDeps = Object.entries(pkg.dependencies || {});
 const devDeps = Object.entries(pkg.devDependencies || {});
 
-const MAX_PROD_DEPS = 8;
+// V5 adopts a zero-transitive-dependency PDF engine after a real CV's custom font failed.
+const MAX_PROD_DEPS = 9;
 
 test('1. every production dependency is journaled by name in DEPENDENCIES_AND_LICENSES.md', () => {
   assert.ok(prodDeps.length > 0, 'guard needs deps to guard');

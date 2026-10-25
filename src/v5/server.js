@@ -69,6 +69,7 @@ function serveStaticFile(res, filePath, contentType) {
 export function createV5Server({
   dataDir = path.join(os.homedir(), '.majin', 'v5'),
   workspaceDir = null,
+  browserWriteOrigins = [],
   host = '127.0.0.1',
   port = 0,
   fetchImpl = globalThis.fetch,
@@ -82,7 +83,7 @@ export function createV5Server({
     completeImpl,
     portalAdapter,
   });
-  const providerAgent = new ProviderAgent({ architect });
+  const providerAgent = new ProviderAgent({ architect, browserWriteOrigins });
   const useProviderAgent = body => Boolean(architect.providers.state.activeModelId) &&
     body.actions == null && body.jobAds == null && !body.synthesizeMissingSkill && !body.blocker && !body.requireUserConfirmation;
 

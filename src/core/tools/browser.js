@@ -1,8 +1,7 @@
 /**
  * Browser automation powered by Playwright Core (no model/provider dependency).
  * The browser is intentionally isolated in MAJIN's own persistent profile.
- * Non-read HTTP methods and native form submits are blocked: an agent may prepare
- * a form, but this tool cannot submit it or perform other remote writes.
+ * Remote writes require an exact origin grant supplied by the owning runtime.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -13,9 +12,13 @@ import { dirs } from '../paths.js';
 
 const sessions = new Map();
 
+export function browserWriteAllowed(ctx, url) {
+  try { const parsed = new URL(url); return !parsed.username && !parsed.password && (ctx.browserWriteOrigins || []).includes(parsed.origin); } catch { return false; }
+}
+
 function stateFor(ctx) {
   const key = String(ctx.session || 'desktop');
-  if (!sessions.has(key)) sessions.set(key, { context: null, page: null, browserType: null, headless: true, lock: Promise.resolve() });
+  if (!sessions.has(key)) sessions.set(key, { context: null, page: null, browserType: null, headless: true, lock: Promise.resolve(), blockedRequests: [] });
   return sessions.get(key);
 }
 
@@ -73,7 +76,7 @@ async function loadChromium() {
   }
 }
 
-async function safeClick(p, selector, index) {
+async function safeClick(p, selector, index, ctx) {
   const locator = p.locator(selector);
   const count = await locator.count();
   if (!count) throw new Error(`no element matched selector: ${selector}`);
@@ -86,7 +89,7 @@ async function safeClick(p, selector, index) {
     text: (el.innerText || el.value || el.getAttribute('aria-label') || '').trim().slice(0, 160),
   }));
   const submitLabel = /\b(apply|submit|send application|skicka ansökan|skicka ansokan|skicka ansökan|ansök nu|ansok nu)\b/i.test(meta.text);
-  if ((meta.tag === 'button' && meta.type === 'submit') || (meta.tag === 'input' && ['submit', 'image'].includes(meta.type)) || meta.role === 'submit' || (['button', 'input'].includes(meta.tag) && submitLabel)) {
+  if (!browserWriteAllowed(ctx, p.url()) && ((meta.tag === 'button' && meta.type === 'submit') || (meta.tag === 'input' && ['submit', 'image'].includes(meta.type)) || meta.role === 'submit' || (['button', 'input'].includes(meta.tag) && submitLabel))) {
     throw new Error(`blocked final form-submit control (${meta.text || selector}). Forms can be prepared, but submitting is intentionally unavailable.`);
   }
   await target.click();
@@ -106,7 +109,7 @@ export const browserTools = [
     name: 'browser.open',
     group: 'browser',
     risk: 'read',
-    desc: 'Open or navigate a real browser page using Playwright Core. Uses an isolated persistent MAJIN profile. Form submissions and all non-read HTTP requests are blocked; you can inspect and prepare forms but never submit them.',
+    desc: 'Open or navigate a real browser page using Playwright Core. Uses an isolated persistent MAJIN profile. By default tools never submit forms. The owner host can authorize writes to exact origins; a model cannot grant this permission.',
     params: {
       url: 'string: http(s) page to open',
       headless: 'boolean: run without a visible browser window (default true)',
@@ -130,20 +133,32 @@ export const browserTools = [
             serviceWorkers: 'block',
           });
           state.headless = Boolean(headless);
+          state.context.setDefaultTimeout(12000);
           state.page = state.context.pages()[0] || await state.context.newPage();
           state.context.on('page', (newPage) => newPage.on('dialog', (dialog) => dialog.dismiss().catch(() => {})));
           // Defense in depth: stop native form submits in every tab before site handlers run.
-          await state.context.addInitScript(() => {
+          await state.context.addInitScript((origins) => {
             document.addEventListener('submit', (event) => {
+              const action = event.submitter?.formAction || event.target.action || location.href;
+              if (origins.includes(location.origin) && origins.includes(new URL(action, location.href).origin)) return;
               event.preventDefault();
               event.stopImmediatePropagation();
             }, true);
-          });
+          }, [...(ctx.browserWriteOrigins || [])]);
           // Stop JS-driven writes too; this workflow prepares forms but never sends them.
           await state.context.route('**/*', async (route) => {
             const method = route.request().method().toUpperCase();
             if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+              const request = route.request();
+              let frameUrl = '';
+              try { frameUrl = request.frame().url(); } catch { /* no trusted frame */ }
+              if (browserWriteAllowed(ctx, request.url()) && browserWriteAllowed(ctx, frameUrl)) {
+                await route.continue(); return;
+              }
               ctx.emit?.({ type: 'browser:blocked-request', method, url: route.request().url() });
+              const blockedUrl = new URL(route.request().url());
+              state.blockedRequests.push({ method, origin: blockedUrl.origin, path: blockedUrl.pathname });
+              state.blockedRequests = state.blockedRequests.slice(-30);
               await route.abort('blockedbyclient').catch(() => {});
               return;
             }
@@ -152,9 +167,9 @@ export const browserTools = [
         }
         await state.page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
         await state.page.waitForTimeout(350);
-        const result = { url: state.page.url(), title: await state.page.title(), headless: state.headless, submissionsBlocked: true };
+        const result = { url: state.page.url(), title: await state.page.title(), headless: state.headless, submissionsBlocked: !browserWriteAllowed(ctx, state.page.url()) };
         audit(ctx, 'open', { url: result.url, title: result.title, headless: result.headless }, state.page);
-        return { result: `Opened ${result.url}\nTitle: ${result.title}\nForm submissions and non-read HTTP requests are blocked.`, meta: result, summary: `opened ${new URL(result.url).host}` };
+        return { result: `Opened ${result.url}\nTitle: ${result.title}\n${result.submissionsBlocked ? 'Form submissions and non-read HTTP requests are blocked.' : 'Owner-authorized writes are enabled for this exact origin.'}`, meta: result, summary: `opened ${new URL(result.url).host}` };
       });
     },
   }),
@@ -169,6 +184,22 @@ export const browserTools = [
       return withPage(ctx, async (p) => {
         const details = await p.evaluate((limit) => {
           const visible = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+          const selectorFor = el => {
+            if (el.id && document.querySelectorAll(`#${CSS.escape(el.id)}`).length === 1) return `#${CSS.escape(el.id)}`;
+            if (el.name) {
+              const candidate = `${el.tagName.toLowerCase()}[name="${CSS.escape(el.name)}"]` + (el.matches('input[type="radio"]') ? `[value="${CSS.escape(el.value)}"]` : '');
+              if (document.querySelectorAll(candidate).length === 1) return candidate;
+            }
+            const pieces = [];
+            for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+              const tag = node.tagName.toLowerCase();
+              const siblings = node.parentElement ? [...node.parentElement.children].filter(sibling => sibling.tagName === node.tagName) : [node];
+              pieces.unshift(`${tag}:nth-of-type(${siblings.indexOf(node) + 1})`);
+              const candidate = pieces.join(' > ');
+              if (document.querySelectorAll(candidate).length === 1) return candidate;
+            }
+            return pieces.join(' > ');
+          };
           const controls = [...document.querySelectorAll('input,textarea,select,button,[role="radio"],[role="checkbox"]')]
             .filter(visible).slice(0, 100).map((el, i) => {
               const labels = [...(el.labels || [])].map((l) => l.innerText.trim()).filter(Boolean);
@@ -180,20 +211,24 @@ export const browserTools = [
                 type,
                 name: el.name || '',
                 id: el.id || '',
-                selector: el.id ? `#${CSS.escape(el.id)}` : el.name ? `${el.tagName.toLowerCase()}[name="${CSS.escape(el.name)}"]` : `${el.tagName.toLowerCase()}:nth-of-type(${i + 1})`,
+                selector: selectorFor(el),
                 label: labels[0] || parentLabel || el.getAttribute('aria-label') || el.placeholder || '',
-                required: Boolean(el.required || el.getAttribute('aria-required') === 'true'),
-                checked: 'checked' in el ? Boolean(el.checked) : undefined,
+                required: Boolean(el.required || el.getAttribute('aria-required') === 'true' || /\*|\bRequired\b/i.test(labels[0] || parentLabel || '')),
+                checked: 'checked' in el ? Boolean(el.checked) : el.hasAttribute('aria-checked') ? el.getAttribute('aria-checked') === 'true' : undefined,
+                disabled: Boolean(el.disabled || el.getAttribute('aria-disabled') === 'true'),
+                inViewport: (() => { const r = el.getBoundingClientRect(); return r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth; })(),
                 value: ['password', 'file'].includes(type) ? undefined : (el.value || '').slice(0, 250),
               };
               if (el.tagName === 'SELECT') item.options = [...el.options].slice(0, 50).map((o) => ({ value: o.value, label: o.label, selected: o.selected }));
               if (el.tagName === 'BUTTON') item.text = (el.innerText || '').trim().slice(0, 160);
               return item;
             });
-          return { title: document.title, text: (document.body?.innerText || '').slice(0, limit), controls };
+          const links = [...document.querySelectorAll('a[href]')].filter(visible).slice(0,100).map(el => ({text:el.innerText.trim().slice(0,160),url:el.href,selector:selectorFor(el)}));
+          return { title: document.title, text: (document.body?.innerText || '').slice(0, limit), controls, links };
         }, Math.max(500, Math.min(Number(maxChars) || 10000, 24000)));
+        if (stateFor(ctx).blockedRequests.length) details.text += '\nBlocked network writes (owner grant required):\n' + JSON.stringify(stateFor(ctx).blockedRequests);
         audit(ctx, 'inspect', { controls: details.controls.length });
-        return { result: `URL: ${p.url()}\nTitle: ${details.title}\n\nVisible text:\n${details.text}\n\nControls (${details.controls.length}, max 100):\n${JSON.stringify(details.controls, null, 2)}`, meta: { url: p.url(), title: details.title, controls: details.controls.length }, summary: `inspected page (${details.controls.length} controls)` };
+        return { result: `URL: ${p.url()}\nTitle: ${details.title}\n\nVisible text:\n${details.text}\n\nControls (${details.controls.length}, max 100):\n${JSON.stringify(details.controls, null, 2)}\n\nLinks:\n${JSON.stringify(details.links)}`, meta: { url: p.url(), title: details.title, controls: details.controls.length }, summary: `inspected page (${details.controls.length} controls)` };
       });
     },
   }),
@@ -202,12 +237,12 @@ export const browserTools = [
     name: 'browser.click',
     group: 'browser',
     risk: 'write',
-    desc: 'Click one page element selected by a Playwright CSS/text selector. Native submit buttons are refused; network writes are blocked even for custom buttons.',
+    desc: 'Click one page element selected by a Playwright CSS/text selector. By default submit buttons are refused. Owner-authorized origins permit submission; inspect the real confirmation and never repeat an uncertain submission.',
     params: { selector: 'string: Playwright locator selector, e.g. #next or text=Continue', index: 'number: 0-based match index when selector matches more than once' },
     required: ['selector'],
     async run({ selector, index }, ctx) {
       return withPage(ctx, async (p) => {
-        const element = await safeClick(p, selector, index);
+        const element = await safeClick(p, selector, index, ctx);
         audit(ctx, 'click', { selector, index: index ?? 0, element });
         return { result: `Clicked ${selector}${element.text ? ` (${element.text})` : ''}. URL: ${p.url()}`, meta: { url: p.url(), selector, element }, summary: `clicked ${selector}` };
       });

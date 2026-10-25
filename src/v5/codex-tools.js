@@ -1,12 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { createHash } from 'node:crypto';
 import { fileTools } from '../core/tools/files.js';
 import { winControlTools } from '../core/tools/wincontrol.js';
 import { desktopAppTools } from '../core/tools/desktop-app.js';
 import { netTools } from '../core/tools/net.js';
 import { browserTools } from '../core/tools/browser.js';
-import { extractText, MAX_EXTRACT_BYTES } from '../v4/extract.js';
+import { MAX_EXTRACT_BYTES } from '../v4/extract.js';
+import { extractDriverDocument } from './document-extract.js';
 import { discoverSkills, usableSkills } from '../v4/skills.js';
 import { interactiveWindowsSession, browserBinary } from '../v4/tools/host.js';
 import { z } from 'zod';
@@ -33,9 +35,14 @@ export function checkedPath(root, raw) {
 }
 
 export async function createDriverTools({ workspace, desktop = false, browser = false, processAccess = false, skillsDir,
-  allowedFolders = [], controller = 'codex', grantedLanes = null } = {}) {
+  allowedFolders = [], controller = 'codex', grantedLanes = null, browserWriteOrigins = [] } = {}) {
   fs.mkdirSync(workspace, { recursive: true });
-  const ctx = { session: 'codex-driver', cfg: { get: (key) => key === 'workspace' ? workspace : undefined } };
+  const writeOrigins = browserWriteOrigins.map(raw => {
+    const url = new URL(raw);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('Browser write permission must be an exact http(s) origin');
+    return url.origin;
+  });
+  const ctx = { session: `majin-${createHash('sha256').update(path.resolve(workspace)).digest('hex').slice(0,20)}`, browserWriteOrigins: Object.freeze(writeOrigins), cfg: { get: (key) => key === 'workspace' ? workspace : undefined } };
   const definitions = fileTools.filter(t => ['fs.list','fs.read','fs.write','fs.patch','fs.search','fs.grep','fs.stat','fs.mkdir','fs.find'].includes(t.name));
   definitions.push(...webTools.filter(t => ['web.search', 'web.fetch'].includes(t.name)));
   if (processAccess) definitions.push(shellTools.find(t => t.name === 'shell.run'));
@@ -101,10 +108,10 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
     name, description, inputSchema: z.toJSONSchema(schema), run: args => run(schema.parse(args)),
   });
   add('documents_extract', 'Extract text from a workspace PDF/DOCX/text file. Reports extraction confidence.',
-    z.object({ path: z.string() }).strict(), ({ path: raw }) => {
+    z.object({ path: z.string() }).strict(), async ({ path: raw }) => {
       const abs = resolveToolPath(raw);
       if (fs.statSync(abs).size > MAX_EXTRACT_BYTES) throw new Error('Document exceeds extraction limit');
-      return { result: extractText(fs.readFileSync(abs), { fileName: abs }) };
+      return { result: await extractDriverDocument(fs.readFileSync(abs), abs) };
     });
   add('jobs_search', 'Search current public Platsbanken advertisements. No applications are submitted; IDs are deduplicated locally.',
     z.object({ query: z.string().min(1), limit: z.number().int().min(1).max(25).default(5) }).strict(), async ({ query, limit }) => {
@@ -138,7 +145,7 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
     });
   add('driver_status', 'Actual host, capabilities and limitations. No provider inference is used.', z.object({}).strict(), () => ({ result: {
     mode: controller === 'provider' ? 'PROVIDER_TOOLS' : 'CODEX_DRIVER', hostname: os.hostname(), platform: process.platform, workspace,
-    interactiveWindows: Boolean(interactive), browserAvailable, processAccess, providerInference: false,
+    interactiveWindows: Boolean(interactive), browserAvailable, processAccess, browserWriteOrigins: writeOrigins, providerInference: false,
     toolSources: [...tools.values()].map(t => ({ name: t.name, source: t.source || 'deterministic adapter' })),
     unavailable: ['computer.use (requires Majin LLM)', 'learning approval/XP mutation', 'external accounts require owner-authorized credentials or sessions'],
   } }));
