@@ -55,13 +55,12 @@ async function main() {
   }
 
   if (['window', 'ui', 'app'].includes(command)) {
-    const exe = path.join(
-      process.env.LOCALAPPDATA || '',
-      'Programs',
-      'majin-v5-desktop',
-      'MAJIN V5.exe',
-    );
-    if (!fs.existsSync(exe)) {
+    const candidates = [
+      path.join(process.env.LOCALAPPDATA || '', 'Programs', 'majin-v5-desktop', 'MAJIN V5.exe'),
+      path.join(process.env.LOCALAPPDATA || '', 'Programs', 'MAJIN V5', 'MAJIN V5.exe'),
+    ];
+    const exe = candidates.find((p) => fs.existsSync(p));
+    if (!exe) {
       throw new Error('Install MAJIN-V5-Setup.exe first, or run: majin-v5 serve');
     }
     const child = spawn(exe, args, { detached: true, stdio: 'ignore', windowsHide: false });

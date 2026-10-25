@@ -3,13 +3,13 @@
   "product": "MAJIN V5 — GRAND ARCHITECT",
   "version": "5.0.0",
   "gitSha": "e59794988795b97b40ec5a90d71e8d1fa71f0d69",
-  "packageTreeSha256": "a01ba11eec524a67868ff80dc635ee36fa67831f0a17c4fd4915e790b96b8d23",
+  "packageTreeSha256": "023c8b7a34d356b1e4abe60277c62cdb15fa708a759eb9e9739a4dca4fa6e68a",
   "windowsInstallerScript": "scripts/v5/install-majin-v5-windows.ps1",
   "filesCount": 45,
   "files": {
     "bin/majin-v5.mjs": {
-      "bytes": 3454,
-      "sha256": "e36b6a6e08ecf5b4b3166beb5a69eab20c567d153d634acbf9814143cbe4478f"
+      "bytes": 3577,
+      "sha256": "4543efcb2a80d82c310d9a88f7ac5a3dfbf6f9d380c3ec0e70cd6142bc1347f7"
     },
     "desktop/main.cjs": {
       "bytes": 9228,
@@ -140,8 +140,8 @@
       "sha256": "c06ba81571dcc6934314365002cdec8595c08465a9633453d7a6763a5fd90baf"
     },
     "scripts/v5/desktop-installer-verify.ps1": {
-      "bytes": 7907,
-      "sha256": "3ef049638dfc9ac66f6c581a4a52735902c2abfc79ca34e3cac8e92378a1187a"
+      "bytes": 10989,
+      "sha256": "94c4cbf4d8488f5fde4d6ad0bbf46290639fa5cebeed7510c742f5f64def465a"
     },
     "scripts/v5/install-majin-v5-windows.ps1": {
       "bytes": 1718,
