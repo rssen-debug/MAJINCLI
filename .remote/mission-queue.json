@@ -1,6 +1,6 @@
 {
   "schema": "majin.v5.bridge-queue/v1",
-  "updatedAt": "2026-10-25T16:19:31.775Z",
+  "updatedAt": "2026-10-25T16:22:46.643Z",
   "missions": [
     {
       "missionId": "MISSION-ARENA-NP-739204",
@@ -12,6 +12,19 @@
         "iv": "AEC2u1wv589wURAn",
         "tag": "L5gCal0LXdc3vydpCqEB9Q==",
         "ciphertext": "JQ5QtlUEAAw67c2u2fccS4e8UonPNucceRXGh62WgVN0mnBoElqS+KXRSUwnM91YI/exybdcmdOc81z4qbFrcSICqMZ4FgGGszmGcdtBUYZZbe5kT6jXGIIRwap781sz/jQ3NwbUX52UL6+UmsHM0MpLhRSP1wEw1TtIYflJLzfvtcrLm54v1bXj1CmxzFPNF7YdK17EpSlmx5/9XF0J2NY0yE1RHSY/gOF2FFwZwE963AOE90w5pJB7IMTbDOYU8M6WFUVEigyCiXyZg8HDVCTHRKiEXzTmRhpGtdfDS5PIEl56KXYmqvAR1OUT2/ogRjTmYChFBUZ5jMTFsJuYDJ1c7Dvpj3aBKuxS/KbqMTw60+JxbqFiVrcIT6yHcFIn39TDOoGKUThKwKH84XNmOPBhiVg/AOiQofhaYQltO0qDcmAzuGGX0MdgppgbZxATmVJJEzLkb+CLCHiTMfkp8fTFTSqfu23mMNcJQhaxziO/moGmwYUmEpGmaXXsF6e5LuakBrNYMGCYk/K3rmYfpQtOHiocxRXZckd9dsdG1EhMES9EGKFjIuJ9OA+op/ltsroKnTZm9Cp+SxYeUC/jQaE8kC0mAT8TJYOgxj/8gYWsGUjc/JJOqelGmfBzeyX6u3abZ7BEWTScG6Hc5xbHRRg2oog/wydvlw3h+lQ120D1etPAwk4fVk6eOtDk3lcDePj4DrhauGsYYTfXli4KsmeXvsVxwOoWOFVkECCYEH4t1Nnw4HqwfNeo1xRrmfjPi6BMC0ow5K2NtZqHWo7q+R0AWVvaH/7pNwMmyBZvz9VCaoSF543N6QGbAp4MuohJY3kaRBQuqtNVsxnWqPNkCH592t300kts+eYh/UnL+2FCjekRu8b5BkMZQr/7G3eYSTwGDhz44wf3ShBjRHGaJhx6E2KBDsiz/bI7CJ1BSyKNVmiPUUOs1F3ySOoueA=="
+      }
+    },
+    {
+      "missionId": "MISSION-ARENA-FELLOWMIND-8515519",
+      "kind": "browser_job_visit",
+      "url": "https://career.fellowmind.se/jobs/8515519-technical-consultant-dynamics-365-till-vart-managed-services-team",
+      "description": "Open Fellowmind Dynamics 365 job ad in visible browser (headless: false), extract live title/heading, take screenshot without submitting any application, and award verified XP.",
+      "awardXp": true,
+      "encryptedUpload": {
+        "alg": "AES-256-GCM",
+        "iv": "jOgAvIPTK5Su5vp1",
+        "tag": "Q49z3qPVV8PdJUcdicqSGg==",
+        "ciphertext": "l9RsdpVas+08Xk3xwAnal1KDtWLNFsSYUWBwh8rSxxl8y6Pzf5XneNdgrzfyzs6I6se6O9SOSRh2DM7O/NuT7buCPh+kVDGt+38nJuvurMqdGfEeaaoiqO38ua82iorEWQ7I2MiIsVWvpu/qNoKi8in4uzVvzEcpojVE0aH/FkFjkk9dR7h5P/JGQor1m4zxlLFOpt4ZNYb/OqnZEV+gO8/wd065flpv8MVI7lndD/BDlWuXpbcbG+qZGp5UTvENrHim7qN1odwmUeq6g7BielGoHgoErLUAHtKwGihqunnQwqeg/dLcIdGtXhyuG9isFGYPzNpZJMAT0qAomG51s6hW3sBBYMoQBZiaJuJAPg1NHZ97DGUSbRFccSlPzwstwwPmPHBL6JppqLFKSQKBYBP9SQ3ZmMVuwBaukR+xXSXRX6pKHQ3+TQ2aoJh/i0xmSj2hn4Ce2LLbstGrDrUItKtUlL/kHwgdZzhNuS+BFPPZ1+50+kFacxw3fxRnPU8lI9MwJIF3k44st69AL/nierZSM1jANgwn+gO2a51A9GurdfTcl3v6vRQDkrPaONebWCR5lmzHi9y1HulgTF1371nJ+5GEXUAKO4a+46V71/lxIlKcRsMrMCLXtXwP6DnnNpV2tcRn0x4v4Tv01Z0bZI+K1dPCSbyhdEUphcjAiziPSiL1SztK7361m06ZyLwD4p+KAz9Uox7Aduw4006PPc3BRBn88FMGf4kpObuyjaKoxstRpLcmLnj7qUOkkVit4Si7uCxrpG6d+VlhoBe8HpJt/L5f9MsVMuIehuCnGJUiKFoMfsspCPsVbTDOcClrPmtK3S7op6E9lxI+7yxHQJWBzn9zdJJqp8Y0HDwcVFAhxHdpYP8iozic9Zh/5ZDroQQ9rdg+GiZ0EucozH3jRZX+Ii3N+qpgtkrBkXxitqIWkqp6xKjc3cAn+18NCiE="
       }
     }
   ]
