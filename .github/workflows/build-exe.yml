@@ -44,7 +44,28 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: npm test
+      # A failing run used to leave nothing readable: the job log lives in blob
+      # storage, which some clients cannot reach. Emit the failing test names as
+      # annotations so the failure is diagnosable from the API alone.
+      - name: npm test
+        run: |
+          set +e
+          npm test > /tmp/v1-test.log 2>&1
+          status=$?
+          if [ $status -ne 0 ]; then
+            echo "--- failing tests ---"
+            grep -E '^not ok' /tmp/v1-test.log | head -20
+            echo "--- tail ---"
+            tail -80 /tmp/v1-test.log
+            {
+              echo "Failing tests:"
+              grep -E '^not ok' /tmp/v1-test.log | head -20
+            } > /tmp/annotation.txt
+            while IFS= read -r line; do
+              echo "::error title=V1 test failure::$line"
+            done < /tmp/annotation.txt
+            exit $status
+          fi
       - run: npm run check
       - run: npm run i18n
       - run: npx playwright install --with-deps chromium

@@ -26,13 +26,27 @@ jobs:
       - name: Run full UI acceptance against live MAJIN server
         shell: pwsh
         run: |
-          npm run test:ui
-          if ($LASTEXITCODE -ne 0) { throw "Real browser acceptance failed with exit $LASTEXITCODE" }
+          npm run test:ui 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\ui.log"
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content "$env:RUNNER_TEMP\ui.log" | Select-Object -Last 25 | ForEach-Object {
+              Write-Output "::error title=UI acceptance failure::$($_)"
+            }
+            Write-Output "::error title=UI acceptance exited non-zero::exit $LASTEXITCODE"
+            exit 1
+          }
+      # The job log lives in blob storage, which some clients cannot reach, so a
+      # red step used to be undiagnosable from the API. Name the failing tests.
       - name: Run JS unit and integration suite on Windows
         shell: pwsh
         run: |
-          npm test
-          if ($LASTEXITCODE -ne 0) { throw "Unit and integration tests failed with exit $LASTEXITCODE" }
+          npm test 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\v1-test.log"
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content "$env:RUNNER_TEMP\v1-test.log" | Select-String -Pattern '^not ok' | Select-Object -First 20 | ForEach-Object {
+              Write-Output "::error title=V1 test failure on Windows::$($_.Line)"
+            }
+            Write-Output "::error title=V1 suite exited non-zero::exit $LASTEXITCODE"
+            exit 1
+          }
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4
