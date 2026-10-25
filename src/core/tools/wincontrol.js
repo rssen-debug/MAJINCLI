@@ -48,6 +48,12 @@ public class Ctl {
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder sb, int n);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder sb, int n);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr pid);
+  [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+  [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a, uint b, bool attach);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, string l);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, StringBuilder l);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
@@ -62,13 +68,16 @@ public class Ctl {
     return tops;
   }
   public static IntPtr FindTop(string titlePart){
-    IntPtr found=IntPtr.Zero; var low=titlePart.ToLower();
+    if(titlePart.StartsWith("hwnd:")){ long n; if(long.TryParse(titlePart.Substring(5),out n)){var h=new IntPtr(n); return IsWindowVisible(h)?h:IntPtr.Zero;} return IntPtr.Zero; }
+    IntPtr found=IntPtr.Zero; IntPtr exact=IntPtr.Zero; int matches=0; int exactMatches=0; var low=titlePart.ToLower();
     EnumWindows((h,l)=>{ if(IsWindowVisible(h)){ var sb=new StringBuilder(512); GetWindowText(h,sb,sb.Capacity);
-      if(sb.ToString().ToLower().Contains(low)){ found=h; return false; } } return true; }, IntPtr.Zero);
-    return found;
+      var title=sb.ToString().ToLower();
+      if(title==low){exact=h;exactMatches++;}
+      if(title.Contains(low)){found=h;matches++;} } return true; }, IntPtr.Zero);
+    return exactMatches==1?exact:(matches==1?found:IntPtr.Zero);
   }
   public static IntPtr FindChildEdit(IntPtr parent){ IntPtr edit=IntPtr.Zero;
-    EnumChildWindows(parent,(h,l)=>{ var c=ClassOf(h); if(c=="Edit"||c=="RichEdit20W"||c=="RichEdit50W"||c.StartsWith("WindowsForms10.EDIT.",StringComparison.OrdinalIgnoreCase)){ if(edit==IntPtr.Zero) edit=h; } else if(edit==IntPtr.Zero && c=="ComboBoxEx32"){ edit=h; } return true; }, IntPtr.Zero);
+    EnumChildWindows(parent,(h,l)=>{ var c=ClassOf(h); if(c=="Edit"||c=="RichEdit20W"||c=="RichEdit50W"||c=="RichEditD2DPT"||c.StartsWith("WindowsForms10.EDIT.",StringComparison.OrdinalIgnoreCase)){ if(edit==IntPtr.Zero) edit=h; } else if(edit==IntPtr.Zero && c=="ComboBoxEx32"){ edit=h; } return true; }, IntPtr.Zero);
     return edit;
   }
   public static IntPtr FindButton(IntPtr parent, string caption){ IntPtr btn=IntPtr.Zero; var low=caption.ToLower();
@@ -99,6 +108,30 @@ switch ($Action) {
     $w = [Ctl]::FindTop($Window); if ($w -eq [IntPtr]::Zero) { Fail 'window_not_found' ("no visible top window containing '" + $Window + "' is present") $null }
     $e = [Ctl]::FindChildEdit($w); if ($e -eq [IntPtr]::Zero) { Fail 'edit_not_found' ("window '" + $Window + "' has no Edit-class text control") $null }
     Out @{ ok = $true; window = $Window; text = [Ctl]::TextOf($e) }
+  }
+  'inspect' {
+    $w = [Ctl]::FindTop($Window); if ($w -eq [IntPtr]::Zero) { Fail 'window_not_found' 'Window not found' $null }
+    $script:children = [System.Collections.Generic.List[object]]::new()
+    [void][Ctl]::EnumChildWindows($w, { param($h,$l)
+      $script:children.Add(@{hwnd=$h.ToInt64(); class=[Ctl]::ClassOf($h); text=[Ctl]::TextOf($h)})
+      return $true
+    }, [IntPtr]::Zero)
+    Out @{ok=$true; window=$Window; children=@($script:children.ToArray())}
+  }
+  'focus' {
+    $w = [Ctl]::FindTop($Window); if ($w -eq [IntPtr]::Zero) { Fail 'window_not_found' 'Window not found' $null }
+    [void][Ctl]::ShowWindow($w, 9)
+    [void][Ctl]::SetForegroundWindow($w)
+    if ([Ctl]::GetForegroundWindow() -ne $w) {
+      $from = [Ctl]::GetCurrentThreadId()
+      $to = [Ctl]::GetWindowThreadProcessId([Ctl]::GetForegroundWindow(), [IntPtr]::Zero)
+      $attached = [Ctl]::AttachThreadInput($from, $to, $true)
+      try { [void][Ctl]::SetForegroundWindow($w) }
+      finally { if ($attached) { [void][Ctl]::AttachThreadInput($from, $to, $false) } }
+    }
+    Start-Sleep -Milliseconds 250
+    if ([Ctl]::GetForegroundWindow() -ne $w) { Fail 'focus_denied' 'Windows refused foreground focus' $null }
+    Out @{ok=$true; hwnd=$w.ToInt64(); foregroundVerified=$true}
   }
   'click' {
     $w = [Ctl]::FindTop($Window); if ($w -eq [IntPtr]::Zero) { Fail 'window_not_found' ("no visible top window containing '" + $Window + "' is present") $null }
@@ -232,6 +265,26 @@ async function moveWindowsMouse(x,y) {
 }
 
 export const winControlTools = [
+  def({
+    name: 'control.focus', group: 'control', risk: 'exec',
+    desc: 'Focus a specific observed hwnd:<number> or unique window title; verify foreground handle.',
+    params: { window: 'string: observed window title or hwnd:<number>' },
+    async run({ window }) {
+      if (!IS_WIN) return unsupported();
+      const b = await runBridge('focus', { window: String(window) });
+      return b.ok ? { ok: true, result: b.report, meta: b.meta } : b;
+    },
+  }),
+  def({
+    name: 'control.inspect', group: 'control', risk: 'read',
+    desc: 'Inspect actual Win32 child classes and text in an observed window.',
+    params: { window: 'string: unique observed window title' },
+    async run({ window }) {
+      if (!IS_WIN) return unsupported();
+      const b = await runBridge('inspect', { window: String(window) });
+      return b.ok ? { ok: true, result: b.report, meta: b.meta } : b;
+    },
+  }),
   def({
     name: 'mouse.move',
     group: 'control',

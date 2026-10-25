@@ -11,7 +11,7 @@ import { encodeControlRequest } from '../src/core/tools/wincontrol.js';
  */
 test('wincontrol: control lane is a shipped product surface', () => {
   const names = ALL_TOOLS.filter((t) => t.group === 'control').map((t) => t.name).sort();
-  assert.deepEqual(names, ['control.click_button', 'control.list_windows', 'control.read', 'control.type', 'mouse.move']);
+  assert.deepEqual(names, ['control.click_button', 'control.focus', 'control.inspect', 'control.list_windows', 'control.read', 'control.type', 'mouse.move']);
   for (const t of ALL_TOOLS.filter((t) => t.group === 'control')) {
     assert.ok(['read', 'exec'].includes(t.risk), `${t.name} risk must be declared`);
     if (/type|click/.test(t.name)) assert.equal(t.risk, 'exec', `${t.name} drives other windows — must be exec-gated`);

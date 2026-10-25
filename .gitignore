@@ -14,3 +14,4 @@ majin.config.json
 # local V4 data if someone points MAJIN_HOME into the repo
 v4-data/
 desktop/stage/
+.codex-driver/

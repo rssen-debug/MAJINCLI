@@ -160,7 +160,7 @@ test('99-dot matrix state & Black Box UI DOM: 99 segments, "Formulär 18/99 · +
   assert.equal(filledCells.length, 1);
 
   const tickerEl = document.getElementById('xp-ticker');
-  assert.equal(tickerEl.textContent, formatXpTicker({ displayName: 'Formulär', level: 1, xpGain: 0 })); // input vocabulary, never rendered
+  assert.equal(tickerEl.textContent, formatXpTicker({ displayName: 'Skills', level: 1, xpGain: 0 }));
 
   // Verify clicking logo opens Skill Tree and Escape closes it
   document.getElementById('majin-logo-trigger').click();
