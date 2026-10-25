@@ -151,7 +151,7 @@ test('failure: a hanging tool is cut off by the turn timeout', async () => {
 
 test('failure: the tool budget stops a runaway loop instead of spending forever', async () => {
   const h = build({
-    toolDef: { ...explodingTool, name: 'noop', execute: async () => ({ ok: true }) },
+    toolDef: { ...explodingTool, name: 'noop', execute: async () => { throw new Error('controlled no-progress failure'); } },
     modelScript: [call('noop'), call('noop'), call('noop'), call('noop')],
   });
   h.config.limits.maxModelRounds = 10;
@@ -161,6 +161,30 @@ test('failure: the tool budget stops a runaway loop instead of spending forever'
     assert.equal(res.status, 'failed');
     const assistant = [...h.conversations.get(res.conversationId).messages].reverse().find((m) => m.role === 'assistant');
     assert.match(assistant.content, /budget/i);
+    assert.match(assistant.content, /2\/2 calls across 3\/10 model rounds/);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('failure: model-round exhaustion reports actual rounds and tool calls, not just caps', async () => {
+  const search = {
+    name: 'search', description: 'controlled failing search', tier: 'read',
+    inputSchema: z.object({ query: z.string() }),
+    outputSchema: z.object({ ok: z.boolean() }),
+    execute: async () => { throw new Error('controlled search failure'); },
+  };
+  const modelScript = ['one', 'two', 'three'].map((query, index) => ({
+    toolCalls: [{ id: `search_${index}`, name: 'search', argsJson: JSON.stringify({ query }) }],
+  }));
+  const h = build({ toolDef: search, modelScript });
+  h.config.limits.maxToolCallsPerTurn = 9;
+  try {
+    const res = await h.agent.runTurn({ text: 'search until complete' });
+    assert.equal(res.status, 'failed');
+    const assistant = [...h.conversations.get(res.conversationId).messages].reverse().find((m) => m.role === 'assistant');
+    assert.match(assistant.content, /3\/3 model rounds and 3\/9 tool calls/);
+    assert.match(assistant.content, /Review the tool trace/);
   } finally {
     h.cleanup();
   }

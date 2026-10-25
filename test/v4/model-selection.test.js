@@ -113,9 +113,10 @@ test('actual HTTP transport uses canonical model for subsequent calls, no fallba
     fs.writeFileSync(path.join(f.home, 'config.json'), JSON.stringify(f.config));
     await assert.rejects(restarted.chat({ messages: [] }), (error) => {
       assert.equal(error.code, 'MODEL_UNAVAILABLE');
+      assert.equal(error.reason, 'model-not-listed');
       assert.match(error.message, /No fallback/);
       assert.match(explainModelError(error), /Ingen modellförfrågan skickades/);
-      assert.match(explainModelError(error), /modellväljaren/);
+      assert.match(explainModelError(error), /Uppdatera modellistan/);
       return true;
     });
     assert.deepEqual(received, ['two', 'two'], 'an unavailable selection sends no request and never falls back');

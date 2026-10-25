@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { tempHome, startTestServer, postChat } from './helpers.mjs';
-import { discoverModels, resolveRouteForModel } from '../../src/v4/models.js';
+import { discoverModels, resolveRouteForModel, routeUnavailableReason } from '../../src/v4/models.js';
 
 const V1_SECRET = 'sk-live-must-never-leak-0123456789';
 
@@ -77,6 +77,20 @@ test('models: route resolution rejects ids that are not in the configured catalo
   assert.equal(resolveRouteForModel({ home, env, modelId: 'evil/model' }), null);
   assert.equal(resolveRouteForModel({ home, env, modelId: '../../etc/passwd' }), null);
   assert.equal(resolveRouteForModel({ home, env, modelId: '' }), null);
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+test('models: route diagnostics distinguish stale selections from missing credentials without leaking keys', () => {
+  const home = tempHome();
+  writeV1Config(home);
+  const env = {};
+  assert.equal(routeUnavailableReason({ home, env, modelId: 'deepseek/not-declared' }), 'model-not-listed');
+  assert.equal(routeUnavailableReason({ home, env, modelId: 'unconfigured/nothing-here' }), 'api-key-missing');
+  assert.equal(routeUnavailableReason({ home, env, modelId: 'removed/model' }), 'provider-missing');
+  assert.equal(routeUnavailableReason({ home, env, modelId: 'openrouter/z-ai/glm-4.6' }), 'api-key-missing');
+  assert.equal(JSON.stringify([
+    routeUnavailableReason({ home, env, modelId: 'openrouter/z-ai/glm-4.6' }),
+  ]).includes(V1_SECRET), false);
   fs.rmSync(home, { recursive: true, force: true });
 });
 

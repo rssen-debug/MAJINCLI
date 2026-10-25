@@ -318,6 +318,31 @@ export function discoverModels({ home, env = process.env } = {}) {
   return result;
 }
 
+/** Return a safe diagnostic code for why the selected route cannot be resolved. */
+export function routeUnavailableReason({ home, env = process.env, modelId, base }) {
+  if (!modelId) return 'no-model';
+  if (modelId.startsWith('env/')) {
+    if (!base || base.kind === 'demo') return 'env-route-unavailable';
+    if (`env/${base.model}` !== modelId) return 'env-route-mismatch';
+    return 'route-unresolved';
+  }
+  const cfg = readConfig(configFilePath({ home, env }));
+  if (!cfg) return 'config-missing';
+  const slash = modelId.indexOf('/');
+  if (slash < 1 || slash === modelId.length - 1) return 'invalid-model-id';
+  const providerName = modelId.slice(0, slash);
+  const model = modelId.slice(slash + 1);
+  const provider = cfg.providers?.[providerName];
+  if (!provider) return 'provider-missing';
+  if (!provider.baseUrl) return 'endpoint-missing';
+  const declared = Array.isArray(provider.models) ? provider.models : [];
+  const cached = readCatalogCache({ home }).providers?.[providerName];
+  const discovered = cacheEntryFresh(cached) ? cached.models : [];
+  if (!declared.includes(model) && !discovered.includes(model)) return 'model-not-listed';
+  if (!expandEnvValue(provider.apiKey, env)) return 'api-key-missing';
+  return 'route-unresolved';
+}
+
 /**
  * Resolve a model id to a complete route, or null when it is not authorised.
  * Only ids present in the discovered catalogue (or the explicit env route)

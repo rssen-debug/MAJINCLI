@@ -918,7 +918,7 @@ export function createAgent({
     let toolLimit = config.limits.maxToolCallsPerTurn;
     let extended = false;
     const maybeExtend = () => {
-      if (extended || !lastOutcome?.ok || toolCallsUsed === 0 || signal?.aborted) return false;
+      if (extended || !lastOutcome?.ok || !lastOutcome?.verified || toolCallsUsed === 0 || signal?.aborted) return false;
       extended = true;
       roundLimit += Math.min(8, Math.max(1, config.limits.maxModelRounds));
       toolLimit += Math.min(16, Math.max(1, config.limits.maxToolCallsPerTurn));
@@ -1001,10 +1001,10 @@ export function createAgent({
           }
         }
         if (toolCallsUsed + response.toolCalls.length - startAt > toolLimit && !maybeExtend()) {
-          throw Object.assign(new Error(`tool budget exceeded (${toolLimit})`), { code: 'TOOL_BUDGET' });
+          throw Object.assign(new Error(`Tool-call budget ended after ${toolCallsUsed}/${toolLimit} calls across ${rounds}/${roundLimit} model rounds.`), { code: 'TOOL_BUDGET' });
         }
         if (toolCallsUsed + response.toolCalls.length - startAt > toolLimit) {
-          throw Object.assign(new Error(`tool budget exceeded (${toolLimit})`), { code: 'TOOL_BUDGET' });
+          throw Object.assign(new Error(`Tool-call budget ended after ${toolCallsUsed}/${toolLimit} calls across ${rounds}/${roundLimit} model rounds.`), { code: 'TOOL_BUDGET' });
         }
         for (const [index, call] of response.toolCalls.entries()) {
           if (index < startAt) continue;
@@ -1082,15 +1082,15 @@ export function createAgent({
       }
 
       if (!finishedReasoning) {
-        // The old message named a number and stopped. It now says what actually
-        // happened and what the owner can do, because "budget exhausted" on its
-        // own reads like a defect rather than a limit.
+        // Report actual consumption as well as configured caps. The old message
+        // named only the limits, which made it impossible to distinguish a
+        // model-round loop from early tool exhaustion in an owner-visible trace.
         throw Object.assign(
           new Error(
-            `The bounded execution budget (${roundLimit} model rounds, `
-            + `${toolLimit} tool calls) ran out before the task finished. `
-            + 'Nothing was reported as done that was not verified. Retry with a narrower goal, or raise '
-            + 'MAJIN_V4_MAX_MODEL_ROUNDS / MAJIN_V4_MAX_TOOL_CALLS on the host.',
+            `The bounded execution budget ended after ${rounds}/${roundLimit} model rounds `
+            + `and ${toolCallsUsed}/${toolLimit} tool calls, before the task finished. `
+            + 'Nothing was reported as done that was not verified. Review the tool trace and retry with a narrower goal; '
+            + 'raise MAJIN_V4_MAX_MODEL_ROUNDS / MAJIN_V4_MAX_TOOL_CALLS only if the trace shows the task needs more work.',
           ),
           { code: 'MODEL_BUDGET', cls: 'MODEL_BUDGET' },
         );

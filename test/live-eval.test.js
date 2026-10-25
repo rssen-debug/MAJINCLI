@@ -1,12 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { assertSafeRoutes, resolveConfigPath } from '../scripts/eval-live.mjs';
 
 test('live eval resolves explicit config paths without consulting provider secrets', () => {
-  assert.equal(resolveConfigPath({ MAJIN_CONFIG: '/tmp/custom-majin.json' }), '/tmp/custom-majin.json');
-  assert.equal(resolveConfigPath({ MAJIN_HOME: '/tmp/custom-home' }), path.join('/tmp/custom-home', 'config.json'));
+  const configPath = path.join(os.tmpdir(), 'custom-majin.json');
+  const homePath = path.join(os.tmpdir(), 'custom-home');
+  assert.equal(resolveConfigPath({ MAJIN_CONFIG: configPath }), path.resolve(configPath));
+  assert.equal(resolveConfigPath({ MAJIN_HOME: homePath }), path.join(path.resolve(homePath), 'config.json'));
 });
 
 test('live eval requires explicit consent before any paid provider calls', () => {
