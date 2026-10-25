@@ -394,3 +394,166 @@ skill discouraged the correct step. Fixed and pinned by a test.
 One task, one model, one environment. The skill it produced is EXPERIMENTAL by the
 engine's own rule; broader reliability needs repeated verified runs across varied
 tasks. Nothing here proves the Windows host, the phone, or a browser lane.
+
+## 11. The unified tree is green on both suites — 2026-10-24
+
+Merging `main` (V1) into `v4/main` kept `v4/main`'s copies of six V1 test files
+during the 52 add/add resolutions. Those copies encoded counts and vocabularies
+that were true on `v4/main` alone, so `npm test` — the command `build-exe.yml`
+runs on every push — was red in the unified tree. Nothing was made green by
+softening an assertion; each failure was traced to its cause:
+
+| Symptom | Real cause | Fix |
+|---|---|---|
+| `npm test` blocked, 5× W6 gate tests red | `test/v4/learning.test.js` carried key-shaped *literals* as fixtures; the release gate's secret-hygiene scan flagged the repo | fixtures are assembled at runtime; every assertion unchanged |
+| 144 ≠ 141 in `tool-schema-contract`, `jobs`, `agent`, `server` | `main` pinned 140, `v4/main` pinned 141, the merged tree has 144 (main's 140 + `browser.form`, `browser.form_fill`, `browser.form_submit`, `fs.find`) | the single count lock updated to 144 with the composition written down; the other tests now assert the *relationship* (registry == state == prompt) instead of repeating a number |
+| `majin_heartbeat` and `net_http` tiers were `process` | the two V1 vocabularies were being derived from each other: an unknown `risk` fell through to a tier default, and a legal `risk` (`exec`) mapped to `process` — either way an outbound tool lost its `external` tier | a tool may now declare `tier` next to `risk`; both tools declare `risk:'exec'` (V1's own word for outbound comms, per `channels.js`) **and** `tier:'external'`, and `adaptV1Tool` honours the explicit tier |
+| `web-push` production dep not journaled | adopted in `7b1a3f0` for encrypted device push, never recorded | `DEPENDENCIES_AND_LICENSES.md` now has the row: licence MPL-2.0, why it was taken, what the licence obliges, and the endpoint/key hardening that is ours |
+
+```
+$ node --test test/*.test.js              # the command CI runs
+# tests 1432
+# pass 1413
+# fail 0
+# skipped 19
+EXIT=0
+
+$ node --test --test-concurrency=1 test/v4/*.test.js
+# tests 628
+# pass 614
+# fail 0
+# skipped 14
+
+$ npm run check      → 692/692 files parse cleanly
+$ npm run i18n       → 0 Swedish string literal(s) in 343 files
+$ node scripts/release-gate.mjs
+PASS  version-literals — 7 files carry 4.0.0-alpha.3
+PASS  matrix-integrity — all five totals = 100/100
+PASS  checkpoint — lastVerifiedMain=d2d4dcada1400efd5fba32f447720b5c40114d2a (ancestor of HEAD ✓)
+PASS  secret-hygiene — no key material in tracked tree
+RELEASE GATE: local checks GREEN
+```
+
+Still not verified here, and therefore still 0 points: anything that needs the
+owner's Windows machine or phone (H1–H6, G8, M10, M11, V6, S14, M9) and real
+inference (A7, no key in this sandbox). The score stays **78.5/100** — a green
+suite is not new hardware evidence.
+
+## 12. "It cannot even search a job" — the actual causes, 2026-10-24
+
+The owner's report was taken literally. Four separate defects were behind it, and
+three of them had nothing to do with the job sites themselves.
+
+### The defect that mattered most: the model never received the job list
+
+`adaptV1Tool` copied only `result`/`meta`/`summary` out of the V1 tool's return
+value, and the output schema was a plain `z.object` — which **strips unknown
+keys**. `jobs.search` returns `{total, seenBefore, applications[]}`. The model was
+therefore handed:
+
+```json
+{ "ok": true, "result": null, "summary": "1 new jobs found (0 seen before, hidden)" }
+```
+
+No titles, no companies, no urls, and no `fp` — so it could not list a job and
+could not call `jobs.match` afterwards. The search ran, wrote the pipeline, and
+the answer was still "I could not find any jobs". `jobs.list` lost `counts` and
+its rows the same way.
+
+Fix: `OUTPUT.passthrough()` plus an explicit passthrough of every non-envelope
+field the V1 tool returned. Proven end-to-end by a scripted model that calls
+`jobs_search` and whose *next request* is asserted to contain the title, the
+company, the ad url and the `fp`.
+
+### Job search required a model to choose the tool
+
+When the provider was rate-limited — which the owner saw four times in one
+evening — nothing worked, not even a plain Platsbanken search. The host now
+exposes `POST /api/jobs/search`, which runs the same tool through the same
+runner, with the same audit, and **no model in the loop**.
+
+### A pasted LinkedIn link was searched as if it were words
+
+`sök jobbet till mig` + a LinkedIn URL was sent to Platsbanken as a query. It
+matches nothing, so the agent fell back to driving a browser and stopped on an
+approval prompt. `jobs.search` now refuses a URL by name and says which host it
+was given and what to do instead.
+
+### The wire path had never been tested
+
+Every existing job test used `parseHits()` fixtures; the real `fetch` never ran
+against a server. The base URL is now overridable (`MAJIN_PLATSBANKEN_URL`) and
+the whole path is tested against a local Platsbanken-shaped fixture: success,
+HTTP 503, connection refused, and a timeout. The timeout message was also a real
+bug — aborting with a reason makes the error a plain `Error`, so `e.name ===
+'AbortError'` was never true and a timeout was reported as an unnamed failure.
+
+### Evidence
+
+```
+$ node --test test/v4/jobs-search.test.js
+# tests 7   # pass 7   # fail 0        (0.68 s)
+
+$ node --test --test-name-pattern="Jobbsök panel" test/v4/client-dom.test.js
+ok 1 - client: the Jobbsök panel lists jobs without any model   (jsdom, real DOM)
+
+$ node --test --test-concurrency=1 test/v4/*.test.js
+# tests 636  # pass 622  # fail 0  # skipped 14
+```
+
+### What is still NOT verified here
+
+The live Platsbanken service is unreachable from this sandbox (the network
+allowlist covers npm and GitHub only), so the fixture proves the code path, not
+Arbetsförmedlingen's current response. On the owner's machine:
+
+```powershell
+npm run v4 -- start
+# menu → Jobbsök → "webbutvecklare stockholm"
+```
+
+That is the one command that turns this into real evidence.
+
+## 13. The merge with main, and the five tests main is already red on — 2026-10-25
+
+`main` and `v4/main` still share **no ancestor**, so every common file is an
+`add/add` conflict and GitHub's resolution can only pick a side. This merge used
+a real three-way merge with `d5178dd` as the base: all 33 conflicted files merged
+cleanly, and neither line lost work (main's `autonomous-diagnosis.js`,
+`goal-supervisor.js` and `job-form-accept.mjs` are in; this branch's job-search
+fixes are in).
+
+Two defects existed on `main` **by itself** and are fixed here, because they were
+what turned the checks red:
+
+| Check | Real cause | Fix |
+|---|---|---|
+| `i18n: no Swedish in shipped string literals` | 31 Swedish literals in `src/v4/ui/app.js` (tool labels + the live progress row) | the words moved to `strings.js`, the repository's declared localization resource, and are read through `t()`; the Swedish form labels in `scripts/v4/job-form-accept.mjs` are input data and carry the existing `input vocabulary, never rendered` marker |
+| `visible Chrome startup cannot forward about:blank…` | an instantly-exiting Chrome/Edge was reported as "both launch strategies failed", which blames the wrong thing | the error now names the real cause: the profile may already be in use by another browser window, and says the page was not the problem |
+
+```
+merged tree:
+$ node --test test/*.test.js
+# tests 1454   # pass 1435   # fail 0
+
+$ npm run check  → 700/700 files parse cleanly
+$ npm run i18n   → 0 Swedish string literal(s) in 346 files
+$ release-gate   → local checks GREEN
+$ test/v4/jobs-search.test.js → 7/7
+$ Jobbsök panel in jsdom      → ok
+```
+
+### Five V4 tests that are red on `main` — pre-existing, not caused by this merge
+
+Verified on a clean worktree of `origin/main` **without** any of this branch's
+work: 628 tests, 609 pass, **5 fail**. The same five fail in the merged tree.
+
+| Test | File |
+|---|---|
+| `approvals do not reset the model or tool budget and never report premature completion` | `test/v4/agent-failures.test.js:242` |
+| `history ui: a reload lands back in the conversation that was open` | `test/v4/client-dom.test.js:734` |
+| `history ui: another session sees failed and unverified receipts…` | `test/v4/client-dom.test.js:781` |
+| `memory: irrelevant memories are not injected, so the prompt stays small` | `test/v4/memory.test.js:76` |
+| `recovery: a failure class with no executable retry is reported, not invented` | `test/v4/recovery.test.js:149` |
+
+They are recorded here rather than hidden: this merge does not claim to fix them.

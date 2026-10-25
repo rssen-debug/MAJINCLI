@@ -381,7 +381,12 @@ async function openForOnce({ session, url = null, headless = true, cfgGet = null
         // A real process failure is evidence to try the OTHER browser, not
         // evidence that the user needs to open Chrome or enter CLI flags.
         if (attempt < maxLaunchAttempts) break;
-        throw new Error('Chrome/Edge exited before CDP was available; both available launch strategies failed.');
+        /* An instant exit is a PROFILE fact, not a form fact: another Chrome or
+           Edge is holding this profile, so the new process hands the launch to
+           it and dies. Saying "both strategies failed" leaves the user staring
+           at the page wondering what they did wrong. Name the lock. */
+        throw new Error('Chrome/Edge exited before its debug port came up — the browser profile may already be in use by another Chrome or Edge window. '
+          + 'Close the other browser window (or let MAJIN use its own profile) and run it again; nothing about your page or form was wrong.');
       }
       try {
         version = await httpJson(`${base}/json/version`, { timeoutMs: 1200, signal });
@@ -399,7 +404,10 @@ async function openForOnce({ session, url = null, headless = true, cfgGet = null
   if (!version || !version.webSocketDebuggerUrl) {
     try { if (proc && !proc.killed) proc.kill(); } catch { /* gone */ }
     thePool.release(session);
-    throw new Error('the browser debug port never came up — the browser may be blocked by a policy on this machine');
+    /* Same honesty for the slow path: an unreachable port has two real causes,
+       and blaming only a policy hides the common one. */
+    throw new Error('the browser debug port never came up. Either a policy on this machine blocks it, or the profile may already be in use by another Chrome/Edge window. '
+      + 'Close other browser windows and try again — this is not a problem with the page or the form.');
   }
     signal?.throwIfAborted();
     ws = await wsConnect(version.webSocketDebuggerUrl, wsFactory, signal);

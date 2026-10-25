@@ -18,6 +18,9 @@ test('transient historical failure must not permanently disable browser_open',()
 test('live activity, evidence and supported previews remain in same work row',()=>{
  const src=fs.readFileSync(new URL('../src/v4/ui/app.js',import.meta.url),'utf8');
  assert.match(src,/progressCard\.detail : els\.thread\)\.append\(node\)/);
- assert.match(src,/Klart.*Problem.*toolLabel\(data\.name\)/);
+ /* The words moved to strings.js (the i18n gate forbids Swedish literals in
+    shipped code), so the pin follows the behaviour — one row that says done vs
+    problem and names the tool — instead of the exact Swedish spellings. */
+ assert.match(src,/t\('progress\.done'\).*t\('progress\.problem'\).*toolLabel\(data\.name\)/);
  assert.ok(src.includes('if (!/\\.(html?|htm)$/i.test(name))'));
 });

@@ -58,6 +58,11 @@ const els = {
   folderAdd: $('#folder-add'),
   folderList: $('#folder-list'),
   ownerRevoke: $('#owner-revoke'),
+  jobsQuery: $('#jobs-query'),
+  jobsSearchBtn: $('#jobs-search-btn'),
+  jobsResults: $('#jobs-results'),
+  jobsStatus: $('#jobs-status'),
+  jobsNote: $('#jobs-note'),
   approvalState: $('#approval-state'),
   approvalNote: $('#approval-note'),
   approvalAuto: $('#approval-auto'),
@@ -566,32 +571,13 @@ function endAssistantBubble(meta = '') {
 }
 
 function toolLabel(name) {
-  return {
-    workspace_write: 'Skapar en fil',
-    workspace_read: 'Läser en fil',
-    workspace_list: 'Letar bland filer',
-    document_read: 'Läser dokument',
-    fs_find: 'Letar efter en fil',
-    fs_read: 'Läser filens innehåll',
-    fs_list: 'Utforskar mappar',
-    memory_save: 'Sparar ett minne',
-    memory_search: 'Söker i minnet',
-    browser_open: 'Öppnar webbsida',
-    browser_read: 'Läser webbsida',
-    browser_elements: 'Undersöker formulär',
-    browser_click: 'Klickar på webbsida',
-    browser_form: 'Undersöker formulär',
-    browser_form_fill: 'Fyller i formulär',
-    browser_form_submit: 'Skickar formulär',
-    browser_screenshot: 'Tar skärmbild',
-    browser_snapshot: 'Undersöker webbsidan',
-    exec_start: 'Kör kommando',
-    exec_wait: 'Kontrollerar kommandot',
-    tools_search: 'Söker efter verktyg',
-    tools_activate: 'Aktiverar verktyg',
-    agent_delegate: 'Delegerar deluppgift',
-    agent_graph: 'Samordnar deluppgifter',
-  }[name] || String(name || 'Arbetar').replaceAll('_', ' ');
+  /* The copy lives in strings.js, the repository's declared localization
+     resource. Keeping it inline here made the app the one shipped module the
+     i18n gate flags, and the words were then invisible to review as product
+     language. Same labels, same fallback — only the location changed. */
+  const label = t(`tool.${name}`);
+  if (label !== `tool.${name}`) return label;
+  return String(name || t('tool.working')).replaceAll('_', ' ');
 }
 
 /** Only show a short, non-secret hint from the server's redacted input. */
@@ -663,7 +649,7 @@ function updateProgress(label, { failed = false, complete = false, step = false 
     : `${progressCount} steg · detaljer`;
   if (label && step) {
     const line = document.createElement('div');
-    line.textContent = `${progressCount}. ${label}${failed ? ' · misslyckades' : ''}`;
+    line.textContent = `${progressCount}. ${label}${failed ? t('progress.failedSuffix') : ''}`;
     progressCard.detail.append(line);
   }
   scrollDown();
@@ -707,7 +693,7 @@ function renderConversationMessages(conversation) {
         const card = goal._receiptCard;
         if (receipt.result !== 'success') card.node.dataset.state = 'failed';
         goal._receiptCount += 1;
-        card.sum.textContent = `${goal._receiptCount} steg · klicka för detaljer`;
+        card.sum.textContent = t('goal.receipts', { n: goal._receiptCount });
         const line = document.createElement('div');
         line.textContent = `${toolLabel(name)} · ${receipt.result === 'success' ? (receipt.verified ? t('history.previouslyVerified') : t('state.done')) : t('state.failed')}`
           + (receipt.target ? ` · ${receipt.target}` : '')
@@ -1201,7 +1187,7 @@ function startStream(mode = 'thinking') {
   spirit.set(mode);
   els.hint.textContent = '';
   state.controller = new AbortController();
-  updateProgress('Tänker…');
+  updateProgress(t('progress.thinking'));
   return state.controller;
 }
 
@@ -1288,8 +1274,8 @@ function viewIntents(event, data, intents) {
       break;
 
     case 'state':
-      if (data.state === 'thinking') { spirit.set('thinking'); updateProgress('Tänker på nästa steg…'); }
-      else if (data.state === 'working') { spirit.set('working'); if (!progressCount) updateProgress('Förbereder uppgiften…'); }
+      if (data.state === 'thinking') { spirit.set('thinking'); updateProgress(t('progress.thinkingNext')); }
+      else if (data.state === 'working') { spirit.set('working'); if (!progressCount) updateProgress(t('progress.preparing')); }
       else if (data.state === 'verifying') { spirit.set('working'); updateProgress('Verifierar resultatet…'); }
       break;
 
@@ -1313,7 +1299,7 @@ function viewIntents(event, data, intents) {
       }
       if (progressCard) {
         const activity = progressCard.node.querySelector('.tool-name');
-        if (activity) activity.textContent = `${data.ok ? 'Klart' : 'Problem'} · ${toolLabel(data.name)}`;
+        if (activity) activity.textContent = `${data.ok ? t('progress.done') : t('progress.problem')} · ${toolLabel(data.name)}`;
         const line = document.createElement('div');
         line.textContent = `${toolLabel(data.name)} · ${data.ok ? (data.verified ? t('state.verified') : t('state.done')) : t('state.failed')}`
           + (data.summary ? ` · ${data.summary}` : '')
@@ -1333,7 +1319,7 @@ function viewIntents(event, data, intents) {
     case 'recovery': {
       // The host is retrying on its own; say so instead of looking frozen.
       spirit.set('working');
-      updateProgress('Försöker lösa ett problem…');
+      updateProgress(t('progress.recovering'));
       const reason = data.failureClass || t('common.unknownError');
       if (data.action && data.action !== 'none') {
         els.hint.textContent = t('state.recovering', { attempt: data.attempt || 1, reason });
@@ -2034,6 +2020,70 @@ async function setApprovalPolicy(policy) {
   }
 }
 
+/**
+ * Job search, the one action that does not need a model.
+ *
+ * The owner's report was "it cannot even search a job". It was true: every
+ * other capability in the app waits for the LLM to choose a tool, so a
+ * rate-limited provider made even a plain Platsbanken search impossible. The
+ * host exposes jobs.search directly (`POST /api/jobs/search`), so this panel
+ * talks to Arbetsförmedlingen with no model, no browser and no approval.
+ */
+async function searchJobs() {
+  const query = String(els.jobsQuery?.value || '').trim();
+  if (!query) {
+    if (els.jobsStatus) els.jobsStatus.textContent = t('jobs.needQuery');
+    return;
+  }
+  if (els.jobsStatus) els.jobsStatus.textContent = t('jobs.searching');
+  if (els.jobsResults) els.jobsResults.textContent = '';
+  if (els.jobsSearchBtn) els.jobsSearchBtn.disabled = true;
+  try {
+    const res = await api('/api/jobs/search', { method: 'POST', body: { query, limit: 8 } });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      // A missing grant is not a failed search, and saying "search failed"
+      // would send the owner looking in the wrong place.
+      const code = data?.error?.code;
+      const message = code === 'LANE_NOT_GRANTED' || code === 'TOOL_UNAVAILABLE'
+        ? t('jobs.needLane')
+        : data?.error?.message || data?.message || t('jobs.failed');
+      if (els.jobsStatus) els.jobsStatus.textContent = message;
+      return;
+    }
+    const jobs = data.applications || [];
+    if (!jobs.length) {
+      if (els.jobsStatus) els.jobsStatus.textContent = t('jobs.empty');
+      return;
+    }
+    if (els.jobsStatus) els.jobsStatus.textContent = t('jobs.found').replace('{n}', String(jobs.length));
+    for (const job of jobs) {
+      const li = document.createElement('li');
+      const title = document.createElement('strong');
+      title.textContent = job.title || t('jobs.untitled');
+      li.append(title);
+      const meta = document.createElement('span');
+      meta.className = 'sheet-note';
+      meta.textContent = [job.company, job.city, job.deadline ? `${t('jobs.deadline')}: ${job.deadline}` : '', job.alreadySeen ? t('jobs.seenBefore') : ''].filter(Boolean).join(' · ');
+      li.append(meta);
+      const href = job.url || job.apply?.url || null;
+      if (href) {
+        const link = document.createElement('a');
+        link.href = href;
+        link.target = '_blank';
+        link.rel = 'noreferrer noopener';
+        link.textContent = t('jobs.open');
+        li.append(link);
+      }
+      els.jobsResults.append(li);
+    }
+  } catch (err) {
+    if (els.jobsStatus) els.jobsStatus.textContent = err.message || t('jobs.failed');
+  } finally {
+    if (els.jobsSearchBtn) els.jobsSearchBtn.disabled = false;
+  }
+}
+
 async function refreshSidebar() {
   try {
     const res = await api('/api/state');
@@ -2217,6 +2267,13 @@ function bindEvents() {
     if (ev.key === 'Enter') {
       ev.preventDefault();
       addFolder();
+    }
+  });
+  els.jobsSearchBtn?.addEventListener('click', searchJobs);
+  els.jobsQuery?.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      searchJobs();
     }
   });
   els.approvalAuto.addEventListener('change', () => {

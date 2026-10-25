@@ -120,8 +120,10 @@ export const netTools = [
     // 'net' is not a V1 risk level, so the guard could not classify this tool at
     // all: no-dead-tools and the capability map both rejected it. It can issue
     // any method against any URL, so the honest level is the one that asks -
-    // 'exec' - rather than 'read', which would auto-approve a POST.
+    // 'exec' - rather than 'read', which would auto-approve a POST. The V4
+    // approval tier is stated separately: raw HTTP leaves the machine.
     risk: 'exec',
+    tier: 'external',
     desc: 'Raw HTTP request (method, headers, body). Use for your own APIs and for testing a local web service.',
     params: { url: 'string: address', method: 'string: GET | POST | PUT | DELETE | HEAD | OPTIONS. optional (default: GET) [GET|POST|PUT|DELETE|HEAD|OPTIONS]', headers: 'object: extra headers (optional)', body: 'string: body (optional)', maxChars: 'number: response cap (default: 8000)' },
         required: ['url'],

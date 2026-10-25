@@ -57,13 +57,16 @@ try {
  mark('form.dynamic_load',snapshot.fields.length>=6,'fields='+snapshot.fields.length);
  const ctx={session,cfg:{get:key=>key==='workspace'?tmp:undefined},signal:null};
  const run=async(name,input)=>webTools.find(tool=>tool.name===name).run(input,ctx);
+ /* Keys are the Swedish LABELS printed on the form being filled — the browser
+    has to match them to find the field. They are input vocabulary, never
+    rendered to the user, which is what the marker below records. */
  const values={
-  'Förnamn':'Test',
+  'Förnamn':'Test', // input vocabulary, never rendered
   'Efternamn':'Applicant',
   'E-post':'acceptance@example.test',
-  'Varför rollen':'I want to help the team with verified Microsoft IT skills.',
+  'Varför rollen':'I want to help the team with verified Microsoft IT skills.', // input vocabulary, never rendered
   'Helsingborg':true,
-  'Ladda upp CV':cv,
+  'Ladda upp CV':cv, // input vocabulary, never rendered
  };
  const result=await fillForm({browser,session,values,run});
  mark('form.fill_and_upload',result.ok,JSON.stringify(result.error||result.meta||{}));
