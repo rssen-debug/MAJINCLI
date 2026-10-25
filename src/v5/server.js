@@ -190,6 +190,7 @@ export function createV5Server({
         const goalState = await architect.executeGoal(body);
         return sendJson(res, 200, {
           ok: true,
+          goal: goalState,
           ...goalState,
         });
       }

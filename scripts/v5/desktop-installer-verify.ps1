@@ -93,7 +93,6 @@ $ProvBody = @{
     modelId = "GLM-5.3"
     manualOverride = $true
 } | ConvertTo-Json
-$ProvRes = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$TestPort/api/v5/provider" -ContentType "application/json" -Body $ProvResBody -ErrorAction SilentlyContinue
 $ProvRes = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$TestPort/api/v5/provider" -ContentType "application/json" -Body $ProvBody
 if (-not $ProvRes.ok) {
     throw "Failed to save provider config on installed host"
