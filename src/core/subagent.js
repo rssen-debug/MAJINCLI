@@ -6,7 +6,7 @@
 import { loop } from './loop.js';
 import { routeFor } from './router.js';
 
-export async function run({ cfg, task, job = 'tasks', maxSteps, registry, session, emit, memory }) {
+export async function run({ cfg, task, job = 'tasks', maxSteps, registry, session, emit, memory, providerErrorCap = 4, providerRetries = null }) {
   maxSteps = Number(maxSteps) || Number(cfg.get('agent.subagents.maxSteps')) || 14;
   const route = routeFor(cfg, job);
   const messages = [
@@ -34,6 +34,10 @@ export async function run({ cfg, task, job = 'tasks', maxSteps, registry, sessio
     ctx: { session: `${session}:sub`, emit: (e) => emit?.({ ...e, sub: true }) },
     onEvent: (e) => emit?.({ ...e, sub: true }),
     label: 'sub',
+    providerErrorCap,
+    providerRetries,
   });
-  return { text: res.text, steps: res.steps, tools: res.toolLog.map((t) => t.tool), usage: res.usage, error: res.error };
+  return { text: res.text, steps: res.steps, tools: res.toolLog.map((t) => t.tool), usage: res.usage,
+    error: res.error, errorKind: res.errorKind, incomplete: Boolean(res.incomplete || res.blocked || res.aborted || res.fatal),
+    blocked: res.blocked || null, stopReason: res.stopReason || (res.incomplete ? 'step_limit' : null) };
 }

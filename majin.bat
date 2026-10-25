@@ -3,5 +3,5 @@ rem MAJIN — bogyttan: majin.bat doctor / majin.bat send "..." / majin.bat re f
 setlocal
 if "%MAJIN_HOME%"=="" set "MAJIN_HOME=%LOCALAPPDATA%\MAJIN"
 cd /d "%~dp0"
-node "src\cli\majin.js" %*
+node "bin\majin.mjs" %*
 endlocal

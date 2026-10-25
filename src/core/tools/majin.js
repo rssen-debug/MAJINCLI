@@ -10,11 +10,13 @@ import path from 'node:path';
 import { def } from './registry.js';
 import { validatePatch, JOBS } from '../config.js';
 import { parseIntent } from '../routes.js';
-import { PRESETS, listModelsUrl, needsKeyFor } from '../presets.js';
+import { PRESETS, needsKeyFor } from '../presets.js';
 import { complete } from '../provider/chat.js';
 import { dirs } from '../paths.js';
 import { bus } from '../log.js';
+import { VERSION } from '../version.js';
 import { detect as detectRe } from '../binary/external.js';
+import { validateAdapter } from '../adapters.js';
 
 const mask = (v) => (!v ? '' : v.length <= 6 ? '•••' : `${v.slice(0, 3)}…${v.slice(-2)}`);
 
@@ -25,10 +27,10 @@ export const majinTools = [
     risk: 'write',
     desc: 'Change MAJIN own configuration (routes, moa, providers, channels, guard, agent, tools, ui, budget, persona). A validated JSON patch; an invalid patch is rejected with a reason. Use intent for natural language.',
     params: {
-      patch: 'object: JSON patch of the config tree, e.g. {"models":{"routes":{"code":"deepseek/deepseek-v4-pro"}}}',
-      intent: 'string: an instruction in plain language that is translated into a patch, e.g. "use deepseek pro for code always"',
-      dry: 'boolean: show the diff without saving',
-      note: 'string: why the change is made (goes into the log)',
+      patch: 'object: JSON patch of the config tree, e.g. {"models":{"routes":{"code":"deepseek/deepseek-v4-pro"}}} (optional)',
+      intent: 'string: an instruction in plain language that is translated into a patch, e.g. "use deepseek pro for code always" (optional)',
+      dry: 'boolean: show the diff without saving (optional)',
+      note: 'string: why the change is made (goes into the log) (optional)',
     },
     examples: ['majin.configure({intent:"use deepseek flash for tasks always"})', 'majin.configure({patch:{moa:{policy:"hard"}}})'],
     async run({ patch = null, intent = '', dry = false, note = '' }, ctx) {
@@ -67,11 +69,11 @@ export const majinTools = [
     risk: 'write',
     desc: 'Model routing: show, set or test the jobs (chat, tasks, tools, code, re, research, plan, analysis, final, summarize, aggregator, router, vision).',
     params: {
-      action: 'string: show | set | test | show_all [show|set|test|show_all]',
-      job: 'string: which job (required for set)',
-      model: 'string: "provider/model" (required for set)',
-      all: 'boolean: set the same model for every job',
-      note: 'string: why',
+      action: 'string: show | set | test | show_all [show|set|test|show_all] (optional)',
+      job: 'string: which job (required for set) (optional)',
+      model: 'string: "provider/model" (required for set) (optional)',
+      all: 'boolean: set the same model for every job (optional)',
+      note: 'string: why (optional)',
     },
     examples: ['majin.routes({action:"set",job:"code",model:"deepseek/deepseek-v4-pro"})'],
     async run({ action = 'show', job = '', model = '', all = false, note = '' }, ctx) {
@@ -114,14 +116,14 @@ export const majinTools = [
     risk: 'write',
     desc: 'Manage providers: list | add | remove | test | models (list available models from /models).',
     params: {
-      action: 'string: list | add | remove | test | models [list|add|remove|test|models]',
-      name: 'string: provider name (the key in config)',
-      preset: 'string: use a preset (deepseek, openrouter, groq, openai, anthropic, nous, ollama, lmstudio, mock)',
-      baseUrl: 'string: https://…',
-      apiKey: 'string: sk-…  (stored in the config on disk)',
-      env: 'string: instead of a key — store as {env:VAR}',
-      models: 'string: comma separated model names',
-      kind: 'string: openai | anthropic | mock [openai|anthropic|mock]',
+      action: 'string: list | add | remove | test | models [list|add|remove|test|models] (optional)',
+      name: 'string: provider name (the key in config) (optional)',
+      preset: 'string: use a preset (deepseek, openrouter, groq, openai, anthropic, nous, ollama, lmstudio, mock) (optional)',
+      baseUrl: 'string: https://… (optional)',
+      apiKey: 'string: sk-…  (stored in the config on disk) (optional)',
+      env: 'string: instead of a key — store as {env:VAR} (optional)',
+      models: 'string: comma separated model names (optional)',
+      kind: 'string: openai | anthropic | mock [openai|anthropic|mock] (optional)',
     },
     examples: ['majin.provider({action:"add",name:"deepseek",apiKey:"sk-…"})'],
     async run({ action = 'list', name = '', preset = '', baseUrl = '', apiKey = '', env = '', models = null, kind = '' }, ctx) {
@@ -132,14 +134,13 @@ export const majinTools = [
       if (action === 'models') {
         const p = providers[name];
         if (!p) return { ok: false, error: { code: 'no_provider', message: `unknown provider ${name}` } };
-        const url = listModelsUrl({ kind: p.kind, baseUrl: p.baseUrl });
-        if (!url) return { ok: false, error: { code: 'unsupported', message: `${p.kind} has no /models endpoint`, hint: 'set the models manually' } };
-        const r = await fetch(url, { headers: { authorization: `Bearer ${p.apiKey}` } }).catch((e) => ({ ok: false, err: e }));
-        if (!r.ok) return { ok: false, error: { code: 'list_failed', message: (r.err?.message || `HTTP ${r.status}`), hint: 'check the key and baseUrl' } };
-        const j = await r.json().catch(() => ({}));
-        const ids = (j.data || j.models || []).map((m) => m.id || m.name).filter(Boolean);
-        await ctx.cfg.patch({ providers: { [name]: { models: ids.slice(0, 400) } } });
-        return { result: `${name}: ${ids.length} models (saved ${Math.min(400, ids.length)} in config)\n${ids.slice(0, 120).join('\n')}`, summary: `${ids.length} models` };
+        const { discoverModels } = await import('../provider/catalog.js');
+        const { payload, ...catalog } = await discoverModels(p);
+        if (!catalog.ok) return { ok: false, error: { code: 'list_failed', message: catalog.error, hint: catalog.hint } };
+        ctx.cfg.patch({ providers: { [name]: { models: catalog.models } } });
+        const { importPricing } = await import('../pricing.js');
+        await importPricing(ctx.cfg, name, payload, { source: name + ':/models' }).catch(() => {});
+        return { result: name + ': ' + catalog.count + ' models (all saved)\n' + catalog.models.slice(0, 120).join('\n'), meta: catalog, summary: catalog.count + ' models' };
       }
       if (action === 'add') {
         if (!name) return { ok: false, error: { code: 'no_name', message: 'give a provider name (or pick a preset)', hint: 'majin.provider({action:"add",name:"deepseek",apiKey:"sk-…"})' } };
@@ -150,6 +151,10 @@ export const majinTools = [
           baseUrl: baseUrl || base.baseUrl || '',
           apiKey: env ? `{env:${env}}` : apiKey || base.apiKey || '',
           models: models ? String(models).split(',').map((x) => x.trim()).filter(Boolean) : base.models || [],
+          /* gateway-presets kan kräva skall-headrar (opencode Go 400:ar utan
+             x-opencode-session) — de måste följa med in i config, annars
+             sparas en nyckel som aldrig kan svara */
+          ...(base.headers ? { headers: base.headers } : {}),
         };
         if (entry.kind !== 'mock' && !entry.baseUrl) return { ok: false, error: { code: 'no_url', message: 'baseUrl is required (or pick a preset)' } };
         // ett tomt nyckelfalt far inte kunna rapporteras som "sparat": en vanlig
@@ -176,11 +181,49 @@ export const majinTools = [
         return { result: `added ${name} (${entry.kind} ${entry.baseUrl}) and routed ${first ? `${entry.models.length} suggestions` : 'no model'} →\n${routeLines(ctx)}\n\nTest it: majin.routes({action:"test",model:"${name}/${first || '?'}"})`, summary: `provider ${name} tillagd` };
       }
       if (action === 'remove') {
-        const { [name]: gone, ...rest } = providers;
-        void gone;
-        ctx.cfg.patch({ providers: rest });
-        return { result: `removed ${name}. Left: ${Object.keys(rest).join(', ')}`, summary: `provider ${name} removed` };
+        if (!providers[name]) return { ok: false, error: { code: 'no_provider', message: `unknown provider ${name}` } };
+        /* merge() is a DEEP merge — it can never drop a nested key by itself.
+           The only truthful way to remove a provider is the undefined sentinel,
+           which config.merge honours with delete (src/core/config.js). Sending
+           "the remaining map" merges straight back over the old data and the
+           removed provider silently survives — exactly the bug this fixes. */
+        const presets = PRESETS;
+        const rest = Object.fromEntries(Object.entries(providers).filter(([n]) => n !== name));
+        const isUser = (n) => !(n in presets);
+        const hasKey = (pv) => pv.apiKey && !String(pv.apiKey).startsWith('{env:');
+        const isLocal = (pv) => /127\.0\.0\.1|localhost|mock:/.test(pv.baseUrl || '');
+        const candidates = Object.entries(rest).filter(([n, pv]) => n !== 'demo' && (pv.models || []).length && (isUser(n) || hasKey(pv) || isLocal(pv)));
+        const patch = { providers: { [name]: undefined } };
+        /* never leave routes pointing at a ghost: repoint to something that
+           can actually answer (user provider with a key first, then keyed
+           presets, then user/preset locals), or say clearly that setup must
+           run again */
+        const routes = { ...(ctx.cfg.get('models.routes') || {}) };
+        const dangling = Object.entries(routes).filter(([, ref]) => String(ref).startsWith(name + '/'));
+        let note = '';
+        if (dangling.length) {
+          const next = (candidates.find(([n, pv]) => isUser(n) && hasKey(pv))
+            || candidates.find(([, pv]) => hasKey(pv))
+            || candidates.find(([n, pv]) => isUser(n) && isLocal(pv))
+            || candidates.find(([, pv]) => isLocal(pv))
+            || [null])[0];
+          if (next) {
+            const model = rest[next].models[0];
+            for (const [j] of dangling) routes[j] = `${next}/${model}`;
+            patch.models = { provider: next, routes };
+            note = `\nrepointed ${dangling.length} route(s) to ${next}/${model}`;
+          } else {
+            note = '\nWARNING: your routes pointed at it and nothing is left to fall back to — run the setup wizard again';
+          }
+        }
+        const rr = ctx.cfg.patch(patch, { source: 'provider.remove' });
+        if (rr && rr.ok === false) {
+          return { ok: false, error: { code: 'config', message: `could not finish removal safely: ${(rr.errors || []).map((e) => e.path + ' ' + e.msg).join('; ') || 'validation failed'} — nothing was changed` } };
+        }
+        const leftKeys = candidates.map(([n]) => n);
+        return { result: 'removed ' + name + '. Providers with keys left: ' + (leftKeys.join(', ') || 'none') + note, summary: 'provider ' + name + ' removed' };
       }
+
       if (action === 'test') {
         const p = providers[name] || {};
         const route = ctx.cfg.resolveModel(`${name}/${(p.models || ['x'])[0]}`, 'test');
@@ -202,10 +245,10 @@ export const majinTools = [
     risk: 'write',
     desc: 'Mixture-of-Agents: show | on | off | hard (only hard jobs) | set (references/aggregator/width). On by default.',
     params: {
-      action: 'string: show | on | off | hard | set [show|on|off|hard|set]',
-      references: 'array: [{"model":"provider/model","temperature":0.3}]',
-      aggregator: 'string: provider/model that aggregates',
-      width: 'number: how many references to run',
+      action: 'string: show | on | off | hard | set [show|on|off|hard|set] (optional)',
+      references: 'array: [{"model":"provider/model","temperature":0.3}] (optional)',
+      aggregator: 'string: provider/model that aggregates (optional)',
+      width: 'number: how many references to run (optional)',
     },
     async run({ action = 'show', references = null, aggregator = '', width = 0 }, ctx) {
       const m = ctx.cfg.get('moa');
@@ -228,7 +271,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'write',
     desc: 'The safety glass: status | mode(confirm|strict|off) | allow(tool) | disallow. The agent can NOT approve its own dangerous actions — a human always does that.',
-    params: { action: 'string: status | mode | allow | disallow [status|mode|allow|disallow]', mode: 'string: confirm | strict | off', tool: 'string: verktygsnamn' },
+    params: { action: 'string: status | mode | allow | disallow [status|mode|allow|disallow] (optional)', mode: 'string: confirm | strict | off (optional)', tool: 'string: verktygsnamn (optional)' },
     async run({ action = 'status', mode = '', tool = '' }, ctx) {
       const g = ctx.cfg.get('guard');
       if (action === 'status') {
@@ -259,7 +302,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'write',
     desc: 'Long-term memory: remember(text) | recall(query) | forget(query) | list | clear. The agent stores preferences, projects and solutions here.',
-    params: { action: 'string: remember | recall | forget | list | clear [remember|recall|forget|list|clear]', text: 'string: vad som ska minnas', query: 'string: vad du letar efter', tags: 'array: taggar' },
+    params: { action: 'string: remember | recall | forget | list | clear [remember|recall|forget|list|clear] (optional)', text: 'string: vad som ska minnas (optional)', query: 'string: vad du letar efter (optional)', tags: 'array: taggar (optional)' },
     async run({ action = 'list', text = '', query = '', tags = [] }, ctx) {
       const m = ctx.memory;
       if (action === 'remember') {
@@ -286,9 +329,19 @@ export const majinTools = [
     group: 'majin',
     risk: 'write',
     desc: 'Learned skills (markdown in data/skills): list | save | read | delete | match. A skill is how a kind of task is done, step by step.',
-    params: { action: 'string: list | save | read | delete | match [list|save|read|delete|match]', name: 'string: name', when: 'string: when to use it', steps: 'string: the steps (markdown)', tools: 'array: tools it uses', query: 'string: for match' },
-    async run({ action = 'list', name = '', when = '', steps = '', tools = '', query = '' }, ctx) {
+    params: { action: 'string: list | save | read | delete | match | report | enable [list|save|read|delete|match|report|enable] (optional)', name: 'string: name (optional)', when: 'string: when to use it (optional)', steps: 'string: the steps (markdown) (optional)', tools: 'array: tools it uses (optional)', query: 'string: for match (optional)', ok: 'boolean: did the skill work (report) (optional)', why: 'string: why it failed (report) (optional)' },
+    async run({ action = 'list', name = '', when = '', steps = '', tools = '', query = '', ok = null, why = '' }, ctx) {
       const s = ctx.skills;
+      if (action === 'report') {
+        if (ok === null || ok === undefined) return { ok: false, error: { code: 'incomplete', message: 'name + ok required' } };
+        const r = s.recordOutcome(name, { ok: Boolean(ok), why });
+        if (!r.ok) return { ok: false, error: { code: 'not_found', message: r.why } };
+        return { result: `skill "${name}": fails=${r.fails} streak=${r.streak}${r.disabled ? ' DISABLED (repeat failures — a human can majin.skill action=enable when the world changed)' : ''}`, meta: r, summary: `outcome ${r.disabled ? 'DISABLED' : 'recorded'}` };
+      }
+      if (action === 'enable') {
+        const r = s.enable(name);
+        return r.ok ? { result: `skill "${name}" re-enabled`, summary: 'skill enabled' } : { ok: false, error: { code: 'not_found', message: r.why } };
+      }
       if (action === 'save') {
         if (!name || !steps) return { ok: false, error: { code: 'incomplete', message: 'name + steps required' } };
         const r = s.save({ name, when, steps, tools });
@@ -311,6 +364,9 @@ export const majinTools = [
       }
       if (action === 'match') {
         const hits = s.match(query || '', 5);
+        /* WAVE 10: a deliberate lookup is a visit — count it on disk (by file
+           slug, the same identity prompt() uses). */
+        if (hits.length) s.hit(hits.map((h) => String(h.file).replace(/\.md$/, '')));
         return { result: hits.length ? hits.map((h) => `${h.name} (${h.score}) — ${h.when}`).join('\n') : 'no matching skills', meta: { hits: hits.length }, summary: `${hits.length} match` };
       }
       const list = s.list();
@@ -324,12 +380,12 @@ export const majinTools = [
     risk: 'write',
     desc: 'Scheduled work: add | list | remove | run | pause | resume. Requests like "every morning 07:30: do X and send it to telegram" belong here.',
     params: {
-      action: 'string: add | list | remove | run | pause | resume [add|list|remove|run|pause|resume]',
-      id: 'string: job id (for remove/pause/run)',
-      when: 'string: "07:30 daily" | "every 30m" | "*/15 * * * *" | "2026-01-01T09:00"',
-      task: 'string: what to run (the whole prompt)',
-      readOnly: 'boolean: the job may only read; every tool that changes state is refused',
-      deliver: 'string: telegram | whatsapp | silent (where the answer goes)',
+      action: 'string: add | list | remove | run | pause | resume [add|list|remove|run|pause|resume] (optional)',
+      id: 'string: job id (for remove/pause/run) (optional)',
+      when: 'string: "07:30 daily" | "every 30m" | "*/15 * * * *" | "2026-01-01T09:00" (optional)',
+      task: 'string: what to run (the whole prompt) (optional)',
+      readOnly: 'boolean: the job may only read; every tool that changes state is refused (optional)',
+      deliver: 'string: telegram | whatsapp | silent (where the answer goes) (optional)',
       model: 'string: optional route for the job',
     },
     examples: ['majin.schedule({action:"add",when:"07:30 daily",task:"Short morning report: weather, my tickets, new security advisories. Deliver to telegram"})'],
@@ -362,16 +418,16 @@ export const majinTools = [
     risk: 'write',
     desc: 'Channels: status | telegram | whatsapp | send | pair. Sets bot keys, links devices and sends messages.',
     params: {
-      action: 'string: status | telegram | whatsapp | send | pair | unpair [status|telegram|whatsapp|send|pair|unpair]',
-      token: 'string: Telegram bot-token (123456:ABC…)',
-      transport: 'string: baileys | cloud (WhatsApp) [baileys|cloud]',
-      phoneNumberId: 'string: WhatsApp Cloud API phone-number-id',
-      accessToken: 'string: WhatsApp Cloud API token',
+      action: 'string: status | telegram | whatsapp | send | pair | unpair [status|telegram|whatsapp|send|pair|unpair] (optional)',
+      token: 'string: Telegram bot-token (123456:ABC…) (optional)',
+      transport: 'string: baileys | cloud (WhatsApp) [baileys|cloud] (optional)',
+      phoneNumberId: 'string: WhatsApp Cloud API phone-number-id (optional)',
+      accessToken: 'string: WhatsApp Cloud API token (optional)',
       verifyToken: 'string: optional secret for webhook verification',
-      to: 'string: dit (chat-id eller telefonnummer)',
-      text: 'string: the message body',
-      channel: 'string: telegram | whatsapp',
-      enable: 'boolean: start/stop the channel',
+      to: 'string: dit (chat-id eller telefonnummer) (optional)',
+      text: 'string: the message body (optional)',
+      channel: 'string: telegram | whatsapp (optional)',
+      enable: 'boolean: start/stop the channel (optional)',
     },
     examples: ['majin.channel({action:"telegram",token:"123:ABC",enable:true})'],
     async run({ action = 'status', token = '', transport = '', phoneNumberId = '', accessToken = '', verifyToken = '', to = '', text = '', channel = '', enable = null }, ctx) {
@@ -433,13 +489,13 @@ export const majinTools = [
     group: 'majin',
     risk: 'read',
     desc: 'Full status: config, routes, MOA, channels, external RE tools, budget, memory, skills, jobs, log path. Use it when the user asks "how are you doing?".',
-    params: { verbose: 'boolean: med allt' },
+    params: { verbose: 'boolean: med allt (optional)' },
     async run({ verbose = false }, ctx) {
       const cfg = ctx.cfg;
       const re = await detectRe({}).catch(() => ({}));
       const u = ctx.usage?.summary?.() || {};
       const out = {
-        version: '0.1.0',
+        version: VERSION,
         node: process.version,
         platform: `${os.platform()} ${os.arch()}`,
         uptimeS: Math.round(process.uptime()),
@@ -468,11 +524,55 @@ export const majinTools = [
   }),
 
   def({
+    name: 'majin.doctor',
+    group: 'majin',
+    risk: 'read',
+    desc: 'Health check, human style: every capability gets OK / why-not / how-to-fix. Use it when something feels off, before the user asks you to guess. No network calls — it reads config and reports, then points at the exact tool or card that fixes each problem.',
+    params: {},
+    examples: ['majin.doctor({})'],
+    async run(_args, ctx) {
+      const cfg = ctx.cfg;
+      const lines = [];
+      const status = cfg.providerStatus();
+      const ready = status.filter((p) => p.ready && p.kind !== 'mock');
+      const routes = cfg.routeTable();
+      /* 1) AI key: the one thing everything hangs on */
+      if (ready.length) {
+        lines.push(`OK    ai-key    ${ready.length} provider(s) can answer (${ready.map((p) => p.name).join(', ')})`);
+      } else {
+        lines.push('FIX   ai-key    no real provider has a key — MAJIN can only fake answers. Fix: paste a key in the wizard (», » model chip) or majin.provider({action:"add",name:"deepseek",apiKey:"sk-…"})');
+      }
+      /* 2) routes must land on providers that can ANSWER */
+      const names = new Set(ready.map((p) => p.name));
+      const dead = routes.filter((r) => !names.has(r.ref.split('/')[0]) && !String(r.ref).startsWith('demo/'));
+      if (!dead.length) lines.push(`OK    routes    all ${routes.length} routes point at providers that can answer`);
+      else lines.push(`FIX   routes    ${dead.length} route(s) point at a provider with no working key (${dead.slice(0, 4).map((r) => r.job + '→' + r.ref).join(', ')}). Fix: open the model chip and pick one model — every route follows it.`);
+      /* 3) single-model sanity: MOA must be a choice, not an accident */
+      const policy = cfg.get('moa.policy');
+      if (policy === 'off') lines.push('OK    moa      off — one model, no hidden multi-call cost');
+      else lines.push(`NOTE  moa      policy '${policy}' — every answer calls several models (costs multiply). If that was not your idea: MOA chip in the header, or majin.moa({action:"off"}).`);
+      /* 4) memory + scheduler exist at all */
+      const memCount = ctx.memory?.stats?.()?.lines;
+      lines.push(memCount !== undefined ? `OK    memory    ${memCount} stored line(s)` : 'NOTE  memory    memory service not attached in this context — restart the app if it stays away');
+      /* 5) channels (optional by design) */
+      const ch = ctx.channels?.status?.() || {};
+      const on = Object.entries(ch).filter(([, v]) => v && v.online).map(([k]) => k);
+      lines.push(on.length ? `OK    channels  ${on.join(', ')} online` : 'OK    channels  none configured (optional — desktop always works)');
+      /* 6) guard mode */
+      const mode = cfg.get('guard.mode');
+      lines.push(`OK    guard     mode '${mode}'`);
+      const broken = lines.filter((l) => l.startsWith('FIX')).length;
+      const verdict = broken === 0 ? 'HEALTHY — every checked piece is in place.' : (broken === 1 ? 'ONE THING needs attention — see the FIX line.' : `${broken} things need attention — see the FIX lines.`);
+      return { result: verdict + '\n\n' + lines.join('\n'), meta: { verdict, broken, lines }, summary: verdict };
+    },
+  }),
+
+  def({
     name: 'majin.selftest',
     group: 'majin',
     risk: 'read',
     desc: 'Diagnostics: provider keys, one real minimal call per provider, the tool registry, an RE check on its own binary, channel status, port, writability. Run this when something behaves oddly.',
-    params: { level: 'string: quick | full [quick|full]' },
+    params: { level: 'string: quick | full [quick|full] (optional)' },
     async run({ level = 'quick' }, ctx) {
       const out = [];
       // ok=null betyder "kan inte testa / inte konfigurerad" — inte ett fel, så en ny
@@ -549,7 +649,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'read',
     desc: 'List every tool with its description and risk level. All of them are always on — there is no off switch.',
-    params: { group: 'string: filter by group', describe: 'string: tool name for the full description' },
+    params: { group: 'string: filter by group (optional)', describe: 'string: tool name for the full description (optional)' },
     async run({ group = '', describe = '' }, ctx) {
       if (describe) {
         const t = ctx.registry.byName.get(describe);
@@ -570,7 +670,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'write',
     desc: 'Export/import everything MAJIN knows (config, memory, skills, schedules) as a tar.gz in workspace/backups.',
-    params: { action: 'string: export | list | restore [export|list|restore]', file: 'string: archive to restore' },
+    params: { action: 'string: export | list | restore [export|list|restore] (optional)', file: 'string: archive to restore (optional)' },
     async run({ action = 'list', file }, ctx) {
       const dir = path.join(ctx.cfg.get('workspace'), 'backups');
       await fsp.mkdir(dir, { recursive: true });
@@ -600,7 +700,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'read',
     desc: 'Open the UI: on Windows a dedicated Edge/Chrome app window. action=open | theme | voice.',
-    params: { action: 'string: open | theme | voice | wake [open|theme|voice|wake]', theme: 'string: jarvis | arc | minimal', voice: 'boolean: tts on/off', wake: 'boolean: wake word on/off' },
+    params: { action: 'string: open | theme | voice | wake [open|theme|voice|wake] (optional)', theme: 'string: jarvis | arc | minimal (optional)', voice: 'boolean: tts on/off (optional)', wake: 'boolean: wake word on/off (optional)' },
     async run({ action = 'open', theme = '', voice = null, wake = '' }, ctx) {
       if (action !== 'open') {
         const ui = { ...(ctx.cfg.get('ui') || {}) };
@@ -635,7 +735,7 @@ export const majinTools = [
     group: 'majin',
     risk: 'write',
     desc: 'Control the agent itself: restart | stop | pause | resume | clear (session) | sessions | history.',
-    params: { action: 'string: restart | stop | pause | resume | clear | sessions | history [restart|stop|pause|resume|clear|sessions|history]', session: 'string: session (default active)', limit: 'number: lines for history' },
+    params: { action: 'string: restart | stop | pause | resume | clear | sessions | history [restart|stop|pause|resume|clear|sessions|history] (optional)', session: 'string: session (default active) (optional)', limit: 'number: lines for history (optional)' },
     async run({ action = 'sessions', session = 'desktop', limit = 40 }, ctx) {
       if (action === 'sessions') {
         const list = await fsp.readdir(dirs.sessions).catch(() => []);
@@ -682,13 +782,13 @@ export const majinTools = [
       'Local trajectory recording used to make MAJIN better. OFF by default, redacted on write, stored next to the config, '
     + 'and never uploaded — exporting is a deliberate command you run.',
     params: {
-      action: 'string: status | on | off | stats | list | export | purge | rate',
-      query: 'string: which turn to rate (empty = the newest)',
-      score: 'number: 1 or -1 for rate',
-      id: 'string: record id for purge',
-      before: 'string: purge everything older than this ISO date',
-      clean: 'boolean: export metadata only, no question or answer text',
-      limit: 'number: how many records to list (default 8)',
+      action: 'string: status | on | off | stats | list | export | purge | rate (optional)',
+      query: 'string: which turn to rate (empty = the newest) (optional)',
+      score: 'number: 1 or -1 for rate (optional)',
+      id: 'string: record id for purge (optional)',
+      before: 'string: purge everything older than this ISO date (optional)',
+      clean: 'boolean: export metadata only, no question or answer text (optional)',
+      limit: 'number: how many records to list (default 8) (optional)',
     },
     examples: ['majin.dataset({action:"stats"})', 'majin.dataset({action:"export",clean:true})', 'majin.dataset({action:"on"})'],
     async run({ action = 'status', query = '', score = 1, id = null, before = null, clean = false, limit = 8 }, ctx) {
@@ -737,6 +837,48 @@ export const majinTools = [
         return r.ok ? { result: `rated ${r.id} as ${r.rating > 0 ? 'good' : 'bad'}`, meta: r } : { ok: false, error: { code: 'not_found', message: r.error } };
       }
       return { ok: false, error: { code: 'bad_action', message: `${action} — use status|on|off|stats|list|export|purge|rate` } };
+    },
+  }),
+
+  def({
+    name: 'majin.adapter',
+    group: 'majin',
+    risk: 'write',
+    desc: 'Safe external adapters (Del 7B): validate | create | list | remove. An adapter is a DECLARATIVE http-json descriptor (no code, https only, permission class read | external-write | external-post); an invalid adapter is never written to disk.',
+    params: {
+      action: 'string: validate | create | list | remove | call | enable',
+      spec: 'object: {name, kind:"http-json", baseUrl, permission, headers, mapping, timeoutMs, rate:{maxPerHour}}',
+      name: 'string: adapter name (for remove | call | enable)',
+      params: 'object: request payload for call (params for GET, json body for POST). optional [call only]',
+      approved: 'boolean: only ever true after the HUMAN said yes — required for external-write/external-post. optional [call only]',
+    },
+    async run({ action = 'list', spec = null, name = '', params = {}, approved = false }, ctx) {
+      const a = ctx.adapters;
+      if (!a) return { ok: false, error: { code: 'no_adapters', message: 'adapter store missing' } };
+      if (action === 'validate') {
+        const issues = validateAdapter(spec || {});
+        return { result: issues.length ? `INVALID:\n- ${issues.join('\n- ')}` : 'valid', meta: { issues, valid: !issues.length }, summary: issues.length ? `${issues.length} issue(s)` : 'valid' };
+      }
+      if (action === 'create') {
+        const r = a.create(spec || {});
+        if (!r.ok) return { ok: false, error: { code: 'invalid_adapter', message: `refused — adapter is NEVER written when it fails validation:\n- ${(r.issues || []).join('\n- ')}`, hint: 'fix the spec; close adapters are validated hard' } };
+        return { result: `adapter \"${r.adapter.name}\" created (${r.adapter.permission}, ${r.adapter.baseUrl})`, meta: { adapter: r.adapter }, summary: 'adapter created' };
+      }
+      if (action === 'remove') {
+        const r = a.remove(name);
+        return r.ok ? { result: `removed ${name}`, summary: 'adapter removed' } : { ok: false, error: { code: 'not_found', message: r.why } };
+      }
+      if (action === 'enable') {
+        const r = a.enable(name);
+        return r.ok ? { result: `adapter "${name}" re-enabled (failure counters cleared)`, summary: 'adapter enabled' } : { ok: false, error: { code: 'not_found', message: r.why } };
+      }
+      if (action === 'call') {
+        const r = await a.call(name, { params: params && typeof params === 'object' ? params : {}, approved: Boolean(approved), approvals: ctx.approvals, session: ctx.session });
+        if (!r.ok) return r;
+        return { result: JSON.stringify(r.rows, null, 1).slice(0, 10000), meta: { adapter: r.adapter, status: r.status, rows: r.rows.length, method: r.method }, summary: `${r.rows.length} rows from ${name}` };
+      }
+      const list = a.list();
+      return { result: `${list.length} adapters in ${a.dir}:\n${list.map((x) => `- ${x.name} [${x.permission}] ${x.baseUrl}`).join('\n') || '(none)'}`, meta: { count: list.length }, summary: `${list.length} adapters` };
     },
   }),
 ];

@@ -51,7 +51,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Full triage of a binary: format, headers, sections+entropy, imports/exports, packers, YARA, IOC strings, opcode patterns, a risk score and suggested next steps. Start here.',
-    params: { path: 'string: file to analyse', maxStrings: 'number: max number of strings (default 4000)', rules: 'string: "builtin", "builtin+user" or [auto|builtin|builtin+user]' },
+    params: { path: 'string: file to analyse', maxStrings: 'number: max number of strings (default: 4000)', rules: 'string: "builtin", "builtin+user". optional (default: builtin+user) [auto|builtin|builtin+user]' },
     examples: ['re.analyze({path:"downloads/suspect.exe"})'],
     async run({ path: p, maxStrings = 4000, rules = 'builtin+user' }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -99,11 +99,11 @@ export const reTools = [
     desc: 'Extract strings (ascii + utf16) with offsets. Filter with a regex. Used to find URLs, paths, mutexes and important API names.',
     params: {
       path: 'string: file',
-      min: 'number: minimum length (default 5)',
-      filter: 'string: regex the string must match',
-      encoding: 'string: ascii | utf16 | both [ascii|utf16|both]',
-      limit: 'number: max count (default 400)',
-      classify: 'boolean: also group as IOCs',
+      min: 'number: minimum length (default: 5)',
+      filter: 'string: regex the string must match (optional)',
+      encoding: 'string: ascii | utf16 | both. optional (default: ascii) [ascii|utf16|both]',
+      limit: 'number: max count (default: 400)',
+      classify: 'boolean: also group as IOCs (optional)',
     },
     async run({ path: p, min = 5, filter = '', encoding = 'both', limit = 400, classify: cl = false }, ctx) {
       const { abs, buf } = await load(ctx, p);
@@ -125,7 +125,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Hex dump at an offset. Used for headers, the overlay, packer signatures and raw comparison.',
-    params: { path: 'string: file', offset: 'string: 0x40 or 64', length: 'number: bytes to read (default 512, max 8192)' },
+    params: { path: 'string: file', offset: 'string: 0x40 or 64 (optional)', length: 'number: bytes to read (default: 512, max 8192)' },
     async run({ path: p, offset = '0', length = 512 }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const off = typeof offset === 'number' ? offset : parseInt(String(offset).replace(/^0x/i, ''), 16) || 0;
@@ -140,7 +140,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Pattern hunt in bytes: "4d 5a ?? (e8|eb)" or a text string. Returns offset + context.',
-    params: { path: 'string: file', pattern: 'string: hex pattern or text', max: 'number: max hits (default 60)', context: 'number: bytes around each hit (default 24)' },
+    params: { path: 'string: file', pattern: 'string: hex pattern or text', max: 'number: max hits (default: 60)', context: 'number: bytes around each hit (default: 24)' },
     async run({ path: p, pattern, max = 60, context = 24 }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const isHex = /^[\s0-9a-fx?,;()|]+$/i.test(String(pattern).replace(/ /g, '')) && /[0-9a-f]{2}/i.test(String(pattern));
@@ -157,7 +157,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Entropy profile per section + block. High entropy = packed or encrypted. Used to decide what to unpack.',
-    params: { path: 'string: file', block: 'number: block size in bytes (default 1024)', threshold: 'number: flag above this (default 7.0)' },
+    params: { path: 'string: file', block: 'number: block size in bytes (default: 1024)', threshold: 'number: flag above this (default: 7.0)' },
     async run({ path: p, block = 1024, threshold = 7.0 }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const win = entropyWindow(buf, { block: Number(block), threshold: Number(threshold) });
@@ -213,7 +213,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Import tables (DLL → functions) with risk flags. Delay imports included.',
-    params: { path: 'string: file', dll: 'string: filter on dll name', flagged: 'boolean: only risky ones' },
+    params: { path: 'string: file', dll: 'string: filter on dll name (optional)', flagged: 'boolean: only risky ones (optional)' },
     async run({ path: p, dll = '', flagged = false }, ctx) {
       const { abs, buf } = await load(ctx, p);
       let pe;
@@ -238,7 +238,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Export table (for DLLs) + forwarded exports. Used to list hook and backend functions.',
-    params: { path: 'string: file', limit: 'number: max count (default 200)' },
+    params: { path: 'string: file', limit: 'number: max count (default: 200)' },
     async run({ path: p, limit = 200 }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const pe = parsePe(buf);
@@ -256,7 +256,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Run YARA rules with the built-in mini engine — no yara binary needed. Add your own rules in rules/majin.yar.',
-    params: { path: 'string: file', ruleText: 'string: your own rules in YARA syntax', only: 'string: filter on rule name (regex)' },
+    params: { path: 'string: file', ruleText: 'string: your own rules in YARA syntax', only: 'string: filter on rule name (regex) (optional)' },
     async run({ path: p, ruleText = '', only = '' }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const rules = parseRules(ruleText || userRules(ctx));
@@ -274,7 +274,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Pull out and group IOCs (URLs, IPs, file paths, registry keys, mutexes, e-mail, GUIDs) and resolve domains when asked.',
-    params: { path: 'string: file', resolve: 'boolean: resolve the domains via DNS', save: 'boolean: write the list to workspace/re/<name>-iocs.json' },
+    params: { path: 'string: file', resolve: 'boolean: resolve the domains via DNS (optional)', save: 'boolean: write the list to workspace/re/<name>-iocs.json (optional)' },
     async run({ path: p, resolve = false, save = false }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const strs = extractStrings(buf, { limit: 120000 });
@@ -308,7 +308,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Read (and optionally extract) the data after the last section — where packers and self-extractors hide.',
-    params: { path: 'string: file to inspect', extract: 'boolean: write the overlay to workspace/re/<name>.overlay', maxPeek: 'number: bytes to show (default 256)' },
+    params: { path: 'string: file to inspect', extract: 'boolean: write the overlay to workspace/re/<name>.overlay (optional)', maxPeek: 'number: bytes to show (default 256) (optional)' },
     async run({ path: p, extract = false, maxPeek = 256 }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const pe = parsePe(buf);
@@ -335,7 +335,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'write',
     desc: 'Extract ZIP/APK/asar entries or a PE resource into the workspace. Used to reach embedded content.',
-    params: { path: 'string: archive or PE', entry: 'string: entry name (regex) inside the archive', all: 'boolean: take every match', resourceType: 'string: PE resource to dump (RCDATA, MANIFEST, VERSION)', out: 'string: target folder (default workspace/re/<name>)' },
+    params: { path: 'string: archive or PE', entry: 'string: entry name (regex) inside the archive (optional)', all: 'boolean: take every match (optional)', resourceType: 'string: PE resource to dump (RCDATA, MANIFEST, VERSION) (optional)', out: 'string: target folder (default workspace/re/<name>) (optional)' },
     async run({ path: p, entry = '', all = false, resourceType = '', out = '' }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const base = resolveIn(ctx, out || path.join('re', `${path.basename(abs)}.extracted`));
@@ -411,7 +411,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Compare two binaries (versions, variants, clean vs injected). Gives hash/import/string deltas plus a section diff.',
-    params: { a: 'string: the first file', b: 'string: the second file', strings: 'number: how many strings to compare' },
+    params: { a: 'string: the first file', b: 'string: the second file', strings: 'number: how many strings to compare (optional)' },
     async run({ a, b, strings = 6000 }, ctx) {
       const A = await load(ctx, a);
       const B = await load(ctx, b);
@@ -449,7 +449,7 @@ export const reTools = [
     group: 'reverse',
     risk: 'read',
     desc: 'Modules/DLLs loaded in a running process + unusual paths. Used to see injection or hooking live.',
-    params: { process: 'string: process name or pid', filter: 'string: regex on the module path' },
+    params: { process: 'string: process name or pid (optional)', filter: 'string: regex on the module path (optional)' },
     async run({ process: proc = '', filter = '' }) {
       const { runShell, IS_WIN } = await import('./shell.js');
       if (!IS_WIN) return { ok: false, error: { code: 'windows_only', message: 'the module list uses Get-Process Modules', hint: 'on Linux: read /proc/<pid>/maps via shell.run' } };
@@ -474,12 +474,12 @@ export const reTools = [
     desc: 'Hook up external RE tools when you need real power: ghidra (decompile), rizin, objdump, binwalk, upx, yara, jadx, apktool, ilspycmd. Auto-detects what is installed.',
     params: {
       tool: 'string: ghidra | rizin | objdump | binwalk | upx | yara | jadx | apktool | ilspycmd | nm',
-      path: 'string: file to process',
-      commands: 'string: rizin-kommandon (semikollon) eller objdump-flaggor',
-      args: 'array: extra CLI-argument',
-      extract: 'boolean: binwalk -e',
-      out: 'string: target folder/file',
-      timeoutSec: 'number: timeout (ghidra kan ta minuter)',
+      path: 'string: file to process (optional)',
+      commands: 'string: rizin-kommandon (semikollon) eller objdump-flaggor (optional)',
+      args: 'array: extra CLI-argument (optional)',
+      extract: 'boolean: binwalk -e (optional)',
+      out: 'string: target folder/file (optional)',
+      timeoutSec: 'number: timeout (ghidra kan ta minuter) (optional)',
     },
     examples: ['re.tool({tool:"rizin",path:"a.exe",commands:"aa;afl;s entry0;pdf"})'],
         required: ['tool'],
@@ -507,7 +507,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     group: 'reverse',
     risk: 'read',
     desc: 'Which external RE tools exist and what is missing. The built-in parser needs nothing — this is for deeper work.',
-    params: { refresh: 'boolean: look it up in PATH again' },
+    params: { refresh: 'boolean: look it up in PATH again (optional)' },
     async run({ refresh = false }) {
       const d = await detectTools({ refresh: Boolean(refresh) });
       const rows = Object.entries(d).map(([id, v]) => `${v.available ? '✓' : '·'} ${id.padEnd(9)} ${v.label}${v.available ? ` — ${v.path}` : ` — ${v.hint || 'not installed'}`}`);
@@ -520,7 +520,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     group: 'reverse',
     risk: 'read',
     desc: 'Disassemble at an address/offset. Uses rizin/objdump when present — otherwise bytes + pattern analysis, never guesses.',
-    params: { path: 'string: file', address: 'string: 0x401000 or an offset', count: 'number: how many instructions (default 80)', mode: 'string: auto | rizin | objdump | bytes' },
+    params: { path: 'string: file', address: 'string: 0x401000 or an offset (optional)', count: 'number: how many instructions (default 80) (optional)', mode: 'string: auto | rizin | objdump | bytes (optional)' },
     async run({ path: p, address = '0', count = 80, mode = 'auto' }, ctx) {
       const { abs, buf } = await load(ctx, p);
       const avail = await detectTools({});
@@ -549,7 +549,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     group: 'reverse',
     risk: 'write',
     desc: 'Try to unpack known packers. UPX works directly; otherwise: entropy/section assessment + carving the overlay.',
-    params: { path: 'string: file', out: 'string: target file' },
+    params: { path: 'string: file', out: 'string: target file (optional)' },
     async run({ path: p, out }, ctx) {
       const abs = resolveIn(ctx, p).abs;
       const buf = await fs.readFile(abs);
@@ -580,7 +580,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     group: 'reverse',
     risk: 'read',
     desc: 'MD5/SHA1/SHA256 + imphash for one or more files. Used to look up known samples.',
-    params: { path: 'string: file, or a folder with a glob', glob: 'string: only for folders (default *)' },
+    params: { path: 'string: file, or a folder with a glob', glob: 'string: only for folders (default *) (optional)' },
     async run({ path: p, glob = '*' }, ctx) {
       const { abs } = resolveIn(ctx, p);
       const st = await fs.stat(abs);
@@ -610,10 +610,10 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     risk: 'write',
     desc: 'Turn a finished investigation into SPEC.md: observable behaviour, inputs/outputs, formats, error handling and open questions — every claim carrying the file offset it came from, and everything not proven listed under Uncertain. This is the step between "I understood it" and "now build it". Use it before writing a replacement; never copy source out of the analysed file.',
     params: {
-      path: 'string: analysed file',
-      feature: 'string: what you are specifying (e.g. "notes export") — steers which evidence is kept',
-      report: 'string: re.analyze json to reuse instead of re-reading the file',
-      max: 'number: max evidence lines per section (default 25)',
+      path: 'string: analysed file (optional)',
+      feature: 'string: what you are specifying (e.g. "notes export") — steers which evidence is kept (optional)',
+      report: 'string: re.analyze json to reuse instead of re-reading the file (optional)',
+      max: 'number: max evidence lines per section (default 25) (optional)',
     },
     async run({ path: file = '', feature = '', report = '', max = 25 }, ctx) {
       let r = null;
@@ -699,7 +699,7 @@ async run({ tool, path: p = '', commands = '', args = '', extract = false, out =
     group: 'reverse',
     risk: 'read',
     desc: 'List and save YARA rules in <home>/rules/majin.yar (MAJIN\'s own rule database).',
-    params: { action: 'string: list | save | delete [list|save|delete]', name: 'string: rule name', text: 'string: rule text (saved into the file)' },
+    params: { action: 'string: list | save | delete [list|save|delete] (optional)', name: 'string: rule name (optional)', text: 'string: rule text (saved into the file) (optional)' },
     async run({ action = 'list', name = '', text = '' }, ctx) {
       const file = path.join(dirs.rules, 'majin.yar');
       const cur = fss.existsSync(file) ? fss.readFileSync(file, 'utf8') : '';

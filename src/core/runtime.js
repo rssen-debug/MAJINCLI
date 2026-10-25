@@ -9,8 +9,10 @@ import path from 'node:path';
 import { load } from './config.js';
 import { PRESETS, presetCard } from './presets.js';
 import { bus } from './log.js';
+import { checkForUpdate, downloadSetup, installSetup, notice, scheduleUpdateCheck } from './update.js';
 import { dirs, ensureDirs } from './paths.js';
 import { Memory, Skills } from './memory.js';
+import { Adapters } from './adapters.js';
 import { Usage } from './usage.js';
 import { buildRegistry } from './tools/index.js';
 import { loadUserPlugins } from './tools/plugins.js';
@@ -19,25 +21,43 @@ import { Dataset } from './dataset.js';
 import { Scheduler } from './schedule.js';
 import { approvals } from './guard.js';
 import { readHistory } from './context.js';
+import { recordEffect, sha256 } from './effects.js';
+import { Channels } from './channels/index.js';
 
-export const VERSION = '0.1.0';
+import { VERSION as APP_VERSION } from './version.js';
+export const VERSION = APP_VERSION;
 
 export async function createRuntime({ channels = true, scheduler = true, open = null } = {}) {
   ensureDirs();
   const cfg = load();
   const memory = new Memory(cfg);
   const skills = new Skills(cfg);
+  const adapters = new Adapters(cfg);
   const usage = new Usage(cfg);
   const dataset = new Dataset(cfg, bus);
   dataset.trim();
 
-  const ctx = { cfg, bus, memory, skills, usage, dataset, approvals, agent: null, channels: null, scheduler: null, emit: (ev) => bus.emit(`tool.${ev.type}`, ev) };
+  const ctx = { cfg, bus, memory, skills, adapters, usage, dataset, approvals, agent: null, channels: null, scheduler: null, emit: (ev) => bus.emit(`tool.${ev.type}`, ev) };
   const registry = buildRegistry(ctx);
   const plugins = await loadUserPlugins(registry);
   for (const item of plugins.skipped) bus.warn('plugin.load', { name: item.name, reason: item.reason });
   if (plugins.loaded.length) bus.info('plugin.load', { count: plugins.loaded.length, names: plugins.loaded });
 
   const agent = new Agent({ cfg, registry, memory, skills, usage, bus, shared: ctx });
+  /* Del 1D: every fs.write lands in the session journal with the same truth the
+     tool logged — a crash never makes us write the same file twice. */
+  (async () => {
+    try {
+      bus.on('file.write', (ev) => {
+        try {
+          if (!ev || !ev.session || !ev.path) return;
+          let hash = null;
+          try { hash = sha256(fs.readFileSync(ev.path)); } catch { /* transient */ }
+          recordEffect(ev.session, { kind: 'fs.write', target: ev.path, hash, status: 'completed' });
+        } catch { /* journaling must never break the tool loop */ }
+      });
+    } catch { /* effects får aldrig stoppa runtime */ }
+  })();
   ctx.agent = agent;
   ctx.pause = () => agent.pause();
   ctx.resume = () => agent.resume();
@@ -57,7 +77,6 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
 
   let chans = null;
   if (channels && (cfg.get('channels.telegram.enabled') || cfg.get('channels.whatsapp.enabled'))) {
-    const { Channels } = await import('./channels/index.js');
     chans = new Channels({ cfg, agent, registry, scheduler: sched, bus });
     ctx.channels = chans;
     agent.channels = chans;
@@ -117,6 +136,7 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
       providers: cfg.providerStatus(),
       routes: cfg.routeTable(),
       needsSetup: cfg.needsSetup?.() ?? !cfg.providerStatus().some((p) => p.ready),
+      update: updateInfo.info ? { ...updateInfo.info, notice: updateInfo.notice } : null,
       // hela presetlistan, sa att valjaren aldrig hardkodar en leverantor
       presets: Object.entries(PRESETS).map(([name, p]) => presetCard(name, p)),
       moa: { policy: moa.policy, enabled: moa.enabled, width: moa.width, refs: moa.references.map((r) => r.model), aggregator: moa.aggregator, disagreementFloor: moa.disagreementFloor },
@@ -132,9 +152,37 @@ export async function createRuntime({ channels = true, scheduler = true, open = 
     };
   }
 
+  const updateInfo = { info: null, notice: '' };
+  const update = {
+    get info() {
+      return updateInfo.info ? { ...updateInfo.info, notice: updateInfo.notice } : null;
+    },
+    /** force skips the interval; a failing check returns the info with `error` set, never throws. */
+    async check(o = {}) {
+      const info = await checkForUpdate({ cfg, version: VERSION, fetchImpl: o.fetchImpl, force: o.force === true });
+      updateInfo.info = info;
+      updateInfo.notice = info && !info.error ? notice(info, VERSION) : '';
+      return update.info;
+    },
+    download(o = {}) {
+      return downloadSetup({ cfg, ...o });
+    },
+    install: (o = {}) => installSetup({ cfg, ...o }),
+  };
+  scheduleUpdateCheck({
+    cfg,
+    version: VERSION,
+    log: bus,
+    onInfo: (i) => {
+      updateInfo.info = i;
+      updateInfo.notice = i.notice || '';
+    },
+  });
+
   return {
     cfg,
     bus,
+    update,
     memory,
     skills,
     usage,

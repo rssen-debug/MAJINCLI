@@ -18,7 +18,7 @@ majin doctor --full        # keys, tools, rules, port, workspace — everything 
 ```
 
 ```bash
-# Anywhere with Node 20.11+
+# Anywhere with Node 22+
 node src/cli/majin.js doctor
 node src/cli/majin.js
 ```
@@ -57,7 +57,7 @@ node src/cli/majin.js
    One line, no git needed:
 
 ```powershell
-curl.exe -L -o majin-win-x64.exe https://github.com/rssen-debug/slurps/releases/latest/download/majin-win-x64.exe
+curl.exe -L -o majin-win-x64.exe https://github.com/rssen-debug/MAJINCLI/releases/latest/download/majin-win-x64.exe
 ```
 
    It is unsigned, so SmartScreen will ask once (*More info → Run anyway*) — that is expected for a
@@ -75,8 +75,8 @@ directory, and needs no Node.js.
 ### Windows, from the repo (recommended while MAJIN is young)
 
 ```powershell
-winget install OpenJS.NodeJS.LTS        # if you do not have Node 20.11+
-git clone https://github.com/rssen-debug/slurps.git && cd slurps
+winget install OpenJS.NodeJS.LTS        # if you do not have Node 22+
+git clone https://github.com/rssen-debug/MAJINCLI.git && cd MAJINCLI
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
 

@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { dirs, expand } from './paths.js';
-import { PRESETS, presetNames, splitModel, chatUrl } from './presets.js';
+import { PRESETS, presetNames, splitModel, chatUrl, goDialect } from './presets.js';
 
 /** Model routing table keys. A "job" is any of these; a route is provider/model. */
 export const JOBS = [
@@ -30,6 +30,8 @@ export const DEFAULTS = {
   version: 1,
   name: 'MAJIN',
   workspace: null,
+  /* browser-use: one window per agent task, a capped fleet for the whole machine */
+  browser: { maxInstances: 3, rpcTimeoutMs: 20000 },
   persona: {
     identity:
       "MAJIN — a personal agent running directly on the user's own machine (Windows first). You talk briefly, in the language the user writes in, and you never explain what you are about to do before you have done it.",
@@ -44,7 +46,7 @@ export const DEFAULTS = {
     ...Object.fromEntries(
       Object.entries(PRESETS)
         .filter(([name]) => name !== 'deepseek' && name !== 'mock')
-        .map(([name, p]) => [name, { label: p.label, kind: p.kind, baseUrl: p.baseUrl, apiKey: null, models: [...(p.models || [])], keyEnv: p.keyEnv || null, keyUrl: p.keyUrl || null }]),
+        .map(([name, p]) => [name, { label: p.label, kind: p.kind, baseUrl: p.baseUrl, apiKey: null, models: [...(p.models || [])], keyEnv: p.keyEnv || null, keyUrl: p.keyUrl || null, ...(p.headers ? { headers: { ...p.headers } } : {}) }]),
     ),
     deepseek: {
       label: 'DeepSeek',
@@ -79,6 +81,9 @@ export const DEFAULTS = {
     'deepseek/deepseek-flash': { in: 0.14, out: 0.28 },
     'deepseek/deepseek-v4-pro': { in: 1.7, out: 8 },
   },
+  /* provenance for prices that rode in from a provider's /models answer —
+     populated by src/core/pricing.js, gaps only, never overwrites. */
+  pricingMeta: {},
   routing: {
     auto: true,
     escalateAfterErrors: 2,
@@ -97,7 +102,7 @@ export const DEFAULTS = {
   },
   moa: {
     enabled: true,
-    policy: 'always',
+    policy: 'off', /* VNEXT §3: multi-model spend is opt-in, never a default */
     hardJobs: ['re', 'code', 'analysis', 'plan', 'final', 'research'],
     width: 3,
     references: [
@@ -164,6 +169,12 @@ export const DEFAULTS = {
     webhook: { enabled: false, host: '0.0.0.0', port: 8788, path: '/whatsapp', tunnel: 'none' },
   },
   agent: {
+    /* facit: alls schemas varje turn. toolSubset: true = the loop skickar bara
+       determiniskt utvalda verktyg (search(input) + alltid tools.search som
+       flyktväg). Mätt-skick: flippa till true först när bench visar paritet
+       + uträknat spar — se DECISIONS Öppna frågor. */
+    toolSubset: true,
+    toolSubsetLimit: 12,
     maxSteps: 60,
     parallel: true,
     contextTokens: 48000,
@@ -183,12 +194,23 @@ export const DEFAULTS = {
     title: 'MAJIN',
     tagline: 'everything on — always ready',
     theme: 'jarvis',
-    voice: { enabled: true, lang: 'en-US', wakeWord: 'majin', tts: true, ttsVoice: null, rate: 1.05, pitch: 0.95 },
+    voice: { enabled: true, lang: 'sv-SE', wakeWord: '', requireWakeWord: false, foregroundGate: false, tts: true, ttsVoice: null, rate: 1.05, pitch: 0.95 },
     transparency: { showTools: 'verbose', showThinking: 'summary', showTokens: true },
     density: 'comfortable',
     autoOpen: true,
   },
-  budget: { mode: 'track', monthlyUsd: 0, warnAt: 0.8 },
+  budget: { mode: 'track', monthlyUsd: 0, warnAt: 0.8, perTaskUsd: 0 },
+  /* Del 4C: hard caps that code enforces on every mission run. 0 = off for the
+     time/token caps; repairRounds is the verify->repair ceiling (never infinite). */
+  mission: { limits: { repairRounds: 1, timeoutMs: 0, tokenBudget: 0, transientRetries: 1, replanRounds: 1 } },
+  // Analysis-only Meta Ads integration. The access token stays local and
+  // is always redacted by GET /api/config; use an env reference if preferred.
+  marketing: {
+    meta: { accountId: '', currency: '', accessToken: '{env:MAJIN_META_ACCESS_TOKEN}' },
+    tiktok: { advertiserId:'', currency:'', accessToken:'{env:MAJIN_TIKTOK_ADS_ACCESS_TOKEN}' },
+    google: { customerId:'', currency:'', accessToken:'{env:MAJIN_GOOGLE_ADS_ACCESS_TOKEN}', developerToken:'{env:MAJIN_GOOGLE_ADS_DEVELOPER_TOKEN}', loginCustomerId:'' },
+    economics: { price: 0, cogs: 0, shipping: 0, fees: 0, refundRate: 0, targetProfit: 0, dailyCap: 0 },
+  },
   // Spelas endast in när användaren uttryckligen bett om det. Uppladdning finns inte som
   // kodväg alls — export är ett medvetet steg, ingen tyst dataflöde från en privat maskin.
   dataset: {
@@ -200,9 +222,24 @@ export const DEFAULTS = {
   },
   logging: { level: 'info', keepDays: 14, jsonl: true },
   server: { host: '0.0.0.0', port: 8787, token: null, openBrowser: true, allowRemote: false, trustLocal: true },
+  /* Update checks against GitHub Releases. `check: false` means no request is ever made;
+     the rest is only ever written by src/core/update.js, never fetched from. */
+  updates: {
+    check: true,
+    intervalHours: 24,
+    repo: 'rssen-debug/MAJINCLI',
+    channel: '',
+    token: null,
+    lastCheck: 0,
+    latest: null,
+    url: null,
+    notes: null,
+    asset: null,
+    checkedVersion: null,
+  },
 };
 
-const SECRET_KEYS = /(^|\.)(apikey|key|token|secret|bottoken|accesstoken|password|appsecret|verifytoken)$/i;
+const SECRET_KEYS = /(^|\.)(apikey|key|token|secret|bottoken|accesstoken|developertoken|password|appsecret|verifytoken)$/i;
 const ENV_REF = /^\{env:([A-Z0-9_]+)\}$/i;
 
 /* ------------------------------- utils ----------------------------------- */
@@ -222,11 +259,19 @@ export function isPlain(v) {
   return p === Object.prototype || p === null;
 }
 
+/* Del 10E (CVE-class): keys that rewrite JS object identity. A config patch
+   containing "__proto__"/"constructor"/"prototype" must NEVER reach a merge
+   or a dotted-path write — sandbox-adversarial test 10E-V2 proved the naive
+   merge made cfg.get('guard.pwned') reachable from payload __proto__. The
+   defense: drop the segment ENTIRELY (not just neutralize the value). */
+const DANGEROUS_SEGS = new Set(['__proto__', 'constructor', 'prototype']);
+
 export function merge(base, patch) {
   if (patch === undefined) return base;
   if (Array.isArray(patch) || !isPlain(patch) || !isPlain(base)) return clone(patch);
   const out = { ...base };
   for (const [k, v] of Object.entries(patch)) {
+    if (DANGEROUS_SEGS.has(k)) continue; // 10E: hostile identity keys vanish here
     if (v === undefined) delete out[k];
     else out[k] = isPlain(v) && isPlain(base[k]) ? merge(base[k], v) : clone(v);
   }
@@ -239,11 +284,15 @@ export function smartMerge(base, patch) {
 }
 
 export function getPath(obj, dotted) {
-  return dotted.split('.').reduce((a, k) => (a == null ? a : a[k]), obj);
+  return dotted.split('.').reduce((a, k) => {
+    if (a == null || DANGEROUS_SEGS.has(k) || !Object.prototype.hasOwnProperty.call(a, k)) return undefined;
+    return a[k];
+  }, obj);
 }
 
 export function setPath(obj, dotted, value) {
   const keys = dotted.split('.');
+  if (keys.some((k) => DANGEROUS_SEGS.has(k))) return obj; // 10E: sabotage-segment write refused
   let cur = obj;
   for (const k of keys.slice(0, -1)) {
     if (!isObj(cur[k])) cur[k] = {};
@@ -293,10 +342,15 @@ export class Config {
     this.file = file;
     this.subs = new Set();
     this.errors = [];
+    /* paths denna process raderade med undefined i patch — skydd mot återuppståndelse */
+    this.tombstones = new Set();
   }
 
   get(key) {
-    return key ? getPath(this.data, key) : this.data;
+    /* callers must never mutate the live config silently past validation —
+       hand out a live view ONLY through raw() */
+    const v = key ? getPath(this.data, key) : this.data;
+    return v && typeof v === 'object' ? structuredClone(v) : v;
   }
 
   raw() {
@@ -316,10 +370,47 @@ export class Config {
     const diff = flattenDiff(this.data, obj);
     if (errors.length) return { ok: false, errors, diff };
     if (dry) return { ok: true, errors: [], diff, preview: merge(this.data, obj) };
+    /* Skivan är delad sanning: en annan process (CLI, andra servern) kan skriva
+       medan vi är uppe. Applicera patchen ovanpå den färskaste filen — men
+       respektera tombstones: nycklar som DENNA process medvetet raderade
+       (undefined i patch) får aldrig återuppstå via en disc-merge med DEFAULTS
+       (CI-bevisat: provider-remove väckte raderade providrar; en motriktning
+       bevisad i run 39128429043: update-check raderade CLI-markören). */
+    let base = this.data;
+    try {
+      if (this.file && fs.existsSync(this.file)) {
+        const onDisk = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+        if (isPlain(onDisk)) {
+          /* samma pipeline som load(): DEFAULTS fyller i, sedan expandEnv —
+             annan blir '{env:X}'-literaler "sanna nycklar" i resolveModel
+             och fallback-vägen dör (A/B-bevisat: turner 401:ade via literalen) */
+          base = expandEnv(merge(clone(DEFAULTS), onDisk));
+          for (const t of this.tombstones) {
+            const parts = t.split('.');
+            let node = base;
+            for (let i = 0; i < parts.length - 1 && node; i++) node = node[parts[i]];
+            if (node && Object.prototype.hasOwnProperty.call(node, parts.at(-1))) delete node[parts.at(-1)];
+          }
+        }
+      }
+    } catch { /* oläsbar disk → skriv det vi har */ }
     const prev = this.data;
-    this.data = merge(this.data, obj);
+    this.data = merge(base, obj);
+    const walk = (node, prefix) => {
+      if (!isPlain(node)) return;
+      for (const [k, v] of Object.entries(node)) {
+        const p = prefix ? prefix + '.' + k : k;
+        if (v === undefined) this.tombstones.add(p);
+        else if (isPlain(v)) walk(v, p);
+      }
+    };
+    walk(obj, '');
+    /* miljövariabler kör alltid före fil — en disk-merge med äldre värden får
+       aldrig tyst riva MAJIN_PORT/MAJIN_TOKEN som processen startades med */
+    if (process.env.MAJIN_TOKEN && String(process.env.MAJIN_TOKEN).trim()) this.data.server.token = String(process.env.MAJIN_TOKEN).trim();
+    if (Number.isFinite(Number(process.env.MAJIN_PORT))) this.data.server.port = Number(process.env.MAJIN_PORT);
     this.errors = [];
-    this.save();
+    const persisted = this.save();
     for (const fn of this.subs) {
       try {
         fn({ patch: obj, source, prev });
@@ -327,7 +418,11 @@ export class Config {
         void err;
       }
     }
-    return { ok: true, errors: [], diff, applied: obj };
+    if (!persisted) {
+      const err = this.lastSaveError || { message: 'unknown save failure', code: 'save_failed' };
+      return { ok: false, errors: [{ path: '(config)' , msg: `disk save failed: ${err.message}`, code: 'save_failed' }], diff, applied: obj, persisted: false };
+    }
+    return { ok: true, errors: [], diff, applied: obj, persisted: true };
   }
 
   onChange(fn) {
@@ -335,19 +430,31 @@ export class Config {
     return () => this.subs.delete(fn);
   }
 
+  /** P0 (UI-agent handover 2026-10-19): atomic, honestly reported save.
+      tmp-write → fsync → backup current → rename. A write failure leaves the
+      PREVIOUS file intact on disk and returns { ok:false, error } — callers
+      must propagate, never pretend. returns {ok:true} on success. */
   save() {
     const file = this.file || dirs.config;
+    const tmp = `${file}.tmp`;
     try {
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      if (fs.existsSync(file)) fs.copyFileSync(file, `${file}.bak`);
-      fs.writeFileSync(file, JSON.stringify(jsonable(this.data), null, 2) + '\n', 'utf8');
+      const payload = JSON.stringify(jsonable(this.data), null, 2) + '\n';
+      fs.writeFileSync(tmp, payload, 'utf8');
       try {
-        fs.chmodSync(file, 0o600);
-      } catch {
-        /* Windows: nope */
+        const fd = fs.openSync(tmp, 'r');
+        try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+      } catch { /* fsync best-effort */ }
+      try { fs.chmodSync(tmp, 0o600); } catch { /* Windows: nope */ }
+      if (fs.existsSync(file)) {
+        try { fs.copyFileSync(file, `${file}.bak`); } catch { /* backup is best-effort */ }
       }
+      fs.renameSync(tmp, file);
+      try { fs.chmodSync(file, 0o600); } catch { /* Windows: nope */ }
       return true;
-    } catch {
+    } catch (err) {
+      try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* fine */ }
+      this.lastSaveError = { message: String(err?.message || err), code: err?.code || 'save_failed', when: new Date().toISOString() };
       return false;
     }
   }
@@ -359,19 +466,25 @@ export class Config {
     const name = parsed.provider;
     const provider = { label: name, kind: 'openai', baseUrl: '', apiKey: '', ...(this.data.providers[name] || {}) };
     const pricing = this.data.pricing?.[`${name}/${parsed.model}`] || null;
+    const kind = name === 'opencode' ? goDialect(parsed.model) : (provider.kind || PRESETS[provider.preset]?.kind || 'openai');
     return {
       ref: `${name}/${parsed.model}`,
       providerName: name,
       // etiketten med (DeepSeek, inte deepseek) sa att felmeddelanden namner
       // leverantoren pa samma sat som mannen kan lasa den i panelen
       label: provider.label || name,
-      model: parsed.model,
-      kind: provider.kind || PRESETS[provider.preset]?.kind || 'openai',
+      model: provider.kind === 'gemini' ? parsed.model.replace(/^models\//, '') : parsed.model,
+      kind,
       baseUrl: provider.baseUrl,
-      endpoint: provider.endpoint || chatUrl({ kind: provider.kind || PRESETS[provider.preset]?.kind || 'openai', baseUrl: provider.baseUrl }),
-      apiKey: provider.apiKey,
+      endpoint: provider.endpoint || chatUrl({ kind, baseUrl: provider.baseUrl }),
+      // Environment keys remain in the process, never copied to config or UI.
+      apiKey: provider.apiKey || (provider.keyEnv && process.env[provider.keyEnv]) || '',
       extraHeaders: provider.headers || {},
       pricing,
+      /* GODLIKE V4 §7: per-provider quota (owner-configured) rides the route so
+         the admission layer never needs a second config lookup. Absent →
+         pass-through, no invented limits. */
+      quota: this.data.limits?.[name] ? { ...this.data.limits[name] } : null,
       job,
     };
   }
@@ -455,6 +568,8 @@ export function hasKey(provider) {
   if (!provider) return false;
   if (provider.kind === 'mock') return true;
   const raw = String(provider.apiKey || '').trim();
+  // Detect environment-configured providers without persisting their secret.
+  if (!raw && provider.keyEnv && String(process.env[provider.keyEnv] || '').trim()) return true;
   if (!raw) return false;
   if (/^\{env:[A-Z0-9_]+\}$/i.test(raw)) return Boolean(process.env[raw.slice(5, -1)]);
   return true;
@@ -520,6 +635,35 @@ export function validatePatch(patch, current) {
       }
     }
   }
+  if (isPlain(patch.marketing)) {
+    for (const k of Object.keys(patch.marketing)) {
+      if (!['meta', 'economics', 'tiktok', 'google'].includes(k)) errors.push({ path: 'marketing.' + k, msg: 'unknown marketing key' });
+    }
+    if (isPlain(patch.marketing.meta)) {
+      for (const k of Object.keys(patch.marketing.meta)) {
+        if (!['accountId', 'currency', 'accessToken'].includes(k)) errors.push({ path: 'marketing.meta.' + k, msg: 'unknown Meta setting' });
+      }
+      const m = patch.marketing.meta;
+      if (m.accountId !== undefined && m.accountId !== '' && !/^(act_)?[0-9]{3,25}$/.test(String(m.accountId))) errors.push({ path: 'marketing.meta.accountId', msg: 'enter a Meta ad account ID' });
+      if (m.currency !== undefined && m.currency !== '' && !/^[A-Z]{3}$/.test(String(m.currency))) errors.push({ path: 'marketing.meta.currency', msg: 'use an uppercase ISO currency code' });
+    }
+    for (const platform of ['tiktok','google']) {
+      if (!isPlain(patch.marketing[platform])) continue;
+      const fields=platform==='tiktok'?['advertiserId','currency','accessToken']:['customerId','currency','accessToken','developerToken','loginCustomerId'];
+      for (const [k,v] of Object.entries(patch.marketing[platform])) {
+        if (!fields.includes(k)) errors.push({path:'marketing.'+platform+'.'+k,msg:'unknown marketing credential setting'});
+        else if (k==='currency' && v!=='' && !/^[A-Z]{3}$/.test(String(v))) errors.push({path:'marketing.'+platform+'.currency',msg:'currency must be 3 uppercase letters'});
+        else if (['advertiserId','customerId','loginCustomerId'].includes(k) && v!=='' && !/^[0-9]{3,25}$/.test(String(v))) errors.push({path:'marketing.'+platform+'.'+k,msg:'account ID must be numeric'});
+        else if (['accessToken','developerToken'].includes(k) && typeof v!=='string') errors.push({path:'marketing.'+platform+'.'+k,msg:'token must be a string'});
+      }
+    }
+    if (isPlain(patch.marketing.economics)) {
+      for (const [k, v] of Object.entries(patch.marketing.economics)) {
+        if (!['price','cogs','shipping','fees','refundRate','targetProfit','dailyCap'].includes(k)) errors.push({ path: 'marketing.economics.' + k, msg: 'unknown economics setting' });
+        else if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || (k === 'refundRate' && v > 1)) errors.push({ path: 'marketing.economics.' + k, msg: 'must be a finite nonnegative number (refundRate 0..1)' });
+      }
+    }
+  }
   const walk = (obj, prefix = '') => {
     if (!isPlain(obj)) return;
     for (const [k, v] of Object.entries(obj)) {
@@ -528,18 +672,22 @@ export function validatePatch(patch, current) {
         for (const [job, ref] of Object.entries(v)) {
           if (!JOBS.includes(job)) errors.push({ path: `${p}.${job}`, msg: `unknown job route. Allowed: ${JOBS.join(', ')}` });
           if (typeof ref !== 'string' || !/^[a-z0-9._-]+\/[^\s]+$/i.test(ref)) errors.push({ path: `${p}.${job}`, msg: `"${ref}" — format provider/model` });
-          else if (current && !current.providers[ref.split('/')[0]]) errors.push({ path: `${p}.${job}`, msg: `unknown provider "${ref.split('/')[0]}". Add it to providers first.` });
+          else if (current && !current.providers[ref.split('/')[0]] && !(isObj(patch.providers) && isObj(patch.providers[ref.split('/')[0]]))) errors.push({ path: `${p}.${job}`, msg: `unknown provider "${ref.split('/')[0]}". Add it to providers first.` });
         }
       }
       if (p === 'providers' && isObj(v)) {
         for (const [name, prov] of Object.entries(v)) {
-          if (!isObj(prov)) errors.push({ path: p, msg: 'the provider must be an object' });
+          /* undefined = explicit DELETE sentinel: the only way to actually
+             remove a provider, since merge() deep-merges ordinary objects and
+             could otherwise never drop a nested key (see merge()). */
+          if (prov === undefined) continue;
+          if (!isObj(prov)) errors.push({ path: `${p}.${name}`, msg: `provider "${name}" must be an object (or undefined to remove it)` });
           else {
             const cur = (current && current.providers && current.providers[name]) || {};
             const kind = prov.kind || cur.kind || PRESETS[prov.preset || cur.preset]?.kind || 'openai';
             const base = prov.baseUrl || cur.baseUrl || PRESETS[prov.preset]?.baseUrl || PRESETS[cur.preset]?.baseUrl;
             if (kind !== 'mock' && !base) errors.push({ path: `${p}.${name}.baseUrl`, msg: 'missing baseUrl (or pick a preset that has one)' });
-            if (prov.kind && !['openai', 'anthropic', 'mock'].includes(prov.kind)) errors.push({ path: `${p}.${name}.kind`, msg: 'kind: openai | anthropic | mock' });
+            if (prov.kind && !['openai', 'anthropic', 'gemini', 'mock'].includes(prov.kind)) errors.push({ path: `${p}.${name}.kind`, msg: 'kind: openai | anthropic | gemini | mock' });
             if (prov.preset && !presetNames().includes(prov.preset)) errors.push({ path: `${p}.${name}.preset`, msg: `unknown preset "${prov.preset}" — use one of: ${presetNames().join(', ')}` });
             if (prov.models && !Array.isArray(prov.models)) errors.push({ path: `${p}.${name}.models`, msg: 'models must be an array' });
           }
@@ -614,10 +762,30 @@ export function load() {
   const file = configFile();
   let stored = {};
   let fresh = false;
+  let recoveredFrom = null;
+  const loadIssues = [];
   try {
     stored = JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    fresh = true;
+  } catch (e1) {
+    /* P0: corrupt is NOT the same as absent. Missing file (ENOENT) → fresh.
+       Parse error → try the .bak backup; never auto-save over a file we
+       could not read — that would overwrite the user's last working data.
+       Every anomaly is left in the open via cfg.loadIssues. */
+    if (e1 && e1.code === 'ENOENT') {
+      fresh = true;
+    } else {
+      loadIssues.push({ kind: 'corrupt-main', message: String(e1?.message || e1) });
+      try {
+        stored = JSON.parse(fs.readFileSync(`${file}.bak`, 'utf8'));
+        recoveredFrom = 'bak';
+        fresh = false;
+      } catch (e2) {
+        stored = {};
+        fresh = false; // still NOT fresh: never auto-save over the corrupt file
+        recoveredFrom = null;
+        loadIssues.push({ kind: e2 && e2.code === 'ENOENT' ? 'no-backup' : 'corrupt-backup', message: String(e2?.message || e2) });
+      }
+    }
   }
   const data = expandEnv(merge(clone(DEFAULTS), stored));
   if (!data.server.token) data.server.token = genToken();
@@ -630,7 +798,10 @@ export function load() {
   compileRuntime(cfg);
   cfg.onChange(() => compileRuntime(cfg));
   cfg.isFresh = fresh;
-  if (fresh) cfg.save();
+  if (recoveredFrom) cfg.recoveredFrom = recoveredFrom;
+  if (loadIssues.length) cfg.loadIssues = loadIssues;
+  if (fresh) cfg.save(); // fresh = no file existed; never auto-save over corrupt
+
   return cfg;
 }
 

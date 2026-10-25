@@ -56,6 +56,7 @@ test('classify: binärt och magi-vägning', (t) => {
 
 test('plan: always ⇒ MOA på alla jobb, hard ⇒ bara tunga', (t) => {
   const c = cfg(t);
+  c.patch({ moa: { policy: 'always', width: 3, references: [{ model: 'demo/demo-fast', temperature: 0.1 }, { model: 'demo/demo-fast', temperature: 0.5 }], aggregator: 'demo/demo-pro' } });
   const p1 = plan(c, { job: 'chat', confidence: 0.9 });
   assert.equal(p1.moa.enabled, true);
   assert.ok(p1.moa.width >= 2, 'även chat ska ha referenser');
@@ -125,6 +126,7 @@ test('llmClassify: tyst när routern är nyckellös', async (t) => {
 
 test('moa.run: referenser → aggregator, och degradering utan svar', async (t) => {
   const c = cfg(t);
+  c.patch({ moa: { policy: 'always', references: [{ model: 'demo/demo-fast', temperature: 0.1 }, { model: 'demo/demo-fast', temperature: 0.5 }], aggregator: 'demo/demo-pro' }, models: { routes: { final: 'demo/demo-fast' } } });
   setScript('moa:final', []);
   const r = await moaRun({ cfg: c, question: 'Vad gör den här filen?', context: [], job: 'final' });
   assert.ok(r.answer, ' ska alltid komma ett svar');
@@ -135,7 +137,7 @@ test('moa.run: referenser → aggregator, och degradering utan svar', async (t) 
 
 test('moa.run: enig referens skivar inte ensamt till aggregator', async (t) => {
   const c = cfg(t);
-  c.patch({ moa: { width: 2, references: [{ model: 'demo/demo-fast', temperature: 0.1 }, { model: 'demo/demo-fast', temperature: 0.2 }], aggregator: 'demo/demo-pro' } });
+  c.patch({ moa: { policy: 'always', width: 2, references: [{ model: 'demo/demo-fast', temperature: 0.1 }, { model: 'demo/demo-fast', temperature: 0.2 }], aggregator: 'demo/demo-pro' }, models: { routes: { analysis: 'demo/demo-fast' } } });
   const r = await moaRun({ cfg: c, question: 'test', context: [], job: 'analysis', forceWidth: 2 });
   assert.equal(r.refs.filter((x) => !x.error).length, 2);
   assert.ok(r.answer.length > 0);

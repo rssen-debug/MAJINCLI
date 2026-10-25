@@ -9,7 +9,7 @@ your shell and your programs — and be reachable from your phone.
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-1. **Checks Node** — needs 20.11+ on `PATH` (`winget install OpenJS.NodeJS.LTS`).
+1. **Checks Node** — needs 22.0.0+ on `PATH` (`winget install OpenJS.NodeJS.LTS`).
 2. **Copies the app** — `src/`, `rules/`, `scripts/`, `package.json`, the icons and the shims into
    `%LOCALAPPDATA%\MAJIN` (override with `-Home <dir>`). Nothing goes into `Program Files`, so no
    elevation is required.
