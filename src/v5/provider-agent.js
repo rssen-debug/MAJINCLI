@@ -17,6 +17,20 @@ export class ProviderAgent {
   constructor({ architect, maxRounds = 32, browserWriteOrigins = [] } = {}) {
     this.architect = architect; this.maxRounds = maxRounds; this.active = null;
     this.browserWriteOrigins = [...browserWriteOrigins];
+    // Persist owner-approved web origins across host restarts, never infer grants from page content.
+    this.approvedOriginsFile = path.join(architect.dataDir, 'browser-write-origins.json');
+    if (fs.existsSync(this.approvedOriginsFile)) {
+      const saved = JSON.parse(fs.readFileSync(this.approvedOriginsFile, 'utf8'));
+      if (Array.isArray(saved)) {
+        for (const origin of saved) {
+          try {
+            const parsed = new URL(origin);
+            if (parsed.protocol === 'https:' && parsed.origin === origin && !this.browserWriteOrigins.includes(origin))
+              this.browserWriteOrigins.push(origin);
+          } catch { /* ignore corrupt saved origin */ }
+        }
+      }
+    }
     this.dir = path.join(architect.dataDir, 'provider-agent'); fs.mkdirSync(this.dir, { recursive: true });
     this.currentFile = path.join(this.dir, 'current.json');
     this.current = fs.existsSync(this.currentFile) ? JSON.parse(fs.readFileSync(this.currentFile, 'utf8')) : null;
@@ -44,6 +58,23 @@ export class ProviderAgent {
     }
   }
   getGoalState() { return this.current?.goal || null; }
+  getApprovedBrowserOrigins() { return [...this.browserWriteOrigins]; }
+  approveBrowserOrigin(raw) {
+    if (this.active) throw Object.assign(new Error('Wait for the current operation to finish or pause it before changing browser write access.'), { statusCode: 409 });
+    const url = new URL(String(raw || ''));
+    if (url.protocol !== 'https:' || url.origin !== raw || url.username || url.password ||
+        url.pathname !== '/' || url.search || url.hash) {
+      throw Object.assign(new Error('Provide one exact HTTPS origin, e.g. https://example.com; no paths or wildcards.'), { statusCode: 400 });
+    }
+    if (!this.browserWriteOrigins.includes(url.origin)) this.browserWriteOrigins.push(url.origin);
+    const persist = this.browserWriteOrigins.filter(origin => {
+      try { return new URL(origin).protocol === 'https:'; } catch { return false; }
+    });
+    const tmp = this.approvedOriginsFile + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(persist, null, 2), { mode: 0o600 });
+    fs.renameSync(tmp, this.approvedOriginsFile);
+    return this.getApprovedBrowserOrigins();
+  }
   steer(instruction) {
     if (!this.active) throw new Error('No active provider operation');
     if (!String(instruction || '').trim()) throw new Error('Steering instruction required');
