@@ -107,6 +107,7 @@ const rt = await createRuntime({ channels: false, scheduler: false });
 rt.cfg.patch({
   workspace: path.join(home, 'workspace'),
   models: { provider: 'demo', routes: Object.fromEntries(['chat', 'tasks', 'tools', 'code', 're', 'analysis', 'final', 'plan', 'research', 'summarize', 'router', 'aggregator', 'vision'].map((j) => [j, 'demo/demo-fast'])) },
+  providers: { demo: { kind: 'mock', apiKey: 'demo' } },
   guard: { mode: 'off' },
   agent: { maxSteps: 6 },
 });
@@ -159,7 +160,7 @@ test('A: three independent tasks truly run at the same time, with isolated histo
 test('E: stopping one task lets the other two finish untouched', async () => {
   const a = newTask('lång uppgift ett');
   const b = newTask('lång uppgift två');
-  scriptAll([{ text: words(400) }]);
+  scriptAll([{ text: words(400) }, { text: words(400) }]);
   const A = rt.agent.turn({ input: a.input, session: a.session });
   await sleep(40); // A is mid-stream now
   const B = rt.agent.turn({ input: b.input, session: b.session });

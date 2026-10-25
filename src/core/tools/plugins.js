@@ -142,9 +142,9 @@ export const pluginTools = [
     params: {
       action: 'string: list | create | reload | remove [list|create|reload|remove]',
       name: 'string: plugin name, e.g. plugin.csv_summary',
-      description: 'string?: what the custom tool does (at least 20 chars; required for create)',
-      params: 'object?: JSON object {} of parameter descriptions, e.g. {"path":"string: input file"}',
-      code: 'string?: JavaScript async function body; parameters are args and ctx; return a result object',
+      description: 'string?: (optional) what the custom tool does (at least 20 chars; required for create)',
+      params: 'object?: (optional) JSON object {} of parameter descriptions, e.g. {"path":"string: input file"}',
+      code: 'string?: (optional) JavaScript async function body; parameters are args and ctx; return a result object',
     },
     examples: ['majin.plugin({action:"create",name:"plugin.word_count",description:"Count words in a local text file",params:{path:"string: file path"},code:"const fs = await import(\'node:fs/promises\'); return { result: String((await fs.readFile(args.path, \'utf8\')).trim().split(/\\s+/).length) };"})'],
     async run({ action = 'list', name = '', description = '', params = {}, code = '' }, ctx) {

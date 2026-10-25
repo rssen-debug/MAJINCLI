@@ -26,7 +26,9 @@ test('classify: svenska fraser hamnar rätt', (t) => {
     ['analysera den här exe-filen och säg om den är malware', 're'],
     ['fixa buggen i src/core/router.js', 'code'],
     ['flytta alla pdf-filer i downloads till mappen archive', 'tasks'],
+    ['please write the text "hello" to notes.txt', 'tasks'],
     ['vad är senaste nyheterna om quantum', 'research'],
+    ['vad är Sveriges huvudstad?', 'research'],
     ['hej', 'chat'],
     ['tack, det var bra', 'chat'],
   ];

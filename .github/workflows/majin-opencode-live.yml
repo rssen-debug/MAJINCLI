@@ -1,7 +1,7 @@
 name: MAJIN OpenCode Go live cloud acceptance
+# Live OpenCode Go/Qwen calls are intentionally manual so normal PRs never
+# contact a paid or user-owned model account.
 on:
-  pull_request:
-    branches: [fix/realworld-repairs, main]
   workflow_dispatch:
 permissions:
   contents: read

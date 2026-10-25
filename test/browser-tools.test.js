@@ -3,13 +3,18 @@ import assert from 'node:assert/strict';
 import { browserTools, validateUrl } from '../src/core/tools/browser.js';
 import { ALL_TOOLS } from '../src/core/tools/index.js';
 
-test('browser tools are registered and provider-agnostic', () => {
+test('Playwright browser tools do not override the integrated browser registry', () => {
   const names = browserTools.map((tool) => tool.name);
   assert.deepEqual(names, [
     'browser.open', 'browser.inspect', 'browser.click', 'browser.fill',
     'browser.check', 'browser.select', 'browser.upload', 'browser.press', 'browser.close',
   ]);
-  for (const tool of browserTools) assert.ok(ALL_TOOLS.includes(tool), `${tool.name} is in the registry`);
+  assert.equal(browserTools.some((tool) => ALL_TOOLS.includes(tool)), false,
+    'the integrated CDP browser surface owns the registered browser session');
+  const registeredBrowserTools = ALL_TOOLS.filter((tool) => tool.name.startsWith('browser.'));
+  assert.equal(new Set(registeredBrowserTools.map((tool) => tool.name)).size, registeredBrowserTools.length,
+    'each browser capability has one implementation');
+  assert.ok(registeredBrowserTools.some((tool) => tool.name === 'browser.open'));
   assert.match(browserTools[0].desc, /Playwright Core/);
   assert.match(browserTools[0].desc, /never submit/i);
   assert.match(browserTools.find((tool) => tool.name === 'browser.click').desc, /submit buttons are refused/i);
