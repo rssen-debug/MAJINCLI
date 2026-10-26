@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { classifyProviderError } from '../../src/v5/providers.js';
 import { openaiStream, buildMessages } from '../../src/core/provider/openai.js';
 
 test('DeepSeek streamed parallel calls survive fragmented UTF-8 and an unterminated final SSE line', async () => {
@@ -42,3 +43,39 @@ test('a tool-call delta in the final SSE line is not silently dropped', async ()
     assert.equal(JSON.parse(result.toolCalls[0].argsJson).path, 'cv.txt');
   } finally { globalThis.fetch = previous; }
 });
+
+for (const [label, payload, code] of [
+  ['malformed JSON', '{"choices":', 'invalid_stream_data'],
+  ['upstream error', JSON.stringify({ error: { message: 'private-request-secret', code: 'upstream' } }), 'provider_stream_error'],
+  ['null event', 'null', 'invalid_stream_data'],
+]) {
+  test(`stream rejects ${label} after partial tool arguments without exposing the payload`, async () => {
+    const previous = globalThis.fetch;
+    let requests = 0;
+    const first = { choices: [{ delta: { tool_calls: [{ index: 0, id: 'partial', function: {
+      name: 'browser_fill', arguments: '{"selector":"#name","value":"',
+    } }] } }] };
+    // Ignoring the broken middle event would turn this into a valid but wrong call.
+    const last = { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '"}' } }] }, finish_reason: 'tool_calls' }] };
+    globalThis.fetch = async () => {
+      requests++;
+      return new Response(`data: ${JSON.stringify(first)}\n\ndata: ${payload}\n\ndata: ${JSON.stringify(last)}\n\ndata: [DONE]\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    };
+    try {
+      await assert.rejects(openaiStream({ route: { model: 'deepseek-fixture', endpoint: 'http://127.0.0.1/fixture' },
+        messages: [{ role: 'user', content: 'Execute the fixture tools' }], maxTokens: 100 }), error => {
+        assert.equal(error.code, code);
+        assert.equal(error.retryable, false);
+        const classified = classifyProviderError(error);
+        assert.equal(classified.code, 'PROVIDER_STREAM_ERROR');
+        assert.equal(classified.retryable, false);
+        assert.match(classified.message, /Incomplete tool calls were discarded/);
+        assert.doesNotMatch(error.message, /private-request-secret/);
+        return true;
+      });
+      assert.equal(requests, 1);
+    } finally { globalThis.fetch = previous; }
+  });
+}
