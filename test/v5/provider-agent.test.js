@@ -63,6 +63,28 @@ test('actual HTTP transport advertises tools, executes a failure/recovery loop a
   assert.equal(responsesInput([assistant])[0].arguments, '{"path":"result.txt"}');
   assert.deepEqual(toAnthropic([assistant]).messages[0].content[0].input, { path: 'result.txt' });
 });
+test('object-form tool arguments from a gateway dialect execute and verify end-to-end', async t => {
+  // Some OpenAI-compatible gateways return `arguments` as a parsed object
+  // instead of a JSON string. The loop must execute the call, not fail it
+  // as INVALID_TOOL_CALL on "[object Object]".
+  const { requests, server } = await setup(t, (_body, count) => {
+    if (count === 1) return { role: 'assistant', content: null,
+      tool_calls: [{ id: 'write-object-args', type: 'function', function: { name: 'fs_write', arguments: { path: 'dialect.txt', content: 'object args executed' } } }] };
+    return { role: 'assistant', content: 'Created dialect.txt.' };
+  });
+  const { url } = await server.start();
+  const response = await fetch(url + '/api/v5/goal', { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ goalText: 'Create dialect.txt containing object args executed', criteria: [{ kind: 'file', path: 'dialect.txt', contains: 'object args executed' }] }) });
+  const result = await response.json();
+  assert.equal(result.status, 'COMPLETED', JSON.stringify(result));
+  assert.equal(fs.readFileSync(path.join(server.architect.workspaceDir, 'dialect.txt'), 'utf8'), 'object args executed');
+  assert.deepEqual(result.tool_results.map(row => row.ok), [true]);
+  // The replayed history on the second request must carry string arguments.
+  const replayed = requests[1].body.messages.find(m => m.role === 'assistant' && m.tool_calls?.length);
+  assert.equal(typeof replayed.tool_calls[0].function.arguments, 'string');
+  assert.deepEqual(JSON.parse(replayed.tool_calls[0].function.arguments), { path: 'dialect.txt', content: 'object args executed' });
+});
+
 test('progressive tool exposure caps the advertised catalog and activates discovered bridge tools on demand', async t => {
   const { requests, server } = await setup(t, (_body, count) => {
     if (count === 1) return tool('search-hash', 'tools_search', { query: 're.hash', limit: 5 });

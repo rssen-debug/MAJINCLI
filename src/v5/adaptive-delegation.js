@@ -168,7 +168,7 @@ export function createDelegationTool({ architect, goal, signal, grantedLanes = [
             }
             if (calls.length > 8) throw new Error('Worker exceeded the eight-tool-call response limit');
             const normalized = calls.map((call, index) => ({ id: String(call.id || `${round}-${index}`), type: 'function', name: call.name,
-              function: { name: call.name, arguments: call.argsJson || JSON.stringify(call.args || {}) } }));
+              function: { name: call.name, arguments: typeof call.argsJson === 'string' ? (call.argsJson || '{}') : JSON.stringify(call.argsJson ?? call.args ?? {}) } }));
             messages.push({ role: 'assistant', content: response.text || response.content || null,
               ...(response.reasoning ? { reasoning_content: response.reasoning } : {}), tool_calls: normalized });
             for (const [index, call] of normalized.entries()) {

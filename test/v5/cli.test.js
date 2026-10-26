@@ -352,6 +352,8 @@ test('CLI run streams the live trace, prints evidence details, and logs replays 
   const run = await runCli(['run', 'Inspect MAJIN host state and create visible-proof.txt', '--data-dir', fx.dataDir, '--criteria', criteria, '--lanes', 'sys,re'], fx);
   assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
   assert.match(run.stdout, /Status: COMPLETED/);
+  assert.match(run.stdout, /Acceptance checks \(1\):/);
+  assert.match(run.stdout, /✓ file visible-proof\.txt contains "visible verified" — verified/);
   assert.match(run.stdout, /Verification evidence: 1/);
   assert.match(run.stdout, / {2}verified file .*visible-proof\.txt — \d+ bytes, sha256 /);
   assert.match(run.stderr, /\[majin\] strategy: /);
@@ -374,6 +376,27 @@ test('CLI run streams the live trace, prints evidence details, and logs replays 
   assert.match(logs.stdout, /tool fs_write started path=visible-proof\.txt/);
   assert.match(logs.stdout, /goal finished: COMPLETED/);
   assert.doesNotMatch(logs.stdout, /secret-body-9e1/);
+});
+
+test('CLI logs checklist shows exactly which acceptance checks failed or remain unverified', async (t) => {
+  const fx = fixture(t);
+  // The model only ever claims success in prose; nothing is ever written.
+  const provider = await fakeProvider(t, () => ({ role: 'assistant', content: 'All done, trust me.' }));
+  await configureProvider(fx.dataDir, provider.baseUrl);
+  const criteria = JSON.stringify([
+    { kind: 'file', path: 'never-a.txt', contains: 'alpha' },
+    { kind: 'file', path: 'never-b.txt', contains: 'beta' },
+  ]);
+  const run = await runCli(['run', 'Create never-a.txt and never-b.txt', '--data-dir', fx.dataDir, '--criteria', criteria, '--lanes', 'sys,re'], fx);
+  assert.notEqual(run.status, 0, 'an unverified claim must not exit 0');
+  assert.doesNotMatch(run.stdout, /Status: COMPLETED/);
+
+  const logs = await runCli(['logs', '--data-dir', fx.dataDir], fx);
+  assert.equal(logs.status, 0, `${logs.stdout}\n${logs.stderr}`);
+  assert.match(logs.stdout, /Acceptance checks \(2\):/);
+  assert.match(logs.stdout, /✗ file never-a\.txt contains "alpha" — FAILED verification/);
+  assert.match(logs.stdout, /· file never-b\.txt contains "beta" — not yet verified/);
+  assert.doesNotMatch(logs.stdout, /✓ file never-/, 'no check may be shown verified without host evidence');
 });
 
 test('CLI model commands configure from env, discover a live catalog, and never echo the secret', async (t) => {

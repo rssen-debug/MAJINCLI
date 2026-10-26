@@ -1011,8 +1011,14 @@ export class ProviderAgent {
           break;
         }
         if (calls.length > 32) throw new Error('Provider returned too many tool calls in one response');
-        const normalized = calls.map((call, i) => ({ id: String(call.id || `${goalId}-${round}-${i}`), type: 'function', name: call.name, argsJson: call.argsJson || JSON.stringify(call.args || {}),
-          function: { name: call.name, arguments: call.argsJson || JSON.stringify(call.args || {}) } }));
+        const normalized = calls.map((call, i) => {
+          // Any provider dialect may hand back already-parsed argument
+          // objects; persisted history and the JSON.parse below require a
+          // JSON string, never "[object Object]".
+          const argsJson = typeof call.argsJson === 'string' ? (call.argsJson || '{}') : JSON.stringify(call.argsJson ?? call.args ?? {});
+          return { id: String(call.id || `${goalId}-${round}-${i}`), type: 'function', name: call.name, argsJson,
+            function: { name: call.name, arguments: argsJson } };
+        });
         messages.push({ role: 'assistant', content: response.text || response.content || null,
           ...(response.reasoning ? { reasoning_content: response.reasoning } : {}), tool_calls: normalized });
         this.#save(); // Persist tool identities before any effect.

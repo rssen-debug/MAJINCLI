@@ -243,6 +243,43 @@ function formatEvidenceLine(evidence) {
   return `${evidence.kind || 'evidence'} ${JSON.stringify(evidence).slice(0, 160)}`;
 }
 
+function formatCriterionLabel(criterion) {
+  if (!criterion || typeof criterion !== 'object') return 'unknown check';
+  switch (criterion.kind) {
+    case 'file': return `file ${criterion.path || ''}${criterion.contains ? ` contains ${JSON.stringify(String(criterion.contains).slice(0, 60))}` : ''}`;
+    case 'json': return `json ${criterion.path || ''}${criterion.pointer ? ` at ${criterion.pointer}` : ''}`;
+    case 'http': return `http ${criterion.url || ''}`;
+    case 'pixel': return `pixel ${criterion.pngPath || criterion.path || ''}`;
+    case 'dom': return `dom ${criterion.url || ''} ${criterion.selector || ''}`.trim();
+    case 'memory': return `memory ${criterion.memoryKind || ''}:${criterion.key || ''}`;
+    default: return String(criterion.kind || 'check');
+  }
+}
+
+function printCriteriaChecklist(goal) {
+  const criteria = Array.isArray(goal.criteria) ? goal.criteria : [];
+  if (!criteria.length) return;
+  const evidence = Array.isArray(goal.verification_evidence) ? goal.verification_evidence : [];
+  // Trace verification events carry the criterion index, including passes
+  // from an attempt that later failed on another check — the honest record
+  // of what was actually proven so far. A rotated-out old pass can only
+  // understate progress, never fabricate it.
+  const passed = new Set();
+  let failedIndex = -1;
+  for (const event of Array.isArray(goal.trace) ? goal.trace : []) {
+    if (event?.type === 'verification_passed' && Number.isInteger(event.index)) passed.add(event.index);
+    if (event?.type === 'verification_failed' && Number.isInteger(event.failure?.index)) failedIndex = event.failure.index;
+    if (event?.type === 'verification_completed') failedIndex = -1;
+  }
+  const allProven = goal.status === 'COMPLETED' && evidence.length >= criteria.length;
+  console.log(`Acceptance checks (${criteria.length}):`);
+  criteria.forEach((criterion, index) => {
+    const state = allProven || passed.has(index) ? 'verified' : index === failedIndex ? 'FAILED verification' : 'not yet verified';
+    const mark = state === 'verified' ? '✓' : state === 'FAILED verification' ? '✗' : '·';
+    console.log(`  ${mark} ${formatCriterionLabel(criterion)} — ${state}`);
+  });
+}
+
 function formatTraceEvent(event) {
   if (!event || typeof event !== 'object' || !event.type) return null;
   switch (event.type) {
@@ -315,6 +352,7 @@ function printGoalResult(result) {
     }
   }
   const evidence = Array.isArray(goal.verification_evidence) ? goal.verification_evidence : [];
+  printCriteriaChecklist(goal);
   if (goal.criteria_source) console.log(`Acceptance criteria source: ${goal.criteria_source}`);
   console.log(`Verification evidence: ${evidence.length}`);
   for (const item of evidence) console.log(`  verified ${formatEvidenceLine(item)}`);
