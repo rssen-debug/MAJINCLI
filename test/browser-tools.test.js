@@ -6,7 +6,7 @@ import { ALL_TOOLS } from '../src/core/tools/index.js';
 test('Playwright browser tools do not override the integrated browser registry', () => {
   const names = browserTools.map((tool) => tool.name);
   assert.deepEqual(names, [
-    'browser.open', 'browser.inspect', 'browser.shot', 'browser.click', 'browser.fill',
+    'browser.open', 'browser.inspect', 'browser.verify', 'browser.shot', 'browser.click', 'browser.fill',
     'browser.check', 'browser.select', 'browser.upload', 'browser.press', 'browser.clear_marks', 'browser.close',
   ]);
   assert.equal(browserTools.some((tool) => ALL_TOOLS.includes(tool)), false,

@@ -224,6 +224,9 @@ function formatEvidenceLine(evidence) {
   if (evidence.kind === 'file') {
     return `file ${evidence.path || ''} — ${evidence.bytes ?? '?'} bytes${evidence.sha256 ? `, sha256 ${shortSha(evidence.sha256)}` : ''}`;
   }
+  if (evidence.kind === 'json') {
+    return `json ${evidence.path || ''} — ${evidence.bytes ?? '?'} bytes${evidence.pointer ? `, pointer ${evidence.pointer}` : ''}${evidence.value !== undefined ? `, value ${JSON.stringify(String(evidence.value).slice(0, 60))}` : ''}${evidence.sha256 ? `, sha256 ${shortSha(evidence.sha256)}` : ''}`;
+  }
   if (evidence.kind === 'http') {
     return `http ${evidence.url || ''} — status ${evidence.status ?? '?'}${evidence.contains ? `, contains ${JSON.stringify(String(evidence.contains).slice(0, 60))}` : ''}${evidence.bytes != null ? `, ${evidence.bytes} bytes` : ''}${evidence.sha256 ? `, sha256 ${shortSha(evidence.sha256)}` : ''}`;
   }

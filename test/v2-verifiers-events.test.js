@@ -10,15 +10,42 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { PNG } from 'pngjs';
-import { verifyFile, verifyHttp, verifyPixel, verifyDom, verifierRegistry } from '../src/v2/runtime/verifiers.js';
+import { verifyFile, verifyJson, verifyHttp, verifyPixel, verifyDom, verifierRegistry } from '../src/v2/runtime/verifiers.js';
 import { verifyAcceptance } from '../src/v2/runtime/verify-bridge.js';
 import { EventBus, EVENT_NAMES } from '../src/v2/runtime/events.js';
 import { Goal } from '../src/v2/runtime/goal.js';
 
 const tmpdir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'v2-ver-'));
 
-test('verifier registry exposes all four kinds', () => {
-  assert.deepEqual(Object.keys(verifierRegistry).sort(), ['dom', 'file', 'http', 'pixel']);
+test('verifier registry exposes all five kinds', () => {
+  assert.deepEqual(Object.keys(verifierRegistry).sort(), ['dom', 'file', 'http', 'json', 'pixel']);
+});
+
+test('json verifier: parse, pointer, deep equals and contains with bounded evidence; honest failures', () => {
+  const dir = tmpdir();
+  const f = path.join(dir, 'result.json');
+  fs.writeFileSync(f, JSON.stringify({ result: { status: 'ready', items: [{ id: 7, tags: ['alpha', 'beta'] }] } }));
+  const parsed = verifyJson({ path: f });
+  assert.equal(parsed.verified, true);
+  assert.equal(parsed.evidence.kind, 'json');
+  assert.equal(parsed.evidence.value, '<object:1 keys>');
+  const eq = verifyJson({ path: f, pointer: 'result.items.0', equals: { tags: ['alpha', 'beta'], id: 7 } });
+  assert.equal(eq.verified, true, 'deep equality must not depend on object key order');
+  assert.equal(eq.evidence.pointer, 'result.items.0');
+  assert.equal(verifyJson({ path: f, pointer: 'result.status', equals: 'ready' }).verified, true);
+  assert.equal(verifyJson({ path: f, pointer: 'result.items.0.tags', contains: 'beta' }).verified, true);
+  assert.equal(verifyJson({ path: f, pointer: 'result.status', contains: 'read' }).verified, true);
+  assert.equal(verifyJson({ path: f, pointer: 'result.status', equals: 'waiting' }).verified, false);
+  const missingPointer = verifyJson({ path: f, pointer: 'result.nope' });
+  assert.equal(missingPointer.verified, false);
+  assert.equal(missingPointer.error.cls, 'VERIFICATION_FAILURE');
+  assert.equal(verifyJson({ path: f, pointer: '__proto__.polluted' }).verified, false);
+  const broken = path.join(dir, 'broken.json');
+  fs.writeFileSync(broken, '{not json');
+  const unparsable = verifyJson({ path: broken });
+  assert.equal(unparsable.verified, false);
+  assert.equal(unparsable.error.cls, 'INVALID_TOOL_OUTPUT');
+  assert.equal(verifyJson({ path: path.join(dir, 'absent.json') }).error.cls, 'DEPENDENCY_MISSING');
 });
 
 test('file verifier: existence + content evidence, honest failure paths', () => {

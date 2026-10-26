@@ -4,7 +4,7 @@
  * The executor asks "how do I do this"; the verifier asks "what evidence proves
  * it happened". Each verifier is an independent check that returns
  * { verified:boolean, evidence } or { verified:false, error:{cls,...} }.
- * Kinds shipped now: file, http, pixel, dom (dom degrades honestly when
+ * Kinds shipped now: file, json, http, pixel, dom (dom degrades honestly when
  * Playwright is not installed — registry never fabricates a pass).
  */
 import fs from 'node:fs';
@@ -39,6 +39,82 @@ export function verifyFile(spec) {
     return { verified: false, error: { cls: 'VERIFICATION_FAILURE', message: 'expected content absent' } };
   }
   return { verified: true, evidence: { kind: 'file', path: p, bytes: buf.length, sha256: hash || sha256(buf) } };
+}
+
+function stableStringify(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'undefined';
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
+}
+
+const jsonDeepEqual = (a, b) => stableStringify(a) === stableStringify(b);
+
+function jsonValuePreview(value) {
+  if (value === null || ['number', 'boolean'].includes(typeof value)) return value;
+  if (typeof value === 'string') return value.slice(0, 80);
+  if (Array.isArray(value)) return `<array:${value.length}>`;
+  if (typeof value === 'object') return `<object:${Object.keys(value).length} keys>`;
+  return String(value).slice(0, 80);
+}
+
+/**
+ * kind='json' — a target file must parse as JSON, and optionally a dot-path
+ * pointer (for example "result.items.0.status") must exist and deep-equal
+ * `equals`, or contain `contains` (substring for strings, element deep-equal
+ * for arrays). Evidence carries only a bounded scalar preview, never the
+ * whole document.
+ * spec: { path, pointer?, equals?, contains? }
+ */
+export function verifyJson(spec) {
+  const p = spec?.path;
+  if (!p || !fs.existsSync(p)) {
+    return { verified: false, error: { cls: 'DEPENDENCY_MISSING', message: `json file missing: ${p}` } };
+  }
+  const buf = fs.readFileSync(p);
+  let data;
+  try {
+    data = JSON.parse(buf.toString('utf8'));
+  } catch (err) {
+    return { verified: false, error: { cls: 'INVALID_TOOL_OUTPUT', message: `json parse failed: ${err.message}` } };
+  }
+  const evidence = { kind: 'json', path: p, bytes: buf.length, sha256: sha256(buf) };
+  let actual = data;
+  if (spec.pointer != null && String(spec.pointer) !== '') {
+    const pointer = String(spec.pointer);
+    evidence.pointer = pointer;
+    let found = true;
+    for (const segment of pointer.split('.')) {
+      if (['__proto__', 'constructor', 'prototype'].includes(segment)) {
+        return { verified: false, error: { cls: 'UNKNOWN', message: `json pointer segment not allowed: ${segment}` } };
+      }
+      if (Array.isArray(actual)) {
+        const idx = /^\d+$/.test(segment) ? Number(segment) : -1;
+        if (idx < 0 || idx >= actual.length) { found = false; break; }
+        actual = actual[idx];
+      } else if (actual && typeof actual === 'object' && Object.hasOwn(actual, segment)) {
+        actual = actual[segment];
+      } else { found = false; break; }
+    }
+    if (!found) {
+      return { verified: false, error: { cls: 'VERIFICATION_FAILURE', message: `json pointer not found: ${pointer}` } };
+    }
+  }
+  evidence.value = jsonValuePreview(actual);
+  if (Object.hasOwn(spec, 'equals') && !jsonDeepEqual(actual, spec.equals)) {
+    return { verified: false, error: { cls: 'VERIFICATION_FAILURE', message: `json value mismatch at ${spec.pointer || '(root)'}` } };
+  }
+  if (spec.contains !== undefined) {
+    const ok = typeof actual === 'string'
+      ? actual.includes(String(spec.contains))
+      : Array.isArray(actual)
+        ? actual.some((item) => jsonDeepEqual(item, spec.contains))
+        : false;
+    if (!ok) {
+      return { verified: false, error: { cls: 'VERIFICATION_FAILURE', message: `json contains check failed at ${spec.pointer || '(root)'}` } };
+    }
+    evidence.contains = jsonValuePreview(spec.contains);
+  }
+  return { verified: true, evidence };
 }
 
 /**
@@ -209,7 +285,7 @@ export async function verifyDom(spec, { timeoutMs = 15000, launchTimeoutMs = 450
   }
 }
 
-export const verifierRegistry = { file: verifyFile, http: verifyHttp, pixel: verifyPixel, dom: verifyDom };
+export const verifierRegistry = { file: verifyFile, json: verifyJson, http: verifyHttp, pixel: verifyPixel, dom: verifyDom };
 
 export async function runVerifier(kind, spec, o) {
   const fn = verifierRegistry[kind];

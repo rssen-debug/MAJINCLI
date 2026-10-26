@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT = fileURLToPath(new URL('../../scripts/v5/cli-live-accept.mjs', import.meta.url));
@@ -22,4 +26,102 @@ test('installed-CLI live acceptance reports NOT VERIFIED without attempting a re
   assert.equal(parsed.stage, 'credential');
   assert.match(parsed.error, /NOT VERIFIED/);
   assert.equal(result.stderr, '');
+});
+
+const toolCall = (id, name, args) => ({
+  role: 'assistant',
+  content: null,
+  tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }],
+});
+
+function runScript(env, timeoutMs = 240000) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [SCRIPT], {
+      env: { ...process.env, ...env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error(`cli-live-accept timed out after ${timeoutMs}ms\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`));
+    }, timeoutMs);
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', (error) => { clearTimeout(timer); reject(error); });
+    child.on('close', (status) => { clearTimeout(timer); resolve({ status, stdout, stderr }); });
+  });
+}
+
+test('installed-CLI live acceptance plumbing completes end-to-end against a local compatible endpoint (not live-account proof)', async (t) => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-live-plumbing-'));
+  t.after(() => fs.rmSync(tmpRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
+  const requests = [];
+  const upstream = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    res.setHeader('content-type', 'application/json');
+    if (req.method === 'GET') {
+      res.end(JSON.stringify({ data: [{ id: 'deepseek-v4-pro', tools: true }] }));
+      return;
+    }
+    const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    requests.push({ body, headers: req.headers });
+    const nonce = /MAJIN_LIVE_CLI_\d+_[0-9a-f]+/.exec(JSON.stringify(body.messages || []))?.[0];
+    const toolDone = (name) => (body.messages || []).some((message) => message.role === 'tool' && message.name === name);
+    let message;
+    if (!nonce) message = { role: 'assistant', content: 'The goal nonce was not observed.' };
+    else if (!toolDone('goal_criteria')) message = toolCall('plumb-criteria', 'goal_criteria', { criteria: [{ kind: 'file', path: 'live-proof.txt', contains: nonce }] });
+    else if (!toolDone('fs_write')) message = toolCall('plumb-write', 'fs_write', { path: 'live-proof.txt', content: nonce });
+    else if (!toolDone('fs_read')) message = toolCall('plumb-read', 'fs_read', { path: 'live-proof.txt' });
+    else message = { role: 'assistant', content: 'Created and read back live-proof.txt.' };
+    res.end(JSON.stringify({
+      id: 'plumbing-response',
+      model: body.model,
+      choices: [{ message, finish_reason: message.tool_calls ? 'tool_calls' : 'stop' }],
+      usage: { prompt_tokens: 11, completion_tokens: 5 },
+    }));
+  });
+  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  t.after(async () => {
+    upstream.closeAllConnections?.();
+    await new Promise((resolve) => upstream.close(resolve));
+  });
+
+  const dummyKey = 'dummy-live-plumbing-key';
+  const result = await runScript({
+    MAJIN_LIVE_KEY_ENV: 'MAJIN_TEST_LIVE_KEY',
+    MAJIN_TEST_LIVE_KEY: dummyKey,
+    MAJIN_LIVE_BASE_URL: `http://127.0.0.1:${upstream.address().port}/v1`,
+    MAJIN_LIVE_MODEL: 'deepseek-v4-pro',
+    MAJIN_LIVE_TIMEOUT_MS: '180000',
+    TMPDIR: tmpRoot,
+    TMP: tmpRoot,
+    TEMP: tmpRoot,
+  });
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const summary = JSON.parse(result.stdout);
+  assert.equal(summary.ok, true);
+  assert.equal(summary.verified, true);
+  assert.equal(summary.baseUrlOverride, true, 'the summary must disclose that this was not the default live endpoint');
+  assert.equal(summary.modelId, 'deepseek-v4-pro');
+  assert.equal(summary.status, 'COMPLETED');
+  assert.equal(summary.criteriaSource, 'model');
+  assert.ok(summary.verificationEvidence >= 1);
+  assert.ok(summary.tools.includes('goal_criteria'));
+  assert.ok(summary.tools.includes('fs_write'));
+  assert.ok(summary.modelCalls >= 3);
+  assert.doesNotMatch(result.stdout, new RegExp(dummyKey), 'the env key must never reach script output');
+  assert.doesNotMatch(result.stderr, new RegExp(dummyKey), 'the env key must never reach script stderr');
+  assert.ok(requests.length >= 3, `expected real model calls through the installed CLI, got ${requests.length}`);
+  assert.ok(requests.every((request) => request.headers.authorization === `Bearer ${dummyKey}`), 'CLI must send the env-named key to the provider endpoint');
+  assert.equal(new Set(requests.map((request) => request.headers['x-opencode-session'])).size, 1, 'OpenCode session header must be stable across the goal');
+  assert.deepEqual(
+    fs.readdirSync(tmpRoot).filter((name) => name.startsWith('majin-v5-cli-live-')),
+    [],
+    'the temporary provider state tree (including the secret file) must be removed after the run',
+  );
 });

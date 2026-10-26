@@ -13,6 +13,11 @@
  * script. The installed CLI stores it in its normal private provider state
  * inside a temporary directory; this script deletes that secret file and, by
  * default, removes the whole temporary tree when the run ends.
+ *
+ * MAJIN_LIVE_BASE_URL may point the same opencode-go provider configuration
+ * at a compatible gateway (used by the local plumbing test with a fake
+ * endpoint). A run against anything other than the real OpenCode Go service
+ * proves only the script/CLI plumbing, never live-account acceptance.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -25,6 +30,7 @@ const BIN = fileURLToPath(new URL('../../bin/majin-v5.mjs', import.meta.url));
 const keyEnv = process.env.MAJIN_LIVE_KEY_ENV || 'OPENCODE_API_KEY';
 const apiKey = process.env[keyEnv] || '';
 const requestedModel = String(process.env.MAJIN_LIVE_MODEL || '').trim();
+const baseUrl = String(process.env.MAJIN_LIVE_BASE_URL || '').trim();
 const runTimeoutMs = Number(process.env.MAJIN_LIVE_TIMEOUT_MS) > 0 ? Number(process.env.MAJIN_LIVE_TIMEOUT_MS) : 300000;
 const keepRoot = process.env.MAJIN_LIVE_KEEP === '1';
 
@@ -143,6 +149,15 @@ async function main() {
     process.exitCode = 2;
     return;
   }
+  if (baseUrl) {
+    let parsed = null;
+    try { parsed = new URL(baseUrl); } catch { /* handled below */ }
+    if (!parsed || !['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) {
+      console.log(JSON.stringify({ ok: false, verified: false, stage: 'config', error: 'MAJIN_LIVE_BASE_URL must be a valid http(s) URL without credentials' }, null, 2));
+      process.exitCode = 2;
+      return;
+    }
+  }
 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-v5-cli-live-'));
   const dataDir = path.join(root, 'data');
@@ -159,6 +174,7 @@ async function main() {
       'model', 'configure',
       '--provider', 'opencode-go',
       '--api-key-env', keyEnv,
+      ...(baseUrl ? ['--base-url', baseUrl] : []),
       '--discover',
       '--data-dir', dataDir,
       '--timeout-ms', '30000',
@@ -222,6 +238,7 @@ async function main() {
       provider: 'opencode-go',
       modelId,
       catalogModels: discovery.models.length,
+      baseUrlOverride: Boolean(baseUrl),
       status: goal.status,
       criteriaSource: goal.criteria_source,
       verificationEvidence: goal.verification_evidence.length,

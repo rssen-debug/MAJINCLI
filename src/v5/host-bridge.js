@@ -255,7 +255,6 @@ export async function createUniversalHostTools({
 export const SUPERSEDED_TOOLS = new Map([
   ['browser.read', { coveredBy: ['browser_inspect'], surface: 'driver' }],
   ['browser.elements', { coveredBy: ['browser_inspect'], surface: 'driver' }],
-  ['browser.verify', { coveredBy: ['browser_inspect'], surface: 'driver' }],
   ['browser.form', { coveredBy: ['browser_inspect'], surface: 'driver' }],
   ['browser.form_fill', { coveredBy: ['browser_fill', 'browser_check', 'browser_select'], surface: 'driver' }],
   ['browser.form_submit', { coveredBy: ['browser_click'], surface: 'driver' }],

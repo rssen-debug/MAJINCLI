@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import { def } from './registry.js';
 import { dirs } from '../paths.js';
 import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText } from '../browser-ground.js';
+import { VERIFY_JS, verificationCriteria, verifyObserved, browserRecoveryAdvice } from '../browser-evidence.js';
 
 const sessions = new Map();
 const recentShots = new Map();
@@ -447,6 +448,78 @@ export const browserTools = [
         }
         audit(ctx, 'inspect', { controls: details.controls.length, ...(marksMeta.marks != null ? { marks: marksMeta.marks } : {}) });
         return withOwnerHandoff(p, ctx, { result: `URL: ${p.url()}\nTitle: ${details.title}\n\nVisible text:\n${details.text}\n\nControls (${details.controls.length}, max 100):\n${JSON.stringify(details.controls, null, 2)}\n\nLinks:\n${JSON.stringify(details.links)}${marksText}`, meta: { url: p.url(), title: details.title, controls: details.controls.length, ...marksMeta }, summary: `inspected page (${details.controls.length} controls${marksMeta.marks ? `, ${marksMeta.marks} marks` : ''})` });
+      });
+    },
+  }),
+
+  def({
+    name: 'browser.verify',
+    group: 'browser',
+    risk: 'read',
+    desc: 'Verify a REAL post-action browser outcome on the current page: live URL (fragment, exact path, exact origin), title, unique visible element, element text, checkbox state, enabled state, or exact match count. Polls briefly for async rendering and can require the outcome to stay stable. On failure returns assertion_failed with observed evidence and a recovery hint — never calls a click successful merely because it executed. Use after click/fill when the goal requires an effect.',
+    params: {
+      selector: 'string: optional CSS selector to assert exists uniquely and is visible',
+      present: 'boolean: optional expected presence when selector is set (default true)',
+      text: 'string: optional expected text fragment within selector',
+      url: 'string: optional URL fragment (loose; use urlPath+urlOrigin for security-sensitive outcomes)',
+      urlPath: 'string: optional EXACT pathname such as /dashboard, unaffected by redirect query parameters',
+      urlOrigin: 'string: optional EXACT origin such as https://app.example.com',
+      title: 'string: optional expected title fragment',
+      checked: 'boolean: optional expected checkbox/radio checked state',
+      enabled: 'boolean: optional expected element enabled state (includes aria-disabled and inert)',
+      count: 'number: optional exact number 0-1000 of matching elements; use for lists/cards, not with element text or checkbox expectations',
+      waitMs: 'number: optional wait up to 0-5000ms for the expected DOM outcome (default 1800, immediate return on success)',
+      stableMs: 'number: optional 0-1500ms the expected DOM state must stay true (default 0)',
+    },
+    examples: ['browser.verify({selector:"#success",text:"Saved"})', 'browser.verify({urlPath:"/dashboard"})', 'browser.verify({selector:"input[name=consent]",checked:true})', 'browser.verify({selector:".results > li",count:10})'],
+    async run(input = {}, ctx) {
+      return withPage(ctx, async (p) => {
+        const criteria = verificationCriteria(input);
+        if (!criteria.ok) return { ok: false, error: { code: 'bad_expectation', message: criteria.reason }, summary: 'browser verify rejected the expectation' };
+        const script = VERIFY_JS.replace('__MAJIN_ARGS__', JSON.stringify(criteria));
+        const waitMs = Math.min(5000, Math.max(0, Math.trunc(Number(input.waitMs ?? 1800) || 0)));
+        const stableMs = Math.min(1500, Math.max(0, Math.trunc(Number(input.stableMs) || 0)));
+        const deadline = Date.now() + Math.max(waitMs, stableMs);
+        let verdict;
+        let firstPassingAt = null;
+        for (;;) {
+          let observed;
+          try { observed = await p.evaluate(script); }
+          catch (error) { return { ok: false, error: { code: 'browser_verify_error', message: String(error?.message || error) }, summary: 'browser verify could not observe the page' }; }
+          const now = Date.now();
+          verdict = verifyObserved(criteria, observed);
+          if (verdict.ok) {
+            if (firstPassingAt === null) firstPassingAt = now;
+            if (now - firstPassingAt >= stableMs) break;
+          } else firstPassingAt = null;
+          if (now >= deadline) {
+            if (verdict.ok && stableMs > 0) {
+              verdict = { ...verdict, ok: false, failures: [{ name: 'stable_duration', expected: stableMs, actual: firstPassingAt === null ? 0 : now - firstPassingAt }] };
+            }
+            break;
+          }
+          await p.waitForTimeout(Math.min(120, Math.max(1, deadline - now)));
+        }
+        audit(ctx, 'verify', { ok: verdict.ok, assertions: verdict.assertions?.length || 0 });
+        if (!verdict.ok) {
+          const recovery = browserRecoveryAdvice(verdict, criteria, []);
+          const hint = recovery.hint
+            .replaceAll('browser.read or browser.elements', 'browser_inspect (marks=true)')
+            .replaceAll('browser.elements', 'browser_inspect with marks=true')
+            .replaceAll('browser.read', 'browser_inspect');
+          const mapped = { ...recovery, hint };
+          return {
+            ok: false,
+            error: { code: 'assertion_failed', message: `Browser outcome NOT verified. ${hint}`, failures: verdict.failures, recovery: mapped },
+            meta: { assertions: verdict.assertions, observed: verdict.observed, recovery: mapped },
+            summary: `verification FAILED · ${mapped.action}`,
+          };
+        }
+        return withOwnerHandoff(p, ctx, {
+          result: `Verified live browser outcome: ${verdict.assertions.map((a) => `${a.name}=${a.actual}`).join(', ')}`,
+          meta: { assertions: verdict.assertions, observed: verdict.observed },
+          summary: 'browser outcome VERIFIED',
+        });
       });
     },
   }),

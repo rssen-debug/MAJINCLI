@@ -241,6 +241,43 @@ test('independent http and file verification repairs a premature completion clai
   assert.match(JSON.stringify(requests[1].body.messages), /Host independent verification failed/);
 });
 
+test('independent json verification repairs a premature completion claim', async t => {
+  const { requests, server } = await setup(t, (_body, count) => {
+    if (count === 1) return tool('write-wrong-json', 'fs_write', { path: 'result.json', content: JSON.stringify({ result: { status: 'waiting', count: 1 } }) });
+    if (count === 2) return { role: 'assistant', content: 'Done.' };
+    if (count === 3) return tool('write-right-json', 'fs_write', { path: 'result.json', content: JSON.stringify({ result: { status: 'ready', count: 2 } }) });
+    return { role: 'assistant', content: 'Fixed the structured result.' };
+  });
+  const result = await server.providerAgent.execute({
+    goalText: 'Write result.json with result.status ready and result.count 2',
+    criteria: [
+      { kind: 'json', path: 'result.json', pointer: 'result.status', equals: 'ready' },
+      { kind: 'json', path: 'result.json', pointer: 'result.count', equals: 2 },
+    ],
+  });
+  assert.equal(result.status, 'COMPLETED', JSON.stringify(result));
+  assert.deepEqual(result.verification_evidence.map((item) => item.kind), ['json', 'json']);
+  assert.equal(result.verification_evidence[0].pointer, 'result.status');
+  assert.equal(result.verification_evidence[0].value, 'ready');
+  assert.equal(result.adaptive.verificationFailures, 1);
+  assert.equal(requests.length, 4);
+  assert.match(JSON.stringify(requests[2].body.messages), /Host independent verification failed/);
+});
+
+test('bare goal can lock a model-registered json criterion and complete on host evidence', async t => {
+  const { server } = await setup(t, (_body, count) => {
+    if (count === 1) return tool('register-json-criterion', 'goal_criteria', { criteria: [{ kind: 'json', path: 'structured.json', pointer: 'answer.value', equals: 42 }] });
+    if (count === 2) return tool('write-structured-json', 'fs_write', { path: 'structured.json', content: JSON.stringify({ answer: { value: 42 } }) });
+    return { role: 'assistant', content: 'Wrote the structured answer.' };
+  });
+  const result = await server.providerAgent.execute({ goalText: 'Write structured.json so answer.value is 42' });
+  assert.equal(result.status, 'COMPLETED', JSON.stringify(result));
+  assert.equal(result.criteria_source, 'model');
+  assert.deepEqual(result.criteria, [{ kind: 'json', path: 'structured.json', pointer: 'answer.value', equals: 42 }]);
+  assert.equal(result.verification_evidence[0].kind, 'json');
+  assert.equal(result.verification_evidence[0].value, 42);
+});
+
 test('trace argument summaries never leak secrets, file contents or URL tokens', () => {
   const summary = summariseToolArgs({
     path: 'report.txt',

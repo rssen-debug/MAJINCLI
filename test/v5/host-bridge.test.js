@@ -121,6 +121,9 @@ test('tool parity classifies every unavailable tool and names the current tool c
   const clearMarks = byName.get('browser.clear_marks');
   if (tools.has('browser_clear_marks')) assert.equal(clearMarks, undefined, 'Playwright clear_marks must be directly available when a browser binary exists');
   else assert.equal(clearMarks?.category, 'missing-dependency', 'without a browser binary, clear_marks is a concrete dependency gap, not an unported capability');
+  const browserVerify = byName.get('browser.verify');
+  if (tools.has('browser_verify')) assert.equal(browserVerify, undefined, 'Playwright browser_verify must be directly available when a browser binary exists');
+  else assert.equal(browserVerify?.category, 'missing-dependency', 'browser_verify is a direct Playwright tool now; without a binary it is a dependency gap, not superseded by inspection');
   assert.equal(byName.get('media.speak').category, 'missing-dependency');
   assert.equal(byName.get('majin.configure').category, 'host-service');
   if (process.platform !== 'win32') assert.equal(byName.get('control.click_button').category, 'platform');

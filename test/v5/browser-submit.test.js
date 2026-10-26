@@ -231,3 +231,53 @@ test('Set-of-Marks refs click deterministically, stale refs are refused, and cle
     'cleared refs must be forgotten instead of remaining clickable',
   );
 });
+
+test('browser_verify asserts real post-action page outcomes and fails honestly before the effect', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-browser-verify-'));
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(workspace, { recursive: true });
+  const page = http.createServer((_req, res) => {
+    res.setHeader('content-type', 'text/html');
+    res.end(`<!doctype html><title>Verify fixture</title><h1>Verify fixture</h1>
+      <button id="go" type="button" onclick="setTimeout(()=>{document.querySelector('#state').textContent='READY';document.querySelector('#consent').checked=true;this.disabled=true;},250)">Go</button>
+      <label>Consent <input type="checkbox" id="consent"></label>
+      <div id="state">WAITING</div>
+      <ul><li>one</li><li>two</li></ul>`);
+  });
+  await new Promise(resolve => page.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${page.address().port}`;
+  const tools = await createDriverTools({ workspace, grantedLanes: ['browser'], browser: true, browserVisible: false });
+  const run = async (name, args = {}) => tools.get(name).run(args);
+  t.after(async () => {
+    try { await run('browser_close'); } catch { /* browser may not have opened on a skipped runner */ }
+    page.closeAllConnections();
+    await new Promise(resolve => page.close(resolve));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  if (!tools.has('browser_open')) { t.skip('No installed Chromium/Edge on this runner'); return; }
+  assert.equal(tools.has('browser_verify'), true);
+
+  await run('browser_open', { url: origin });
+  const premature = await run('browser_verify', { selector: '#state', text: 'READY', waitMs: 0 });
+  assert.equal(premature.ok, false, 'verify must not invent the outcome before the click');
+  assert.equal(premature.error.code, 'assertion_failed');
+  assert.ok(premature.error.failures.some((failure) => failure.name === 'element_text_contains'));
+  assert.ok(premature.meta.recovery.action, 'a failed assertion must carry a grounded recovery action');
+
+  const badExpectation = await run('browser_verify', {});
+  assert.equal(badExpectation.ok, false);
+  assert.equal(badExpectation.error.code, 'bad_expectation');
+
+  await run('browser_click', { selector: '#go' });
+  const ready = await run('browser_verify', { selector: '#state', text: 'READY', urlPath: '/', title: 'Verify fixture', stableMs: 200 });
+  assert.notEqual(ready.ok, false, JSON.stringify(ready.error || ready.meta));
+  assert.ok(ready.meta.assertions.some((assertion) => assertion.name === 'element_text_contains' && assertion.actual === true));
+  assert.ok(ready.meta.assertions.some((assertion) => assertion.name === 'url_path_exact' && assertion.actual === true));
+  assert.notEqual((await run('browser_verify', { selector: '#consent', checked: true })).ok, false);
+  assert.notEqual((await run('browser_verify', { selector: '#go', enabled: false })).ok, false);
+  const counted = await run('browser_verify', { selector: 'li', count: 2 });
+  assert.notEqual(counted.ok, false, JSON.stringify(counted.error || counted.meta));
+  assert.ok(counted.meta.assertions.some((assertion) => assertion.name === 'element_count_exact' && assertion.actual === 2));
+  const wrongOrigin = await run('browser_verify', { urlOrigin: 'https://example.invalid', waitMs: 0 });
+  assert.equal(wrongOrigin.ok, false, 'an exact-origin assertion must fail on a different origin');
+});
