@@ -594,6 +594,11 @@ test('CLI chat keeps a queued goal parked across WAITING_USER and starts it only
   assert.deepEqual(submissions, [], 'the blocked submit must not reach the portal');
   assert.equal(completions, 4);
 
+  // Give the parked queued goal its own acceptance criteria while the first
+  // goal still waits; they must apply to the queued goal, not the checkpoint.
+  session.write('/criteria [{"kind":"file","path":"queued-after-wait.txt","contains":"queued goal ran after resume"}]');
+  await session.waitFor('Acceptance criteria will apply to the next new goal', 'stdout', 60000);
+
   session.write(`/browser-origin grant ${origin}/submit`);
   await session.waitFor(`Browser write origins (1): ${origin}`, 'stdout', 60000);
   session.write('/resume');
@@ -605,7 +610,10 @@ test('CLI chat keeps a queued goal parked across WAITING_USER and starts it only
     120000,
   );
   const closed = await session.exit();
+  // Exit 0 also proves the queued goal itself finished COMPLETED: chat exits
+  // with the last goal's code, and an unverified PARTIAL would exit 2.
   assert.equal(closed.status, 0, `${closed.stdout}\n${closed.stderr}`);
+  assert.match(closed.stderr, /tool fs_write started path=queued-after-wait\.txt/, 'live trace must stream the queued goal too');
   assert.deepEqual(submissions, [{ name: 'Queue User', marker }], 'resume submitted the already-filled page exactly once');
   assert.equal(fs.readFileSync(path.join(fx.workspace, 'queue-wait-receipt.txt'), 'utf8'), `Queue wait receipt ${marker}`);
   assert.equal(completions, 11);
