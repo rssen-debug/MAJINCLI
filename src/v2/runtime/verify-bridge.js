@@ -12,7 +12,7 @@ import { runVerifier } from './verifiers.js';
  * @param {Goal} goal
  * @param {object} o
  * @param {string} o.acceptanceId  which acceptance item this proves
- * @param {string} o.kind          verifier kind ('file'|'http'|'pixel'|'dom')
+ * @param {string} o.kind          verifier kind ('file'|'json'|'http'|'pixel'|'dom'|'memory')
  * @param {object} o.spec          verifier spec
  * @param {string} [o.taskId]      DAG task this proof belongs to
  * @param {number} [o.attempt]

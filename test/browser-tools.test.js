@@ -6,8 +6,8 @@ import { ALL_TOOLS } from '../src/core/tools/index.js';
 test('Playwright browser tools do not override the integrated browser registry', () => {
   const names = browserTools.map((tool) => tool.name);
   assert.deepEqual(names, [
-    'browser.open', 'browser.inspect', 'browser.click', 'browser.fill',
-    'browser.check', 'browser.select', 'browser.upload', 'browser.press', 'browser.close',
+    'browser.open', 'browser.inspect', 'browser.verify', 'browser.shot', 'browser.click', 'browser.fill',
+    'browser.check', 'browser.select', 'browser.upload', 'browser.press', 'browser.download', 'browser.tabs', 'browser.clear_marks', 'browser.close',
   ]);
   assert.equal(browserTools.some((tool) => ALL_TOOLS.includes(tool)), false,
     'the integrated CDP browser surface owns the registered browser session');
@@ -31,4 +31,14 @@ test('browser URL validation accepts only absolute http(s) URLs', () => {
 test('browser form tools never expose a submit operation', () => {
   assert.equal(browserTools.some((tool) => /submit|apply/i.test(tool.name)), false);
   assert.match(browserTools.find((tool) => tool.name === 'browser.upload').desc, /not uploaded until the user submits/i);
+});
+
+test('frame-scoped browser tools declare the frame parameter they implement', () => {
+  // Regression guard: these runs destructure and use `frame`; a missing param
+  // declaration means the driver schema strips it (additionalProperties:false)
+  // and frame-scoped calls can never reach the implementation.
+  for (const name of ['browser.inspect', 'browser.verify', 'browser.click', 'browser.fill', 'browser.check', 'browser.select', 'browser.download', 'browser.clear_marks']) {
+    const tool = browserTools.find((entry) => entry.name === name);
+    assert.ok(Object.hasOwn(tool.parameters.properties, 'frame'), `${name} must declare a frame param`);
+  }
 });

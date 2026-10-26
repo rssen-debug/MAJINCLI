@@ -211,7 +211,7 @@ export const SV = {
   'model.status.verified': 'Live-verifierad i denna session',
   'model.status.unavailable': 'Tillfälligt otillgänglig',
   'model.selectionUnavailable': 'Vald modell saknas — välj en tillgänglig modell',
-  'model.error.unavailable': 'Den valda modellen kan inte användas: {reason} Ingen modellförfrågan skickades och ingen reservmodell valdes.',
+  'model.error.unavailable': 'Den valda modellen kan inte användas: {reason} Ingen modellförfrågan skickades och ingen annan modell valdes. Öppna modellväljaren och välj en tillgänglig modell.',
   'model.error.reason.noModel': 'ingen modell är vald.',
   'model.error.reason.envUnavailable': 'den konfigurerade miljömodellen är inte tillgänglig.',
   'model.error.reason.envMismatch': 'den sparade miljömodellen skiljer sig från den aktiva route-konfigurationen.',

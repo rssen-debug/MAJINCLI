@@ -693,27 +693,28 @@ function renderConversationMessages(conversation) {
         if (receipt.at && message.at && receipt.at > message.at) continue;
         rendered.add(receipt.id);
         const name = receipt.action.slice(5);
-        // Group all receipts under one collapsed work row, not one chat block
-        // per tool. The exact receipt IDs and failure classes are still visible.
-        if (!goal._receiptCard) {
-          goal._receiptCard = addToolCard('Worked', {});
-          goal._receiptCard.node.open = false;
-          goal._receiptCard.node.dataset.historical = 'true';
-          goal._receiptCard.node.dataset.state = 'verified';
-          goal._receiptCard.node.querySelector('.tool-name').textContent = 'Worked';
-          goal._receiptCard.detail.textContent = '';
-          goal._receiptCount = 0;
-        }
-        const card = goal._receiptCard;
-        if (receipt.result !== 'success') card.node.dataset.state = 'failed';
-        goal._receiptCount += 1;
-        card.sum.textContent = `${goal._receiptCount} steps · click for details`;
-        const line = document.createElement('div');
-        line.textContent = `${toolLabel(name)} · ${receipt.result === 'success' ? (receipt.verified ? t('history.previouslyVerified') : t('state.done')) : t('state.failed')}`
-          + (receipt.target ? ` · ${receipt.target}` : '')
-          + (receipt.errorClass ? ` · ${receipt.errorClass}` : '')
-          + ` · ${t('state.receipt')} ${receipt.id}`;
-        card.detail.append(line);
+        // One card per durable receipt. Grouping them would lose the receipt's
+        // own state and could make unverified work inherit a sibling's
+        // verified/failed state after reload or on another device.
+        const card = addToolCard(name, {});
+        card.node.open = false;
+        card.node.dataset.receiptId = receipt.id;
+        card.node.dataset.historical = 'true';
+        card.node.dataset.state = receipt.result !== 'success'
+          ? 'failed'
+          : (receipt.verified ? 'verified' : 'ok');
+        card.node.querySelector('.tool-name').textContent = `${t('history.recorded')} · ${toolLabel(name)}`;
+        // Targets are untrusted recorded data: textContent keeps markup inert.
+        card.sum.textContent = receipt.target || '';
+        const status = receipt.result === 'success'
+          ? (receipt.verified ? t('history.previouslyVerified') : t('state.done'))
+          : t('state.failed');
+        card.detail.textContent = [
+          status,
+          receipt.errorClass || null,
+          `${t('state.receipt')} ${receipt.id}`,
+          t('history.receiptTime'),
+        ].filter(Boolean).join(' · ');
       }
     }
     addMessage(message.role === 'user' ? 'user' : 'assistant', message.content, {

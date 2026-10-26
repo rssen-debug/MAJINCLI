@@ -70,11 +70,14 @@ export function createV5Server({
   dataDir = path.join(os.homedir(), '.majin', 'v5'),
   workspaceDir = null,
   browserWriteOrigins = [],
+  browserVisible = undefined,
   host = '127.0.0.1',
   port = 0,
   fetchImpl = globalThis.fetch,
   completeImpl = null,
   portalAdapter = null,
+  providerMaxRounds = undefined,
+  providerContextCharBudget = undefined,
 } = {}) {
   const architect = new GrandArchitect({
     dataDir,
@@ -83,7 +86,13 @@ export function createV5Server({
     completeImpl,
     portalAdapter,
   });
-  const providerAgent = new ProviderAgent({ architect, browserWriteOrigins });
+  const providerAgent = new ProviderAgent({
+    architect,
+    browserWriteOrigins,
+    browserVisible,
+    ...(providerMaxRounds ? { maxRounds: providerMaxRounds } : {}),
+    ...(providerContextCharBudget ? { contextCharBudget: providerContextCharBudget } : {}),
+  });
   const useProviderAgent = body => Boolean(architect.providers.state.activeModelId) &&
     body.actions == null && body.jobAds == null && !body.synthesizeMissingSkill && !body.blocker && !body.requireUserConfirmation;
 
@@ -226,7 +235,7 @@ export function createV5Server({
       // Resume goal from checkpoint
       if (method === 'POST' && pathname === '/api/v5/goal/resume') {
         const body = await readJsonBody(req);
-        const resumed = providerAgent.getGoalState() ? await providerAgent.execute({ goalText: body.goalText, criteria: body.criteria, resume: true }) : await architect.resumeGoal(body);
+        const resumed = providerAgent.getGoalState() ? await providerAgent.execute({ goalText: body.goalText, criteria: body.criteria, maxRounds: body.maxRounds, resume: true }) : await architect.resumeGoal(body);
         return sendJson(res, 200, { ok: true, goal: resumed });
       }
 
@@ -257,12 +266,21 @@ export function createV5Server({
           architect.cancelGoal();
           return sendJson(res, 200, { ok: true, ...stopped });
         }
-        if (body.action === 'revoke') {
-          await providerAgent.cancel();
-          const state = architect.files.revokePermissions({ lanes: body.lane ? [body.lane] : null, folder: body.folder || null });
+        if (body.action === 'grant_browser_origin') {
+          const state = architect.files.grantBrowserOrigins(body.origins || body.origin);
           return sendJson(res, 200, { ok: true, access: state });
         }
-        const state = architect.files.enableOwnerMode({ lanes: body.lanes, folders: body.folders || body.allowedPaths });
+        if (body.action === 'revoke_browser_origin') {
+          const origins = body.origins ?? body.origin ?? null;
+          const state = architect.files.revokeBrowserOrigins(!origins || (Array.isArray(origins) && !origins.length) ? null : origins);
+          return sendJson(res, 200, { ok: true, access: state });
+        }
+        if (body.action === 'revoke') {
+          await providerAgent.cancel();
+          const state = architect.files.revokePermissions({ lanes: body.lane ? [body.lane] : body.lanes || null, folder: body.folder || null, browserOrigins: body.browserOrigins || null });
+          return sendJson(res, 200, { ok: true, access: state });
+        }
+        const state = architect.files.enableOwnerMode({ lanes: body.lanes, folders: body.folders || body.allowedPaths, browserOrigins: body.browserOrigins || [] });
         return sendJson(res, 200, { ok: true, access: state });
       }
 
@@ -350,7 +368,7 @@ export function createV5Server({
       };
     },
     async stop() {
-      await providerAgent.cancel();
+      await providerAgent.close();
       await new Promise((resolve) => server.close(() => resolve()));
     },
   };

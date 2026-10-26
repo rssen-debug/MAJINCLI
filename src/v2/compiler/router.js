@@ -25,7 +25,7 @@ function sanitizeModelGoal(raw) {
 
 const MODEL_PROMPT = (text) => [
   { role: 'system', content:
-    'Compile the user objective into EXACTLY one JSON object with keys: objective (string), deliverables (array of short strings), acceptance (array of {id, description, verify:{kind one of file|http|pixel|dom, spec object}, inferred boolean}), risk (low|medium|high) and permissions from this allowlist only: workspace_write, process_launch, browser_preview, web_codeget, execute_tools, ask_for_consent. No prose. JSON only.' },
+    'Compile the user objective into EXACTLY one JSON object with keys: objective (string), deliverables (array of short strings), acceptance (array of {id, description, verify:{kind one of file|json|http|pixel|dom, spec object}, inferred boolean}), risk (low|medium|high) and permissions from this allowlist only: workspace_write, process_launch, browser_preview, web_codeget, execute_tools, ask_for_consent. No prose. JSON only.' },
   { role: 'user', content: text },
 ];
 

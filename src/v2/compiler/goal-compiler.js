@@ -16,7 +16,7 @@ const acceptanceItem = z.object({
   id: z.string().min(1).max(80),
   description: z.string().min(1).max(300),
   verify: z.object({
-    kind: z.enum(['file', 'http', 'pixel', 'dom']),
+    kind: z.enum(['file', 'json', 'http', 'pixel', 'dom', 'memory']),
     // spec kept loose here; each verifier enforces its own required fields
     spec: z.object({}).passthrough(),
   }),

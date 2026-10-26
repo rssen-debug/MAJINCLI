@@ -28,6 +28,35 @@ function headersFor(route) {
   };
 }
 
+/* Some OpenAI-compatible gateways return tool-call `arguments` as an already
+   parsed object instead of a JSON string. Normalize at ingestion so every
+   downstream consumer (argument parsing, checkpoint history, and the next
+   request, where strict gateways reject non-string arguments) always sees a
+   JSON string. Without this, JSON.parse receives "[object Object]" and a
+   perfectly valid tool call fails as INVALID_TOOL_CALL. */
+export function argsToJsonString(value) {
+  if (typeof value === 'string') return value || '{}';
+  if (value == null) return '{}';
+  try { return JSON.stringify(value); } catch { return '{}'; }
+}
+
+function mapToolCalls(msg) {
+  const calls = (msg.tool_calls || []).map((tc) => ({
+    id: tc.id || `call_${Math.random().toString(36).slice(2, 8)}`,
+    name: tc.function?.name || tc.name,
+    argsJson: argsToJsonString(tc.function?.arguments ?? tc.arguments),
+  }));
+  // Legacy single function_call dialect still emitted by some endpoints.
+  if (!calls.length && msg.function_call?.name) {
+    calls.push({
+      id: `call_${Math.random().toString(36).slice(2, 8)}`,
+      name: msg.function_call.name,
+      argsJson: argsToJsonString(msg.function_call.arguments),
+    });
+  }
+  return calls;
+}
+
 export function buildMessages(route, messages) {
   const out = [];
   for (const m of messages) {
@@ -44,7 +73,7 @@ export function buildMessages(route, messages) {
         tool_calls: m.tool_calls.map((tc) => ({
           id: tc.id,
           type: 'function',
-          function: { name: tc.name || tc.function?.name, arguments: tc.function?.arguments ?? (typeof tc.args === 'string' ? tc.args : JSON.stringify(tc.args ?? {})) },
+          function: { name: tc.name || tc.function?.name, arguments: argsToJsonString(tc.function?.arguments ?? tc.argsJson ?? tc.args) },
         })),
       });
       continue;
@@ -164,12 +193,9 @@ export async function openaiOnce(o) {
   const json = await res.json();
   const choice = json.choices?.[0];
   const msg = choice?.message || {};
-  const toolCalls = (msg.tool_calls || []).map((tc) => ({
-    id: tc.id || `call_${Math.random().toString(36).slice(2, 8)}`,
-    name: tc.function?.name,
-    argsJson: tc.function?.arguments || '{}',
-  }));
+  const toolCalls = mapToolCalls(msg);
   onEvent?.({ type: 'delta', text: msg.content || '' });
+  for (const call of toolCalls) if (call.name) onEvent?.({ type: 'tool', name: call.name });
   return {
     text: msg.content || '',
     reasoning: msg.reasoning_content || msg.reasoning || null,
@@ -193,12 +219,9 @@ export async function openaiStream(o) {
     if (!json) await fail(res);
     const choice = json.choices?.[0] || {};
     const msg = choice.message || {};
-    const toolCalls = (msg.tool_calls || []).map((tc) => ({
-      id: tc.id || `call_${Math.random().toString(36).slice(2, 8)}`,
-      name: tc.function?.name,
-      argsJson: tc.function?.arguments || '{}',
-    }));
+    const toolCalls = mapToolCalls(msg);
     if (msg.content) onEvent?.({ type: 'delta', text: msg.content });
+    for (const call of toolCalls) if (call.name) onEvent?.({ type: 'tool', name: call.name });
     return { text: msg.content || '', reasoning: msg.reasoning_content || msg.reasoning || null, toolCalls, usage: usage(json.usage, msg.content, toolCalls), stopReason: choice.finish_reason || 'stop', raw: { id: json.id, model: json.model }, fallback: 'json' };
   }
   let text = '';
@@ -241,7 +264,7 @@ export async function openaiStream(o) {
         const cur = calls.get(key) || { id: '', name: '', args: '' };
         if (tc.id) cur.id = tc.id;
         if (tc.function?.name) cur.name += tc.function.name;
-        if (tc.function?.arguments) cur.args += tc.function.arguments;
+        if (tc.function?.arguments) cur.args += typeof tc.function.arguments === 'string' ? tc.function.arguments : argsToJsonString(tc.function.arguments);
         calls.set(key, cur);
         if (tc.function?.name && !cur.notified) {
           cur.notified = true;

@@ -12,6 +12,25 @@ import { dirs } from '../paths.js';
 
 const WIN = process.platform === 'win32';
 let chosen = null;
+const activeShellChildren = new Set();
+
+function killChildTree(child) {
+  if (!child?.pid) return;
+  try {
+    if (WIN) {
+      // Killing only PowerShell/cmd can orphan the command's own child (for
+      // example `node delayed.mjs`). Terminate the whole tree so a cancelled
+      // or timed-out shell cannot produce a late external effect.
+      spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', timeout: 5000 });
+    } else {
+      child.kill('SIGKILL');
+    }
+  } catch { /* child already exited */ }
+}
+
+export function killActiveShellChildren() {
+  for (const child of [...activeShellChildren]) killChildTree(child);
+}
 
 export function selectShell({ windows = WIN, pref = process.env.MAJIN_SHELL || 'auto', probe = (cmd, args) => spawnSync(cmd, [...args, 'exit 0'], { windowsHide: true, stdio: 'ignore', timeout: 5000 }).status === 0 } = {}) {
   const candidates = windows
@@ -53,6 +72,7 @@ export function runShell(command, { cwd, timeoutSec = 150, maxChars = 40000, env
     let child;
     try {
       child = spawn(cmd, args, { cwd: wdf, env: wenv, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      activeShellChildren.add(child);
     } catch (err) {
       resolve({ ok: false, error: `spawn: ${err.message}`, exitCode: -1, ms: 0, cmd: `${cmd}` });
       return;
@@ -62,11 +82,7 @@ export function runShell(command, { cwd, timeoutSec = 150, maxChars = 40000, env
     let truncated = false;
     const timer = setTimeout(() => {
       killed = true;
-      try {
-        child.kill('SIGKILL');
-      } catch {
-        /* red */
-      }
+      killChildTree(child);
     }, Math.max(1, timeoutSec) * 1000);
     timer.unref?.();
     let killed = false;
@@ -83,10 +99,12 @@ export function runShell(command, { cwd, timeoutSec = 150, maxChars = 40000, env
     child.stdout?.on('data', (d) => onData(d, 'out'));
     child.stderr?.on('data', (d) => onData(d, 'err'));
     child.on('error', (e) => {
+      activeShellChildren.delete(child);
       clearTimeout(timer);
       resolve({ ok: false, error: `${cmd}: ${e.message}`, hint: /ENOENT/.test(e.message) ? 'skallet hittades inte' : null, exitCode: -1, ms: Date.now() - t0 });
     });
     child.on('close', (code, signal) => {
+      activeShellChildren.delete(child);
       clearTimeout(timer);
       resolve({
         ok: code === 0,

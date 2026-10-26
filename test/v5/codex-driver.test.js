@@ -77,10 +77,14 @@ test('process lane resolves Node and cancellation prevents a delayed child write
   const driver = new CodexDriver(options); t.after(() => driver.close()); await driver.start();
   const version = await driver.call('shell_run', { operationId: 'version', command: 'node --version' });
   assert.equal(version.isError, false, version.content[0].text);
-  fs.writeFileSync(path.join(options.workspace, 'delayed.mjs'), "import fs from 'node:fs'; setTimeout(()=>fs.writeFileSync('late.txt','unexpected'),2000);");
+  fs.writeFileSync(path.join(options.workspace, 'delayed.mjs'), "import fs from 'node:fs'; fs.writeFileSync('started.txt','started'); setTimeout(()=>fs.writeFileSync('late.txt','unexpected'),3000);");
   const pending = driver.call('shell_run', { operationId: 'delay', command: 'node delayed.mjs' });
-  await new Promise(resolve => setTimeout(resolve, 400)); await driver.cancel('delay'); await pending;
-  await new Promise(resolve => setTimeout(resolve, 2300));
+  const startedPath = path.join(options.workspace, 'started.txt');
+  const startDeadline = Date.now() + 10000;
+  while (!fs.existsSync(startedPath) && Date.now() < startDeadline) await new Promise(resolve => setTimeout(resolve, 25));
+  assert(fs.existsSync(startedPath), 'the delayed child must actually start before cancellation is exercised');
+  await driver.cancel('delay'); await pending;
+  await new Promise(resolve => setTimeout(resolve, 3300));
   assert(!fs.existsSync(path.join(options.workspace, 'late.txt')));
 });
 test('unexpected worker death remains uncertain and a fresh operation can recover', async t => {

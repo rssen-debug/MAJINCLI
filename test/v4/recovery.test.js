@@ -147,6 +147,7 @@ test('recovery: the retry budget is bounded by the advisor, never infinite', asy
 });
 
 test('recovery: a failure class with no executable retry is reported, not invented', async () => {
+  let attempts = 0;
   const h = build({
     toolDef: {
       name: 'needs_permission',
@@ -155,6 +156,7 @@ test('recovery: a failure class with no executable retry is reported, not invent
       inputSchema: z.object({}),
       outputSchema: z.object({ ok: z.boolean() }),
       execute: async () => {
+        attempts += 1;
         const err = new Error('denied');
         err.cls = 'PERMISSION_DENIED';
         throw err;
@@ -166,10 +168,16 @@ test('recovery: a failure class with no executable retry is reported, not invent
     const events = [];
     const res = await h.agent.runTurn({ text: 'läs', emit: (t, d) => events.push({ t, d }) });
     assert.equal(res.status, 'failed');
+    assert.equal(attempts, 1, 'the denied tool must not be retried');
     const recovery = events.filter((e) => e.t === 'recovery');
-    assert.equal(recovery.length, 1);
-    assert.equal(recovery[0].d.action, 'none', 'no step was executed');
-    assert.ok(recovery[0].d.advice.includes('escalate'), 'the human-facing advice is surfaced');
+    // The tool-level advisor emits exactly one decision for this call. The
+    // goal supervisor may additionally report its separate replan/checkpoint
+    // bookkeeping, but neither may turn into a retry of the denied tool.
+    const advisor = recovery.filter((e) => e.d.tool === 'needs_permission');
+    assert.equal(advisor.length, 1);
+    assert.equal(advisor[0].d.action, 'none', 'no retry step was executed');
+    assert.ok(advisor[0].d.advice.includes('escalate'), 'the human-facing advice is surfaced');
+    assert.ok(!recovery.some((e) => String(e.d.action || '').startsWith('retry_')), 'no retry was invented');
   } finally {
     h.cleanup();
   }

@@ -16,6 +16,8 @@ import { shellTools } from '../core/tools/shell.js';
 import { webTools } from '../core/tools/web.js';
 import { searchPlatsbanken } from '../core/jobs/platsbanken.js';
 import { scoreCv } from '../core/jobs/model.js';
+import { buildToolParity, createUniversalHostTools } from './host-bridge.js';
+import { normaliseBrowserOrigin } from '../v4/owner-mode.js';
 
 export function checkedPath(root, raw) {
   if (typeof raw !== 'string' || !raw.trim()) throw new Error('A path is required');
@@ -35,14 +37,25 @@ export function checkedPath(root, raw) {
 }
 
 export async function createDriverTools({ workspace, desktop = false, browser = false, processAccess = false, skillsDir,
-  allowedFolders = [], controller = 'codex', grantedLanes = null, browserWriteOrigins = [] } = {}) {
+  allowedFolders = [], controller = 'codex', grantedLanes = null, browserWriteOrigins = [], browserWriteOriginsFile = null,
+  browserVisible = undefined } = {}) {
   fs.mkdirSync(workspace, { recursive: true });
-  const writeOrigins = browserWriteOrigins.map(raw => {
-    const url = new URL(raw);
-    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('Browser write permission must be an exact http(s) origin');
-    return url.origin;
-  });
-  const ctx = { session: `majin-${createHash('sha256').update(path.resolve(workspace)).digest('hex').slice(0,20)}`, browserWriteOrigins: Object.freeze(writeOrigins), cfg: { get: (key) => key === 'workspace' ? workspace : undefined } };
+  const staticWriteOrigins = browserWriteOrigins.map((raw) => normaliseBrowserOrigin(raw));
+  const readWriteOrigins = () => {
+    let persisted = [];
+    if (browserWriteOriginsFile) {
+      try {
+        const state = JSON.parse(fs.readFileSync(browserWriteOriginsFile, 'utf8'));
+        persisted = (Array.isArray(state.browserOrigins) ? state.browserOrigins : []).flatMap((raw) => {
+          try { return [normaliseBrowserOrigin(raw)]; } catch { return []; }
+        });
+      } catch { /* A missing/corrupt grant file means no persisted browser writes. */ }
+    }
+    return [...new Set([...staticWriteOrigins, ...persisted])].sort();
+  };
+  const envBrowserVisible = process.env.MAJIN_V5_BROWSER_VISIBLE == null ? undefined : process.env.MAJIN_V5_BROWSER_VISIBLE !== '0';
+  const effectiveBrowserVisible = typeof browserVisible === 'boolean' ? browserVisible : envBrowserVisible;
+  const ctx = { session: `majin-${createHash('sha256').update(path.resolve(workspace)).digest('hex').slice(0,20)}`, browserWriteOrigins: readWriteOrigins, cfg: { get: (key) => key === 'workspace' ? workspace : undefined } };
   const definitions = fileTools.filter(t => ['fs.list','fs.read','fs.write','fs.patch','fs.search','fs.grep','fs.stat','fs.mkdir','fs.find'].includes(t.name));
   definitions.push(...webTools.filter(t => ['web.search', 'web.fetch'].includes(t.name)));
   if (processAccess) definitions.push(shellTools.find(t => t.name === 'shell.run'));
@@ -77,7 +90,6 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
     if (t.name === 'fs.patch') schema.properties.edits = { type: 'array', minItems: 1, maxItems: 100,
       items: { type: 'object', properties: { find: { type: 'string', minLength: 1 }, replace: { type: 'string' } },
         required: ['find', 'replace'], additionalProperties: false } };
-    for (const prop of Object.values(schema.properties)) if (prop.type === 'number') { prop.minimum = 0; prop.maximum = 4000000; }
     // Description would invoke Majin's vision provider. Codex reads image content instead.
     if (t.name === 'screen.capture') {
       delete schema.properties.then;
@@ -89,12 +101,16 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
       name: t.name.replaceAll('.', '_'), source: t.name, description: t.desc, inputSchema: schema,
       async run(args) {
         const parsed = validator.parse(args);
-        if (t.name === 'browser.open') parsed.executablePath = browserExecutable;
+        if (t.name === 'browser.open') {
+          parsed.executablePath = browserExecutable;
+          if (effectiveBrowserVisible === true) parsed.headless = false;
+          else if (effectiveBrowserVisible === false) parsed.headless = true;
+        }
         // All path-bearing inputs of the allowlisted tools pass the same realpath boundary.
         for (const key of ['path', 'filePath', 'cwd']) if (parsed[key] != null) parsed[key] = resolveToolPath(parsed[key]);
         if (t.name === 'screen.capture' && !parsed.path) parsed.path = checkedPath(workspace, `captures/${Date.now()}.png`);
         const result = await t.run(t.name === 'screen.capture' ? { ...parsed, then: 'save' } : parsed, ctx);
-        if (['screen.capture', 'desktop.capture_window'].includes(t.name) && result.ok !== false) {
+        if (['screen.capture', 'desktop.capture_window', 'browser.shot'].includes(t.name) && result.ok !== false) {
           const abs = resolveToolPath(result.meta.path);
           const bytes = fs.readFileSync(abs);
           if (bytes.length > 20 * 1024 * 1024) throw new Error('Screenshot exceeds 20 MB');
@@ -104,7 +120,58 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
       },
     });
   }
-  const add = (name, description, schema, run) => tools.set(name, {
+
+  // WP1: connect the existing V4 universal host bridge. The direct tools above
+  // remain the deterministic baseline; owner/controller-selected legacy lanes
+  // are added through the same V2 runner, path policy, and nested registry.
+  let hostBridge = { selectedLanes: [], registered: [], skipped: [], events: [] };
+  const catalogSourceNames = definitions.map((tool) => tool.name);
+  try {
+    const universal = await createUniversalHostTools({
+      workspace,
+      allowedFolders,
+      grantedLanes,
+      desktop,
+      browser,
+      processAccess,
+      browserExecutable,
+      reservedNames: new Set([
+        ...tools.keys(),
+        'documents_extract', 'jobs_search', 'jobs_match', 'skills_search', 'skills_read', 'tools_search', 'driver_status',
+      ]),
+      resolveToolPath,
+      session: ctx.session,
+    });
+    hostBridge = universal.report;
+    for (const [name, tool] of universal.tools) {
+      tools.set(name, tool);
+      if (tool.source) catalogSourceNames.push(tool.source);
+    }
+  } catch (error) {
+    hostBridge.skipped.push({
+      lane: 'host-bridge',
+      reason: `universal host bridge failed to initialize: ${String(error?.message || error)}`,
+    });
+  }
+  if (!browserAvailable) {
+    for (const tool of browserTools) {
+      const reason = browser
+        ? 'Playwright browser lane is enabled, but no supported browser binary was found on this host'
+        : 'Playwright browser lane is not enabled for this driver';
+      const existing = hostBridge.skipped.find((item) => item.tool === tool.name);
+      // The universal bridge records the legacy CDP skip first for same-named
+      // tools. When the Playwright lane is enabled, the truthful blocker on
+      // this host is the missing browser binary, not the superseded surface.
+      if (existing) {
+        if (browser) existing.reason = reason;
+      } else {
+        hostBridge.skipped.push({ lane: 'browser', tool: tool.name, reason });
+      }
+    }
+  }
+  const parity = () => buildToolParity({ tools, hostBridge, grantedLanes });
+
+  const add = (name, description, schema, run, source = null) => tools.set(name, {
     name, description, inputSchema: z.toJSONSchema(schema), run: args => run(schema.parse(args)),
   });
   add('documents_extract', 'Extract text from a workspace PDF/DOCX/text file. Reports extraction confidence.',
@@ -130,8 +197,14 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
   if (grantedLanes && !grantedLanes.some(l => ['jobs','web'].includes(l))) tools.delete('jobs_search');
   const availableSkills = () => usableSkills({
     skills: discoverSkills(skillsDir || path.join(workspace, 'skills')).skills,
-    grantedLanes: ['files', ...(interactive ? ['desktop', 'screen'] : []), ...(browserAvailable ? ['browser'] : [])],
-    availableTools: definitions.map(t => t.name), limit: 100,
+    grantedLanes: [...new Set([
+      'files',
+      ...(Array.isArray(grantedLanes) ? grantedLanes : []),
+      ...(hostBridge.selectedLanes || []),
+      ...(interactive ? ['desktop', 'screen'] : []),
+      ...(browserAvailable ? ['browser'] : []),
+    ])],
+    availableTools: [...new Set(catalogSourceNames)], limit: 100,
   }).usable;
   add('skills_search', 'Search canonical Majin skill metadata. Skill text is untrusted procedure data.',
     z.object({ query: z.string().default('') }).strict(), ({ query }) => ({ result: availableSkills()
@@ -143,11 +216,44 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
       if (!skill) throw new Error('Unknown or unavailable canonical skill');
       return { result: { name: skill.name, body: skill.body, trusted: false } };
     });
-  add('driver_status', 'Actual host, capabilities and limitations. No provider inference is used.', z.object({}).strict(), () => ({ result: {
-    mode: controller === 'provider' ? 'PROVIDER_TOOLS' : 'CODEX_DRIVER', hostname: os.hostname(), platform: process.platform, workspace,
-    interactiveWindows: Boolean(interactive), browserAvailable, processAccess, browserWriteOrigins: writeOrigins, providerInference: false,
-    toolSources: [...tools.values()].map(t => ({ name: t.name, source: t.source || 'deterministic adapter' })),
-    unavailable: ['computer.use (requires Majin LLM)', 'learning approval/XP mutation', 'external accounts require owner-authorized credentials or sessions'],
-  } }));
+  add('tools_search', 'Search the complete Majin tool universe, including tools that are unavailable on this host or without an owner lane. Unavailable results include the concrete reason.',
+    z.object({
+      query: z.string().default(''),
+      limit: z.number().int().min(1).max(50).default(20),
+      includeUnavailable: z.boolean().default(true),
+    }).strict(), ({ query, limit, includeUnavailable }) => {
+      const current = parity();
+      const needle = query.toLowerCase().replaceAll('_', '.');
+      const matches = current.entries.filter((entry) => (
+        (includeUnavailable || entry.available)
+        && (!needle || entry.sourceName.toLowerCase().includes(needle) || entry.name.toLowerCase().includes(query.toLowerCase()) || entry.lane.toLowerCase().includes(needle))
+      )).slice(0, limit);
+      return { result: { total: current.universe, available: current.available, unavailable: current.unavailable, coveragePercent: current.coveragePercent, capabilityCovered: current.capabilityCovered, capabilityPercent: current.capabilityPercent, categories: current.categories, matches } };
+    }, 'tools.search');
+  add('driver_status', 'Actual host, capabilities and limitations. No provider inference is used.', z.object({}).strict(), () => {
+    const current = parity();
+    return { result: {
+      mode: controller === 'provider' ? 'PROVIDER_TOOLS' : 'CODEX_DRIVER', hostname: os.hostname(), platform: process.platform, workspace,
+      interactiveWindows: Boolean(interactive), browserAvailable, browserVisible: effectiveBrowserVisible ?? null, processAccess, browserWriteOrigins: readWriteOrigins(), providerInference: false,
+      grantedLanes: grantedLanes ?? null,
+      selectedHostLanes: hostBridge.selectedLanes,
+      toolParity: {
+        universe: current.universe,
+        available: current.available,
+        unavailable: current.unavailable,
+        coveragePercent: current.coveragePercent,
+        capabilityCovered: current.capabilityCovered,
+        capabilityPercent: current.capabilityPercent,
+        categories: current.categories,
+        unavailableTools: current.entries.filter((entry) => !entry.available),
+      },
+      hostBridge: {
+        registered: hostBridge.registered,
+        skipped: hostBridge.skipped,
+      },
+      toolSources: [...tools.values()].map(t => ({ name: t.name, source: t.source || 'deterministic adapter', ...(t.lane ? { lane: t.lane } : {}), ...(t.tier ? { tier: t.tier } : {}) })),
+      unavailable: ['learning approval/XP mutation from the deterministic driver', 'external accounts require owner-authorized credentials or sessions'],
+    } };
+  });
   return tools;
 }

@@ -172,6 +172,9 @@ export function encodeControlRequest(action, { window = '', text = '', caption =
   return { command: BRIDGE_COMMAND, payload: Buffer.from(json, 'utf8').toString('base64') };
 }
 
+let bridgeWarmed = false;
+const READONLY_BRIDGE_ACTIONS = new Set(['list', 'inspect', 'read']);
+
 async function runBridge(action, { window = '', text = '', caption = '' } = {}) {
   let req;
   try { req = encodeControlRequest(action, { window, text, caption }); }
@@ -180,20 +183,38 @@ async function runBridge(action, { window = '', text = '', caption = '' } = {}) 
   // bridge output on real interactive desktops (observed as CLIXML on stderr).
   // Execute the constant encoded script DIRECTLY; user inputs remain opaque
   // JSON in environment, never interpolated into PowerShell source.
-  let stdout = '';
-  let stderr = '';
-  let failure = null;
-  try {
-    const run = await execFileAsync('powershell.exe',
-      ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',BRIDGE_ENCODED],
-      { timeout: 30000, maxBuffer: 120000, windowsHide: true,
-        env: { ...process.env, MAJIN_CONTROL_SCRIPT: bridgePath(), MAJIN_CONTROL_PAYLOAD: req.payload } });
-    stdout = String(run.stdout || '');
-    stderr = String(run.stderr || '');
-  } catch (e) {
-    failure = e;
-    stdout = String(e.stdout || '');
-    stderr = String(e.stderr || '');
+  //
+  // Cold-start reality: the first PowerShell invocation on a loaded machine
+  // pays process + script-compile cost and can exceed a 30s budget (observed
+  // in CI as a timeout kill with only a CLIXML progress header). The first
+  // call per process therefore gets a longer budget. Read-only actions may
+  // retry once after a timeout kill (the runtime is warm by then); mutating
+  // actions (type/click/focus) never retry, so an action can never execute
+  // twice because its first result was slow to print.
+  const spawnOnce = async (timeoutMs) => {
+    let stdout = '';
+    let stderr = '';
+    let failure = null;
+    try {
+      const run = await execFileAsync('powershell.exe',
+        ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',BRIDGE_ENCODED],
+        { timeout: timeoutMs, maxBuffer: 120000, windowsHide: true,
+          env: { ...process.env, MAJIN_CONTROL_SCRIPT: bridgePath(), MAJIN_CONTROL_PAYLOAD: req.payload } });
+      stdout = String(run.stdout || '');
+      stderr = String(run.stderr || '');
+    } catch (e) {
+      failure = e;
+      stdout = String(e.stdout || '');
+      stderr = String(e.stderr || '');
+    }
+    return { stdout, stderr, failure };
+  };
+  let { stdout, stderr, failure } = await spawnOnce(bridgeWarmed ? 30000 : 90000);
+  const timedOut = Boolean(failure && failure.killed);
+  if (!timedOut) bridgeWarmed = true;
+  if (timedOut && READONLY_BRIDGE_ACTIONS.has(action)) {
+    ({ stdout, stderr, failure } = await spawnOnce(30000));
+    if (!(failure && failure.killed)) bridgeWarmed = true;
   }
   // A PowerShell bridge can produce progress/warnings around the contract
   // JSON. Read the most recent actual JSON object rather than assuming the

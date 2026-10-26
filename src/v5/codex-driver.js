@@ -47,6 +47,8 @@ export class CodexDriver {
     if (this.worker) return;
     this.worker = fork(workerFile, [], { execArgv: [], detached: process.platform !== 'win32', stdio: ['ignore', 'ignore', 'pipe', 'ipc'], windowsHide: true,
       env: { ...scrubMcpEnv(), PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH || ''}`,
+        ...(process.env.MAJIN_V4_BROWSER ? { MAJIN_V4_BROWSER: process.env.MAJIN_V4_BROWSER } : {}),
+        ...(process.env.PLAYWRIGHT_BROWSERS_PATH ? { PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH } : {}),
         ...(process.platform === 'win32' ? { PATHEXT: process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD' } : {}), MAJIN_HOME: path.join(this.stateDir, 'majin'),
         MAJIN_WORKSPACE: this.options.workspace, MAJIN_DRIVER_OPTIONS: JSON.stringify(this.options) } });
     const worker = this.worker;
@@ -93,7 +95,7 @@ export class CodexDriver {
     this.busy = true;
     try { await this.start(); } catch (error) { this.busy = false; throw error; }
     const record = { operationId, fingerprint, tool: name, status: 'running', startedAt: new Date().toISOString(),
-      result: null, evidence: [], errorCode: null, blocker: null };
+      result: null, evidence: [], errorCode: null, blocker: null, details: null };
     this.operations.set(operationId, record); this.save(record);
     const id = randomUUID();
     let timer;
@@ -105,6 +107,7 @@ export class CodexDriver {
       if (record.status === 'running') {
         record.status = value.error?.code === 'WORKER_EXIT' ? 'uncertain' : value.ok === false ? 'failed' : 'completed';
         record.errorCode = value.error?.code || null; record.blocker = value.error?.message || null;
+        record.details = value.error?.meta || value.error?.details || value.meta || null;
         const { image, ...data } = value; record.result = data;
         if (image) {
           const filename = `${hash(operationId)}.png`;
@@ -132,8 +135,23 @@ export class CodexDriver {
     active.record.blocker = 'Worker stopped. An effect may already have occurred; inspect before retrying. Browser must be reopened.';
     const worker = this.worker;
     if (worker) {
-      if (process.platform === 'win32') await promisify(execFile)('taskkill.exe', ['/PID', String(worker.pid), '/T', '/F'], { windowsHide: true });
-      else process.kill(-worker.pid, 'SIGKILL');
+      if (process.platform === 'win32') {
+        // Give the worker a brief chance to terminate tracked shell trees
+        // itself. Force-killing the worker first can race a shell that is
+        // spawning its command child and leave that child orphaned. The
+        // taskkill below remains the hard fallback for a blocked worker.
+        let exited = worker.exitCode !== null;
+        if (!exited) {
+          const exitSeen = new Promise((resolve) => worker.once('exit', () => { exited = true; resolve(); }));
+          try { if (worker.connected) worker.send({ type: 'shutdown' }); } catch { /* fall through to taskkill */ }
+          await Promise.race([exitSeen, new Promise((resolve) => setTimeout(resolve, 1500))]);
+        }
+        if (!exited && worker.pid) {
+          await promisify(execFile)('taskkill.exe', ['/PID', String(worker.pid), '/T', '/F'], { windowsHide: true }).catch(() => {});
+        }
+      } else {
+        process.kill(-worker.pid, 'SIGKILL');
+      }
       this.worker = null;
     }
     active.resolve({ ok: false }); this.save(active.record);

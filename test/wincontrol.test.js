@@ -51,7 +51,9 @@ test('wincontrol: untrusted window strings are payload, never executable PowerSh
 
 test('wincontrol: Windows executes the actual PowerShell bridge without an interactive desktop', {
   skip: !IS_WIN && 'requires Windows PowerShell',
-  timeout: 45000,
+  // Covers the bridge cold-start budget (90s first call) plus one warmed
+  // read-only retry; the assertion still requires real bridge output.
+  timeout: 150000,
 }, async () => {
   const list = ALL_TOOLS.find((t) => t.name === 'control.list_windows');
   const result = await list.run({});
