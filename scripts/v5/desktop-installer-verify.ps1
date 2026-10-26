@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 New-Item -ItemType Directory -Force -Path "docs\v5" | Out-Null
 
-function Wait-HealthyV5Host([int]$Port, [int]$TimeoutSeconds = 25) {
+function Wait-HealthyV5Host([int]$Port, [int]$TimeoutSeconds = 60) {
     $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $Deadline) {
         try {
@@ -61,7 +61,13 @@ try {
         (Join-Path $ProgramsDir "MAJIN V5")
     )
     $InstalledDir = $null
-    for ($i = 0; $i -lt 90; $i++) {
+    # NSIS install time varies widely with runner load (observed >45s while
+    # the installer process was still running). Wait for real completion —
+    # the installed files present — with a generous deadline instead of a
+    # fixed short poll, and report the installer exit state on failure.
+    $InstallDeadline = (Get-Date).AddSeconds(300)
+    $InstallExitedAt = $null
+    while ((Get-Date) -lt $InstallDeadline) {
         foreach ($cand in $CandidateDirs) {
             if (
                 (Test-Path (Join-Path $cand "MAJIN V5.exe")) -and
@@ -73,12 +79,24 @@ try {
             }
         }
         if ($InstalledDir) { break }
-        Start-Sleep -Milliseconds 500
+        if ($InstallProc.HasExited) {
+            if (-not $InstallExitedAt) { $InstallExitedAt = Get-Date }
+            # Files can flush briefly after the installer exits; allow a
+            # short grace period, then fail with the real exit code.
+            if (((Get-Date) - $InstallExitedAt).TotalSeconds -gt 15) { break }
+        }
+        Start-Sleep -Seconds 1
     }
 
     if (-not $InstalledDir) {
+        $exitInfo = "installer still running after 300s"
+        if ($InstallProc.HasExited) {
+            $exitInfo = "installer exited with code $($InstallProc.ExitCode)"
+        } else {
+            $InstallProc | Stop-Process -Force -ErrorAction SilentlyContinue
+        }
         $progList = (Get-ChildItem -Path $ProgramsDir -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name) -join ", "
-        throw "Installed MAJIN V5.exe not found under $ProgramsDir (contents: $progList)"
+        throw "Installed MAJIN V5.exe not found under $ProgramsDir ($exitInfo; contents: $progList)"
     }
     Start-Sleep -Seconds 2
 
@@ -126,7 +144,7 @@ try {
     $env:MAJIN_V5_DESKTOP_URL = "http://127.0.0.1:$TestPort"
 
     $BgProc1 = Start-Process -FilePath $InstalledExe -ArgumentList "--background" -PassThru
-    $Health1 = Wait-HealthyV5Host -Port $TestPort -TimeoutSeconds 25
+    $Health1 = Wait-HealthyV5Host -Port $TestPort -TimeoutSeconds 60
 
     $ProvBody = @{
         providerId = "opencode-go"
@@ -151,7 +169,7 @@ try {
     Start-Sleep -Seconds 2
 
     $BgProc2 = Start-Process -FilePath $InstalledExe -ArgumentList "--background" -PassThru
-    $Health2 = Wait-HealthyV5Host -Port $TestPort -TimeoutSeconds 25
+    $Health2 = Wait-HealthyV5Host -Port $TestPort -TimeoutSeconds 60
 
     $StateAfterRestart = Invoke-RestMethod -Uri "http://127.0.0.1:$TestPort/api/v5/state" -TimeoutSec 5
     if ($StateAfterRestart.provider.activeProvider -ne "opencode-go" -or $StateAfterRestart.provider.activeModelId -ne "GLM-5.3") {
@@ -172,9 +190,10 @@ try {
     # 6. Run Uninstaller (/S) and verify clean removal + data/V1-V4 preservation
     Write-Host "==> [5/6] Running Uninstaller and verifying clean removal + data preservation..." -ForegroundColor Cyan
     $UninstallProc = Start-Process -FilePath $UninstallerExe -ArgumentList "/S" -PassThru
-    for ($i = 0; $i -lt 50; $i++) {
+    $UninstallDeadline = (Get-Date).AddSeconds(180)
+    while ((Get-Date) -lt $UninstallDeadline) {
         if (-not (Test-Path $InstalledExe)) { break }
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Seconds 1
     }
     if (Test-Path $InstalledExe) {
         throw "Uninstaller did not remove $InstalledExe"
