@@ -8,10 +8,23 @@ import { jsonSchemaFor } from '../v4/schema.js';
 import { V1_LANES, hostCapabilities, registerHostTools } from '../v4/tools/host.js';
 
 const SERVICE_BOUND = [
+  // Specific entries first (first match wins): name the working V5 surface so
+  // the catalog shows the real path instead of a generic placeholder. None of
+  // these make the legacy tool itself available — partial coverage is never
+  // reported as parity.
+  [/^majin\.memory$/, 'long-term memory is split by design: model surface majin_memory (status/read/remember), full lifecycle owner-only via `majin-v5 memory` (list/search/get/forget/clear/export/import); the legacy all-in-one tool is not supplied to the isolated driver'],
+  [/^majin\.provider$/, 'provider reads are model-reachable via majin_provider (list/models); configuring providers or handling API keys is owner-only via `majin-v5 model` or the UI and never supplied to the isolated driver'],
+  [/^majin\.routes$/, 'model routing is owner configuration (`majin-v5 model`); the active selection is visible to the model via majin_provider and majin_status'],
+  [/^majin\.skill$/, 'verified procedures are model-reachable via procedures_search and procedures_read; procedures are learned host-side from independently verified goals, and legacy skill file management is not supplied to the isolated driver'],
+  [/^majin\.backup$/, 'owner backup surface: `majin-v5 memory export` / `import --yes` covers long-term memory with validated sync records; no full-host backup service is supplied to the isolated driver'],
+  [/^majin\.schedule$/, 'no scheduler service runs in the V5 CLI host, so scheduled execution is not available'],
+  [/^majin\.heartbeat$/, 'the legacy heartbeat daemon does not run in the V5 host'],
+  [/^majin\.channel$/, 'external messaging channels require host adapters and credentials configured by the owner; none are supplied to the isolated driver'],
+  [/^majin\.(configure|control|guard)$/, 'owner-only configuration/guard surface (`majin-v5 grants`, `majin-v5 doctor`, the UI); settings and permissions are never writable from model text'],
   [/^majin\.(?!self_audit$)/, 'requires the V1/V5 host service context (config, memory, skills, scheduler, channels, dataset, or adapters); use the corresponding V5 surface until that service is supplied to the isolated driver'],
   [/^media\./, 'requires a configured media provider service; the deterministic driver does not supply media credentials or provider inference'],
   [/^(agent|team)\./, 'legacy agent orchestration requires a model runtime; the V5 provider supplies agent_plan, agent_checkpoint, and agent_delegate on the host side'],
-  [/^memory\./, 'requires the legacy memory service; V5 procedural memory is supplied host-side through procedures_search and procedures_read'],
+  [/^memory\./, 'requires the legacy memory service; V5 procedural memory is supplied host-side through procedures_search and procedures_read, and owner memory sync/backup runs through `majin-v5 memory export` / `import --yes`'],
   [/^(reset|plugin)\./, 'requires the host runtime service that owns reset/plugin state; it is not supplied to the isolated deterministic driver'],
 ];
 
