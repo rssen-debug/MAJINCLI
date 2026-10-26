@@ -273,8 +273,15 @@ export const browserTools = [
           } catch (error) {
             state.context = null;
             state.page = null;
+            const raw = String(error?.message || error);
+            // Playwright's call log starts with the very long browser command
+            // line; the actionable evidence (browser stderr, CDP handshake
+            // failure) is at the end. Keep those lines instead of truncating
+            // the head of the message.
+            const evidenceLines = raw.split(/\r?\n/).filter((line) => /\[err\]|\[out\]|<launched>|timeout|error|failed|closed|exit/i.test(line));
+            const detail = (evidenceLines.length ? evidenceLines.join('\n') : raw).slice(-4000);
             const launchError = new Error(
-              `Browser launch failed (executable: ${executable || 'playwright-managed'}, profile: ${profileDir}, headless: ${Boolean(headless)}, timeoutMs: ${launchTimeoutMs}): ${String(error?.message || error).slice(0, 2000)}`,
+              `Browser launch failed (executable: ${executable || 'playwright-managed'}, profile: ${profileDir}, headless: ${Boolean(headless)}, timeoutMs: ${launchTimeoutMs}): ${detail}`,
             );
             launchError.code = 'BROWSER_LAUNCH_FAILED';
             launchError.cause = error;

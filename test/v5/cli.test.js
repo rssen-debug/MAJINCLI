@@ -466,8 +466,14 @@ test('CLI chat grants a blocked browser origin in the same host and resumes the 
   // A cold real Edge/Chromium launch plus four isolated driver operations can
   // exceed the generic 30s chat wait on a loaded Windows runner. The product
   // still has its own per-model/per-tool timeouts; this waits for the same
-  // real WAITING_USER checkpoint without weakening any assertion below.
-  await session.waitFor('Status: WAITING_USER', 'stdout', 240000);
+  // real WAITING_USER checkpoint without weakening any assertion below, but
+  // fails fast if the goal reaches a terminal state instead of the handoff.
+  await session.waitFor(/Status: (WAITING_USER|COMPLETED|PARTIAL|BLOCKED|CANCELLED)/, 'stdout', 240000);
+  assert.match(
+    session.stdout,
+    /Status: WAITING_USER/,
+    `the blocked submit must pause for the owner instead of finishing\nSTDOUT:\n${session.stdout}\nSTDERR:\n${session.stderr}`,
+  );
   await session.waitFor('Browser handoff: BROWSER_ORIGIN');
   await session.waitFor(`Exact origin: ${origin}`);
   await session.waitFor('Browser session retained at handoff: yes');
