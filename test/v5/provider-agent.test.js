@@ -10,6 +10,7 @@ import { classifyProviderError } from '../../src/v5/providers.js';
 import { responsesInput } from '../../src/core/provider/responses.js';
 import { toAnthropic } from '../../src/core/provider/anthropic.js';
 import { browserBinary } from '../../src/v4/tools/host.js';
+import { PNG } from 'pngjs';
 
 async function setup(t, respond) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-provider-agent-'));
@@ -162,6 +163,99 @@ test('HTTP resume retains saved acceptance checks when the request omits criteri
   assert.equal(goal.status, 'COMPLETED');
   assert.equal(goal.verification_evidence.length, 1);
 });
+test('independent http and file verification repairs a premature completion claim', async t => {
+  const { requests, server } = await setup(t, (_body, count) => {
+    if (count === 1) return { role: 'assistant', content: 'Done already.' };
+    if (count === 2) return tool('write-http-proof', 'fs_write', { path: 'http-proof.txt', content: 'http verified' });
+    return { role: 'assistant', content: 'Created the proof; the endpoint now reports it.' };
+  });
+  const proofPath = path.join(server.architect.workspaceDir, 'http-proof.txt');
+  const state = http.createServer((_req, res) => {
+    const ready = fs.existsSync(proofPath) && fs.readFileSync(proofPath, 'utf8').includes('http verified');
+    res.writeHead(ready ? 200 : 503, { 'content-type': 'text/plain' });
+    res.end(ready ? 'STATE READY http verified' : 'STATE WAITING');
+  });
+  await new Promise(resolve => state.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { state.closeAllConnections?.(); await new Promise(resolve => state.close(resolve)); });
+  const result = await server.providerAgent.execute({
+    goalText: 'Create http-proof.txt so the local state endpoint reports ready',
+    criteria: [
+      { kind: 'http', url: `http://127.0.0.1:${state.address().port}/state`, status: 200, contains: 'STATE READY' },
+      { kind: 'file', path: 'http-proof.txt', contains: 'http verified' },
+    ],
+  });
+  assert.equal(result.status, 'COMPLETED');
+  assert.deepEqual(result.verification_evidence.map(item => item.kind), ['http', 'file']);
+  assert.equal(result.verification_evidence[0].status, 200);
+  assert.equal(result.verification_evidence[0].contains, 'STATE READY');
+  assert.equal(result.adaptive.verificationFailures, 1);
+  assert.equal(requests.length, 3);
+  assert.match(JSON.stringify(requests[1].body.messages), /Host independent verification failed/);
+});
+
+test('independent pixel verification can complete a mixed-criteria goal', async t => {
+  const { server } = await setup(t, (_body, count) => count === 1
+    ? tool('write-pixel-receipt', 'fs_write', { path: 'pixel-receipt.txt', content: 'pixel receipt' })
+    : { role: 'assistant', content: 'Wrote the receipt for the generated image.' });
+  const png = new PNG({ width: 4, height: 4 });
+  for (let i = 0; i < png.data.length; i += 4) {
+    png.data[i] = 12; png.data[i + 1] = 34; png.data[i + 2] = 56; png.data[i + 3] = 255;
+  }
+  fs.writeFileSync(path.join(server.architect.workspaceDir, 'proof.png'), PNG.sync.write(png));
+  const result = await server.providerAgent.execute({
+    goalText: 'Write pixel-receipt.txt for the verified image artifact',
+    criteria: [
+      { kind: 'pixel', pngPath: 'proof.png', rgba: [12, 34, 56, 255], tolerance: 0, minHits: 16 },
+      { kind: 'file', path: 'pixel-receipt.txt', contains: 'pixel receipt' },
+    ],
+  });
+  assert.equal(result.status, 'COMPLETED');
+  assert.deepEqual(result.verification_evidence.map(item => item.kind), ['pixel', 'file']);
+  assert.equal(result.verification_evidence[0].hits, 16);
+});
+
+test('unsupported acceptance criteria cannot be skipped into a completed goal', async t => {
+  const { server } = await setup(t, (_body, count) => count === 1
+    ? tool('write-partial-proof', 'fs_write', { path: 'partial-proof.txt', content: 'partial proof' })
+    : { role: 'assistant', content: 'Wrote the file.' });
+  const result = await server.providerAgent.execute({
+    goalText: 'Write partial-proof.txt and satisfy every listed acceptance check',
+    criteria: [
+      { kind: 'file', path: 'partial-proof.txt', contains: 'partial proof' },
+      { kind: 'crystal-ball', omen: 'success' },
+    ],
+  });
+  assert.equal(result.status, 'PARTIAL');
+  assert.equal(result.errorCode, 'UNVERIFIABLE_ACCEPTANCE_CRITERIA');
+  assert.equal(result.verification_evidence.length, 0);
+  assert.match(result.blocker, /unsupported verifier kind: crystal-ball/);
+});
+
+test('independent dom verification can complete a browser-visible outcome', async t => {
+  if (!(await browserBinary())) { t.skip('no local browser binary'); return; }
+  const { server } = await setup(t, (_body, count) => count === 1
+    ? tool('write-dom-proof', 'fs_write', { path: 'dom-proof.txt', content: 'dom verified' })
+    : { role: 'assistant', content: 'The page now shows the verified state.' });
+  const proofPath = path.join(server.architect.workspaceDir, 'dom-proof.txt');
+  const pageServer = http.createServer((_req, res) => {
+    const ready = fs.existsSync(proofPath) && fs.readFileSync(proofPath, 'utf8').includes('dom verified');
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end(`<!doctype html><main><div id="state">${ready ? 'DOM READY dom verified' : 'DOM WAITING'}</div></main>`);
+  });
+  await new Promise(resolve => pageServer.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { pageServer.closeAllConnections?.(); await new Promise(resolve => pageServer.close(resolve)); });
+  const result = await server.providerAgent.execute({
+    goalText: 'Create dom-proof.txt so the local page shows the ready state',
+    criteria: [
+      { kind: 'dom', url: `http://127.0.0.1:${pageServer.address().port}/`, selector: '#state', expectText: 'DOM READY' },
+      { kind: 'file', path: 'dom-proof.txt', contains: 'dom verified' },
+    ],
+  });
+  assert.equal(result.status, 'COMPLETED');
+  assert.deepEqual(result.verification_evidence.map(item => item.kind), ['dom', 'file']);
+  assert.match(result.verification_evidence[0].text, /DOM READY/);
+});
+
 test('403 access policy is distinguished from an invalid API key', () => {
   assert.equal(classifyProviderError(new Error('Region not allowed'), 403).code, 'ACCESS_DENIED');
   assert.equal(classifyProviderError(new Error('Invalid API key'), 401).code, 'AUTH_INVALID');

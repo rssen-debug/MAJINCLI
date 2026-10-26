@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { CodexDriver, driverFingerprint } from './codex-driver.js';
 import { checkedPath } from './codex-tools.js';
 import { runVerifier } from '../v2/runtime/verifiers.js';
+import { browserBinary } from '../v4/tools/host.js';
 import { createProcedureTools, usedProcedureLanes } from './procedure-tools.js';
 import { createAdaptiveTools, ensureAdaptiveState, chooseAdaptiveMode, recordAdaptiveTransition, markAdaptiveSteering } from './adaptive-policy.js';
 import { createDelegationTool } from './adaptive-delegation.js';
@@ -24,6 +25,123 @@ function isCoreProviderTool(name, hostToolNames) {
     || name.startsWith('control_')
     || name.startsWith('desktop_')
     || name.startsWith('screen_');
+}
+
+const SUPPORTED_VERIFIER_KINDS = new Set(['file', 'http', 'pixel', 'dom']);
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseAcceptanceUrl(raw) {
+  try {
+    const url = new URL(String(raw || ''));
+    if (!['http:', 'https:'].includes(url.protocol)) return null;
+    if (url.username || url.password) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+function isNonNegativeFiniteNumber(value) {
+  return Number.isFinite(Number(value)) && Number(value) >= 0;
+}
+
+function acceptanceLabel(check, kind) {
+  if (kind === 'file') return String(check?.path || 'file');
+  if (kind === 'pixel') return String(check?.pngPath || check?.path || 'pixel');
+  if (kind === 'http' || kind === 'dom') return String(check?.url || kind);
+  return kind || 'unknown';
+}
+
+/**
+ * Normalise one owner-supplied acceptance criterion into an independently
+ * runnable V2 verifier spec. Unsupported or malformed checks are returned as
+ * data, not thrown mid-loop: the goal may finish as PARTIAL with the concrete
+ * reason recorded, but it can never be upgraded to COMPLETED by inspecting
+ * only the subset MAJIN happens to support.
+ */
+function normaliseAcceptanceCheck(check, workspaceDir) {
+  if (!isPlainObject(check)) return { ok: false, kind: 'unknown', label: 'criterion', reason: 'criterion must be an object' };
+  const kind = String(check.kind || '').toLowerCase().trim();
+  const label = acceptanceLabel(check, kind);
+  if (!SUPPORTED_VERIFIER_KINDS.has(kind)) {
+    return { ok: false, kind: kind || 'unknown', label, reason: `unsupported verifier kind: ${kind || '(missing)'}` };
+  }
+  try {
+    if (kind === 'file') {
+      if (typeof check.path !== 'string' || !check.path.trim()) return { ok: false, kind, label, reason: 'file criterion requires path' };
+      if (check.contains != null && typeof check.contains !== 'string') return { ok: false, kind, label, reason: 'file contains must be a string' };
+      if (check.hash != null && (typeof check.hash !== 'string' || !/^[a-f0-9]{64}$/i.test(check.hash))) return { ok: false, kind, label, reason: 'file hash must be a sha256 hex string' };
+      if (check.minBytes != null && !isNonNegativeFiniteNumber(check.minBytes)) return { ok: false, kind, label, reason: 'file minBytes must be a non-negative number' };
+      return { ok: true, kind, label, spec: { ...check, path: checkedPath(workspaceDir, check.path) } };
+    }
+    if (kind === 'http') {
+      const url = parseAcceptanceUrl(check.url);
+      if (!url) return { ok: false, kind, label, reason: 'http criterion requires a valid http(s) URL without credentials' };
+      const method = String(check.method || 'GET').toUpperCase();
+      if (!['GET', 'HEAD'].includes(method)) return { ok: false, kind, label, reason: 'http verification is read-only and only supports GET/HEAD' };
+      if (method === 'HEAD' && check.contains != null) return { ok: false, kind, label, reason: 'http contains check requires GET' };
+      if (check.status != null && (!Number.isInteger(Number(check.status)) || Number(check.status) < 100 || Number(check.status) > 599)) {
+        return { ok: false, kind, label, reason: 'http status must be an integer from 100 to 599' };
+      }
+      if (check.contains != null && typeof check.contains !== 'string') return { ok: false, kind, label, reason: 'http contains must be a string' };
+      return {
+        ok: true, kind, label,
+        spec: {
+          url: url.toString(),
+          method,
+          ...(check.status != null ? { status: Number(check.status) } : {}),
+          ...(check.contains != null ? { contains: check.contains } : {}),
+        },
+      };
+    }
+    if (kind === 'pixel') {
+      const rawPath = check.pngPath || check.path;
+      if (typeof rawPath !== 'string' || !rawPath.trim()) return { ok: false, kind, label, reason: 'pixel criterion requires pngPath' };
+      if (!Array.isArray(check.rgba) || check.rgba.length < 3 || check.rgba.length > 4
+        || check.rgba.some((value) => !Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 255)) {
+        return { ok: false, kind, label, reason: 'pixel criterion requires rgba with numeric channels from 0 to 255' };
+      }
+      if (check.tolerance != null && !isNonNegativeFiniteNumber(check.tolerance)) return { ok: false, kind, label, reason: 'pixel tolerance must be a non-negative number' };
+      if (check.minHits != null && (!Number.isInteger(Number(check.minHits)) || Number(check.minHits) < 1)) return { ok: false, kind, label, reason: 'pixel minHits must be a positive integer' };
+      if (check.region != null) {
+        const region = check.region;
+        if (!isPlainObject(region) || !isNonNegativeFiniteNumber(region.x) || !isNonNegativeFiniteNumber(region.y)
+          || !(Number(region.w) > 0) || !(Number(region.h) > 0)) {
+          return { ok: false, kind, label, reason: 'pixel region requires non-negative x/y and positive w/h' };
+        }
+      }
+      return {
+        ok: true, kind, label,
+        spec: {
+          pngPath: checkedPath(workspaceDir, rawPath),
+          rgba: check.rgba.map(Number),
+          ...(check.region != null ? { region: { x: Number(check.region.x), y: Number(check.region.y), w: Number(check.region.w), h: Number(check.region.h) } } : {}),
+          ...(check.tolerance != null ? { tolerance: Number(check.tolerance) } : {}),
+          ...(check.minHits != null ? { minHits: Number(check.minHits) } : {}),
+        },
+      };
+    }
+    // kind === 'dom'
+    const url = parseAcceptanceUrl(check.url);
+    if (!url) return { ok: false, kind, label, reason: 'dom criterion requires a valid http(s) URL without credentials' };
+    if (typeof check.selector !== 'string' || !check.selector.trim()) return { ok: false, kind, label, reason: 'dom criterion requires selector' };
+    const expectText = check.expectText ?? check.contains ?? check.text;
+    if (expectText != null && typeof expectText !== 'string') return { ok: false, kind, label, reason: 'dom expected text must be a string' };
+    return {
+      ok: true, kind, label,
+      spec: {
+        url: url.toString(),
+        selector: check.selector,
+        ...(expectText != null ? { expectText } : {}),
+        ...(typeof check.executablePath === 'string' && check.executablePath ? { executablePath: check.executablePath } : {}),
+      },
+    };
+  } catch (error) {
+    return { ok: false, kind, label, reason: error.message };
+  }
 }
 
 const ADAPTIVE_INSTRUCTIONS = `Choose the least expensive useful method: act directly for simple tasks; use agent_plan for dependent or multi-output work; discover and read matching verified procedures before adapting them; use agent_delegate only for independent read-only analysis that benefits from concurrency. Delegates use the same selected model and cannot write or control the shared browser/desktop. You remain responsible for reconciling and verifying their observations. Use agent_checkpoint with actual successful operation IDs to record observed plan progress. Plan completion and worker prose never establish acceptance. When independent verification fails, repair the artifact and check again. Persisted checkpoints survive pauses and restarts; inspect uncertain effects before continuing.`;
@@ -305,16 +423,52 @@ export class ProviderAgent {
           goal.summaryText = goal.model_reply || 'The model returned no result.';
           messages.push({ role: 'assistant', content: goal.model_reply });
           goal.status = 'PARTIAL'; // Prose/tool success is not independently verified task success.
-          const checks = criteria.filter(c => c && typeof c === 'object' && c.kind === 'file' && (c.contains != null || c.hash));
-          if (checks.length && checks.length === criteria.length) {
+          const preparedChecks = criteria.map((check, index) => ({
+            index,
+            check,
+            ...normaliseAcceptanceCheck(check, architect.workspaceDir),
+          }));
+          const unsupportedChecks = preparedChecks.filter((item) => !item.ok);
+          if (preparedChecks.length && unsupportedChecks.length) {
+            // Never upgrade a goal by verifying only the supported subset of
+            // the owner's acceptance checks. The concrete unsupported reasons
+            // stay on the checkpoint while the status remains PARTIAL.
+            goal.blocker = `Acceptance criteria include checks MAJIN cannot independently verify yet: ${unsupportedChecks
+              .map((item) => `#${item.index + 1} ${item.kind} ${item.label} (${item.reason})`)
+              .join('; ')}`;
+            goal.errorCode = 'UNVERIFIABLE_ACCEPTANCE_CRITERIA';
+          } else if (preparedChecks.length) {
             const evidence = []; let failure;
-            for (const check of checks) {
+            for (const item of preparedChecks) {
               try {
-                const abs = checkedPath(architect.workspaceDir, check.path);
-                const verified = await runVerifier('file', { ...check, path: abs });
-                if (!verified.verified) throw new Error(verified.error?.message || 'Acceptance verification failed');
-                evidence.push({ id: `provider-proof-${goalId}-${evidence.length}`, kind: 'file', verifier: 'file', verified: true, ...verified.evidence });
-              } catch (error) { failure = { path: check.path, error: error.message }; break; }
+                const spec = { ...item.spec };
+                if (item.kind === 'dom' && !spec.executablePath) {
+                  const executablePath = await browserBinary().catch(() => null);
+                  if (executablePath) spec.executablePath = executablePath;
+                }
+                const verified = await runVerifier(
+                  item.kind,
+                  spec,
+                  item.kind === 'http' ? { timeoutMs: 10000 } : item.kind === 'dom' ? { timeoutMs: 15000 } : undefined,
+                );
+                if (!verified.verified) {
+                  const error = new Error(verified.error?.message || 'Acceptance verification failed');
+                  error.verifierClass = verified.error?.cls || null;
+                  throw error;
+                }
+                evidence.push({ id: `provider-proof-${goalId}-${evidence.length}`, kind: item.kind, verifier: item.kind, verified: true, ...verified.evidence });
+              } catch (error) {
+                failure = {
+                  index: item.index,
+                  kind: item.kind,
+                  label: item.label,
+                  ...(item.kind === 'file' ? { path: item.check.path } : {}),
+                  ...(item.kind === 'pixel' ? { path: item.check.pngPath || item.check.path } : {}),
+                  ...(error.verifierClass ? { cls: error.verifierClass } : {}),
+                  error: error.message,
+                };
+                break;
+              }
             }
             if (failure) {
               adaptive.verificationFailures = (adaptive.verificationFailures || 0) + 1;
@@ -325,6 +479,7 @@ export class ProviderAgent {
             }
             goal.verification_evidence = evidence;
             goal.status = 'COMPLETED'; adaptive.recoveryPending = false;
+            goal.blocker = null; goal.errorCode = null;
           }
           break;
         }

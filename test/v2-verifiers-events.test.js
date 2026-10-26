@@ -72,6 +72,26 @@ test('pixel verifier: W12-style region proof — pink counted, wrong color rejec
   assert.match(no.error.message, /matching pixels/);
 });
 
+test('http verifier: proves body content and stays read-only', async () => {
+  const srv = http.createServer((_req, res) => { res.writeHead(200); res.end('receipt: READY'); });
+  await new Promise(r => srv.listen(0, r));
+  try {
+    const url = `http://127.0.0.1:${srv.address().port}/receipt`;
+    const ok = await verifyHttp({ url, status: 200, contains: 'READY' });
+    assert.equal(ok.verified, true);
+    assert.equal(ok.evidence.contains, 'READY');
+    assert.match(ok.evidence.sha256, /^[a-f0-9]{64}$/);
+    const missing = await verifyHttp({ url, status: 200, contains: 'MISSING' });
+    assert.equal(missing.verified, false);
+    const mutation = await verifyHttp({ url, method: 'POST' });
+    assert.equal(mutation.verified, false);
+    assert.match(mutation.error.message, /read-only/);
+    const credentials = await verifyHttp({ url: url.replace('://', '://user:secret@') });
+    assert.equal(credentials.verified, false);
+    assert.match(credentials.error.message, /credentials/);
+  } finally { srv.close(); }
+});
+
 test('dom verifier: no playwright -> honest DEPENDENCY_MISSING, never a fabricated pass', async () => {
   const out = await verifyDom({ url: 'http://127.0.0.1:1/x', selector: '#a' });
   assert.equal(out.verified, false);
