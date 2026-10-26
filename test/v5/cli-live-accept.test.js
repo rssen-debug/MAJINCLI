@@ -55,7 +55,7 @@ function runScript(env, timeoutMs = 240000) {
   });
 }
 
-test('installed-CLI live acceptance plumbing completes end-to-end against a local compatible endpoint (not live-account proof)', async (t) => {
+for (const providerId of ['opencode-go', 'deepseek']) test(`installed-CLI ${providerId} acceptance plumbing completes against a local endpoint (not live-account proof)`, async (t) => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-live-plumbing-'));
   t.after(() => fs.rmSync(tmpRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const requests = [];
@@ -77,6 +77,7 @@ test('installed-CLI live acceptance plumbing completes end-to-end against a loca
     else if (!toolDone('fs_write')) message = toolCall('plumb-write', 'fs_write', { path: 'live-proof.txt', content: nonce });
     else if (!toolDone('fs_read')) message = toolCall('plumb-read', 'fs_read', { path: 'live-proof.txt' });
     else message = { role: 'assistant', content: 'Created and read back live-proof.txt.' };
+    if (providerId === 'deepseek' && message.tool_calls) message.reasoning_content = 'fixture reasoning continuity';
     res.end(JSON.stringify({
       id: 'plumbing-response',
       model: body.model,
@@ -92,6 +93,7 @@ test('installed-CLI live acceptance plumbing completes end-to-end against a loca
 
   const dummyKey = 'dummy-live-plumbing-key';
   const result = await runScript({
+    MAJIN_LIVE_PROVIDER: providerId,
     MAJIN_LIVE_KEY_ENV: 'MAJIN_TEST_LIVE_KEY',
     MAJIN_TEST_LIVE_KEY: dummyKey,
     MAJIN_LIVE_BASE_URL: `http://127.0.0.1:${upstream.address().port}/v1`,
@@ -105,6 +107,11 @@ test('installed-CLI live acceptance plumbing completes end-to-end against a loca
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   const summary = JSON.parse(result.stdout);
   assert.equal(summary.ok, true);
+  assert.equal(summary.provider, providerId);
+  if (providerId === 'deepseek') {
+    assert.ok(requests.every(request => !request.headers['x-opencode-session']));
+    assert.ok(requests.slice(1).every(request => request.body.messages.some(message => message.role === 'assistant' && message.tool_calls?.length && message.reasoning_content === 'fixture reasoning continuity')));
+  }
   assert.equal(summary.verified, true);
   assert.equal(summary.baseUrlOverride, true, 'the summary must disclose that this was not the default live endpoint');
   assert.equal(summary.modelId, 'deepseek-v4-pro');
