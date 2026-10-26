@@ -52,7 +52,7 @@ async function setup(t, respond) {
   const providers = server.architect.providers;
   await providers.configureProvider({ providerId: 'opencode-go', apiKey: 'local-test-key', baseUrl: `http://127.0.0.1:${upstream.address().port}/v1` });
   providers.selectModel({ providerId: 'opencode-go', modelId: 'deepseek-v4-pro', allowManualFallback: true });
-  t.after(async () => { await server.providerAgent.cancel(); if (server.server.listening) await server.stop(); await new Promise(resolve => upstream.close(resolve)); fs.rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await server.providerAgent.close(); if (server.server.listening) await server.stop(); await new Promise(resolve => upstream.close(resolve)); fs.rmSync(root, { recursive: true, force: true }); });
   return { root, requests, server };
 }
 
