@@ -875,7 +875,7 @@ export class ProviderAgent {
         // reserved before messages.
         const reserveTokens = Math.min(8192, Math.floor(contextWindow * 0.25));
         const usableTokens = Math.max(2048, contextWindow - reserveTokens);
-        const maxContextChars = this.contextCharBudget || Math.floor(usableTokens * 3.2);
+        const maxContextChars = Math.min(this.contextCharBudget || 80_000, Math.floor(usableTokens * 3.2));
         const permissionPrefix = 'Current host permissions: ';
         for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'system' && String(messages[i].content).startsWith(permissionPrefix)) messages.splice(i, 1);
         const currentAccess = architect.files.describeAccessState();
@@ -1084,6 +1084,7 @@ export class ProviderAgent {
           try {
             const input = JSON.parse(call.function.arguments);
             if (!input || typeof input !== 'object' || Array.isArray(input) || 'operationId' in input) throw new Error('Tool arguments must be an object without operationId');
+            if (call.function.name === 'browser_open' && typeof this.browserVisible === 'boolean') input.headless = !this.browserVisible;
             argKeys = Object.keys(input);
             trace('tool_call_started', { tool: call.function.name, operationId, args: summariseToolArgs(input) });
             // Tool identities were already persisted before the batch; this
@@ -1194,7 +1195,7 @@ export class ProviderAgent {
       goal.summaryText = goal.status === 'CANCELLED' ? 'Stopped.' : goal.status === 'PAUSED' ? 'Paused. Work saved.' : error.message;
     } finally {
       abort.signal.removeEventListener('abort', onAbort); architect.files.activeControllers.delete(abort);
-      const retainBrowserDriver = Boolean(driver.worker && (ownerHandoff || (usedBrowser && ['WAITING_USER', 'PAUSED', 'BLOCKED'].includes(goal.status))));
+      const retainBrowserDriver = Boolean(driver.worker && (ownerHandoff || (usedBrowser && ['WAITING_USER', 'PAUSED', 'BLOCKED', 'PARTIAL'].includes(goal.status))));
       if (goal.browser_handoff) goal.browser_handoff.browserSessionRetained = retainBrowserDriver;
       if (retainBrowserDriver) {
         this.retainedDriver = driver;

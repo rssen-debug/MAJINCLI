@@ -107,6 +107,7 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
           else if (effectiveBrowserVisible === false) parsed.headless = true;
         }
         // All path-bearing inputs of the allowlisted tools pass the same realpath boundary.
+        if (t.name === 'fs.list' && (parsed.path == null || parsed.path === '')) parsed.path = '.';
         for (const key of ['path', 'filePath', 'cwd']) if (parsed[key] != null) parsed[key] = resolveToolPath(parsed[key]);
         if (t.name === 'screen.capture' && !parsed.path) parsed.path = checkedPath(workspace, `captures/${Date.now()}.png`);
         const result = await t.run(t.name === 'screen.capture' ? { ...parsed, then: 'save' } : parsed, ctx);
