@@ -562,7 +562,7 @@ export class JobApplicationWorkflow {
 
     if (signal?.aborted) {
       this.state.status = 'CANCELLED';
-    } else if (Object.values(this.state.items).some((i) => i.status === 'BLOCKED')) {
+    } else if (Object.values(this.state.items).some((i) => ['BLOCKED', 'FAILED', 'SUBMITTED_UNCONFIRMED'].includes(i.status))) {
       this.state.status = 'PARTIAL';
     } else {
       this.state.status = 'COMPLETED';
@@ -584,26 +584,49 @@ export class JobApplicationWorkflow {
       return;
     }
 
-    if (this.portalAdapter?.checkPriorSubmission) {
-      const prior = await this.portalAdapter.checkPriorSubmission({
-        jobId: item.jobId,
-        idempotencyKey,
-        applicantEmail: item.application?.applicantEmail,
+    if (existingLedger?.submittedAt && !existingLedger.pending) {
+      item.submitted = true;
+      item.confirmed = false;
+      item.status = 'SUBMITTED_UNCONFIRMED';
+      this.save();
+      return;
+    }
+
+    let prior = null;
+    try {
+      if (this.portalAdapter?.checkPriorSubmission) prior = await this.portalAdapter.checkPriorSubmission({
+        jobId: item.jobId, idempotencyKey, applicantEmail: item.application?.applicantEmail,
       });
-      if (prior?.alreadySubmitted) {
-        item.submitted = true;
-        item.confirmed = Boolean(prior.confirmed);
-        item.status = prior.confirmed ? 'CONFIRMED' : 'SUBMITTED_UNCONFIRMED';
-        item.receipt = prior.receipt || null;
-        this.state.submissionLedger[idempotencyKey] = {
-          submittedAt: prior.submittedAt || new Date().toISOString(),
-          confirmed: Boolean(prior.confirmed),
-          confirmationId: prior.confirmationId || null,
-          receipt: prior.receipt || null,
-        };
-        this.save();
-        return;
-      }
+    } catch {
+      item.status = 'BLOCKED';
+      item.blocker = { type: 'PRIOR_SUBMISSION_CHECK_FAILED', jobId: item.jobId, message: 'Could not check prior submission. No new submission attempted.' };
+      this.save();
+      return;
+    }
+    if (prior?.alreadySubmitted) {
+      item.submitted = true;
+      item.confirmed = prior.confirmed === true && Boolean(prior.confirmationId) && prior.cvSha256Match === true
+        && prior.receipt?.verified === true && prior.receipt?.cvSha256 === item.application.cvSha256;
+      item.status = item.confirmed ? 'CONFIRMED' : 'SUBMITTED_UNCONFIRMED';
+      item.receipt = item.confirmed ? prior.receipt || null : null;
+      this.state.submissionLedger[idempotencyKey] = {
+        submittedAt: prior.submittedAt || new Date().toISOString(), confirmed: item.confirmed,
+        confirmationId: prior.confirmationId || null, receipt: item.receipt,
+      };
+      this.save();
+      return;
+    }
+    if (existingLedger?.pending && !(prior?.alreadySubmitted === false && prior?.definitive === true)) {
+      item.status = 'BLOCKED';
+      item.blocker = { type: 'SUBMISSION_UNCERTAIN', jobId: item.jobId, message: 'A prior submit may have reached the portal. Verify the portal before retrying.' };
+      this.save();
+      return;
+    }
+    if (typeof this.portalAdapter?.submitApplication !== 'function') {
+      item.status = 'BLOCKED';
+      item.blocker = { type: 'PORTAL_ADAPTER_REQUIRED', jobId: item.jobId, message: 'No submission portal adapter is connected. Application prepared, not submitted.' };
+      this.save();
+      return;
     }
 
     // Check for CAPTCHA / MFA challenges on the job ad or portal
@@ -630,27 +653,14 @@ export class JobApplicationWorkflow {
 
     emit('Laddar upp CV', { jobId: item.jobId }); // input vocabulary, never rendered
     try {
-      let portalRes;
-      if (this.portalAdapter?.submitApplication) {
-        portalRes = await this.portalAdapter.submitApplication({
-          jobId: item.jobId,
-          ad: item.ad,
-          application: item.application,
-          idempotencyKey,
-          signal,
-        });
-      } else {
-        // Default controlled test-portal execution: click submit + verify confirmation receipt
-        const clickOnly = item.ad.simulateClickWithoutConfirmation === true;
-        const confirmationId = clickOnly ? null : `conf-${item.jobId}-${Date.now()}`;
-        portalRes = {
-          submitted: true,
-          confirmed: Boolean(confirmationId),
-          confirmationId,
-          cvSha256Match: true,
-        };
-      }
+      // Persist intent before the external effect, including abrupt process death.
+      this.state.submissionLedger[idempotencyKey] = { pending: true, startedAt: new Date().toISOString(), confirmed: false };
+      this.save();
+      const portalRes = await this.portalAdapter.submitApplication({
+        jobId: item.jobId, ad: item.ad, application: item.application, idempotencyKey, signal,
+      });
 
+      if (portalRes?.submitted === false) delete this.state.submissionLedger[idempotencyKey];
       if (portalRes?.blocker) {
         item.status = 'BLOCKED';
         item.blocker = { ...portalRes.blocker, jobId: item.jobId };
@@ -674,7 +684,7 @@ export class JobApplicationWorkflow {
       const hasIndependentConfirmation = Boolean(
         portalRes.confirmed === true
         && portalRes.confirmationId
-        && portalRes.cvSha256Match !== false,
+        && portalRes.cvSha256Match === true,
       );
 
       if (hasIndependentConfirmation) {
@@ -705,8 +715,9 @@ export class JobApplicationWorkflow {
       };
       this.save();
     } catch (err) {
-      item.status = 'FAILED';
+      item.status = 'BLOCKED';
       item.error = String(err?.message || err);
+      item.blocker = { type: 'SUBMISSION_UNCERTAIN', jobId: item.jobId, message: 'Submission interrupted; inspect the portal before retrying.' };
       this.save();
     }
   }

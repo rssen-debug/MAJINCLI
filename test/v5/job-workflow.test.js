@@ -17,6 +17,58 @@ function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'majin-v5-jobs-'));
 }
 
+test('batch without a portal cannot fabricate a submission or confirmation', async t => {
+  const dir = tmpDir(); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const wf = new JobApplicationWorkflow({ dataDir: dir });
+  const result = await wf.run({ cvText: SAMPLE_CV, jobAds: [{ id: 'one', title: 'Engineer', employer: 'Fixture', location: 'Stockholm' }], mandate: { allowSubmit: true } });
+  assert.equal(result.counters.prepared, 1);
+  assert.equal(result.counters.submitted, 0);
+  assert.equal(result.counters.confirmed, 0);
+  assert.equal(result.status, 'PARTIAL');
+  assert.equal(result.blockers[0].type, 'PORTAL_ADAPTER_REQUIRED');
+});
+
+test('missing CV match cannot confirm; resuming an unconfirmed submission never submits again', async t => {
+  const dir = tmpDir(); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  let calls = 0;
+  const wf = new JobApplicationWorkflow({ dataDir: dir, portalAdapter: { async submitApplication() {
+    calls++; return { submitted: true, confirmed: true, confirmationId: 'portal-receipt' };
+  } } });
+  const result = await wf.run({ cvText: SAMPLE_CV, jobAds: [{ id: 'one', title: 'Engineer', employer: 'Fixture', location: 'Stockholm' }], mandate: { allowSubmit: true } });
+  assert.equal(result.counters.submitted, 1);
+  assert.equal(result.counters.confirmed, 0);
+  assert.equal(result.status, 'PARTIAL');
+  await wf.resolveBlockerAndResume({ jobId: Object.keys(wf.state.items)[0] });
+  assert.equal(calls, 1);
+});
+
+test('persisted submit intent prevents replay after lost response and abrupt restart', async t => {
+  const dir = tmpDir(); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  let calls = 0, crashSnapshot;
+  const adapter = { async submitApplication() {
+    calls++;
+    crashSnapshot = fs.readFileSync(path.join(dir, 'job-workflow-state.json'), 'utf8');
+    assert.equal(Object.values(JSON.parse(crashSnapshot).submissionLedger)[0].pending, true);
+    throw new Error('Connection lost after portal received application');
+  } };
+  const wf = new JobApplicationWorkflow({ dataDir: dir, portalAdapter: adapter });
+  await wf.run({ cvText: SAMPLE_CV, jobAds: [{ id: 'one', title: 'Engineer', employer: 'Fixture', location: 'Stockholm' }], mandate: { allowSubmit: true } });
+  fs.writeFileSync(wf.stateFile, crashSnapshot);
+  const restored = new JobApplicationWorkflow({ dataDir: dir, portalAdapter: adapter });
+  const result = await restored.resumeAfterRestart();
+  assert.equal(calls, 1);
+  assert.equal(result.blockers[0].type, 'SUBMISSION_UNCERTAIN');
+  await restored.resolveBlockerAndResume({ jobId: Object.keys(restored.state.items)[0] });
+  assert.equal(calls, 1);
+  adapter.checkPriorSubmission = async () => ({ alreadySubmitted: false, definitive: true });
+  adapter.submitApplication = async () => {
+    calls++; return { submitted: true, confirmed: true, confirmationId: 'verified-new-receipt', cvSha256Match: true };
+  };
+  await restored.resolveBlockerAndResume({ jobId: Object.keys(restored.state.items)[0] });
+  assert.equal(calls, 2);
+  assert.equal(restored.getSummary().counters.confirmed, 1);
+});
+
 test('CV facts preserve explicit modern workplace skills and Skåne locations without inventing security experience', () => {
   const facts = extractVerifiableCvFacts('Ada Andersson\nIT-tekniker, Local IT\nIntune, Entra ID, Microsoft 365, Apple Business Manager\nHelsingborg, Landskrona');
   for (const skill of ['intune', 'entra id', 'microsoft 365', 'apple business manager']) assert.ok(facts.skills.includes(skill));
