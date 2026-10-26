@@ -281,3 +281,74 @@ test('browser_verify asserts real post-action page outcomes and fails honestly b
   const wrongOrigin = await run('browser_verify', { urlOrigin: 'https://example.invalid', waitMs: 0 });
   assert.equal(wrongOrigin.ok, false, 'an exact-origin assertion must fail on a different origin');
 });
+
+test('browser_download saves exact bytes into the workspace and browser_tabs lists, switches and closes real tabs', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-browser-download-'));
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(workspace, { recursive: true });
+  const payload = Buffer.from(`DOWNLOAD FIXTURE ${randomUUID()}`);
+  const page = http.createServer((req, res) => {
+    if (req.url === '/file') {
+      res.setHeader('content-type', 'application/octet-stream');
+      res.setHeader('content-disposition', 'attachment; filename="report.txt"');
+      res.end(payload);
+      return;
+    }
+    res.setHeader('content-type', 'text/html');
+    if (req.url === '/second') {
+      res.end('<!doctype html><title>Second</title><h1 id="state">SECOND PAGE</h1>');
+      return;
+    }
+    res.end(`<!doctype html><title>First</title><h1>FIRST PAGE</h1>
+      <a id="dl" href="/file">Download report</a>
+      <a id="tablink" href="/second" target="_blank" rel="noopener">Open second</a>
+      <button id="plain" type="button">Plain</button>`);
+  });
+  await new Promise(resolve => page.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${page.address().port}`;
+  const tools = await createDriverTools({ workspace, grantedLanes: ['browser'], browser: true, browserVisible: false });
+  const run = async (name, args = {}) => tools.get(name).run(args);
+  t.after(async () => {
+    try { await run('browser_close'); } catch { /* browser may not have opened on a skipped runner */ }
+    page.closeAllConnections();
+    await new Promise(resolve => page.close(resolve));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  if (!tools.has('browser_open')) { t.skip('No installed Chromium/Edge on this runner'); return; }
+  assert.equal(tools.has('browser_download'), true);
+  assert.equal(tools.has('browser_tabs'), true);
+
+  await run('browser_open', { url: origin });
+  const noDownload = await run('browser_download', { selector: '#plain', timeoutMs: 400 });
+  assert.equal(noDownload.ok, false, 'a click that starts no download must not be reported as a saved file');
+  assert.equal(noDownload.error.code, 'download_timeout');
+
+  const downloaded = await run('browser_download', { selector: '#dl', path: 'downloads/report.txt' });
+  assert.notEqual(downloaded.ok, false, JSON.stringify(downloaded.error || downloaded.meta));
+  const savedPath = path.join(workspace, 'downloads', 'report.txt');
+  assert.equal(downloaded.meta.path, savedPath);
+  assert.equal(downloaded.meta.suggestedFilename, 'report.txt');
+  assert.deepEqual(fs.readFileSync(savedPath), payload);
+  assert.equal(downloaded.meta.bytes, payload.length);
+  assert.equal(downloaded.meta.sha256, createHash('sha256').update(payload).digest('hex'));
+  assert.equal(downloaded.meta.source, `${origin}/file`);
+
+  await run('browser_click', { selector: '#tablink' });
+  let tabs = (await run('browser_tabs', {})).meta.tabs;
+  for (let attempt = 0; attempt < 20 && tabs.length < 2; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 150));
+    tabs = (await run('browser_tabs', {})).meta.tabs;
+  }
+  assert.equal(tabs.length, 2, `expected the target=_blank click to open a second tab: ${JSON.stringify(tabs)}`);
+  const second = tabs.find(tab => tab.url.endsWith('/second'));
+  assert.ok(second, JSON.stringify(tabs));
+  assert.equal(tabs.find(tab => tab.active).url, `${origin}/`, 'opening a tab must not silently move the active page');
+
+  const switched = await run('browser_tabs', { action: 'switch', index: second.index });
+  assert.equal(switched.meta.activeIndex, second.index);
+  assert.notEqual((await run('browser_verify', { selector: '#state', text: 'SECOND PAGE' })).ok, false);
+
+  const closed = await run('browser_tabs', { action: 'close', index: second.index });
+  assert.equal(closed.meta.tabs.length, 1);
+  assert.match((await run('browser_inspect')).result, /FIRST PAGE/, 'closing the active tab must fall back to the remaining page');
+});

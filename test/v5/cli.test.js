@@ -250,7 +250,7 @@ test('CLI grants persist, doctor reports parity, and tools call executes through
   const doctor = await runCli(['doctor', '--data-dir', fx.dataDir, '--json'], fx);
   assert.equal(doctor.status, 0, doctor.stderr);
   const doctorJson = parseJson(doctor);
-  assert.equal(doctorJson.toolParity.universe, 155);
+  assert.equal(doctorJson.toolParity.universe, 157);
   assert.ok(doctorJson.toolParity.available >= 35, `expected bridge lanes in doctor parity, got ${doctorJson.toolParity.available}`);
   assert.deepEqual(doctorJson.browser.writeOrigins, ['https://employer.example']);
   assert.equal(doctorJson.browser.visible, true);

@@ -468,6 +468,57 @@ test('acceptance: browser page outcome is proven by DOM + pixel + file criteria 
   assert.ok(fs.existsSync(path.join(fx.workspace, 'shots', 'acceptance.png')));
 });
 
+test('acceptance: browser download and tab switch through the installed CLI are proven by file + hash criteria', async (t) => {
+  const browserPath = await browserBinary();
+  if (!browserPath) { t.skip('No installed Chromium/Edge on this runner'); return; }
+  const fx = fixture(t);
+  const stamp = Date.now();
+  const payload = Buffer.from(`CLI-DOWNLOAD-${stamp} exact bytes`);
+  const payloadSha = createHash('sha256').update(payload).digest('hex');
+  const page = http.createServer((req, res) => {
+    if (req.url === '/file') {
+      res.setHeader('content-type', 'application/octet-stream');
+      res.setHeader('content-disposition', 'attachment; filename="report.txt"');
+      res.end(payload);
+      return;
+    }
+    res.setHeader('content-type', 'text/html');
+    if (req.url === '/second') {
+      res.end(`<!doctype html><h1 id="state">SECOND TAB ${stamp}</h1>`);
+      return;
+    }
+    res.end(`<!doctype html><h1>FIRST TAB</h1><a id="dl" href="/file">Download report</a> <a id="tablink" href="/second" target="_blank" rel="noopener">Open second</a>`);
+  });
+  await new Promise((resolve) => page.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { page.closeAllConnections?.(); await new Promise((resolve) => page.close(resolve)); });
+  const pageUrl = `http://127.0.0.1:${page.address().port}/`;
+  const provider = await fakeProvider(t, (body) => {
+    const done = (name) => (body.messages || []).some((message) => message.role === 'tool' && message.name === name);
+    const switched = (body.messages || []).some((message) => message.role === 'tool' && message.name === 'browser_tabs' && String(message.content).includes('/second'));
+    if (!done('browser_open')) return toolCall('dl-open', 'browser_open', { url: pageUrl });
+    if (!done('browser_download')) return toolCall('dl-download', 'browser_download', { selector: '#dl', path: 'downloads/report.txt' });
+    if (!done('browser_click')) return toolCall('dl-tablink', 'browser_click', { selector: '#tablink' });
+    if (!switched) return toolCall('dl-switch', 'browser_tabs', { action: 'switch', index: 1 });
+    if (!done('fs_write')) return toolCall('dl-receipt', 'fs_write', { path: 'download-receipt.txt', content: `tabbed download ${stamp}` });
+    return { role: 'assistant', content: 'Downloaded the report, switched to the second tab and wrote the receipt.' };
+  });
+  await configureProvider(fx.dataDir, provider.baseUrl);
+  const criteria = JSON.stringify([
+    { kind: 'file', path: 'downloads/report.txt', contains: `CLI-DOWNLOAD-${stamp}` },
+    { kind: 'file', path: 'downloads/report.txt', hash: payloadSha },
+    { kind: 'file', path: 'download-receipt.txt', contains: `tabbed download ${stamp}` },
+  ]);
+  const run = await runCli(['run', `Open ${pageUrl}, download the report to downloads/report.txt, open and switch to the second tab, then write download-receipt.txt`,
+    '--data-dir', fx.dataDir, '--criteria', criteria, '--lanes', 'files,browser', '--browser-headless'],
+  { ...fx, timeoutMs: 300000, env: { MAJIN_V4_BROWSER: browserPath } });
+  assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
+  assert.match(run.stdout, /Status: COMPLETED/);
+  assert.match(run.stdout, /Verification evidence: 3/);
+  assert.match(run.stderr, /tool browser_download started/);
+  assert.match(run.stderr, /tool browser_tabs started/);
+  assert.deepEqual(fs.readFileSync(path.join(fx.workspace, 'downloads', 'report.txt')), payload);
+});
+
 test('acceptance: a long installed-CLI task stays within a bounded model context and finishes verified', async (t) => {
   const fx = fixture(t);
   for (let index = 0; index < 8; index++) {

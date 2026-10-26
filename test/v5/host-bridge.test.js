@@ -52,8 +52,8 @@ test('WP1 universal bridge exposes previously unreachable lanes and reports ever
   }
 
   const status = (await tools.get('driver_status').run({})).result;
-  assert.equal(V5_TOOL_UNIVERSE.length, 155);
-  assert.equal(status.toolParity.universe, 155);
+  assert.equal(V5_TOOL_UNIVERSE.length, 157);
+  assert.equal(status.toolParity.universe, 157);
   assert.ok(status.toolParity.available >= 90, `expected at least 90 reachable universe tools, got ${status.toolParity.available}`);
   assert.ok(status.toolParity.unavailableTools.every((entry) => typeof entry.reason === 'string' && entry.reason.length > 10));
 

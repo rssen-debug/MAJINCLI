@@ -104,6 +104,24 @@ function sameGroundDescriptor(a, b) {
     && Boolean(a.disabled) === Boolean(b.disabled);
 }
 
+/**
+ * Resolve a Set-of-Marks ref to its live selector, refusing unknown or stale
+ * refs. The descriptor cache is refreshed only after identity is proven, so a
+ * stale ref can never become valid by retrying it.
+ */
+async function resolveGroundedSelector(p, ctx, refName) {
+  if (!/^e[1-9][0-9]*$/.test(refName)) throw groundError('ref_unknown', `ref_unknown: ${refName} is not a Set-of-Marks ref; call browser.inspect with marks=true`);
+  const cached = recallRef(groundSession(ctx), refName);
+  if (!cached) throw groundError('ref_unknown', `ref_unknown: ${refName} is not in the current grounded snapshot; call browser.inspect with marks=true`);
+  const grounded = await groundPage(p, ctx, { remember: false });
+  const current = grounded.elements.find((element) => element.ref === refName);
+  if (!current || !sameGroundDescriptor(cached, current)) {
+    throw groundError('ref_stale', `ref_stale: ${refName} no longer identifies the same visible element; call browser.inspect with marks=true and use a fresh ref`);
+  }
+  rememberRefs(groundSession(ctx), grounded.elements);
+  return `[data-majin-ref="${refName}"]`;
+}
+
 async function detectOwnerHandoff(p, ctx) {
   const found = await p.evaluate(() => {
     const visible = (el) => !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
@@ -579,16 +597,7 @@ export const browserTools = [
         if ((targetSelector ? 1 : 0) + (refName ? 1 : 0) !== 1) throw new Error('browser.click requires exactly one of selector or ref');
         if (refName) {
           if (index != null) throw new Error('browser.click index is only valid with selector, not ref');
-          if (!/^e[1-9][0-9]*$/.test(refName)) throw groundError('ref_unknown', `ref_unknown: ${refName} is not a Set-of-Marks ref; call browser.inspect with marks=true`);
-          const cached = recallRef(groundSession(ctx), refName);
-          if (!cached) throw groundError('ref_unknown', `ref_unknown: ${refName} is not in the current grounded snapshot; call browser.inspect with marks=true`);
-          const grounded = await groundPage(p, ctx, { remember: false });
-          const current = grounded.elements.find((element) => element.ref === refName);
-          if (!current || !sameGroundDescriptor(cached, current)) {
-            throw groundError('ref_stale', `ref_stale: ${refName} no longer identifies the same visible element; call browser.inspect with marks=true and use a fresh ref`);
-          }
-          rememberRefs(groundSession(ctx), grounded.elements);
-          targetSelector = `[data-majin-ref="${refName}"]`;
+          targetSelector = await resolveGroundedSelector(p, ctx, refName);
         }
         const element = await safeClick(p, targetSelector, index, ctx);
         audit(ctx, 'click', { selector: targetSelector, ...(refName ? { ref: refName } : {}), index: index ?? 0, element });
@@ -727,6 +736,134 @@ export const browserTools = [
         await p.waitForTimeout(150);
         audit(ctx, 'press', { selector, key });
         return withOwnerHandoff(p, ctx, { result: `Pressed ${key} on ${selector}. URL: ${p.url()}`, meta: { selector, key, url: p.url() }, summary: `pressed ${key}` });
+      });
+    },
+  }),
+
+  def({
+    name: 'browser.download',
+    group: 'browser',
+    risk: 'write',
+    desc: 'Click one element (selector or Set-of-Marks ref) that starts a file download and save the downloaded bytes into the workspace. Returns the saved path, byte count and sha256 so the result can be proven with a file criterion. The same submit guards as browser.click apply: ungranted final-submit controls are refused before anything is sent. If no download starts before timeoutMs, returns download_timeout instead of pretending a file arrived.',
+    params: {
+      selector: 'string: optional Playwright locator selector for the download link/button; provide exactly one of selector or ref',
+      ref: 'string: optional Set-of-Marks ref such as e3 from browser.inspect; provide exactly one of selector or ref',
+      path: 'string: optional destination path (workspace-relative or absolute inside the workspace); default downloads/<suggested filename>',
+      timeoutMs: 'number: optional milliseconds to wait for the download to start, 100-60000 (default 15000)',
+    },
+    required: [],
+    examples: ['browser.download({selector:"a#report",path:"downloads/report.pdf"})', 'browser.download({ref:"e4"})'],
+    async run({ selector = '', ref = '', path: requestedPath = '', timeoutMs = 15000 } = {}, ctx) {
+      return withPage(ctx, async (p) => {
+        const refName = String(ref || '');
+        let targetSelector = String(selector || '');
+        if ((targetSelector ? 1 : 0) + (refName ? 1 : 0) !== 1) throw new Error('browser.download requires exactly one of selector or ref');
+        const waitMs = Math.min(60000, Math.max(100, Math.trunc(Number(timeoutMs) || 15000)));
+        if (refName) targetSelector = await resolveGroundedSelector(p, ctx, refName);
+        const downloadPromise = p.waitForEvent('download', { timeout: waitMs });
+        downloadPromise.catch(() => {}); // a refused click must not leave an unhandled rejection behind
+        const element = await safeClick(p, targetSelector, undefined, ctx);
+        let download;
+        try {
+          download = await downloadPromise;
+        } catch {
+          return {
+            ok: false,
+            error: { code: 'download_timeout', message: `No download started within ${waitMs}ms after clicking ${refName || targetSelector}. Inspect the page state; the click may have navigated or opened a tab instead (browser.tabs).` },
+            meta: { selector: targetSelector, ...(refName ? { ref: refName } : {}), element },
+            summary: 'no download observed',
+          };
+        }
+        const failure = await download.failure().catch(() => null);
+        if (failure) {
+          return {
+            ok: false,
+            error: { code: 'download_failed', message: `Browser download failed: ${String(failure.message || failure).slice(0, 500)}` },
+            meta: { selector: targetSelector, ...(refName ? { ref: refName } : {}), element },
+            summary: 'download failed',
+          };
+        }
+        const suggested = path.basename(String(download.suggestedFilename() || 'download.bin')).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'download.bin';
+        const workspace = ctx.cfg?.get?.('workspace') || dirs.cache;
+        let target = requestedPath
+          ? (path.isAbsolute(requestedPath) ? requestedPath : path.join(workspace, requestedPath))
+          : path.join(workspace, 'downloads', suggested);
+        if (!requestedPath && fs.existsSync(target)) {
+          const ext = path.extname(suggested);
+          target = path.join(path.dirname(target), `${path.basename(suggested, ext)}-${Date.now()}${ext}`);
+        }
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        await download.saveAs(target);
+        const bytes = fs.readFileSync(target);
+        const sha256 = createHash('sha256').update(bytes).digest('hex');
+        let source = '';
+        try { const u = new URL(download.url()); source = `${u.origin}${u.pathname}`; } catch { /* suggested filename remains the evidence */ }
+        audit(ctx, 'download', { selector: targetSelector, ...(refName ? { ref: refName } : {}), path: target, bytes: bytes.length });
+        return {
+          result: `Downloaded ${suggested} to ${target} (${bytes.length} bytes, sha256 ${sha256}).`,
+          meta: { path: target, suggestedFilename: suggested, bytes: bytes.length, sha256, source, selector: targetSelector, ...(refName ? { ref: refName } : {}), element },
+          summary: `downloaded ${suggested} (${bytes.length} bytes)`,
+        };
+      });
+    },
+  }),
+
+  def({
+    name: 'browser.tabs',
+    group: 'browser',
+    risk: 'write',
+    desc: 'List, switch or close tabs in the current browser session. Links that open a new tab do not move the active page by themselves: list tabs, then switch to the index whose URL/title matches the page you need. Switching clears Set-of-Marks refs (they belong to the previous page). Closing the active tab activates the last remaining tab (or a fresh blank page when none remain).',
+    params: {
+      action: 'string: optional action [list|switch|close] (default list)',
+      index: 'number: optional 0-based tab index for switch/close',
+    },
+    required: [],
+    examples: ['browser.tabs({})', 'browser.tabs({action:"switch",index:1})', 'browser.tabs({action:"close",index:0})'],
+    async run({ action = 'list', index } = {}, ctx) {
+      return withSession(ctx, async (state) => {
+        if (!state.context) return { result: 'No browser session is open.', meta: { tabs: [] }, summary: 'no browser tabs' };
+        const describe = async (pages) => Promise.all(pages.map(async (pg, i) => ({
+          index: i,
+          url: pg.url(),
+          title: await pg.title().catch(() => ''),
+          active: pg === state.page,
+        })));
+        const openPages = () => state.context.pages().filter((pg) => !pg.isClosed());
+        const act = String(action || 'list').toLowerCase();
+        if (act === 'list') {
+          const tabs = await describe(openPages());
+          return {
+            result: `${tabs.length} tab(s) (* = active):\n${tabs.map((t) => `${t.active ? '*' : ' '} [${t.index}] ${t.title || '(no title)'} — ${t.url}`).join('\n')}`,
+            meta: { tabs },
+            summary: `${tabs.length} tab(s)`,
+          };
+        }
+        if (!['switch', 'close'].includes(act)) throw new Error(`unknown tabs action: ${action} (list|switch|close)`);
+        const pages = openPages();
+        const idx = Number(index);
+        if (!Number.isInteger(idx) || idx < 0 || idx >= pages.length) throw new Error(`tab index out of range: ${index} (${pages.length} tab(s) open)`);
+        if (act === 'switch') {
+          state.page = pages[idx];
+          clearRefs(groundSession(ctx));
+          await state.page.bringToFront().catch(() => {});
+          await syncBrowserWriteOrigins(state.page, ctx);
+          const tabs = await describe(openPages());
+          audit(ctx, 'tab-switch', { index: idx, url: state.page.url() });
+          return { result: `Switched to tab [${idx}] ${state.page.url()}`, meta: { tabs, activeIndex: idx }, summary: `switched to tab ${idx}` };
+        }
+        const closing = pages[idx];
+        const wasActive = closing === state.page;
+        const closedUrl = closing.url();
+        await closing.close().catch(() => {});
+        if (wasActive) {
+          const remaining = openPages();
+          state.page = remaining[remaining.length - 1] || await state.context.newPage();
+          clearRefs(groundSession(ctx));
+          await syncBrowserWriteOrigins(state.page, ctx).catch(() => {});
+        }
+        const tabs = await describe(openPages());
+        audit(ctx, 'tab-close', { index: idx, url: closedUrl });
+        return { result: `Closed tab [${idx}] ${closedUrl}. Active tab is now ${state.page?.url() || '(none)'}.`, meta: { tabs }, summary: `closed tab ${idx}` };
       });
     },
   }),
