@@ -37,9 +37,9 @@ export const writeFileTool = (root) => ({
 
 /** verify_now: run any V2 verifier on demand (evidence of state, receipts elsewhere) */
 export const verifyNowTool = {
-  name: 'verify_now', tier: 'read', description: 'run a V2 verifier kind (file/json/http/pixel/dom) on a spec',
+  name: 'verify_now', tier: 'read', description: 'run a V2 verifier kind (file/json/http/pixel/dom/memory) on a spec',
   inputSchema: z.object({
-    kind: z.enum(['file', 'json', 'http', 'pixel', 'dom']),
+    kind: z.enum(['file', 'json', 'http', 'pixel', 'dom', 'memory']),
     spec: z.object({}).passthrough(),
   }),
   outputSchema: z.object({

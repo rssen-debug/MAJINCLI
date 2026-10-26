@@ -10,15 +10,44 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { PNG } from 'pngjs';
-import { verifyFile, verifyJson, verifyHttp, verifyPixel, verifyDom, verifierRegistry } from '../src/v2/runtime/verifiers.js';
+import { verifyFile, verifyJson, verifyHttp, verifyPixel, verifyDom, verifyMemory, verifierRegistry } from '../src/v2/runtime/verifiers.js';
+import { MemoryStore } from '../src/v2/memory/store.js';
 import { verifyAcceptance } from '../src/v2/runtime/verify-bridge.js';
 import { EventBus, EVENT_NAMES } from '../src/v2/runtime/events.js';
 import { Goal } from '../src/v2/runtime/goal.js';
 
 const tmpdir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'v2-ver-'));
 
-test('verifier registry exposes all five kinds', () => {
-  assert.deepEqual(Object.keys(verifierRegistry).sort(), ['dom', 'file', 'http', 'json', 'pixel']);
+test('verifier registry exposes all six kinds', () => {
+  assert.deepEqual(Object.keys(verifierRegistry).sort(), ['dom', 'file', 'http', 'json', 'memory', 'pixel']);
+});
+
+test('memory verifier: exact entry, equals and contains with bounded evidence; honest failures', () => {
+  const dir = tmpdir();
+  const storeDir = path.join(dir, 'memory');
+  const store = new MemoryStore(storeDir);
+  store.put('preference', { key: 'owner.language', text: 'Owner prefers Swedish answers.', tags: ['language'], importance: 0.9, meta: { rememberedBy: 'model' } });
+
+  const exists = verifyMemory({ memoryKind: 'preference', key: 'owner.language', storeDir });
+  assert.equal(exists.verified, true);
+  assert.equal(exists.evidence.kind, 'memory');
+  assert.equal(exists.evidence.rememberedBy, 'model');
+  assert.ok(exists.evidence.textPreview.length <= 80);
+  assert.equal(exists.evidence.sha256.length, 64);
+
+  assert.equal(verifyMemory({ memoryKind: 'preference', key: 'owner.language', equals: 'Owner prefers Swedish answers.', storeDir }).verified, true);
+  assert.equal(verifyMemory({ memoryKind: 'preference', key: 'owner.language', contains: 'Swedish', storeDir }).verified, true);
+  assert.equal(verifyMemory({ memoryKind: 'preference', key: 'owner.language', equals: 'Owner prefers English answers.', storeDir }).verified, false);
+  assert.equal(verifyMemory({ memoryKind: 'preference', key: 'owner.language', contains: 'Danish', storeDir }).verified, false);
+
+  const missing = verifyMemory({ memoryKind: 'preference', key: 'owner.absent', storeDir });
+  assert.equal(missing.verified, false);
+  assert.equal(missing.error.cls, 'VERIFICATION_FAILURE');
+  assert.equal(verifyMemory({ memoryKind: 'secrets', key: 'x', storeDir }).verified, false);
+  assert.equal(verifyMemory({ memoryKind: 'preference', key: 'owner.language' }).error.cls, 'DEPENDENCY_MISSING');
+  assert.equal(verifyMemory({ memoryKind: 'preference', key: 'owner.language', storeDir: path.join(dir, 'absent') }).error.cls, 'DEPENDENCY_MISSING');
+  // Wrong namespace cannot see the entry.
+  assert.equal(verifyMemory({ memoryKind: 'project', key: 'owner.language', storeDir }).verified, false);
 });
 
 test('json verifier: parse, pointer, deep equals and contains with bounded evidence; honest failures', () => {

@@ -4,14 +4,15 @@
  * The executor asks "how do I do this"; the verifier asks "what evidence proves
  * it happened". Each verifier is an independent check that returns
  * { verified:boolean, evidence } or { verified:false, error:{cls,...} }.
- * Kinds shipped now: file, json, http, pixel, dom (dom degrades honestly when
- * Playwright is not installed — registry never fabricates a pass).
+ * Kinds shipped now: file, json, http, pixel, dom, memory (dom degrades
+ * honestly when Playwright is not installed — registry never fabricates a pass).
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { PNG } from 'pngjs';
+import { MemoryStore, MEMORY_KINDS } from '../memory/store.js';
 
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
@@ -285,7 +286,71 @@ export async function verifyDom(spec, { timeoutMs = 15000, launchTimeoutMs = 450
   }
 }
 
-export const verifierRegistry = { file: verifyFile, json: verifyJson, http: verifyHttp, pixel: verifyPixel, dom: verifyDom };
+/**
+ * kind='memory' — one exact long-term memory entry must exist in the host
+ * MemoryStore, optionally with exact text (`equals`) or a required substring
+ * (`contains`). This makes "remember that …" goals independently provable
+ * instead of relying on a receipt file. `storeDir` is always injected by the
+ * host (never accepted from the model), and evidence carries only a bounded
+ * preview plus the text hash — memory entries are non-sensitive by
+ * construction, but a full text is still not copied into receipts.
+ * spec: { memoryKind, key, contains?, equals?, storeDir }
+ */
+export function verifyMemory(spec) {
+  const memoryKind = spec?.memoryKind;
+  if (!MEMORY_KINDS.includes(memoryKind)) {
+    return { verified: false, error: { cls: 'UNKNOWN', message: `memory criterion requires a valid memoryKind (${MEMORY_KINDS.join(', ')})` } };
+  }
+  if (typeof spec?.key !== 'string' || !spec.key.trim()) {
+    return { verified: false, error: { cls: 'UNKNOWN', message: 'memory criterion requires key' } };
+  }
+  if (spec.contains !== undefined && typeof spec.contains !== 'string') {
+    return { verified: false, error: { cls: 'UNKNOWN', message: 'memory contains must be a string' } };
+  }
+  if (spec.equals !== undefined && typeof spec.equals !== 'string') {
+    return { verified: false, error: { cls: 'UNKNOWN', message: 'memory equals must be a string' } };
+  }
+  const storeDir = spec?.storeDir;
+  if (typeof storeDir !== 'string' || !storeDir || !fs.existsSync(storeDir)) {
+    return { verified: false, error: { cls: 'DEPENDENCY_MISSING', message: 'memory store is not available on this host' } };
+  }
+  let entry;
+  try {
+    entry = new MemoryStore(storeDir, { create: false }).get(memoryKind, spec.key);
+  } catch (error) {
+    return { verified: false, error: { cls: 'UNKNOWN', message: `memory store read failed: ${String(error?.message || error).slice(0, 300)}` } };
+  }
+  if (!entry) {
+    return { verified: false, error: { cls: 'VERIFICATION_FAILURE', message: `memory entry not found: ${memoryKind}:${spec.key}` } };
+  }
+  if (entry.sensitive === true) {
+    // MemoryStore.put refuses sensitive entries; fail closed without echoing
+    // any text if a foreign writer ever produced one.
+    return { verified: false, error: { cls: 'VERIFICATION_FAILURE', message: `memory entry ${memoryKind}:${spec.key} is marked sensitive and cannot be used as evidence` } };
+  }
+  const text = String(entry.text ?? '');
+  if (spec.equals !== undefined && text !== spec.equals) {
+    return { verified: false, error: { cls: 'VERIFICATION_FAILURE', message: `memory text mismatch for ${memoryKind}:${spec.key}` } };
+  }
+  if (spec.contains !== undefined && !text.includes(spec.contains)) {
+    return { verified: false, error: { cls: 'VERIFICATION_FAILURE', message: `memory text for ${memoryKind}:${spec.key} does not contain the expected fragment` } };
+  }
+  return {
+    verified: true,
+    evidence: {
+      kind: 'memory',
+      memoryKind,
+      key: spec.key,
+      textPreview: text.slice(0, 80),
+      sha256: sha256(Buffer.from(text, 'utf8')),
+      importance: entry.importance ?? null,
+      at: entry.at ?? null,
+      rememberedBy: entry.meta?.rememberedBy ?? null,
+    },
+  };
+}
+
+export const verifierRegistry = { file: verifyFile, json: verifyJson, http: verifyHttp, pixel: verifyPixel, dom: verifyDom, memory: verifyMemory };
 
 export async function runVerifier(kind, spec, o) {
   const fn = verifierRegistry[kind];

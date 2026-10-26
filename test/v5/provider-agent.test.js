@@ -278,6 +278,40 @@ test('bare goal can lock a model-registered json criterion and complete on host 
   assert.equal(result.verification_evidence[0].value, 42);
 });
 
+test('independent memory verification repairs a premature remembered claim', async t => {
+  const { requests, server } = await setup(t, (_body, count) => {
+    if (count === 1) return { role: 'assistant', content: 'I have remembered your city.' };
+    if (count === 2) return tool('remember-city', 'majin_memory', { action: 'remember', kind: 'preference', key: 'owner.city', text: 'Owner lives in Stockholm.', tags: ['city'] });
+    return { role: 'assistant', content: 'Stored the city in long-term memory.' };
+  });
+  const result = await server.providerAgent.execute({
+    goalText: 'Remember that I live in Stockholm',
+    criteria: [{ kind: 'memory', memoryKind: 'preference', key: 'owner.city', contains: 'Stockholm' }],
+  });
+  assert.equal(result.status, 'COMPLETED', JSON.stringify(result));
+  assert.equal(result.verification_evidence[0].kind, 'memory');
+  assert.equal(result.verification_evidence[0].memoryKind, 'preference');
+  assert.equal(result.verification_evidence[0].key, 'owner.city');
+  assert.equal(result.verification_evidence[0].rememberedBy, 'model');
+  assert.equal(result.adaptive.verificationFailures, 1);
+  assert.equal(server.architect.memoryStore.get('preference', 'owner.city')?.text, 'Owner lives in Stockholm.');
+  assert.match(JSON.stringify(requests[1].body.messages), /Host independent verification failed/);
+});
+
+test('bare goal can lock a model-registered memory criterion without persisting host paths', async t => {
+  const { server } = await setup(t, (_body, count) => {
+    if (count === 1) return tool('register-memory-criterion', 'goal_criteria', { criteria: [{ kind: 'memory', memoryKind: 'project', key: 'garden.plan', equals: 'Plant tomatoes in May.' }] });
+    if (count === 2) return tool('remember-garden', 'majin_memory', { action: 'remember', kind: 'project', key: 'garden.plan', text: 'Plant tomatoes in May.' });
+    return { role: 'assistant', content: 'Remembered the garden plan.' };
+  });
+  const result = await server.providerAgent.execute({ goalText: 'Remember to plant tomatoes in May' });
+  assert.equal(result.status, 'COMPLETED', JSON.stringify(result));
+  assert.equal(result.criteria_source, 'model');
+  assert.deepEqual(result.criteria, [{ kind: 'memory', memoryKind: 'project', key: 'garden.plan', equals: 'Plant tomatoes in May.' }]);
+  assert.equal(JSON.stringify(result.criteria).includes('storeDir'), false, 'host paths must never be locked into stored criteria');
+  assert.equal(result.verification_evidence[0].kind, 'memory');
+});
+
 test('trace argument summaries never leak secrets, file contents or URL tokens', () => {
   const summary = summariseToolArgs({
     path: 'report.txt',

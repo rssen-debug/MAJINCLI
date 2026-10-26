@@ -237,6 +237,9 @@ function formatEvidenceLine(evidence) {
   if (evidence.kind === 'dom') {
     return `dom ${evidence.url || ''} ${evidence.selector || ''} — visible${evidence.text ? `, text ${JSON.stringify(String(evidence.text).slice(0, 60))}` : ''}`;
   }
+  if (evidence.kind === 'memory') {
+    return `memory ${evidence.memoryKind || ''}:${evidence.key || ''} — stored${evidence.textPreview ? `, text ${JSON.stringify(String(evidence.textPreview).slice(0, 60))}` : ''}${evidence.sha256 ? `, sha256 ${shortSha(evidence.sha256)}` : ''}`;
+  }
   return `${evidence.kind || 'evidence'} ${JSON.stringify(evidence).slice(0, 160)}`;
 }
 

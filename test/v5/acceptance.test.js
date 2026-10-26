@@ -591,6 +591,27 @@ test('acceptance: model remembers a durable fact through the installed CLI and a
   assert.equal(parsed.entries[0].rememberedBy, 'model');
 });
 
+test('acceptance: installed CLI proves a remember-goal with an independent memory criterion, no receipt file', async (t) => {
+  const fx = fixture(t);
+  const stamp = Date.now();
+  const provider = await fakeProvider(t, (body) => {
+    const remembered = (body.messages || []).some((message) => message.role === 'tool' && message.name === 'majin_memory' && String(message.content).includes('owner.dog-name'));
+    if (!remembered) return toolCall('remember-dog', 'majin_memory', { action: 'remember', kind: 'preference', key: 'owner.dog-name', text: `Owner dog marker ${stamp} is named Bosse.` });
+    return { role: 'assistant', content: 'Stored the dog name in long-term memory.' };
+  });
+  await configureProvider(fx.dataDir, provider.baseUrl);
+  const criteria = JSON.stringify([{ kind: 'memory', memoryKind: 'preference', key: 'owner.dog-name', contains: `marker ${stamp} is named Bosse` }]);
+  const run = await runCli(['run', 'Remember that my dog is named Bosse for future goals',
+    '--data-dir', fx.dataDir, '--criteria', criteria, '--lanes', 'files'],
+  { ...fx, timeoutMs: 300000 });
+  assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
+  assert.match(run.stdout, /Status: COMPLETED/);
+  assert.match(run.stdout, /Verification evidence: 1/);
+  assert.match(run.stdout, /verified memory /);
+  assert.match(run.stderr, /tool majin_memory started/);
+  assert.equal(fs.existsSync(path.join(fx.workspace, 'remember-receipt.txt')), false, 'completion must rest on the memory criterion, not a proxy file');
+});
+
 test('acceptance: a long installed-CLI task stays within a bounded model context and finishes verified', async (t) => {
   const fx = fixture(t);
   for (let index = 0; index < 8; index++) {
