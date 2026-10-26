@@ -406,7 +406,7 @@ test('frame-scoped inspect, fill, click, check, verify and download work inside 
   assert.equal(frameInspect.meta.frameUrl, `${frameOrigin}/frame`);
   assert.match(frameInspect.result, /FRAME APP/);
   assert.ok(frameInspect.meta.marks > 0, 'Set-of-Marks grounding must run inside the iframe document');
-  const saveRef = String(frameInspect.result).split('\n').find(line => line.includes('Save name'))?.match(/\be\d+\b/)?.[0];
+  const saveRef = String(frameInspect.result).split('\n').find(line => line.includes('Save name') && /\be\d+\b/.test(line))?.match(/\be\d+\b/)?.[0];
   assert.ok(saveRef, `expected a grounded ref for the in-frame button:\n${frameInspect.result.slice(-1500)}`);
 
   await run('browser_fill', { frame: '#app', selector: '#name', value: 'Ada' });
