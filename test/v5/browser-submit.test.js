@@ -424,3 +424,33 @@ test('frame-scoped inspect, fill, click, check, verify and download work inside 
   const cleared = await run('browser_clear_marks', { frame: '#app' });
   assert.notEqual(cleared.ok, false);
 });
+
+test('explicit full browser grant submits to a new origin and live revocation blocks the next submit', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-full-browser-'));
+  const access = new FileAndAccessController({ dataDir: root });
+  access.ownerMode.grant({ lanes: ['browser'], fullAccess: true });
+  let submissions = 0;
+  const portal = http.createServer((req, res) => {
+    if (req.method === 'POST') { submissions++; req.resume(); res.end('<h1>RECEIVED</h1>'); return; }
+    res.setHeader('content-type', 'text/html');
+    res.end('<form method="post"><input name="name"><button type="submit">Send</button></form>');
+  });
+  await new Promise(r => portal.listen(0, '127.0.0.1', r));
+  const origin = `http://127.0.0.1:${portal.address().port}`;
+  const tools = await createDriverTools({ workspace: access.workspaceDir, grantedLanes: ['browser'], browser: true,
+    browserVisible: false, browserWriteOriginsFile: access.ownerMode.file });
+  t.after(async () => {
+    try { await tools.get('browser_close')?.run({}); } catch {}
+    portal.closeAllConnections(); await new Promise(r => portal.close(r));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  if (!tools.has('browser_open')) { t.skip('No installed browser on this runner'); return; }
+  await tools.get('browser_open').run({ url: origin });
+  await tools.get('browser_fill').run({ selector: 'input', value: 'Fixture applicant' });
+  await tools.get('browser_click').run({ selector: 'button' });
+  assert.equal(submissions, 1);
+  access.revokeBrowserOrigins();
+  await tools.get('browser_open').run({ url: origin });
+  await assert.rejects(tools.get('browser_click').run({ selector: 'button' }), { code: 'BROWSER_ORIGIN_GRANT_REQUIRED' });
+  assert.equal(submissions, 1);
+});

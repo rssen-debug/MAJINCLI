@@ -40,14 +40,14 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
   allowedFolders = [], controller = 'codex', grantedLanes = null, browserWriteOrigins = [], browserWriteOriginsFile = null,
   browserVisible = undefined } = {}) {
   fs.mkdirSync(workspace, { recursive: true });
-  const staticWriteOrigins = browserWriteOrigins.map((raw) => normaliseBrowserOrigin(raw));
+  const staticWriteOrigins = browserWriteOrigins.map((raw) => normaliseBrowserOrigin(raw, { allowAll: true }));
   const readWriteOrigins = () => {
     let persisted = [];
     if (browserWriteOriginsFile) {
       try {
         const state = JSON.parse(fs.readFileSync(browserWriteOriginsFile, 'utf8'));
         persisted = (Array.isArray(state.browserOrigins) ? state.browserOrigins : []).flatMap((raw) => {
-          try { return [normaliseBrowserOrigin(raw)]; } catch { return []; }
+          try { return [normaliseBrowserOrigin(raw, { allowAll: true })]; } catch { return []; }
         });
       } catch { /* A missing/corrupt grant file means no persisted browser writes. */ }
     }

@@ -92,7 +92,7 @@ function browserOriginArgs() {
 }
 
 function effectiveBrowserOrigins(access) {
-  return [...new Set([...(access?.browserWriteOrigins || []), ...submitOrigins(), ...browserOriginArgs()])];
+  return [...new Set([...submitOrigins(), ...browserOriginArgs()])];
 }
 
 function browserVisibleOption(defaultVisible = false) {
@@ -1192,6 +1192,7 @@ async function main() {
         '                                                            Interactive persistent session: live steer, pause, cancel, queue, resume and checkpoints',
         '  resume [instruction...] [--criteria <json>] [--max-rounds <n>] [--context-chars <n>] [--json]',
         '                                                            Resume the saved goal/checkpoint without replaying completed work',
+        '  grants full [--json]                                      Persist all lanes, mounted drive roots and all HTTP(S) browser write origins; OS rights unchanged',
         '  grants [show] [--json]                                    Show persisted owner lanes, folders and browser origins',
         '  grants grant [--all-lanes|--lanes <csv>] [--folder <dir>] [--browser-origin <url>] [--json]',
         '                                                            Persist owner lanes/folders/exact browser origins (lanes default: all user-level lanes)',
@@ -1251,6 +1252,17 @@ async function main() {
     const { accessController, access } = accessFor(dataDir);
     const grantPositionals = positionalsFor(new Set(['--data-dir', '--lanes', '--folder', '--browser-origin']));
     const subcommand = grantPositionals[0] || 'show';
+    if (subcommand === 'full') {
+      // Only the local owner CLI exposes this opt-in. Model tools and the
+      // remote access API cannot enable full filesystem/browser authority.
+      const roots = process.platform === 'win32'
+        ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => `${letter}:\\`).filter(root => fs.existsSync(root))
+        : [path.parse(path.resolve(dataDir)).root];
+      accessController.ownerMode.grant({ lanes: [...GRANTABLE_LANES], folders: roots,
+        fullAccess: true, reason: 'Explicit local CLI grants full command' });
+      printAccess(accessController.describeAccessState(), accessController.ownerMode.view());
+      return;
+    }
     if (subcommand === 'show') {
       printAccess(access, accessController.ownerMode.view());
       return;

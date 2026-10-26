@@ -21,6 +21,7 @@ export function browserWriteOrigins(ctx) {
     if (!Array.isArray(raw)) return [];
     return [...new Set(raw.map((value) => {
       try {
+        if (value === '*') return '*';
         const parsed = new URL(String(value));
         return ['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password ? parsed.origin : null;
       } catch { return null; }
@@ -29,7 +30,7 @@ export function browserWriteOrigins(ctx) {
 }
 
 export function browserWriteAllowed(ctx, url) {
-  try { const parsed = new URL(url); return !parsed.username && !parsed.password && browserWriteOrigins(ctx).includes(parsed.origin); } catch { return false; }
+  try { const parsed = new URL(url); const origins = browserWriteOrigins(ctx); return ['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password && (origins.includes('*') || origins.includes(parsed.origin)); } catch { return false; }
 }
 
 function stateFor(ctx) {
@@ -389,7 +390,9 @@ export const browserTools = [
             document.addEventListener('submit', (event) => {
               const allowed = window.__majinBrowserWriteOrigins || [];
               const action = event.submitter?.formAction || event.target.action || location.href;
-              if (allowed.includes(location.origin) && allowed.includes(new URL(action, location.href).origin)) return;
+              const target = new URL(action, location.href);
+              if (['http:', 'https:'].includes(target.protocol) && !target.username && !target.password
+                && (allowed.includes('*') || (allowed.includes(location.origin) && allowed.includes(target.origin)))) return;
               event.preventDefault();
               event.stopImmediatePropagation();
             }, true);
