@@ -10,6 +10,26 @@ function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'majin-v5-learning-'));
 }
 
+test('duplicate receipt delivery persists a prior failed save without increasing verified uses', async t => {
+  const dir = tmpDir();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const tree = new SkillTree({ dir });
+  const engine = new LearningEngine({ dataDir: dir, skillTree: tree });
+  const payload = { goalId: 'durable-goal', goalText: 'Write verified output',
+    trace: [{ tool: 'fs_write', ok: true, argKeys: ['path', 'content'] }],
+    receipts: [{ id: 'durable-receipt', kind: 'file', verifier: 'file', verified: true, sha256: 'abc123' }] };
+  const save = engine.save.bind(engine);
+  engine.save = () => { throw new Error('disk failure'); };
+  await assert.rejects(engine.learnFromVerifiedGoal(payload), /disk failure/);
+  engine.save = save;
+  await engine.learnFromVerifiedGoal(payload);
+  const reloaded = new LearningEngine({ dataDir: dir, skillTree: tree });
+  assert.equal(reloaded.state.procedures.length, 1);
+  assert.equal(reloaded.state.procedures[0].verifiedUses, 1);
+  assert.equal((await reloaded.learnFromVerifiedGoal(payload)).duplicate, true);
+  assert.equal(reloaded.state.procedures[0].provenance.length, 1);
+});
+
 test('LearningEngine sanitizes secrets and personal CV data, parameterizes procedures, and never escalates permissions', async () => {
   const dir = tmpDir();
   const tree = new SkillTree({ dir });

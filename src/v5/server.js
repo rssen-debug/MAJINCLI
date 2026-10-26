@@ -385,6 +385,7 @@ export function createV5Server({
         server.listen(port, host, resolve);
       });
       schedule.start();
+      if (schedule.ownsLock) await providerAgent.recoverLearning();
       heartbeat.start({ ownsHost: schedule.ownsLock === true });
       heartbeat.observe(providerAgent.getGoalState());
       const addr = server.address();

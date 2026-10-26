@@ -356,6 +356,7 @@ function printGoalResult(result) {
   printCriteriaChecklist(goal);
   if (goal.criteria_source) console.log(`Acceptance criteria source: ${goal.criteria_source}`);
   console.log(`Verification evidence: ${evidence.length}`);
+  if (goal.learning) console.log(`Learning: ${goal.learning.status}${goal.learning.procedureId ? ' (' + goal.learning.procedureId + ')' : ''}`);
   for (const item of evidence) console.log(`  verified ${formatEvidenceLine(item)}`);
   if (goal.budget?.maxRounds) console.log(`Model round budget: ${goal.budget.maxRounds}`);
   if (goal.cost) console.log(`Model calls: ${goal.cost.modelCalls || 0}, input tokens: ${goal.cost.inputTokens || 0}, output tokens: ${goal.cost.outputTokens || 0}`);

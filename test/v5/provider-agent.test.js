@@ -13,6 +13,47 @@ import { browserBinary } from '../../src/v4/tools/host.js';
 import { PNG } from 'pngjs';
 import { createDriverTools } from '../../src/v5/codex-tools.js';
 
+test('verified completion survives learning failure and restart delivers it exactly once without model or tool replay', async t => {
+  const { server, requests } = await setup(t, (_body, count) => count === 1
+    ? tool('write-proof', 'fs_write', { path: 'learn.txt', content: 'verified' })
+    : { role: 'assistant', content: 'Done.' });
+  const engine = server.architect.learning;
+  const original = engine.learnFromVerifiedGoal.bind(engine);
+  engine.learnFromVerifiedGoal = async () => { throw new Error('Injected storage failure'); };
+  const result = await server.providerAgent.execute({ goalText: 'Write learn.txt', criteria: [{ kind: 'file', path: 'learn.txt', contains: 'verified' }] });
+  assert.equal(result.status, 'COMPLETED');
+  assert.equal(result.learning.status, 'pending');
+  assert.equal(engine.state.procedures.length, 0);
+  const count = requests.length;
+  await server.providerAgent.close();
+  const restored = new ProviderAgent({ architect: server.architect });
+  // Crash after the learning store commits, but before delivery is acknowledged.
+  engine.learnFromVerifiedGoal = async payload => { await original(payload); throw new Error('Lost acknowledgement'); };
+  await restored.recoverLearning();
+  assert.equal(restored.getGoalState().learning.status, 'pending');
+  assert.equal(engine.state.procedures.length, 1);
+  engine.learnFromVerifiedGoal = original;
+  await restored.recoverLearning();
+  await restored.recoverLearning();
+  assert.equal(restored.getGoalState().learning.status, 'saved');
+  assert.equal(engine.state.procedures[0].verifiedUses, 1);
+  assert.equal(engine.state.procedures[0].provenance.length, 1);
+  assert.equal(requests.length, count);
+  assert.equal(fs.readFileSync(path.join(server.architect.workspaceDir, 'learn.txt'), 'utf8'), 'verified');
+  assert.equal(fs.readdirSync(restored.learningOutbox.dir).length, 0);
+});
+
+test('unverified partial work never enters the learning delivery queue', async t => {
+  const { server } = await setup(t, (_body, count) => count === 1
+    ? tool('write-unverified', 'fs_write', { path: 'draft.txt', content: 'draft' })
+    : { role: 'assistant', content: 'Draft prepared.' });
+  const goal = await server.providerAgent.execute({ goalText: 'Prepare a draft.' });
+  assert.equal(goal.status, 'PARTIAL');
+  assert.equal(goal.learning, undefined);
+  assert.deepEqual(fs.readdirSync(server.providerAgent.learningOutbox.dir), []);
+  assert.equal(server.architect.learning.state.procedures.length, 0);
+});
+
 test('empty directory listing means workspace and still rejects traversal', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-empty-list-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
