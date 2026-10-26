@@ -17,6 +17,16 @@ function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'majin-v5-jobs-'));
 }
 
+test('CV facts preserve explicit modern workplace skills and Skåne locations without inventing security experience', () => {
+  const facts = extractVerifiableCvFacts('Ada Andersson\nIT-tekniker, Local IT\nIntune, Entra ID, Microsoft 365, Apple Business Manager\nHelsingborg, Landskrona');
+  for (const skill of ['intune', 'entra id', 'microsoft 365', 'apple business manager']) assert.ok(facts.skills.includes(skill));
+  assert.ok(facts.locations.includes('helsingborg'));
+  assert.ok(facts.locations.includes('landskrona'));
+  assert.ok(facts.roles.includes('it technician'));
+  assert.ok(!facts.roles.includes('soc analyst'));
+  assert.ok(!facts.skills.includes('sentinel'));
+});
+
 const SAMPLE_CV = `
 Namn: Erik Lindqvist
 E-post: erik.lindqvist@example.com
