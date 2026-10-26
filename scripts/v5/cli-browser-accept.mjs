@@ -13,6 +13,7 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const files = [
   'test/v5/browser-submit.test.js',
   'test/v5/cli.test.js',
+  'test/v5/cli-view.test.js',
   'test/v5/cli-transport.test.js',
   'test/v5/provider-agent.test.js',
   'test/v5/learning-engine.test.js',

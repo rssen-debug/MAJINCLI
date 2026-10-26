@@ -3,6 +3,7 @@
  * MAJIN V5 — GRAND ARCHITECT CLI Entrypoint (`bin/majin-v5.mjs`)
  */
 import fs from 'node:fs';
+import { compactHeader, compactEvent, compactResult } from '../src/v5/cli-view.js';
 import { postGoalJson } from '../src/v5/cli-transport.js';
 import os from 'node:os';
 import path from 'node:path';
@@ -20,6 +21,7 @@ import { resolveV5DataDir } from '../scripts/v5/desktop-host.mjs';
 import { MemoryStore, MEMORY_KINDS } from '../src/v2/memory/store.js';
 
 let [command = 'serve', ...args] = process.argv.slice(2);
+let compactCli = !args.includes('--verbose') && !args.includes('--json') && (args.includes('--compact') || (['chat', 'repl', 'session'].includes(command) && process.stdout.isTTY));
 
 const KNOWN_COMMANDS = new Set([
   'serve', 'start', 'tools', 'status', 'url', 'window', 'ui', 'app', 'version', '--version', '-v',
@@ -315,12 +317,13 @@ function formatTraceEvent(event) {
   }
 }
 
-function printGoalResult(result) {
+function printGoalResult(result, { detailed = false } = {}) {
   if (args.includes('--json')) {
     console.log(JSON.stringify(result, null, 2));
     return;
   }
   const goal = result.goal || result;
+  if (compactCli && !detailed) { console.log(compactResult(goal)); return; }
   console.log(`Status: ${goal.status || 'UNKNOWN'}`);
   if (goal.goal_id) console.log(`Goal: ${goal.goal_id}`);
   if (goal.summaryText) console.log(goal.summaryText);
@@ -417,7 +420,8 @@ function requireCliProviderModel(srv, { resume = false } = {}) {
 }
 
 function createGoalProgressPrinter(srv) {
-  if (args.includes('--quiet')) return { begin() {}, flush() {}, end() {}, stop() {} };
+  if (args.includes('--quiet')) return { begin() {}, flush() {}, end() {}, stop() {}, setOutput() {} };
+  let output = line => console.error(line);
   const printedByGoal = new Map();
   const printedDigests = new Set((srv.heartbeat?.view().notifications || []).map(item => item.id));
   let lastGoalId = '';
@@ -449,8 +453,8 @@ function createGoalProgressPrinter(srv) {
       // here as they happen. Tool-result rows would only duplicate it.
       for (const event of events) {
         if (!(event.seq > cursor.seq)) continue;
-        const line = formatTraceEvent(event);
-        if (line) console.error(`[majin] ${line}`);
+        const line = compactCli ? compactEvent(event) : formatTraceEvent(event);
+        if (line) output(compactCli ? line : `[majin] ${line}`);
         cursor.seq = event.seq;
       }
       cursor.rows = rows.length;
@@ -471,6 +475,7 @@ function createGoalProgressPrinter(srv) {
   };
   const timer = setInterval(flush, 250);
   return {
+    setOutput(write) { output = write; },
     begin() {
       watching = true;
       const goal = currentGoal();
@@ -563,6 +568,8 @@ function printChatHelp() {
     '  /cancel                        Cancel the active goal and preserve its checkpoint for inspection',
     '  /new <text>                    Start a new goal instead of resuming a paused/blocked checkpoint',
     '  /status                        Show model, grants, queue and current goal state',
+    '  /details                       Toggle compact / full live output',
+    '  /clear                         Clear the terminal view; saved history is retained',
     '  /checkpoint                    Show the persisted checkpoint location and adaptive plan state',
     '  /logs                          Show tool results, blockers, verification evidence and the full activity trace',
     '  /model [status|list|verify]   Inspect provider state or refresh its live catalog',
@@ -626,7 +633,17 @@ async function executeChatCommand() {
     historySize: 200,
   });
 
+  progress.setOutput(line => {
+    if (compactCli && process.stdout.isTTY && !rl.closed) {
+      readline.clearLine(process.stdout, 0);
+      readline.cursorTo(process.stdout, 0);
+      process.stdout.write(line + '\n');
+      rl.prompt(true);
+    } else console.error(line);
+  });
+
   function updatePrompt() {
+    if (compactCli) { rl.setPrompt(activeOperation ? 'you (steer) › ' : 'you › '); return; }
     if (activeOperation) rl.setPrompt('majin [running]> ');
     else if (isResumable(goalState())) rl.setPrompt(`majin [${String(goalState().status).toLowerCase()}]> `);
     else rl.setPrompt('majin> ');
@@ -789,7 +806,7 @@ async function executeChatCommand() {
       progress.end();
       promptAgain();
     });
-    console.log(resume
+    console.log(compactCli ? (resume ? 'Continuing from checkpoint. /pause pauses.' : 'Working. Type to steer · /pause pauses.') : resume
       ? '[majin] Resuming saved checkpoint. Type text to steer, /pause to pause, or /cancel to cancel.'
       : '[majin] Goal started. Type text to steer it live, /pause to pause, /queue <goal> for later, or /cancel to cancel.');
     updatePrompt();
@@ -1005,10 +1022,16 @@ async function executeChatCommand() {
   async function handleLine(rawLine) {
     const line = String(rawLine || '').trim();
     if (!line) return;
+    if (line === '/clear' || (!activeOperation && /^(cls|clear)$/i.test(line))) {
+      if (process.stdout.isTTY) console.clear();
+      else console.log('View cleared. Saved history remains in /logs.');
+      return;
+    }
     if (!activeOperation && /^(?:test|\/test)$/i.test(line)) {
       console.log('[majin] CLI is responding. No model request was sent and no saved goal was resumed. Type your task, or /resume to continue saved work.');
       return;
     }
+    if (line === '/details') { compactCli = !compactCli; console.log(compactCli ? 'Compact view enabled. /logs shows full details.' : 'Detailed view enabled. /details returns to compact view.'); return; }
     if (!line.startsWith('/')) {
       if (activeOperation) await steerActive(line);
       else startGoalText(line);
@@ -1033,7 +1056,7 @@ async function executeChatCommand() {
       case 'history': {
         const goal = goalState();
         if (!goal) console.log('No saved V5 goal yet. Type a goal to start one.');
-        else { printGoalResult({ goal }); printGoalTrace(goal); }
+        else { printGoalResult({ goal }, { detailed: true }); printGoalTrace(goal); }
         return;
       }
       case 'steer':
@@ -1147,6 +1170,10 @@ async function executeChatCommand() {
   try {
     const provider = srv.architect.providers.getPublicState();
     const savedGoal = goalState();
+    if (compactCli) {
+      console.log(compactHeader({ version: V5_VERSION, model: provider.canonicalSelection, goal: savedGoal, color: Boolean(process.stdout.isTTY && !('NO_COLOR' in process.env) && process.env.TERM !== 'dumb') }));
+      if (!providerReady()) console.log(NO_PROVIDER_GUIDANCE);
+    } else {
     console.log(`MAJIN V5 interactive session (${V5_VERSION})`);
     console.log(`Model: ${provider.canonicalSelection || '(none selected)'} · workspace: ${srv.architect.workspaceDir}`);
     if (!providerReady()) console.log(NO_PROVIDER_GUIDANCE);
@@ -1155,6 +1182,7 @@ async function executeChatCommand() {
       if (isResumable(savedGoal)) console.log('This checkpoint is resumable. Type an instruction or /resume to continue it; /new <goal> starts separate work.');
     }
     console.log('Type a goal, or /help for interactive commands. While a goal runs, plain text steers it live.');
+    }
     updatePrompt();
     rl.prompt();
     if (args.includes('--resume')) startOperation({ goalText: initialText, resume: true });
@@ -1187,7 +1215,7 @@ async function main() {
         '  run <goal...> [--criteria <json>|--criteria-file <file>] [--file <path>] [--max-rounds <n>] [--context-chars <n>]',
         '                [--all-lanes|--lanes <csv>] [--folder <dir>] [--browser-origin <url>|--submit-origin <origin>] [--browser-visible|--browser-headless] [--allow-deterministic] [--quiet] [--json]',
         '                                                            Execute a goal; explicit lanes/folders/browser origins are saved as owner grants (submit-origin is session-only)',
-        '  chat [first goal...] [--resume] [--criteria <json>] [--file <path>] [--max-rounds <n>] [--context-chars <n>]',
+        '  chat [first goal...] [--compact|--verbose] [--resume] [--criteria <json>] [--file <path>] [--max-rounds <n>] [--context-chars <n>]',
         '                [--all-lanes|--lanes <csv>] [--folder <dir>] [--browser-origin <url>|--submit-origin <origin>] [--browser-visible|--browser-headless] [--quiet]',
         '                                                            Interactive persistent session: live steer, pause, cancel, queue, resume and checkpoints',
         '  resume [instruction...] [--criteria <json>] [--max-rounds <n>] [--context-chars <n>] [--json]',

@@ -12,6 +12,20 @@ import { MemoryStore } from '../../src/v2/memory/store.js';
 
 const BIN = fileURLToPath(new URL('../../bin/majin-v5.mjs', import.meta.url));
 
+test('compact chat starts without inference and can toggle detailed output', t => {
+  const { root, dataDir } = fixture(t);
+  const result = spawnSync(process.execPath, [BIN, 'chat', '--compact', '--data-dir', dataDir], {
+    input: 'cls\n/details\n/details\n/exit\n', encoding: 'utf8', timeout: 15000,
+    env: { ...process.env, NO_COLOR: '1', HOME: root, USERPROFILE: root, MAJIN_HOME: root },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Tell MAJIN what to do/);
+  assert.match(result.stdout, /Detailed view enabled/);
+  assert.match(result.stdout, /Compact view enabled/);
+  assert.ok(!result.stdout.includes('\x1b'));
+  assert.ok(!fs.existsSync(path.join(dataDir, 'provider-agent', 'current.json')));
+});
+
 function killProcessTree(child) {
   if (!child?.pid || child.exitCode !== null) return;
   try {
