@@ -177,7 +177,7 @@ async function attemptGoal({ root, modelId, catalogModels }) {
   ], { root, timeoutMs: 60000 }), 'model-select');
 
   const nonce = `MAJIN_LIVE_CLI_${Date.now()}_${randomBytes(4).toString('hex')}`;
-  const goalText = `Create live-proof.txt containing exactly ${nonce}. Before claiming completion, register a file acceptance criterion with goal_criteria for live-proof.txt containing ${nonce}; write the file with the file tools, read it back, and report the result briefly.`;
+  const goalText = `Create a text file named live-proof.txt containing exactly ${nonce}. Check that the saved file contains the requested text and tell me the result.`;
   const run = await runCli([
     'run', goalText,
     '--data-dir', dataDir,

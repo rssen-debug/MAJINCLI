@@ -117,6 +117,9 @@ test('installed-CLI live acceptance plumbing completes end-to-end against a loca
   assert.doesNotMatch(result.stdout, new RegExp(dummyKey), 'the env key must never reach script output');
   assert.doesNotMatch(result.stderr, new RegExp(dummyKey), 'the env key must never reach script stderr');
   assert.ok(requests.length >= 3, `expected real model calls through the installed CLI, got ${requests.length}`);
+  const ownerPrompt = requests[0].body.messages.find(message => message.role === 'user' && typeof message.content === 'string' && message.content.startsWith('Create a text file')).content;
+  assert.doesNotMatch(ownerPrompt, /goal_criteria|fs_write|fs_read|tools_search/);
+  assert.match(ownerPrompt, /Create a text file/);
   assert.ok(requests.every((request) => request.headers.authorization === `Bearer ${dummyKey}`), 'CLI must send the env-named key to the provider endpoint');
   assert.equal(new Set(requests.map((request) => request.headers['x-opencode-session'])).size, 1, 'OpenCode session header must be stable across the goal');
   assert.deepEqual(
