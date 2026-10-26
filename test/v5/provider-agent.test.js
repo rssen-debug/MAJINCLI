@@ -181,7 +181,9 @@ test('conversation survives restart and uses a stable Go session ID without repl
   await restored.execute({ goalText: 'What was the previous result?' });
   assert.equal(fs.readFileSync(path.join(server.architect.workspaceDir, 'once.txt'), 'utf8'), 'once');
   assert.equal(new Set(requests.map(r => r.headers['x-opencode-session'])).size, 1);
-  assert(requests.at(-1).body.messages.some(m => m.role === 'tool' && /once/.test(m.content)));
+  const reference = requests.at(-1).body.messages.find(m => m.role === 'user' && String(m.content).startsWith('Historical context'));
+  assert.match(reference.content, /fs_write/);
+  assert.match(reference.content, /once/);
 });
 test('repeated failed actions are observed and stopped rather than blindly executed', async t => {
   const { server } = await setup(t, (_body, count) => tool(`missing-${count}`, 'fs_read', { path: 'does-not-exist' }));
@@ -847,4 +849,42 @@ test('a greeting or essential clarification can remain conversational after the 
   assert.equal(result.tool_results.length, 0);
   assert.equal(result.model_reply, 'Hej! Vilken stad gäller det?');
   assert.match(requests[1].body.messages.at(-1).content, /tool use is not required for conversation/);
+});
+
+test('new goals replace stale instructions and archive old observations while retaining a bounded reference', async t => {
+  const { server, requests } = await setup(t, () => ({ role: 'assistant', content: 'Which task do you want to test?' }));
+  const agent = server.providerAgent;
+  agent.current = { conversationId: 'old-session', goal: { goal_id: 'old-goal', objective: 'Prepare Fellowmind application', status: 'PARTIAL', summaryText: 'Draft saved as application.md', criteria: [] }, messages: [
+    { role: 'system', content: 'OBSOLETE_INSTRUCTIONS: require approval for every website' },
+    { role: 'user', content: 'OLD_ACTION: prepare the application' },
+    { role: 'assistant', content: 'OLD_LARGE_OBSERVATION ' + 'x'.repeat(100000) },
+  ] };
+  server.architect.files.ownerMode.grant({ lanes: ['files', 'browser'], fullAccess: true });
+  await agent.execute({ goalText: 'What is saved from the last task?' });
+  const sent = JSON.stringify(requests[0].body.messages);
+  assert.doesNotMatch(sent, /OBSOLETE_INSTRUCTIONS|OLD_ACTION|OLD_LARGE_OBSERVATION/);
+  assert.match(sent, /application.md/);
+  assert.match(sent, /Previous goal reference only/);
+  assert.match(sent, /Full HTTP\(S\) browser write access is already granted/);
+  assert.ok(sent.length < 16000);
+  const archived = JSON.parse(fs.readFileSync(path.join(agent.dir, 'history', 'old-goal.json')));
+  assert.match(JSON.stringify(archived.messages), /OLD_LARGE_OBSERVATION/);
+});
+
+test('resume preserves observed dialogue but refreshes instructions and current browser grants', async t => {
+  const { server, requests } = await setup(t, () => ({ role: 'assistant', content: 'No further action requested.' }));
+  const agent = server.providerAgent;
+  await agent.execute({ goalText: 'Hello' });
+  agent.current.messages.unshift({ role: 'system', content: 'OBSOLETE_SYSTEM' });
+  agent.current.messages.push({ role: 'assistant', content: 'PRESERVE_THIS_OBSERVATION' });
+  server.architect.files.ownerMode.grant({ lanes: ['files', 'browser'], fullAccess: true });
+  await agent.execute({ resume: true, goalText: 'Summarize the saved state' });
+  let sent = JSON.stringify(requests.at(-1).body.messages);
+  assert.doesNotMatch(sent, /OBSOLETE_SYSTEM/); assert.match(sent, /PRESERVE_THIS_OBSERVATION/);
+  assert.match(sent, /Full HTTP\(S\) browser write access is already granted/);
+  server.architect.files.revokeBrowserOrigins();
+  await agent.execute({ resume: true, goalText: 'Summarize again' });
+  sent = JSON.stringify(requests.at(-1).body.messages);
+  assert.doesNotMatch(sent, /Full HTTP\(S\) browser write access is already granted/);
+  assert.match(sent, /required origin is missing/);
 });

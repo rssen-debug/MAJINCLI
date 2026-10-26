@@ -41,7 +41,8 @@ export function chooseAdaptiveMode({ objective = '', criteria = [], procedures =
     overlap: words.filter(word => tokens([proc.summary, proc.canonicalSkillId, ...(proc.keywords || [])].join(' ')).includes(word)).length,
   })).filter(item => item.overlap > 0).sort((a, b) => b.overlap - a.overlap)[0];
   if (match) return decision('skill', 'A currently eligible, previously verified procedure matches this objective; inspect and adapt it.', { procedureName: match.proc.name || match.proc.procedureId });
-  if (!adaptiveState.plan?.length && (criteria.length > 1 || /\b(?:then|after|before|first|sedan|därefter|först)\b|(?:^|\n)\s*\d+[.)]/i.test(objective)))
+  const outcomes = new Set(criteria.map((check, index) => check.path || check.pngPath || check.url || (check.kind === 'memory' ? `${check.memoryKind}:${check.key}` : `unknown-${index}`)));
+  if (!adaptiveState.plan?.length && (outcomes.size > 1 || /\b(?:then|after|before|first|sedan|därefter|först)\b|(?:^|\n)\s*\d+[.)]/i.test(objective)))
     return decision('plan', 'The objective has multiple acceptance outcomes or an explicit sequence; track dependencies.');
   return decision('direct', 'No unresolved failure, dependency plan or matching procedure requires coordination.');
 }

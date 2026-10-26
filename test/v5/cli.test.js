@@ -894,3 +894,18 @@ test('serve rejects unknown owner lanes before listening', async (t) => {
   assert.match(result.stderr, /Unknown lane/);
   assert.doesNotMatch(result.stdout, /listening on/);
 });
+
+test('idle test is local and does not resume or replace a saved blocked goal', async t => {
+  const { root, dataDir } = fixture(t);
+  const dir = path.join(dataDir, 'provider-agent'); fs.mkdirSync(dir, { recursive: true });
+  const state = { goal: { goal_id: 'retained-test-goal', objective: 'Old application task', status: 'BLOCKED', criteria: [] }, messages: [] };
+  const file = path.join(dir, 'current.json'); fs.writeFileSync(file, JSON.stringify(state));
+  const session = startCliSession(['chat', '--data-dir', dataDir], { root });
+  t.after(() => session.terminate());
+  await session.waitFor(/Type a goal/);
+  session.write('test');
+  await session.waitFor(/No model request was sent and no saved goal was resumed/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file)), state);
+  assert.doesNotMatch(session.stdout, /Goal started|Resuming goal/);
+  assert.equal((await session.exit()).status, 0);
+});
