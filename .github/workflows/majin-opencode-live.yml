@@ -9,7 +9,7 @@ jobs:
   go-live:
     name: OpenCode Go real cloud chat and tool calls
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 25
     env:
       OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
       MAJIN_LLM_TIMEOUT: '120000'
@@ -49,6 +49,8 @@ jobs:
         shell: bash
         env:
           MAJIN_LIVE_TIMEOUT_MS: '300000'
+          MAJIN_LIVE_TOTAL_TIMEOUT_MS: '900000'
+          MAJIN_LIVE_MAX_ATTEMPTS: '3'
         run: |
           node scripts/v5/cli-live-accept.mjs
           echo 'Installed MAJIN V5 CLI completed a live bare goal with model-registered criteria and host verification.' >> "$GITHUB_STEP_SUMMARY"

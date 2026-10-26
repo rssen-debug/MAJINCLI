@@ -8,14 +8,21 @@
  * file criterion with goal_criteria, use the file tools, and the host must
  * independently verify the resulting file before COMPLETED is accepted.
  *
+ * Model fallback is bounded and fully reported: unless MAJIN_LIVE_MODEL pins
+ * one model, up to MAJIN_LIVE_MAX_ATTEMPTS catalog models are tried in a
+ * fixed preference order, each in a fresh temporary data dir, until one
+ * attempt passes EVERY check. A pinned model is never silently substituted.
+ * Every attempt (model, stage, error, checks) is disclosed in the output;
+ * `verified` is true only when one complete attempt actually passed.
+ *
  * The API key is referenced only by environment-variable name
  * (--api-key-env). It is never placed in argv, printed, or written by this
  * script. The installed CLI stores it in its normal private provider state
- * inside a temporary directory; this script deletes that secret file and, by
- * default, removes the whole temporary tree when the run ends.
+ * inside a temporary directory; this script deletes those secret files and,
+ * by default, removes the whole temporary tree when the run ends.
  *
  * MAJIN_LIVE_BASE_URL may point the same opencode-go provider configuration
- * at a compatible gateway (used by the local plumbing test with a fake
+ * at a compatible gateway (used by the local plumbing tests with a fake
  * endpoint). A run against anything other than the real OpenCode Go service
  * proves only the script/CLI plumbing, never live-account acceptance.
  */
@@ -32,6 +39,8 @@ const apiKey = process.env[keyEnv] || '';
 const requestedModel = String(process.env.MAJIN_LIVE_MODEL || '').trim();
 const baseUrl = String(process.env.MAJIN_LIVE_BASE_URL || '').trim();
 const runTimeoutMs = Number(process.env.MAJIN_LIVE_TIMEOUT_MS) > 0 ? Number(process.env.MAJIN_LIVE_TIMEOUT_MS) : 300000;
+const totalBudgetMs = Number(process.env.MAJIN_LIVE_TOTAL_TIMEOUT_MS) > 0 ? Number(process.env.MAJIN_LIVE_TOTAL_TIMEOUT_MS) : 900000;
+const maxAttempts = Math.min(5, Math.max(1, Math.trunc(Number(process.env.MAJIN_LIVE_MAX_ATTEMPTS) || 3)));
 const keepRoot = process.env.MAJIN_LIVE_KEEP === '1';
 
 function scrub(text) {
@@ -118,19 +127,110 @@ function requireCliOk(result, stage) {
   });
 }
 
-function chooseModel(models) {
+function candidateModels(models) {
   const ids = models.map((model) => typeof model === 'string' ? model : model?.id).filter(Boolean);
   if (requestedModel) {
     if (!ids.includes(requestedModel)) {
       fail('model-select', `MAJIN_LIVE_MODEL=${requestedModel} was not present in the live OpenCode Go catalog (${ids.length} models)`);
     }
-    return requestedModel;
+    return [requestedModel];
   }
   const preferred = ['glm-5.3-flash', 'deepseek-v4-pro', 'qwen3.8-flash', 'grok-4.6'];
-  for (const candidate of preferred) if (ids.includes(candidate)) return candidate;
-  const fallback = ids.find((id) => /deepseek|qwen|glm|grok/i.test(id));
-  if (!fallback) fail('model-select', `no supported live-acceptance model found in catalog (${ids.length} models)`);
-  return fallback;
+  const ordered = preferred.filter((candidate) => ids.includes(candidate));
+  const fallback = ids.find((id) => /deepseek|qwen|glm|grok/i.test(id) && !ordered.includes(id));
+  if (fallback) ordered.push(fallback);
+  if (!ordered.length) fail('model-select', `no supported live-acceptance model found in catalog (${ids.length} models)`);
+  return ordered.slice(0, maxAttempts);
+}
+
+async function configureAttempt(root, dataDir) {
+  const configure = requireCliOk(await runCli([
+    'model', 'configure',
+    '--provider', 'opencode-go',
+    '--api-key-env', keyEnv,
+    ...(baseUrl ? ['--base-url', baseUrl] : []),
+    '--discover',
+    '--data-dir', dataDir,
+    '--timeout-ms', '30000',
+    '--json',
+  ], { root, timeoutMs: 90000 }), 'model-configure');
+  const configured = parseJsonOutput(configure, 'model-configure');
+  const discovery = configured.discovery || {};
+  if (discovery.ok !== true || !Array.isArray(discovery.models) || !discovery.models.length) {
+    fail('model-configure', `live catalog discovery did not return models: ${JSON.stringify(discovery.error || discovery).slice(0, 1000)}`);
+  }
+  return discovery;
+}
+
+async function attemptGoal({ root, modelId, catalogModels }) {
+  const dataDir = path.join(root, 'data');
+  const workspace = path.join(dataDir, 'workspace');
+  fs.mkdirSync(workspace, { recursive: true });
+
+  await configureAttempt(root, dataDir);
+  requireCliOk(await runCli([
+    'model', 'select', modelId,
+    '--provider', 'opencode-go',
+    '--require-discovered',
+    '--data-dir', dataDir,
+    '--json',
+  ], { root, timeoutMs: 60000 }), 'model-select');
+
+  const nonce = `MAJIN_LIVE_CLI_${Date.now()}_${randomBytes(4).toString('hex')}`;
+  const goalText = `Create live-proof.txt containing exactly ${nonce}. Before claiming completion, register a file acceptance criterion with goal_criteria for live-proof.txt containing ${nonce}; write the file with the file tools, read it back, and report the result briefly.`;
+  const run = await runCli([
+    'run', goalText,
+    '--data-dir', dataDir,
+    '--lanes', 'files',
+    '--max-rounds', '8',
+  ], { root, timeoutMs: runTimeoutMs });
+
+  const logs = requireCliOk(await runCli(['logs', '--data-dir', dataDir, '--json'], { root, timeoutMs: 60000 }), 'logs');
+  const parsedLogs = parseJsonOutput(logs, 'logs');
+  const goal = parsedLogs.goal || parsedLogs;
+  const proofPath = path.join(workspace, 'live-proof.txt');
+  const proof = fs.existsSync(proofPath) ? fs.readFileSync(proofPath) : null;
+  const toolNames = (goal.tool_results || []).map((row) => row.tool).filter(Boolean);
+  const checks = {
+    cliExitZero: run.status === 0,
+    statusCompleted: goal.status === 'COMPLETED',
+    criteriaSourceModel: goal.criteria_source === 'model',
+    verificationEvidence: Array.isArray(goal.verification_evidence) && goal.verification_evidence.length >= 1,
+    fileContainsNonce: Boolean(proof && proof.toString('utf8').trim() === nonce),
+    usedGoalCriteria: toolNames.includes('goal_criteria'),
+    usedFileWrite: toolNames.includes('fs_write'),
+    modelCalled: Number(goal.cost?.modelCalls || 0) > 0,
+  };
+  const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name);
+  if (failedChecks.length) {
+    fail('installed-cli-goal', `live installed-CLI goal did not prove completion; failed checks: ${failedChecks.join(', ')}`, {
+      checks,
+      goalStatus: goal.status || null,
+      criteriaSource: goal.criteria_source || null,
+      blocker: scrub(goal.blocker || ''),
+      stdoutTail: scrub(String(run.stdout || '').slice(-6000)),
+      stderrTail: scrub(String(run.stderr || '').slice(-6000)),
+    });
+  }
+
+  return {
+    ok: true,
+    verified: true,
+    provider: 'opencode-go',
+    modelId,
+    catalogModels,
+    baseUrlOverride: Boolean(baseUrl),
+    status: goal.status,
+    criteriaSource: goal.criteria_source,
+    verificationEvidence: goal.verification_evidence.length,
+    tools: toolNames,
+    modelCalls: goal.cost?.modelCalls || 0,
+    inputTokens: goal.cost?.inputTokens || 0,
+    outputTokens: goal.cost?.outputTokens || 0,
+    fileSha256: createHash('sha256').update(proof).digest('hex'),
+    nonce,
+    checks,
+  };
 }
 
 async function main() {
@@ -159,106 +259,71 @@ async function main() {
     }
   }
 
+  const startedAt = Date.now();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-v5-cli-live-'));
-  const dataDir = path.join(root, 'data');
-  const workspace = path.join(dataDir, 'workspace');
-  fs.mkdirSync(workspace, { recursive: true });
-  if (process.platform === 'win32') {
-    fs.mkdirSync(path.join(root, 'AppData', 'Local'), { recursive: true });
-    fs.mkdirSync(path.join(root, 'AppData', 'Roaming'), { recursive: true });
-  }
+  const prepareRoot = (dir) => {
+    fs.mkdirSync(dir, { recursive: true });
+    if (process.platform === 'win32') {
+      fs.mkdirSync(path.join(dir, 'AppData', 'Local'), { recursive: true });
+      fs.mkdirSync(path.join(dir, 'AppData', 'Roaming'), { recursive: true });
+    }
+  };
 
+  const attemptRoots = [];
+  const attempts = [];
   let summary;
+  let lastError = null;
   try {
-    const configure = requireCliOk(await runCli([
-      'model', 'configure',
-      '--provider', 'opencode-go',
-      '--api-key-env', keyEnv,
-      ...(baseUrl ? ['--base-url', baseUrl] : []),
-      '--discover',
-      '--data-dir', dataDir,
-      '--timeout-ms', '30000',
-      '--json',
-    ], { root, timeoutMs: 90000 }), 'model-configure');
-    const configured = parseJsonOutput(configure, 'model-configure');
-    const discovery = configured.discovery || {};
-    if (discovery.ok !== true || !Array.isArray(discovery.models) || !discovery.models.length) {
-      fail('model-configure', `live catalog discovery did not return models: ${JSON.stringify(discovery.error || discovery).slice(0, 1000)}`);
+    // Discovery pass only selects the ordered candidate list from the live
+    // catalog; each attempt still configures its own fresh data dir.
+    const discoveryRoot = path.join(root, 'discovery');
+    prepareRoot(discoveryRoot);
+    attemptRoots.push(discoveryRoot);
+    const discovery = await configureAttempt(discoveryRoot, path.join(discoveryRoot, 'data'));
+    const candidates = candidateModels(discovery.models);
+
+    for (const [index, modelId] of candidates.entries()) {
+      if (index > 0 && Date.now() - startedAt > totalBudgetMs - 60000) {
+        attempts.push({ modelId, ok: false, stage: 'budget', error: 'total live-acceptance time budget exhausted before this attempt' });
+        continue;
+      }
+      const attemptRoot = path.join(root, `attempt-${index + 1}`);
+      prepareRoot(attemptRoot);
+      attemptRoots.push(attemptRoot);
+      try {
+        summary = await attemptGoal({ root: attemptRoot, modelId, catalogModels: discovery.models.length });
+        attempts.push({ modelId, ok: true });
+        break;
+      } catch (error) {
+        lastError = error;
+        attempts.push({
+          modelId,
+          ok: false,
+          stage: error.stage || 'live-acceptance',
+          error: scrub(error.message || error),
+          ...(error.checks ? { checks: error.checks } : {}),
+          ...(error.goalStatus ? { goalStatus: error.goalStatus } : {}),
+        });
+      }
     }
-    const modelId = chooseModel(discovery.models);
-
-    requireCliOk(await runCli([
-      'model', 'select', modelId,
-      '--provider', 'opencode-go',
-      '--require-discovered',
-      '--data-dir', dataDir,
-      '--json',
-    ], { root, timeoutMs: 60000 }), 'model-select');
-
-    const nonce = `MAJIN_LIVE_CLI_${Date.now()}_${randomBytes(4).toString('hex')}`;
-    const goalText = `Create live-proof.txt containing exactly ${nonce}. Before claiming completion, register a file acceptance criterion with goal_criteria for live-proof.txt containing ${nonce}; write the file with the file tools, read it back, and report the result briefly.`;
-    const run = await runCli([
-      'run', goalText,
-      '--data-dir', dataDir,
-      '--lanes', 'files',
-      '--max-rounds', '8',
-    ], { root, timeoutMs: runTimeoutMs });
-
-    const logs = requireCliOk(await runCli(['logs', '--data-dir', dataDir, '--json'], { root, timeoutMs: 60000 }), 'logs');
-    const parsedLogs = parseJsonOutput(logs, 'logs');
-    const goal = parsedLogs.goal || parsedLogs;
-    const proofPath = path.join(workspace, 'live-proof.txt');
-    const proof = fs.existsSync(proofPath) ? fs.readFileSync(proofPath) : null;
-    const toolNames = (goal.tool_results || []).map((row) => row.tool).filter(Boolean);
-    const checks = {
-      cliExitZero: run.status === 0,
-      statusCompleted: goal.status === 'COMPLETED',
-      criteriaSourceModel: goal.criteria_source === 'model',
-      verificationEvidence: Array.isArray(goal.verification_evidence) && goal.verification_evidence.length >= 1,
-      fileContainsNonce: Boolean(proof && proof.toString('utf8').trim() === nonce),
-      usedGoalCriteria: toolNames.includes('goal_criteria'),
-      usedFileWrite: toolNames.includes('fs_write'),
-      modelCalled: Number(goal.cost?.modelCalls || 0) > 0,
-    };
-    const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name);
-    if (failedChecks.length) {
-      fail('installed-cli-goal', `live installed-CLI goal did not prove completion; failed checks: ${failedChecks.join(', ')}`, {
-        checks,
-        goalStatus: goal.status || null,
-        criteriaSource: goal.criteria_source || null,
-        blocker: scrub(goal.blocker || ''),
-        stdoutTail: scrub(String(run.stdout || '').slice(-6000)),
-        stderrTail: scrub(String(run.stderr || '').slice(-6000)),
-      });
-    }
-
-    summary = {
-      ok: true,
-      verified: true,
-      provider: 'opencode-go',
-      modelId,
-      catalogModels: discovery.models.length,
-      baseUrlOverride: Boolean(baseUrl),
-      status: goal.status,
-      criteriaSource: goal.criteria_source,
-      verificationEvidence: goal.verification_evidence.length,
-      tools: toolNames,
-      modelCalls: goal.cost?.modelCalls || 0,
-      inputTokens: goal.cost?.inputTokens || 0,
-      outputTokens: goal.cost?.outputTokens || 0,
-      fileSha256: createHash('sha256').update(proof).digest('hex'),
-      nonce,
-      checks,
-    };
   } finally {
-    try { fs.rmSync(path.join(dataDir, 'provider-secrets.json'), { force: true }); } catch { /* best-effort secret cleanup */ }
+    for (const attemptRoot of attemptRoots) {
+      try { fs.rmSync(path.join(attemptRoot, 'data', 'provider-secrets.json'), { force: true }); } catch { /* best-effort secret cleanup */ }
+    }
     if (!keepRoot) {
       try { fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* CI workspace is ephemeral */ }
-    } else if (summary) {
-      summary.keptRoot = root;
     }
   }
 
+  if (!summary) {
+    if (lastError) {
+      lastError.attempts = attempts;
+      throw lastError;
+    }
+    fail('installed-cli-goal', 'no live-acceptance attempt produced a result', { attempts });
+  }
+  summary.attempts = attempts;
+  if (keepRoot) summary.keptRoot = root;
   console.log(JSON.stringify(summary, null, 2));
 }
 
@@ -270,6 +335,7 @@ try {
     verified: false,
     stage: error.stage || 'live-acceptance',
     error: scrub(error.message || error),
+    ...(error.attempts ? { attempts: error.attempts } : {}),
     ...(error.checks ? { checks: error.checks } : {}),
     ...(error.goalStatus ? { goalStatus: error.goalStatus } : {}),
     ...(error.criteriaSource ? { criteriaSource: error.criteriaSource } : {}),

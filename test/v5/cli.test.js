@@ -811,3 +811,38 @@ test('CLI memory command lets the owner review, search, forget and clear long-te
   const badKind = await runCli(['memory', 'list', '--kind', 'secrets', '--data-dir', fx.dataDir], fx);
   assert.notEqual(badKind.status, 0);
 });
+
+test('CLI memory export/import round-trips a full backup and refuses unsafe restores', async (t) => {
+  const fx = fixture(t);
+  const store = new MemoryStore(path.join(fx.dataDir, 'memory'));
+  store.put('preference', { key: 'owner.city', text: 'Owner lives in Stockholm.', importance: 0.8 });
+  store.put('project', { key: 'boat.name', text: 'The boat is called Aurora.', importance: 0.7 });
+
+  const backup = path.join(fx.root, 'memory-backup.json');
+  const exported = await runCli(['memory', 'export', '--out', backup, '--data-dir', fx.dataDir, '--json'], fx);
+  assert.equal(exported.status, 0, `${exported.stdout}\n${exported.stderr}`);
+  assert.equal(parseJson(exported).exported, 2);
+  assert.ok(fs.existsSync(backup));
+
+  // Mutate live memory, then prove import refuses without --yes and data stays.
+  store.put('preference', { key: 'owner.city', text: 'Owner moved to Gothenburg.', importance: 0.9 });
+  const refused = await runCli(['memory', 'import', backup, '--data-dir', fx.dataDir], fx);
+  assert.notEqual(refused.status, 0);
+  assert.match(`${refused.stdout}\n${refused.stderr}`, /REPLACES all current/);
+  assert.equal(new MemoryStore(path.join(fx.dataDir, 'memory')).get('preference', 'owner.city')?.text, 'Owner moved to Gothenburg.');
+
+  const imported = parseJson(await runCli(['memory', 'import', backup, '--yes', '--data-dir', fx.dataDir, '--json'], fx));
+  assert.equal(imported.imported, 2);
+  const restored = new MemoryStore(path.join(fx.dataDir, 'memory'));
+  assert.equal(restored.get('preference', 'owner.city')?.text, 'Owner lives in Stockholm.');
+  assert.equal(restored.get('project', 'boat.name')?.text, 'The boat is called Aurora.');
+
+  // A tampered export carrying a sensitive entry is rejected before any write.
+  const tampered = JSON.parse(fs.readFileSync(backup, 'utf8'));
+  tampered.records[0].entry.sensitive = true;
+  const tamperedFile = path.join(fx.root, 'tampered.json');
+  fs.writeFileSync(tamperedFile, JSON.stringify(tampered));
+  const rejected = await runCli(['memory', 'import', tamperedFile, '--yes', '--data-dir', fx.dataDir], fx);
+  assert.notEqual(rejected.status, 0);
+  assert.equal(new MemoryStore(path.join(fx.dataDir, 'memory')).get('preference', 'owner.city')?.text, 'Owner lives in Stockholm.', 'a rejected import must not partially replace memory');
+});

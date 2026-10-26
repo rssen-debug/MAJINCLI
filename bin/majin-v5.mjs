@@ -1181,6 +1181,8 @@ async function main() {
         '  memory get <key> [--kind <kind>] [--json]                 Show one exact memory entry',
         '  memory forget <key> [--kind <kind>] [--json]              Delete one memory entry permanently (owner-only)',
         '  memory clear [--kind <kind>] --yes [--json]               Delete all memory entries, or one kind (owner-only, requires --yes)',
+        '  memory export [--out <file>]                              Export all long-term memory as a portable JSON backup (stdout without --out)',
+        '  memory import <file> --yes [--json]                       Restore memory from an export file — REPLACES all current memory (owner-only, requires --yes)',
         '  serve [--host 0.0.0.0] [--port 4555] [--data-dir <dir>] [--submit-origin <origin>] [--browser-visible|--browser-headless] [--max-rounds <n>] [--context-chars <n>]',
         '                                                            Start V5 Black Box UI & HTTP Host; persisted browser origins are read live',
         '  window                                                    Open native MAJIN V5 Electron window',
@@ -1467,7 +1469,7 @@ async function main() {
     const kind = readArg('--kind', '');
     if (kind && !MEMORY_KINDS.includes(kind)) throw new Error(`Unknown memory kind "${kind}". Kinds: ${MEMORY_KINDS.join(', ')}`);
     const limit = Math.min(200, Math.max(1, Number(readArg('--limit', '50')) || 50));
-    const positionals = positionalsFor(new Set(['--data-dir', '--kind', '--limit']));
+    const positionals = positionalsFor(new Set(['--data-dir', '--kind', '--limit', '--out']));
     const subcommand = positionals[0] || 'list';
     const store = new MemoryStore(path.join(dataDir, 'memory'));
     const kinds = kind ? [kind] : [...MEMORY_KINDS];
@@ -1511,7 +1513,41 @@ async function main() {
       else console.log(`Cleared ${kind ? `memory kind "${kind}"` : 'all long-term memory'}.`);
       return;
     }
-    throw new Error('Usage: majin-v5 memory [list|search <query>|get <key>|forget <key>|clear --yes] [--kind <kind>] [--json]');
+    if (subcommand === 'export') {
+      const snapshot = store.syncSnapshot();
+      const entries = snapshot.records.filter((record) => !record.deleted).length;
+      const payload = JSON.stringify({ exportedAt: new Date().toISOString(), ...snapshot }, null, 2);
+      const out = readArg('--out', '');
+      if (out) {
+        fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
+        fs.writeFileSync(out, payload);
+        if (json) console.log(JSON.stringify({ exported: entries, records: snapshot.records.length, out }, null, 2));
+        else console.log(`Exported ${entries} memory entr${entries === 1 ? 'y' : 'ies'} to ${out}. Keep the file private — it contains everything MAJIN remembers.`);
+      } else {
+        console.log(payload);
+      }
+      return;
+    }
+    if (subcommand === 'import') {
+      const file = positionals[1];
+      if (!file) throw new Error('Usage: majin-v5 memory import <file> --yes');
+      if (!args.includes('--yes')) throw new Error('Refusing to import without --yes: import REPLACES all current long-term memory with the file contents. Export a backup first with: majin-v5 memory export --out backup.json');
+      const stat = fs.statSync(file);
+      if (stat.size > 16_000_000) throw new Error('Import file is too large (max 16 MB).');
+      let parsed;
+      try { parsed = JSON.parse(fs.readFileSync(file, 'utf8')); }
+      catch (error) { throw new Error(`Import file is not valid JSON: ${error.message}`); }
+      const records = Array.isArray(parsed) ? parsed : parsed?.records;
+      if (!Array.isArray(records)) throw new Error('Import file does not look like a MAJIN memory export (missing records array).');
+      // applySyncRecords validates every record first (kinds, versions,
+      // size, sensitive entries) and throws before writing on bad input.
+      store.applySyncRecords(records);
+      const imported = records.filter((record) => !record.deleted).length;
+      if (json) console.log(JSON.stringify({ imported, records: records.length }, null, 2));
+      else console.log(`Imported ${imported} memory entr${imported === 1 ? 'y' : 'ies'} from ${file}. Previous memory was replaced.`);
+      return;
+    }
+    throw new Error('Usage: majin-v5 memory [list|search <query>|get <key>|forget <key>|clear --yes|export [--out <file>]|import <file> --yes] [--kind <kind>] [--json]');
   }
 
   if (command === 'tools') {
