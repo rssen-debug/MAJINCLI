@@ -397,8 +397,10 @@ test('frame-scoped inspect, fill, click, check, verify and download work inside 
   assert.match(shellInspect.result, /"selector":"#app"/);
   assert.ok(!shellInspect.result.includes('FRAME APP'), 'main-document inspect must not pretend to see cross-origin frame content');
 
-  const badFrame = await run('browser_fill', { frame: '#nope', selector: '#name', value: 'Ada' });
-  assert.equal(badFrame.ok, false, 'an unknown frame selector must fail honestly, not fall back to the main document');
+  await assert.rejects(
+    run('browser_fill', { frame: '#nope', selector: '#name', value: 'Ada' }),
+    /no iframe matched frame selector: #nope/,
+    'an unknown frame selector must fail honestly, not fall back to the main document');
 
   const frameInspect = await run('browser_inspect', { frame: '#app', marks: true });
   assert.equal(frameInspect.meta.frameUrl, `${frameOrigin}/frame`);
