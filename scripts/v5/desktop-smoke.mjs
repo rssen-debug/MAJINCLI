@@ -85,6 +85,13 @@ try {
   const winTitle = await page.title();
   assert.match(winTitle, /MAJIN V5/, 'Native Electron window title must identify MAJIN V5');
 
+  // The strip renders synchronously once the deferred UI module boots; wait
+  // for that boot instead of racing module execution on a loaded runner.
+  await page.waitForFunction(
+    () => document.querySelectorAll('#dot-segments .v5-dot-cell').length === 99,
+    null,
+    { timeout: 30_000 },
+  ).catch(() => {});
   const dotCount = await page.locator('#dot-segments .v5-dot-cell').count();
   assert.equal(dotCount, 99, 'Black Box UI must render 99 dot-matrix segments in Electron window');
 
