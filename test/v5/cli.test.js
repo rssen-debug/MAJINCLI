@@ -869,3 +869,28 @@ test('CLI memory export/import round-trips a full backup and refuses unsafe rest
   assert.notEqual(rejected.status, 0);
   assert.equal(new MemoryStore(path.join(fx.dataDir, 'memory')).get('preference', 'owner.city')?.text, 'Owner lives in Stockholm.', 'a rejected import must not partially replace memory');
 });
+
+test('serve persists explicit owner lanes, folders and browser origins before listening', async (t) => {
+  const { root, dataDir } = fixture(t);
+  const session = startCliSession(['serve', '--host', '127.0.0.1', '--port', '0',
+    '--data-dir', dataDir, '--all-lanes', '--folder', root,
+    '--browser-origin', 'https://example.com'], { root });
+  t.after(async () => { killProcessTree(session.child); await session.closed; });
+  await session.waitFor('listening on');
+  const result = await runCli(['grants', 'show', '--data-dir', dataDir, '--json'], { root });
+  assert.equal(result.status, 0, result.stderr);
+  const access = parseJson(result);
+  assert.ok(access.grantedLanes.includes('shell'));
+  assert.ok(access.grantedLanes.includes('browser'));
+  assert.ok(access.grantedFolders.includes(root));
+  assert.deepEqual(access.browserWriteOrigins, ['https://example.com']);
+});
+
+test('serve rejects unknown owner lanes before listening', async (t) => {
+  const { root, dataDir } = fixture(t);
+  const result = await runCli(['serve', '--host', '127.0.0.1', '--port', '0',
+    '--data-dir', dataDir, '--lanes', 'invalid-lane'], { root, timeoutMs: 15000 });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Unknown lane/);
+  assert.doesNotMatch(result.stdout, /listening on/);
+});
