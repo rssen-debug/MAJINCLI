@@ -218,3 +218,10 @@ test('JobApplicationWorkflow supports mid-flight steering ("Nej vänta, bara job
   assert.equal(parsedOutput.counts.matched, 2);
   assert.equal(parsedOutput.rows.length, 1);
 });
+
+ test('CV telephone extraction retains explicit international prefixes without crossing lines', () => {
+  for (const phone of ['+46 70 555 12 34', '+45 12 34 56 78', '0705551234']) {
+    const facts = extractVerifiableCvFacts(`Ada Andersson\nTelefon: ${phone}\n5 års erfarenhet`);
+    assert.equal(facts.phone, phone);
+  }
+});

@@ -58,7 +58,7 @@ export function extractVerifiableCvFacts(cvText = '', { cvFileName = 'cv.pdf', c
   const lower = raw.toLowerCase();
 
   const emailMatch = raw.match(/\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b/);
-  const phoneMatch = raw.match(/\b(?:\+46|\+45|07\d)[\d\s-]{6,13}\b/);
+  const phoneMatch = raw.match(/(?<![\w+])(?:\+(?:46|45)(?:[ \t-]*\d){7,10}|07\d(?:[ \t-]*\d){7})\b/);
 
   // Name: first non-empty header line that looks like a person's name
   const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
