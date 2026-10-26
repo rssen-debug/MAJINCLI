@@ -378,6 +378,7 @@ export function createV5Server({
       schedule.start();
       const addr = server.address();
       const actualPort = typeof addr === 'object' && addr ? addr.port : port;
+      schedule.verificationUrl = `http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${actualPort}/api/v5/schedule`;
       return {
         host,
         port: actualPort,

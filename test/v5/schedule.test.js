@@ -97,3 +97,24 @@ test('provider exceptions pause recurrence and owner can remove schedules after 
   assert.throws(() => f.service.manage({ action: 'resume', id: job.id }), /Owner sys lane/);
   assert.equal(f.service.manage({ action: 'remove', id: job.id }).removed, true);
 });
+
+test('model-created schedule can reach COMPLETED by independently reading the real host schedule endpoint', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-schedule-create-'));
+  let calls = 0;
+  const srv = createV5Server({ dataDir: root, completeImpl: async () => {
+    calls++;
+    const call = (name, args) => ({ text: '', toolCalls: [{ id: `create-${calls}`, name, argsJson: JSON.stringify(args) }], usage: {} });
+    if (calls === 1) return call('majin_schedule', { action: 'add', when: 'every 1h', task: 'Find matching jobs', maxRuns: 3 });
+    if (calls === 2) return call('goal_criteria', { criteria: [{ kind: 'http', url: srv.schedule.verificationUrl, contains: srv.schedule.status().jobs[0].id, status: 200 }] });
+    return { text: 'Schedule created', toolCalls: [], usage: {} };
+  } });
+  await srv.architect.providers.configureProvider({ providerId: 'deepseek', apiKey: 'dummy-local-key', discover: false });
+  srv.architect.providers.selectModel({ providerId: 'deepseek', modelId: 'deepseek-fixture', allowManualFallback: true });
+  srv.architect.files.ownerMode.grant({ lanes: ['sys', 'web'] });
+  t.after(async () => { await srv.stop(); fs.rmSync(root, { recursive: true, force: true }); });
+  await srv.start();
+  const goal = await srv.providerAgent.execute({ goalText: 'Find matching jobs every hour, three times.' });
+  assert.equal(goal.status, 'COMPLETED', goal.blocker);
+  assert.ok(goal.verification_evidence.length);
+  assert.equal(srv.schedule.status().jobs[0].maxRuns, 3);
+});

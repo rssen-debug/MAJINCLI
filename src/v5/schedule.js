@@ -44,7 +44,7 @@ export class V5Schedule {
   }
   status() {
     return { running: Boolean(this.scheduler && this.timer && !this.error), error: this.error,
-      hostMustStayRunning: true, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      hostMustStayRunning: true, verificationUrl: this.verificationUrl || null, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       model: 'current saved V5 model at execution time', jobs: this.scheduler?.list() || [] };
   }
   tick() {
@@ -75,7 +75,7 @@ export class V5Schedule {
       if (this.scheduler.jobs.length >= 100) throw new Error('Schedule limit reached (100)');
       const job = this.scheduler.add({ name: data.name, when: data.when, task: data.task, maxRuns: data.maxRuns ?? 1 });
       if (job.nextRun === null) { this.scheduler.remove(job.id); throw new Error('Schedule has no future execution time'); }
-      return { job, hostMustStayRunning: true };
+      return { job, hostMustStayRunning: true, verificationUrl: this.verificationUrl || null };
     }
     if (!data.id || !this.scheduler.jobs.some(j => j.id === data.id)) throw new Error('Unknown schedule id');
     if (this.scheduler.running.has(data.id)) throw new Error('Schedule is executing; stop the active goal before editing it');
@@ -90,6 +90,6 @@ const scheduleSchema = z.object({
   maxRuns: z.number().int().min(1).max(10000).optional(),
 }).strict();
 export function createScheduleTool(service) {
-  return { name: 'majin_schedule', description: 'Schedule owner-requested future work using the saved V5 model and grants. Host must stay open. Times use the host timezone. Actions: list/add/pause/resume/remove. Set maxRuns explicitly for recurring work (default one run). Unverified runs pause, never silently replay. No separate delivery or model route is implied.',
+  return { name: 'majin_schedule', description: 'Schedule owner-requested future work using the saved V5 model and grants. Host must stay open. Times use the host timezone. Actions: list/add/pause/resume/remove. Set maxRuns explicitly for recurring work (default one run). Unverified runs pause, never silently replay. The add result gives a verificationUrl: register an http goal criterion for that URL containing the returned job.id to verify creation. No separate delivery or model route is implied.',
     inputSchema: jsonSchemaFor(scheduleSchema), run: input => service.manage(input) };
 }
