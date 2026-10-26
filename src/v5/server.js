@@ -11,6 +11,7 @@ import { GrandArchitect } from './architect.js';
 import { getV5InventorySummary } from './inventory.js';
 import { ProviderAgent } from './provider-agent.js';
 import { V5Schedule } from './schedule.js';
+import { V5Heartbeat } from './heartbeat.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.join(__dirname, 'ui');
@@ -103,6 +104,8 @@ export function createV5Server({
       && architect.files.describeAccessState().grantedLanes.includes('sys'),
   });
   architect.schedule = schedule;
+  const heartbeat = new V5Heartbeat({ dataDir });
+  architect.heartbeat = heartbeat;
   const useProviderAgent = body => Boolean(architect.providers.state.activeModelId) &&
     body.actions == null && body.jobAds == null && !body.synthesizeMissingSkill && !body.blocker && !body.requireUserConfirmation;
 
@@ -146,6 +149,11 @@ export function createV5Server({
           app: 'majin-v5',
           ...architect.ops.getVersionInfo(),
         });
+      }
+
+      if (pathname === '/api/v5/heartbeat') {
+        if (method === 'GET') return sendJson(res, 200, heartbeat.view());
+        if (method === 'POST') return sendJson(res, 200, await heartbeat.manage(await readJsonBody(req)));
       }
 
       if (pathname === '/api/v5/schedule') {
@@ -368,6 +376,7 @@ export function createV5Server({
     architect,
     providerAgent,
     schedule,
+    heartbeat,
     server,
     getPairingCode: () => currentPairingCode,
     async start() {
@@ -376,6 +385,8 @@ export function createV5Server({
         server.listen(port, host, resolve);
       });
       schedule.start();
+      heartbeat.start({ ownsHost: schedule.ownsLock === true });
+      heartbeat.observe(providerAgent.getGoalState());
       const addr = server.address();
       const actualPort = typeof addr === 'object' && addr ? addr.port : port;
       schedule.verificationUrl = `http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${actualPort}/api/v5/schedule`;
@@ -386,6 +397,7 @@ export function createV5Server({
       };
     },
     async stop() {
+      heartbeat.stop();
       const stoppingSchedule = schedule.stop();
       await providerAgent.close();
       await stoppingSchedule;
