@@ -3,6 +3,7 @@
  * MAJIN V5 — GRAND ARCHITECT CLI Entrypoint (`bin/majin-v5.mjs`)
  */
 import fs from 'node:fs';
+import { postGoalJson } from '../src/v5/cli-transport.js';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -412,19 +413,6 @@ function requireCliProviderModel(srv, { resume = false } = {}) {
     throw new Error(NO_PROVIDER_GUIDANCE);
   }
   return hasActiveModel;
-}
-
-async function postGoalJson(baseUrl, endpoint, body = {}) {
-  const response = await fetch(`${baseUrl}${endpoint}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok || result.ok === false) {
-    throw new Error(result.error?.message || result.message || `Goal request failed with HTTP ${response.status}`);
-  }
-  return result;
 }
 
 function createGoalProgressPrinter(srv) {

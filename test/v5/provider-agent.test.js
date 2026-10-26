@@ -11,6 +11,30 @@ import { responsesInput } from '../../src/core/provider/responses.js';
 import { toAnthropic } from '../../src/core/provider/anthropic.js';
 import { browserBinary } from '../../src/v4/tools/host.js';
 import { PNG } from 'pngjs';
+import { createDriverTools } from '../../src/v5/codex-tools.js';
+
+test('empty directory listing means workspace and still rejects traversal', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-empty-list-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(root, 'proof.txt'), 'fixture');
+  const driver = await createDriverTools({ workspace: root });
+  const tools = driver;
+  assert.match(JSON.stringify(await tools.get('fs_list').run({ path: '' })), /proof.txt/);
+  await assert.rejects(tools.get('fs_list').run({ path: '..' }), /outside workspace/);
+});
+
+test('default request budget compacts long history without changing persisted evidence', async t => {
+  const { server, requests } = await setup(t, (_body, count) => count <= 10
+    ? tool(`read-${count}`, 'fs_read', { path: 'large.txt' })
+    : { role: 'assistant', content: 'Read the fixture.' });
+  fs.writeFileSync(path.join(server.architect.workspaceDir, 'large.txt'), 'x'.repeat(15000));
+  const result = await server.providerAgent.execute({ goalText: 'Read the fixture ten times for this regression test.' });
+  assert.equal(result.context.maxChars, 80000);
+  assert.equal(result.context.compacted, true);
+  assert.ok(result.context.sentChars + result.context.reservedChars <= 80000);
+  assert.ok(JSON.stringify(server.providerAgent.current.messages).length > 100000);
+  assert.ok(JSON.stringify(requests.at(-1).body.messages).length < 80000);
+});
 
 async function setup(t, respond) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-provider-agent-'));
@@ -31,6 +55,32 @@ async function setup(t, respond) {
   t.after(async () => { await server.providerAgent.cancel(); if (server.server.listening) await server.stop(); await new Promise(resolve => upstream.close(resolve)); fs.rmSync(root, { recursive: true, force: true }); });
   return { root, requests, server };
 }
+
+test('PARTIAL browser work retains its filled form for the next goal and visible override appears in trace', async t => {
+  if (!(await browserBinary())) { t.skip('No installed Chromium/Edge on this runner'); return; }
+  const portal = http.createServer((_req, res) => {
+    res.setHeader('content-type', 'text/html');
+    res.end('<input id="name"><h1>Retained form fixture</h1>');
+  });
+  await new Promise(resolve => portal.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${portal.address().port}`;
+  const { server, requests } = await setup(t, (_body, count) => {
+    if (count === 1) return tool('open', 'browser_open', { url: origin, headless: true });
+    if (count === 2) return tool('fill', 'browser_fill', { selector: '#name', value: 'Preserved Name' });
+    if (count === 4) return tool('inspect', 'browser_inspect', {});
+    return { role: 'assistant', content: 'Form prepared.' };
+  });
+  t.after(async () => { await server.providerAgent.close(); portal.closeAllConnections(); await new Promise(resolve => portal.close(resolve)); });
+  server.providerAgent.browserVisible = true;
+  server.architect.files.enableOwnerMode({ lanes: ['files', 'browser'], folders: [server.architect.workspaceDir] });
+  server.architect.files.grantBrowserOrigins([origin]);
+  const first = await server.providerAgent.execute({ goalText: 'Prepare this form, do not submit.' });
+  assert.equal(first.status, 'PARTIAL');
+  assert.equal(server.providerAgent.hasRetainedBrowserDriver(), true);
+  assert.ok(first.trace.some(row => row.type === 'tool_call_started' && /headless=false/.test(row.args)));
+  await server.providerAgent.execute({ goalText: 'Inspect the existing form only.' });
+  assert.match(JSON.stringify(requests.at(-1).body.messages), /Preserved Name/);
+});
 const tool = (id, name, args, reasoning_content) => ({ role: 'assistant', content: null, reasoning_content,
   tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
 
