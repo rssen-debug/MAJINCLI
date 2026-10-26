@@ -17,6 +17,41 @@ function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'majin-v5-jobs-'));
 }
 
+test('negative and planned CV claims are not extracted as earned qualifications', () => {
+  const facts = extractVerifiableCvFacts('Ada Andersson\nNo Azure experience. Intune administration.\nSaknar arbetstillstånd\nPreparing for CKA\nPMP expired\nNo bachelor degree\nSeeking SOC analyst role\nInte 5 års erfarenhet\nFluent French');
+  assert.equal(facts.workPermit, null);
+  assert.deepEqual(facts.certificates, []);
+  assert.deepEqual(facts.education, []);
+  assert.equal(facts.experienceYears, null);
+  assert.ok(!facts.skills.includes('azure'));
+  assert.ok(facts.skills.includes('intune'));
+  assert.ok(!facts.roles.includes('soc analyst'));
+  assert.ok(!facts.languages.includes('engelska'));
+  const positive = extractVerifiableCvFacts('Ada Andersson\nCKA\nBachelor degree\nEnglish\nWork permit: valid');
+  assert.ok(positive.certificates.includes('CKA'));
+  assert.ok(positive.education.length > 0);
+  assert.ok(positive.languages.includes('engelska'));
+  assert.ok(positive.workPermit);
+  for (const claim of ['Work permit?', 'Arbetstillstånd', 'EU citizen', 'Work permit: pending']) {
+    assert.equal(extractVerifiableCvFacts(claim).workPermit, null);
+  }
+});
+
+test('qualification aliases match without upgrading identity administration to cloud or on-prem expertise', () => {
+  const facts = extractVerifiableCvFacts('Ada Andersson\nAzure Active Directory, M365, Intune\nEnglish');
+  assert.ok(!facts.skills.includes('azure'));
+  assert.ok(!facts.skills.includes('active directory'));
+  const matched = evaluateJobMatch({ requiredSkills: ['Microsoft Entra ID', 'Microsoft 365', 'Microsoft Intune', 'English'] }, facts);
+  assert.equal(matched.matched, true);
+  assert.deepEqual(matched.requiredSkills.missing, []);
+  assert.equal(evaluateJobMatch({ requiredSkills: ['azure'] }, facts).matched, false);
+  assert.equal(evaluateJobMatch({ minExperienceYears: 2 }, undefined).matched, false);
+  const partial = evaluateJobMatch({ requiredSkills: ['Intune', 'PMP'] }, facts, { minRequiredRatio: 0.5 });
+  assert.equal(partial.matched, true);
+  assert.deepEqual(partial.requiredSkills.missing, ['pmp']);
+  assert.doesNotMatch(partial.motivation, /samtliga/);
+});
+
 test('batch without a portal cannot fabricate a submission or confirmation', async t => {
   const dir = tmpDir(); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const wf = new JobApplicationWorkflow({ dataDir: dir });
