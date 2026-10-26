@@ -207,6 +207,21 @@ export async function openaiOnce(o) {
   });
 }
 
+async function* decodedStreamLines(body) {
+  const decoder = new TextDecoder();
+  let buffered = '';
+  for await (const chunk of body) {
+    buffered += decoder.decode(chunk, { stream: true });
+    let end;
+    while ((end = buffered.indexOf('\n')) >= 0) {
+      yield buffered.slice(0, end).trim();
+      buffered = buffered.slice(end + 1);
+    }
+  }
+  buffered += decoder.decode();
+  if (buffered.trim()) yield buffered.trim();
+}
+
 export async function openaiStream(o) {
   const { route, tools = [], messages, signal, maxTokens, temperature, onEvent } = o;
   return withResponse(route, body(route, { messages, tools, maxTokens, temperature, stream: true, extra: o.extra }), { signal }, async (res) => {
@@ -229,14 +244,7 @@ export async function openaiStream(o) {
   const calls = new Map();
   let finish = 'stop';
   let usageObj = null;
-  let buf = '';
-  const decoder = new TextDecoder();
-  for await (const chunk of res.body) {
-    buf += decoder.decode(chunk, { stream: true });
-    let idx;
-    while ((idx = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, idx).trim();
-      buf = buf.slice(idx + 1);
+  for await (const line of decodedStreamLines(res.body)) {
       if (!line.startsWith('data:')) continue;
       const data = line.slice(5).trim();
       if (!data || data === '[DONE]') continue;
@@ -272,7 +280,6 @@ export async function openaiStream(o) {
         }
       }
       if (choice.finish_reason) finish = choice.finish_reason;
-    }
   }
   if (text.length > 6000) bus.warn('stream.truncated', { chars: text.length });
   const toolCalls = [...calls.values()].filter((c) => c.name).map((c) => ({ id: c.id || `call_${Math.random().toString(36).slice(2, 8)}`, name: c.name, argsJson: c.args || '{}' }));

@@ -16,6 +16,8 @@ const files = [
   'test/v5/cli-transport.test.js',
   'test/v5/provider-agent.test.js',
   'test/v5/learning-engine.test.js',
+  'test/v5/deepseek-stream.test.js',
+  'test/v5/job-workflow.test.js',
   'test/v5/full-access.test.js',
   'test/v5/schedule.test.js',
   'test/v5/heartbeat.test.js',

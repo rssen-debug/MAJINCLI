@@ -33,6 +33,8 @@ const KNOWN_SKILLS = [
   'postgresql', 'docker', 'kubernetes', 'aws', 'azure', 'gcp', 'git', 'linux',
   'windows', 'c#', '.net', 'java', 'go', 'golang', 'rust', 'graphql', 'rest',
   'playwright', 'testing', 'ci/cd', 'scrum', 'agile', 'figma', 'css', 'html',
+  'intune', 'entra id', 'azure ad', 'microsoft 365', 'm365', 'apple business manager',
+  'active directory', 'endpoint management', 'local it', 'sentinel', 'defender',
 ];
 
 const KNOWN_LANGUAGES = [
@@ -44,7 +46,7 @@ const KNOWN_LANGUAGES = [
 
 const KNOWN_LOCATIONS = [
   'stockholm', 'göteborg', 'malmö', 'uppsala', 'köpenhamn', 'copenhagen', // input vocabulary, never rendered
-  'oslo', 'helsinki', 'remote', 'distans', 'lund', 'linköping', // input vocabulary, never rendered
+  'oslo', 'helsinki', 'remote', 'distans', 'lund', 'linköping', 'helsingborg', 'landskrona', 'københavn', // input vocabulary, never rendered
 ];
 
 /**
@@ -56,7 +58,7 @@ export function extractVerifiableCvFacts(cvText = '', { cvFileName = 'cv.pdf', c
   const lower = raw.toLowerCase();
 
   const emailMatch = raw.match(/\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b/);
-  const phoneMatch = raw.match(/\b(?:\+46|\+45|07\d)[\d\s-]{6,13}\b/);
+  const phoneMatch = raw.match(/(?<![\w+])(?:\+(?:46|45)(?:[ \t-]*\d){7,10}|07\d(?:[ \t-]*\d){7})\b/);
 
   // Name: first non-empty header line that looks like a person's name
   const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -79,6 +81,10 @@ export function extractVerifiableCvFacts(cvText = '', { cvFileName = 'cv.pdf', c
 
   const roles = [];
   const rolePatterns = [
+    { id: 'it technician', re: /\b(it[- ]tekniker|it technician|local it)\b/i },
+    { id: 'systems administrator', re: /\b(systems? administrator|systemadministratör)\b/i },
+    { id: 'endpoint administrator', re: /\b(intune administrator|endpoint (?:administrator|management specialist)|modern workplace engineer)\b/i },
+    { id: 'soc analyst', re: /\b(soc analyst|soc[- ]analytiker|security operations analyst)\b/i },
     { id: 'fullstack developer', re: /\b(fullstack|full-stack|fullstackutvecklare)\b/i }, // input vocabulary, never rendered
     { id: 'backend developer', re: /\b(backend|backendutvecklare|systemutvecklare)\b/i }, // input vocabulary, never rendered
     { id: 'frontend developer', re: /\b(frontend|frontendutvecklare|webbutvecklare)\b/i }, // input vocabulary, never rendered
