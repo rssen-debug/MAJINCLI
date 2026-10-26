@@ -11,6 +11,7 @@ import { def } from './registry.js';
 import { dirs } from '../paths.js';
 
 const sessions = new Map();
+const recentShots = new Map();
 
 export function browserWriteOrigins(ctx) {
   try {
@@ -405,6 +406,43 @@ export const browserTools = [
         if (stateFor(ctx).blockedRequests.length) details.text += '\nBlocked network writes (owner grant required):\n' + JSON.stringify(stateFor(ctx).blockedRequests);
         audit(ctx, 'inspect', { controls: details.controls.length });
         return withOwnerHandoff(p, ctx, { result: `URL: ${p.url()}\nTitle: ${details.title}\n\nVisible text:\n${details.text}\n\nControls (${details.controls.length}, max 100):\n${JSON.stringify(details.controls, null, 2)}\n\nLinks:\n${JSON.stringify(details.links)}`, meta: { url: p.url(), title: details.title, controls: details.controls.length }, summary: `inspected page (${details.controls.length} controls)` });
+      });
+    },
+  }),
+
+  def({
+    name: 'browser.shot',
+    group: 'browser',
+    risk: 'read',
+    desc: 'Capture a PNG screenshot of the current page into the workspace (default shots/shot-<time>.png). ifChanged=true reuses the previous file when the pixels are identical. The saved PNG is real visual evidence and can be checked with a pixel acceptance criterion.',
+    params: {
+      path: 'string: optional PNG path (workspace-relative or absolute inside the workspace)',
+      ifChanged: 'string optional true|false (default false) to skip saving duplicate PNGs',
+      fullPage: 'boolean: capture the full page instead of the viewport (default false)',
+    },
+    async run({ path: requestedPath = '', ifChanged = 'false', fullPage = false } = {}, ctx) {
+      return withPage(ctx, async (p) => {
+        const bytes = await p.screenshot({ type: 'png', fullPage: Boolean(fullPage) });
+        if (!bytes?.length) throw new Error('Browser returned no screenshot image');
+        const sha256 = createHash('sha256').update(bytes).digest('hex');
+        const sessionKey = String(ctx.session || 'default');
+        const previous = recentShots.get(sessionKey);
+        if (String(ifChanged) === 'true' && previous?.sha256 === sha256) {
+          return { result: `Screenshot unchanged — previous file is still valid: ${previous.path}`,
+            meta: { path: previous.path, sha256, bytes: bytes.length, unchanged: true },
+            summary: 'screen unchanged; no duplicate file' };
+        }
+        const workspace = ctx.cfg?.get?.('workspace') || dirs.cache;
+        const target = requestedPath
+          ? (path.isAbsolute(requestedPath) ? requestedPath : path.join(workspace, requestedPath))
+          : path.join(workspace, 'shots', `shot-${sessionKey.replace(/[^\w.-]/g, '_')}-${Date.now()}.png`);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, bytes);
+        recentShots.set(sessionKey, { path: target, sha256 });
+        if (recentShots.size > 64) recentShots.delete(recentShots.keys().next().value);
+        audit(ctx, 'shot', { path: target, bytes: bytes.length });
+        return { result: `Saved screenshot to ${target} (${bytes.length} bytes). URL: ${p.url()}`,
+          meta: { path: target, sha256, bytes: bytes.length, unchanged: false }, summary: `screenshot saved ${path.basename(target)}` };
       });
     },
   }),

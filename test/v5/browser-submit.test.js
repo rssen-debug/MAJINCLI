@@ -9,6 +9,7 @@ import { CodexDriver } from '../../src/v5/codex-driver.js';
 import { createDriverTools } from '../../src/v5/codex-tools.js';
 import { FileAndAccessController } from '../../src/v5/files-access.js';
 import { browserWriteAllowed } from '../../src/core/tools/browser.js';
+import { verifyPixel } from '../../src/v2/runtime/verifiers.js';
 
 test('browser write grants match exact origins and cannot be escalated by a subdomain or URL credentials', () => {
   const ctx = { browserWriteOrigins: ['https://employer.example'] };
@@ -138,4 +139,42 @@ test('persisted browser origin grants and revocations are reread for the already
   const blockedAfterRevoke = await captureError(run('browser_click', { selector: 'button[type="submit"]' }));
   assert.equal(blockedAfterRevoke.code, 'BROWSER_ORIGIN_GRANT_REQUIRED');
   assert.deepEqual(submissions, [{ name: 'Dynamic User' }], 'revocation is also effective without recreating the tool context');
+});
+
+test('browser_shot captures real PNG evidence that the pixel verifier can independently prove', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-browser-shot-'));
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(workspace, { recursive: true });
+  const page = http.createServer((_req, res) => {
+    res.setHeader('content-type', 'text/html');
+    res.end('<!doctype html><body style="margin:0"><div style="width:100vw;height:100vh;background:rgb(12,34,56)"></div></body>');
+  });
+  await new Promise(resolve => page.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${page.address().port}`;
+  const tools = await createDriverTools({ workspace, grantedLanes: ['browser'], browser: true, browserVisible: false });
+  const run = async (name, args = {}) => tools.get(name).run(args);
+  t.after(async () => {
+    try { await run('browser_close'); } catch { /* browser may not have opened on a skipped runner */ }
+    page.closeAllConnections();
+    await new Promise(resolve => page.close(resolve));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  if (!tools.has('browser_open')) { t.skip('No installed Chromium/Edge on this runner'); return; }
+  assert.equal(tools.has('browser_shot'), true, 'the Playwright surface must include screenshots');
+
+  await run('browser_open', { url: origin });
+  const shot = await run('browser_shot', { path: 'page-shot.png' });
+  const pngPath = path.join(workspace, 'page-shot.png');
+  assert.equal(shot.meta.path, pngPath);
+  const bytes = fs.readFileSync(pngPath);
+  assert.equal(bytes.length, shot.meta.bytes);
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), shot.meta.sha256);
+  assert.equal(shot.image?.mimeType, 'image/png', 'the driver must attach the PNG for provider vision');
+  assert.equal(Buffer.from(shot.image.data, 'base64').length, shot.meta.bytes);
+  const proof = verifyPixel({ pngPath, rgba: [12, 34, 56, 255], tolerance: 2, minHits: 1000 });
+  assert.equal(proof.verified, true, JSON.stringify(proof.error || proof.evidence));
+
+  const again = await run('browser_shot', { ifChanged: 'true' });
+  assert.equal(again.meta.unchanged, true);
+  assert.equal(again.meta.path, pngPath);
 });

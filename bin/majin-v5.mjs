@@ -252,6 +252,10 @@ function formatTraceEvent(event) {
     case 'verification_unsupported': return `verification cannot prove: ${(event.checks || []).map((check) => `${check.kind} (${check.reason})`).join('; ')}`;
     case 'verification_completed': return `all acceptance checks verified (${event.evidence ?? 0} evidence)`;
     case 'repair_requested': return `repairing result (attempt ${event.attempt || 1}) for ${event.kind} ${event.label || ''}`;
+    case 'delegate_batch_started': return `delegating ${(event.tasks || []).length} independent subtask(s) to parallel read-only workers (max ${event.concurrency || 3} at once): ${(event.tasks || []).join(', ')}`;
+    case 'delegate_task_started': return `delegate ${event.taskId} started${event.task ? `: ${event.task}` : ''}`;
+    case 'delegate_task_finished': return `delegate ${event.taskId} ${String(event.status || 'finished').toLowerCase()}${event.cached ? ' (cached observation)' : ''}${event.elapsedMs != null ? ` in ${event.elapsedMs}ms` : ''}${event.toolCalls != null ? ` · ${event.toolCalls} tool call(s)` : ''}`;
+    case 'delegate_batch_finished': return `delegation ${String(event.status || 'finished').toLowerCase()}${event.wallMs != null ? ` in ${event.wallMs}ms wall time` : ''} — observations are unverified evidence for the main agent`;
     case 'waiting_user': return `waiting for owner (${event.kind || 'OWNER'})${event.origin ? ` at ${event.origin}` : event.url ? ` at ${event.url}` : ''} — nothing submitted without your step`;
     case 'goal_finished': return `goal finished: ${event.status || 'UNKNOWN'}`;
     default: return String(event.type).replaceAll('_', ' ');
@@ -931,7 +935,7 @@ async function executeChatCommand() {
     const query = rest.trim();
     if (!query) {
       const status = (await tools.get('driver_status').run({})).result;
-      console.log(`Tool parity: ${status.toolParity.available}/${status.toolParity.universe} (${status.toolParity.coveragePercent}%) · driver tools: ${tools.size}`);
+      console.log(`Tool parity: ${status.toolParity.available}/${status.toolParity.universe} (${status.toolParity.coveragePercent}%) · capability covered: ${status.toolParity.capabilityCovered}/${status.toolParity.universe} (${status.toolParity.capabilityPercent}%) · driver tools: ${tools.size}`);
       console.log('Use /tools <query> to inspect matching available tools and concrete unavailable reasons.');
       return;
     }
@@ -1395,6 +1399,9 @@ async function main() {
         available: status.toolParity.available,
         unavailable: status.toolParity.unavailable,
         coveragePercent: status.toolParity.coveragePercent,
+        capabilityCovered: status.toolParity.capabilityCovered,
+        capabilityPercent: status.toolParity.capabilityPercent,
+        categories: status.toolParity.categories,
       },
       driverTools: tools.size,
     };
@@ -1407,7 +1414,7 @@ async function main() {
       console.log(`Workspace: ${report.workspace} (writable: ${report.checks.workspaceWritable ? 'yes' : 'no'})`);
       console.log(`Provider: ${report.provider.canonicalSelection || 'no active model'} · configured: ${report.checks.providerConfigured ? 'yes' : 'no'} · verified: ${report.checks.providerConnectionVerified ? 'yes' : 'no'}`);
       console.log(`Owner lanes: ${access.grantedLanes.length ? access.grantedLanes.join(', ') : '(none)'}`);
-      console.log(`Tool parity: ${report.toolParity.available}/${report.toolParity.universe} (${report.toolParity.coveragePercent}%) · driver tools: ${report.driverTools}`);
+      console.log(`Tool parity: ${report.toolParity.available}/${report.toolParity.universe} (${report.toolParity.coveragePercent}%) · capability covered: ${report.toolParity.capabilityCovered}/${report.toolParity.universe} (${report.toolParity.capabilityPercent}%) · driver tools: ${report.driverTools}`);
       console.log(`Browser available: ${report.checks.browserAvailable ? 'yes' : 'no'} · interactive Windows: ${report.checks.interactiveWindows ? 'yes' : 'no'} · visible: ${report.browser.visible ? 'yes' : 'no'} · write origins: ${report.browser.writeOrigins.length ? report.browser.writeOrigins.join(', ') : '(none)'}`);
       if (!access.grantedLanes.length) console.log('Next: run `majin-v5 grants grant --all-lanes` or add --all-lanes to a run command to enable the full owner tool surface.');
       if (!report.checks.providerConfigured) console.log('Next: run `majin-v5 model configure --provider opencode-go --api-key-env OPENCODE_API_KEY --discover`, then `majin-v5 model select <model-id>`; deterministic tools still work via `tools call`.');
@@ -1518,11 +1525,26 @@ async function main() {
       console.log(JSON.stringify(payload, null, 2));
     } else {
       console.log(`MAJIN V5 tool parity: ${status.toolParity.available}/${status.toolParity.universe} (${status.toolParity.coveragePercent}%)`);
+      console.log(`Capability coverage (available + provided by a current V5 tool): ${status.toolParity.capabilityCovered}/${status.toolParity.universe} (${status.toolParity.capabilityPercent}%)`);
+      const categoryLabels = {
+        superseded: 'provided by a current V5 tool',
+        platform: `needs another platform (this host: ${process.platform})`,
+        'missing-dependency': 'missing local dependency or configured service',
+        'host-service': 'needs a host/owner service surface, not the isolated driver',
+        'lane-not-granted': 'owner lane not granted',
+        'legacy-unported': 'legacy-only helper without a V5 equivalent yet',
+        unregistered: 'not registered on this host',
+      };
       console.log(`Granted lanes: ${grantedLanes.length ? grantedLanes.join(', ') : '(none)'}`);
       console.log(`Driver tools (${tools.size}):`);
       for (const tool of status.toolSources) console.log(`  ${tool.name}  <- ${tool.source}${tool.lane ? ` [${tool.lane}]` : ''}`);
       console.log(`Unavailable tools (${status.toolParity.unavailable}) with reasons:`);
-      for (const entry of status.toolParity.unavailableTools) console.log(`  ${entry.sourceName} — ${entry.reason}`);
+      for (const [category, label] of Object.entries(categoryLabels)) {
+        const group = status.toolParity.unavailableTools.filter((entry) => entry.category === category);
+        if (!group.length) continue;
+        console.log(`  [${category}] ${label} (${group.length}):`);
+        for (const entry of group) console.log(`    ${entry.sourceName} — ${entry.reason}`);
+      }
     }
     return;
   }

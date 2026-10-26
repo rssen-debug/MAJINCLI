@@ -30,7 +30,7 @@ async function fixture(t, completeImpl) {
 const sourceName = messages => /Read (\w+)\.txt/.exec(messages.find(message => message.role === 'user').content)[1];
 const readCall = name => ({ content: '', toolCalls: [{ id: 'read', name: 'fs_read', args: { path: `${name}.txt` } }], usage: { input: 10, output: 5 } });
 
-test('independent workers use real confined file tools, separate sessions and concurrency two; persisted completed observations resume without calls', async t => {
+test('independent workers use real confined file tools, separate sessions and bounded concurrency; persisted completed observations resume without calls', async t => {
   let active = 0; let maxActive = 0; const sessions = new Set(); const sourceSessions = new Map(); const calls = [];
   const { root, goal, architect, options } = await fixture(t, async ({ messages, tools, provider }) => {
     active++; maxActive = Math.max(maxActive, active);
@@ -49,7 +49,7 @@ test('independent workers use real confined file tools, separate sessions and co
   const tool = createDelegationTool(options({ onCheckpoint: () => fs.writeFileSync(checkpointFile, JSON.stringify(goal)) }));
   const result = await tool.run({ tasks, reason });
   assert.equal(result.status, 'COMPLETED'); assert.equal(result.verified, false); assert.equal(result.trusted, false);
-  assert.equal(maxActive, 2); assert.equal(sessions.size, 3);
+  assert.ok(maxActive >= 2 && maxActive <= 3, `workers must overlap but never exceed the cap of three, saw ${maxActive}`); assert.equal(sessions.size, 3);
   assert.equal(goal.cost.modelCalls, 6); assert.equal(goal.cost.toolCalls, 3);
   assert.equal(goal.cost.inputTokens, 90); assert.equal(goal.cost.outputTokens, 45); assert.equal(goal.cost.reportedUsd, 0.03);
   assert.equal(goal.tool_results.length, 3);
@@ -105,6 +105,57 @@ test('abort joins workers, caches completed observations and resumes only interr
   assert.equal(resumed.status, 'COMPLETED'); assert.equal(calls.alpha, alphaCalls);
   assert(resumed.tasks.find(task => task.id === 'alpha').cached);
   assert.notEqual(resumed.tasks.find(task => task.id === 'beta').sessionId, result.tasks.find(task => task.id === 'beta').sessionId);
+});
+
+test('three workers truly overlap on a barrier, six tasks complete in waves, and lifecycle events stream', async t => {
+  let active = 0; let maxActive = 0; let barrierHit = false; let release;
+  const barrier = new Promise((resolve) => { release = resolve; });
+  const { architect, options } = await fixture(t, async ({ messages }) => {
+    const name = sourceName(messages);
+    if (messages.find((message) => message.role === 'tool')) return { content: `Observed ${name}`, usage: { input: 1, output: 1 } };
+    active += 1; maxActive = Math.max(maxActive, active);
+    if (active === 3) { barrierHit = true; release(); }
+    await Promise.race([barrier, new Promise((resolve) => setTimeout(resolve, 8000))]);
+    active -= 1;
+    return readCall(name);
+  });
+  for (const name of ['delta', 'epsilon', 'zeta']) {
+    fs.writeFileSync(path.join(architect.workspaceDir, `${name}.txt`), `${name}-independent-proof`);
+  }
+  const six = [...tasks,
+    { id: 'delta', task: 'Read delta.txt and report its observed content.' },
+    { id: 'epsilon', task: 'Read epsilon.txt and report its observed content.' },
+    { id: 'zeta', task: 'Read zeta.txt and report its observed content.' }];
+  const events = [];
+  const tool = createDelegationTool(options({ onEvent: (type, fields) => events.push({ type, ...fields }) }));
+  const result = await tool.run({ tasks: six, reason });
+  assert.equal(result.status, 'COMPLETED');
+  assert.equal(barrierHit, true, 'three workers must be inside provider calls at the same time');
+  assert.equal(maxActive, 3);
+  assert.equal(result.concurrency, 3);
+  assert.equal(events[0].type, 'delegate_batch_started');
+  assert.deepEqual(events[0].tasks, six.map((task) => task.id));
+  assert.equal(events.filter((event) => event.type === 'delegate_task_started').length, 6);
+  assert.equal(events.filter((event) => event.type === 'delegate_task_finished' && event.status === 'COMPLETED').length, 6);
+  assert.equal(events.at(-1).type, 'delegate_batch_finished');
+  await assert.rejects(tool.run({ tasks: [...six, { id: 'eta', task: 'Read eta.txt and report its observed content.' }], reason }));
+});
+
+test('delegates advertise only granted read-only tools, including sys, re and jobs observers', async t => {
+  let advertised = [];
+  const { architect, options } = await fixture(t, async ({ tools }) => {
+    advertised = tools.map((tool) => tool.name);
+    return { content: 'Observed without needing tools', usage: { input: 1, output: 1 } };
+  });
+  architect.files.enableOwnerMode({ lanes: ['files', 'sys', 're', 'jobs'], folders: [architect.workspaceDir] });
+  const result = await createDelegationTool(options()).run({ tasks: tasks.slice(0, 2), reason });
+  assert.equal(result.status, 'COMPLETED');
+  for (const name of ['fs_read', 'sys_info', 're_hash', 'jobs_match']) {
+    assert.ok(advertised.includes(name), `${name} must be offered to granted read-only workers: ${advertised}`);
+  }
+  for (const name of ['fs_write', 'shell_run', 'jobs_search', 'jobs_send', 'browser_open', 'agent_delegate']) {
+    assert.ok(!advertised.includes(name), `${name} must never be offered to read-only workers`);
+  }
 });
 
 test('revoked permissions prevent any worker call, and six-round limits stop unresolved subtasks', async t => {

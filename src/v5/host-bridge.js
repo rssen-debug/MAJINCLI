@@ -245,6 +245,36 @@ export async function createUniversalHostTools({
   return { tools, report };
 }
 
+/**
+ * Legacy tools whose capability is genuinely provided by a current V5 tool.
+ * Only list a mapping when the agent can actually achieve the same outcome
+ * through the named tool(s) today; anything weaker stays an honest blocker.
+ * `surface: 'driver'` tools are callable in the isolated driver;
+ * `surface: 'provider-host'` tools exist in provider-driven goals.
+ */
+export const SUPERSEDED_TOOLS = new Map([
+  ['browser.read', { coveredBy: ['browser_inspect'], surface: 'driver' }],
+  ['browser.elements', { coveredBy: ['browser_inspect'], surface: 'driver' }],
+  ['browser.verify', { coveredBy: ['browser_inspect'], surface: 'driver' }],
+  ['browser.form', { coveredBy: ['browser_inspect'], surface: 'driver' }],
+  ['browser.form_fill', { coveredBy: ['browser_fill', 'browser_check', 'browser_select'], surface: 'driver' }],
+  ['browser.form_submit', { coveredBy: ['browser_click'], surface: 'driver' }],
+  ['agent.plan', { coveredBy: ['agent_plan'], surface: 'provider-host' }],
+  ['agent.delegate', { coveredBy: ['agent_delegate'], surface: 'provider-host' }],
+  ['team.run', { coveredBy: ['agent_plan', 'agent_delegate', 'agent_checkpoint'], surface: 'provider-host' }],
+  ['majin.tools', { coveredBy: ['tools_search', 'driver_status'], surface: 'driver' }],
+]);
+
+export function parityCategory({ sourceName, lane, reason }) {
+  const text = String(reason || '');
+  if (/Windows-only|only on Windows|interactive Windows/i.test(text)) return 'platform';
+  if (/no supported browser binary|configured media provider|vision\/desktop model/i.test(text)) return 'missing-dependency';
+  if (/owner lane not granted|lane is not enabled/i.test(text)) return 'lane-not-granted';
+  if (SERVICE_BOUND.some(([pattern]) => pattern.test(sourceName)) || /host service|host runtime service|legacy memory service/i.test(text) || String(lane).endsWith('-service')) return 'host-service';
+  if (/legacy CDP browser surface is superseded/i.test(text)) return 'legacy-unported';
+  return 'unregistered';
+}
+
 export function buildToolParity({ tools, hostBridge = { registered: [], skipped: [], selectedLanes: [] }, grantedLanes = null } = {}) {
   const skippedByTool = new Map();
   const skippedByLane = new Map();
@@ -258,29 +288,48 @@ export function buildToolParity({ tools, hostBridge = { registered: [], skipped:
     const lane = laneForSourceTool(sourceName);
     const tool = tools.get(name);
     const available = Boolean(tool && (tool.source === sourceName || tool.source == null || String(tool.source).startsWith(sourceName)));
-    let reason = null;
-    if (!available) {
-      const service = SERVICE_BOUND.find(([pattern]) => pattern.test(sourceName));
-      const selected = new Set(hostBridge.selectedLanes || []);
-      const laneSelected = selected.has(lane) || (lane === 'browser' && selected.has('web'));
-      reason = skippedByTool.get(sourceName)
-        || service?.[1]
-        || skippedByLane.get(lane)
-        || (Array.isArray(grantedLanes) && !grantedLanes.includes(lane) && !(lane === 'web' && grantedLanes.includes('browser'))
-          ? `owner lane not granted: ${lane}`
-          : !laneSelected && (Object.hasOwn(V1_LANES, lane) || lane === 'browser')
-            ? `lane is not enabled for this driver: ${lane}`
-            : 'not registered on this host; inspect lane capability and runtime requirements');
+    if (available) return { sourceName, name, lane, available, category: 'available' };
+    const service = SERVICE_BOUND.find(([pattern]) => pattern.test(sourceName));
+    const selected = new Set(hostBridge.selectedLanes || []);
+    const laneSelected = selected.has(lane) || (lane === 'browser' && selected.has('web'));
+    const baseReason = skippedByTool.get(sourceName)
+      || service?.[1]
+      || skippedByLane.get(lane)
+      || (Array.isArray(grantedLanes) && !grantedLanes.includes(lane) && !(lane === 'web' && grantedLanes.includes('browser'))
+        ? `owner lane not granted: ${lane}`
+        : !laneSelected && (Object.hasOwn(V1_LANES, lane) || lane === 'browser')
+          ? `lane is not enabled for this driver: ${lane}`
+          : 'not registered on this host; inspect lane capability and runtime requirements');
+    const superseded = SUPERSEDED_TOOLS.get(sourceName);
+    if (superseded) {
+      return {
+        sourceName, name, lane, available, category: 'superseded',
+        coveredBy: [...superseded.coveredBy], surface: superseded.surface,
+        reason: `capability provided by ${superseded.coveredBy.join(', ')} (${superseded.surface === 'driver' ? 'isolated driver' : 'provider host'}); the legacy name itself is not registered: ${baseReason}`,
+      };
     }
-    return { sourceName, name, lane, available, ...(reason ? { reason } : {}) };
+    return { sourceName, name, lane, available, category: parityCategory({ sourceName, lane, reason: baseReason }), reason: baseReason };
   });
 
   const available = entries.filter((entry) => entry.available).length;
+  const categories = {
+    available,
+    superseded: 0, platform: 0, 'missing-dependency': 0,
+    'host-service': 0, 'lane-not-granted': 0, 'legacy-unported': 0, unregistered: 0,
+  };
+  for (const entry of entries) {
+    if (!entry.available) categories[entry.category] = (categories[entry.category] || 0) + 1;
+  }
+  const capabilityCovered = available + categories.superseded;
+  const percent = (value) => (entries.length ? Math.round((value / entries.length) * 1000) / 10 : 0);
   return {
     universe: entries.length,
     available,
     unavailable: entries.length - available,
-    coveragePercent: entries.length ? Math.round((available / entries.length) * 1000) / 10 : 0,
+    coveragePercent: percent(available),
+    capabilityCovered,
+    capabilityPercent: percent(capabilityCovered),
+    categories,
     entries,
   };
 }

@@ -391,7 +391,8 @@ export class ProviderAgent {
         grantedLanes: lanes, availableTools: driverCatalog.map(t => t.name) });
       const adaptiveTools = createAdaptiveTools({ goal, onCheckpoint: () => this.#save() });
       const delegation = createDelegationTool({ architect, goal, signal: abort.signal, grantedLanes: lanes,
-        allowedFolders: access.grantedFolders, onCheckpoint: () => this.#save() });
+        allowedFolders: access.grantedFolders, onCheckpoint: () => this.#save(),
+        onEvent: (type, fields) => trace(type, fields) });
       const activatedToolNames = new Set((goal.toolExposure.activated || []).filter(name => driverToolNames.has(name)));
       const hostTools = new Map([...procedures, ...adaptiveTools, [delegation.name, delegation]]);
       const normalizeToolName = (value) => String(value || '').trim().replaceAll('.', '_');

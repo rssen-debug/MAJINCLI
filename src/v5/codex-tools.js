@@ -110,7 +110,7 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
         for (const key of ['path', 'filePath', 'cwd']) if (parsed[key] != null) parsed[key] = resolveToolPath(parsed[key]);
         if (t.name === 'screen.capture' && !parsed.path) parsed.path = checkedPath(workspace, `captures/${Date.now()}.png`);
         const result = await t.run(t.name === 'screen.capture' ? { ...parsed, then: 'save' } : parsed, ctx);
-        if (['screen.capture', 'desktop.capture_window'].includes(t.name) && result.ok !== false) {
+        if (['screen.capture', 'desktop.capture_window', 'browser.shot'].includes(t.name) && result.ok !== false) {
           const abs = resolveToolPath(result.meta.path);
           const bytes = fs.readFileSync(abs);
           if (bytes.length > 20 * 1024 * 1024) throw new Error('Screenshot exceeds 20 MB');
@@ -155,14 +155,17 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
   }
   if (!browserAvailable) {
     for (const tool of browserTools) {
-      if (!hostBridge.skipped.some((item) => item.tool === tool.name)) {
-        hostBridge.skipped.push({
-          lane: 'browser',
-          tool: tool.name,
-          reason: browser
-            ? 'Playwright browser lane is enabled, but no supported browser binary was found on this host'
-            : 'Playwright browser lane is not enabled for this driver',
-        });
+      const reason = browser
+        ? 'Playwright browser lane is enabled, but no supported browser binary was found on this host'
+        : 'Playwright browser lane is not enabled for this driver';
+      const existing = hostBridge.skipped.find((item) => item.tool === tool.name);
+      // The universal bridge records the legacy CDP skip first for same-named
+      // tools. When the Playwright lane is enabled, the truthful blocker on
+      // this host is the missing browser binary, not the superseded surface.
+      if (existing) {
+        if (browser) existing.reason = reason;
+      } else {
+        hostBridge.skipped.push({ lane: 'browser', tool: tool.name, reason });
       }
     }
   }
@@ -225,7 +228,7 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
         (includeUnavailable || entry.available)
         && (!needle || entry.sourceName.toLowerCase().includes(needle) || entry.name.toLowerCase().includes(query.toLowerCase()) || entry.lane.toLowerCase().includes(needle))
       )).slice(0, limit);
-      return { result: { total: current.universe, available: current.available, unavailable: current.unavailable, coveragePercent: current.coveragePercent, matches } };
+      return { result: { total: current.universe, available: current.available, unavailable: current.unavailable, coveragePercent: current.coveragePercent, capabilityCovered: current.capabilityCovered, capabilityPercent: current.capabilityPercent, categories: current.categories, matches } };
     }, 'tools.search');
   add('driver_status', 'Actual host, capabilities and limitations. No provider inference is used.', z.object({}).strict(), () => {
     const current = parity();
@@ -239,6 +242,9 @@ export async function createDriverTools({ workspace, desktop = false, browser = 
         available: current.available,
         unavailable: current.unavailable,
         coveragePercent: current.coveragePercent,
+        capabilityCovered: current.capabilityCovered,
+        capabilityPercent: current.capabilityPercent,
+        categories: current.categories,
         unavailableTools: current.entries.filter((entry) => !entry.available),
       },
       hostBridge: {

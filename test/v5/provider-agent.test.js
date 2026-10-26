@@ -249,6 +249,53 @@ test('persisted trace records strategy, tool lifecycle and verification repair w
   assert.ok(Array.isArray(onDisk.goal.trace) && onDisk.goal.trace.length >= expectedOrder.length, 'trace must persist in the checkpoint for logs/resume');
 });
 
+test('parallel delegation runs inside the provider loop and streams worker lifecycle into the trace', async t => {
+  let parentCalls = 0;
+  const workerName = (body) => /Read (alpha|beta)\.txt/.exec(JSON.stringify(body.messages))?.[1];
+  const { server } = await setup(t, (body) => {
+    const isWorker = JSON.stringify(body.messages?.[0]?.content || '').includes('bounded read-only MAJIN research worker');
+    if (isWorker) {
+      const name = workerName(body);
+      if (!body.messages.some((message) => message.role === 'tool')) {
+        return tool(`worker-read-${name}`, 'fs_read', { path: `${name}.txt` });
+      }
+      return { role: 'assistant', content: `Observed ${name} content from a parallel worker.` };
+    }
+    parentCalls += 1;
+    if (parentCalls === 1) return tool('delegate-observe', 'agent_delegate', {
+      tasks: [
+        { id: 'alpha', task: 'Read alpha.txt and report its observed content.' },
+        { id: 'beta', task: 'Read beta.txt and report its observed content.' },
+      ],
+      reason: 'The two files are independent sources that can be observed in parallel.',
+    });
+    if (parentCalls === 2) return tool('write-delegation-proof', 'fs_write', { path: 'delegation-proof.txt', content: 'delegation observed both sources' });
+    return { role: 'assistant', content: 'Both workers reported; proof saved.' };
+  });
+  const workspace = server.architect.workspaceDir;
+  fs.writeFileSync(path.join(workspace, 'alpha.txt'), 'alpha-source-proof');
+  fs.writeFileSync(path.join(workspace, 'beta.txt'), 'beta-source-proof');
+  server.architect.files.enableOwnerMode({ lanes: ['files'], folders: [workspace] });
+  const result = await server.providerAgent.execute({
+    goalText: 'Observe alpha.txt and beta.txt in parallel, then save delegation-proof.txt',
+    criteria: [{ kind: 'file', path: 'delegation-proof.txt', contains: 'delegation observed' }],
+  });
+  assert.equal(result.status, 'COMPLETED');
+  assert.equal(result.delegation.batches.length, 1);
+  assert.equal(result.delegation.batches[0].status, 'COMPLETED');
+  assert.equal(result.delegation.batches[0].concurrency, 3);
+  const types = result.trace.map((event) => event.type);
+  const delegateStart = result.trace.findIndex((event) => event.type === 'tool_call_started' && event.tool === 'agent_delegate');
+  const batchStart = types.indexOf('delegate_batch_started');
+  const batchFinish = types.indexOf('delegate_batch_finished');
+  const delegateFinish = result.trace.findIndex((event) => event.type === 'tool_call_finished' && event.tool === 'agent_delegate');
+  assert.ok(delegateStart > -1 && batchStart > delegateStart, `batch must start inside the delegate tool call: ${types.join(',')}`);
+  assert.ok(batchFinish > batchStart && delegateFinish > batchFinish, `batch must finish before the delegate tool call returns: ${types.join(',')}`);
+  assert.deepEqual(result.trace[batchStart].tasks, ['alpha', 'beta']);
+  assert.equal(result.trace.filter((event) => event.type === 'delegate_task_finished' && event.status === 'COMPLETED').length, 2);
+  assert.ok(result.tool_results.some((row) => row.delegated && row.tool === 'fs_read' && row.ok));
+});
+
 test('independent pixel verification can complete a mixed-criteria goal', async t => {
   const { server } = await setup(t, (_body, count) => count === 1
     ? tool('write-pixel-receipt', 'fs_write', { path: 'pixel-receipt.txt', content: 'pixel receipt' })

@@ -87,6 +87,41 @@ test('WP1 universal bridge exposes previously unreachable lanes and reports ever
   assert.equal(found.matches[0].available, true);
 });
 
+test('tool parity classifies every unavailable tool and names the current tool covering superseded capabilities', async (t) => {
+  const workspace = workspaceFixture(t);
+  const tools = await createDriverTools({
+    workspace,
+    grantedLanes: ALL_OWNER_LANES,
+    processAccess: true,
+    browser: true,
+    desktop: true,
+  });
+  const status = (await tools.get('driver_status').run({})).result;
+  const parity = status.toolParity;
+  assert.equal(Object.values(parity.categories).reduce((sum, value) => sum + value, 0), parity.universe);
+  assert.equal(parity.capabilityCovered, parity.available + parity.categories.superseded);
+  assert.ok(parity.capabilityPercent >= parity.coveragePercent);
+  assert.equal(parity.categories.unregistered, 0, 'every unavailable tool must carry a classified, concrete reason');
+  const byName = new Map(parity.unavailableTools.map((entry) => [entry.sourceName, entry]));
+  assert.equal(byName.get('browser.form_fill').category, 'superseded');
+  assert.deepEqual(byName.get('browser.form_fill').coveredBy, ['browser_fill', 'browser_check', 'browser_select']);
+  assert.equal(byName.get('agent.plan').category, 'superseded');
+  assert.deepEqual(byName.get('agent.plan').coveredBy, ['agent_plan']);
+  assert.equal(byName.get('agent.plan').surface, 'provider-host');
+  assert.equal(byName.get('majin.tools').category, 'superseded');
+  assert.equal(byName.get('browser.clear_marks').category, 'legacy-unported');
+  assert.equal(byName.get('media.speak').category, 'missing-dependency');
+  assert.equal(byName.get('majin.configure').category, 'host-service');
+  if (process.platform !== 'win32') assert.equal(byName.get('control.click_button').category, 'platform');
+  // The model-facing search must lead to the covering tool, not a dead end.
+  const found = (await tools.get('tools_search').run({ query: 'form_fill', limit: 5 })).result;
+  const formFill = found.matches.find((entry) => entry.sourceName === 'browser.form_fill');
+  assert.ok(formFill, `tools_search must surface browser.form_fill: ${JSON.stringify(found.matches)}`);
+  assert.equal(formFill.category, 'superseded');
+  assert.ok(formFill.coveredBy.includes('browser_fill'));
+  assert.equal(found.capabilityCovered, parity.capabilityCovered);
+});
+
 test('universal bridge failures are structured observations and path policy stays enforced', async (t) => {
   const workspace = workspaceFixture(t);
   const tools = await createDriverTools({ workspace, grantedLanes: ['re'], processAccess: false });
