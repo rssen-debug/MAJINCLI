@@ -136,6 +136,15 @@ export class LearningEngine {
       };
     }
 
+    // A durable delivery can be retried after a crash between save and ACK.
+    const prior = this.state.procedures.find(p => p.provenance?.some(entry =>
+      entry.goalId === String(goalId || '') && validReceipts.some(receipt =>
+        entry.receiptId === String(receipt.id || receipt.receiptId))));
+    if (prior) {
+      this.save(); // A previous attempt may have mutated memory before its save failed.
+      return { learned: true, duplicate: true, procedureId: prior.procedureId, canonicalSkillId: prior.canonicalSkillId, xpResult: null };
+    }
+
     const successfulSteps = (Array.isArray(trace) ? trace : []).filter((s) => s && s.ok === true);
     if (successfulSteps.length === 0) {
       return {
@@ -190,7 +199,7 @@ export class LearningEngine {
         stepIndex: trace.indexOf(f),
         tool: f.tool || f.name,
         args: f.args || {},
-        failureClass: f.failureClass || f.code || 'METHOD_ERROR',
+        failureClass: f.failureClass || f.errorCode || f.code || 'METHOD_ERROR',
          penalizeSkill: false, // It recovered in the same run!
       });
     }
