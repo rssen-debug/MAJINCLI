@@ -32,3 +32,13 @@ test('browser form tools never expose a submit operation', () => {
   assert.equal(browserTools.some((tool) => /submit|apply/i.test(tool.name)), false);
   assert.match(browserTools.find((tool) => tool.name === 'browser.upload').desc, /not uploaded until the user submits/i);
 });
+
+test('frame-scoped browser tools declare the frame parameter they implement', () => {
+  // Regression guard: these runs destructure and use `frame`; a missing param
+  // declaration means the driver schema strips it (additionalProperties:false)
+  // and frame-scoped calls can never reach the implementation.
+  for (const name of ['browser.inspect', 'browser.verify', 'browser.click', 'browser.fill', 'browser.check', 'browser.select', 'browser.download', 'browser.clear_marks']) {
+    const tool = browserTools.find((entry) => entry.name === name);
+    assert.ok(Object.hasOwn(tool.parameters.properties, 'frame'), `${name} must declare a frame param`);
+  }
+});

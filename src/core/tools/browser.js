@@ -133,11 +133,11 @@ function sameGroundDescriptor(a, b) {
  * refs. The descriptor cache is refreshed only after identity is proven, so a
  * stale ref can never become valid by retrying it.
  */
-async function resolveGroundedSelector(p, ctx, refName) {
+async function resolveGroundedSelector(p, ctx, refName, frameSelector = '') {
   if (!/^e[1-9][0-9]*$/.test(refName)) throw groundError('ref_unknown', `ref_unknown: ${refName} is not a Set-of-Marks ref; call browser.inspect with marks=true`);
   const cached = recallRef(groundSession(ctx), refName);
   if (!cached) throw groundError('ref_unknown', `ref_unknown: ${refName} is not in the current grounded snapshot; call browser.inspect with marks=true`);
-  const grounded = await groundPage(p, ctx, { remember: false });
+  const grounded = await groundPage(p, ctx, { remember: false, frameSelector });
   const current = grounded.elements.find((element) => element.ref === refName);
   if (!current || !sameGroundDescriptor(cached, current)) {
     throw groundError('ref_stale', `ref_stale: ${refName} no longer identifies the same visible element; call browser.inspect with marks=true and use a fresh ref`);
@@ -429,14 +429,16 @@ export const browserTools = [
     name: 'browser.inspect',
     group: 'browser',
     risk: 'read',
-    desc: 'Inspect the current page: title, URL, visible text and form controls (labels, selectors, selected/checked state). Password and file values are never returned. Set marks=true to draw numbered Set-of-Marks refs on visible interactive elements and return refs such as e3 for browser.click.',
+    desc: 'Inspect the current page: title, URL, visible text, form controls (labels, selectors, selected/checked state) and the page iframes (selector + src) so frame-scoped tools can target them. Password and file values are never returned. Set marks=true to draw numbered Set-of-Marks refs on visible interactive elements and return refs such as e3 for browser.click. Pass frame (an iframe selector listed here) to inspect inside that iframe instead of the main document.',
     params: {
       maxChars: 'number: maximum page text characters (default 10000)',
       marks: 'boolean: draw numbered Set-of-Marks refs for deterministic browser.click ref calls (optional, default false)',
+      frame: 'string: optional iframe selector (from this tool\'s iframes list) to inspect inside that iframe document',
     },
-    async run({ maxChars = 10000, marks = false }, ctx) {
+    async run({ maxChars = 10000, marks = false, frame = '' }, ctx) {
       return withPage(ctx, async (p) => {
-        const details = await p.evaluate((limit) => {
+        const inspectRoot = await locatorRoot(p, frame);
+        const details = await inspectRoot.evaluate((limit) => {
           const visible = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
           const selectorFor = el => {
             if (el.id && document.querySelectorAll(`#${CSS.escape(el.id)}`).length === 1) return `#${CSS.escape(el.id)}`;
@@ -486,7 +488,7 @@ export const browserTools = [
         let marksMeta = {};
         if (marks === true || String(marks) === 'true') {
           try {
-            const grounded = await groundPage(p, ctx);
+            const grounded = await groundPage(p, ctx, { frameSelector: frame });
             marksText = `\n\nSet-of-Marks refs (use browser.click with ref, for example ${grounded.elements[0]?.ref || 'e1'}):\n${renderElementsText(grounded, { cap: 60 })}`;
             marksMeta = { marks: grounded.count, refs: grounded.elements.slice(0, 60).map((element) => element.ref) };
           } catch (error) {
@@ -519,6 +521,7 @@ export const browserTools = [
       count: 'number: optional exact number 0-1000 of matching elements; use for lists/cards, not with element text or checkbox expectations',
       waitMs: 'number: optional wait up to 0-5000ms for the expected DOM outcome (default 1800, immediate return on success)',
       stableMs: 'number: optional 0-1500ms the expected DOM state must stay true (default 0)',
+      frame: 'string: optional iframe selector (from browser.inspect) — assertions, including URL/title, are then evaluated against that iframe document',
     },
     examples: ['browser.verify({selector:"#success",text:"Saved"})', 'browser.verify({urlPath:"/dashboard"})', 'browser.verify({selector:"input[name=consent]",checked:true})', 'browser.verify({selector:".results > li",count:10})'],
     async run(input = {}, ctx) {
@@ -534,7 +537,7 @@ export const browserTools = [
         let firstPassingAt = null;
         for (;;) {
           let observed;
-          try { observed = await p.evaluate(script); }
+          try { observed = await verifyRoot.evaluate(script); }
           catch (error) { return { ok: false, error: { code: 'browser_verify_error', message: String(error?.message || error) }, summary: 'browser verify could not observe the page' }; }
           const now = Date.now();
           verdict = verifyObserved(criteria, observed);
@@ -643,12 +646,12 @@ export const browserTools = [
     name: 'browser.fill',
     group: 'browser',
     risk: 'write',
-    desc: 'Fill a text, email, number, date or textarea control by selector. Values are not written to the action log. Does not submit the form.',
-    params: { selector: 'string: Playwright locator selector, e.g. input[name="email"]', value: 'string: value to enter' },
+    desc: 'Fill a text, email, number, date or textarea control by selector. Pass frame (iframe selector from browser.inspect) when the control lives inside an iframe. Values are not written to the action log. Does not submit the form.',
+    params: { selector: 'string: Playwright locator selector, e.g. input[name="email"]', value: 'string: value to enter', frame: 'string: optional iframe selector containing the control' },
     required: ['selector', 'value'],
-    async run({ selector, value }, ctx) {
+    async run({ selector, value, frame = '' }, ctx) {
       return withPage(ctx, async (p) => {
-        const locator = p.locator(selector);
+        const locator = (await locatorRoot(p, frame)).locator(selector);
         const count = await locator.count();
         if (count !== 1) throw new Error(count ? `${count} elements matched; use a unique selector` : `no element matched selector: ${selector}`);
         const field = await locator.evaluate((el) => ({
@@ -693,12 +696,12 @@ export const browserTools = [
     name: 'browser.check',
     group: 'browser',
     risk: 'write',
-    desc: 'Check or uncheck one checkbox/radio input by selector. For radio groups use the exact option selector; no form submission occurs.',
-    params: { selector: 'string: selector for the checkbox or radio input', checked: 'boolean: true to check, false to uncheck (default true)' },
+    desc: 'Check or uncheck one checkbox/radio input by selector. For radio groups use the exact option selector; no form submission occurs. Pass frame when the input lives inside an iframe.',
+    params: { selector: 'string: selector for the checkbox or radio input', checked: 'boolean: true to check, false to uncheck (default true)', frame: 'string: optional iframe selector containing the input' },
     required: ['selector'],
-    async run({ selector, checked = true }, ctx) {
+    async run({ selector, checked = true, frame = '' }, ctx) {
       return withPage(ctx, async (p) => {
-        const locator = p.locator(selector);
+        const locator = (await locatorRoot(p, frame)).locator(selector);
         if (await locator.count() !== 1) throw new Error(`selector must match exactly one input: ${selector}`);
         const nativeInput = await locator.evaluate((el) => el.matches('input[type="checkbox"], input[type="radio"]'));
         if (nativeInput) {
@@ -719,12 +722,12 @@ export const browserTools = [
     name: 'browser.select',
     group: 'browser',
     risk: 'write',
-    desc: 'Choose an option in a <select> element by its value. Does not submit the form.',
-    params: { selector: 'string: selector for the select element', value: 'string: option value to choose' },
+    desc: 'Choose an option in a <select> element by its value. Does not submit the form. Pass frame when the select lives inside an iframe.',
+    params: { selector: 'string: selector for the select element', value: 'string: option value to choose', frame: 'string: optional iframe selector containing the select' },
     required: ['selector', 'value'],
-    async run({ selector, value }, ctx) {
+    async run({ selector, value, frame = '' }, ctx) {
       return withPage(ctx, async (p) => {
-        const locator = p.locator(selector);
+        const locator = (await locatorRoot(p, frame)).locator(selector);
         if (await locator.count() !== 1) throw new Error(`selector must match exactly one select: ${selector}`);
         await locator.selectOption(String(value));
         audit(ctx, 'select', { selector, value });
