@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 const base=path.join(process.env.LOCALAPPDATA||path.join(os.homedir(),'.local','share'),'MAJIN','opencode-multi');
 const tasks=path.join(base,'tasks');
 const notes=path.join(base,'instructions.txt');
@@ -20,17 +21,20 @@ function launch(prompt){
  if(!prompt.trim())throw Error('Enter a request');
  const t={id:randomUUID(),prompt,createdAt:new Date().toISOString(),status:'queued',workdir:process.cwd()};
  ensure();save(t);
- const child=spawn(process.execPath,[new URL(import.meta.url).pathname,'__worker',t.id],{cwd:t.workdir,detached:true,windowsHide:true,stdio:'ignore',env:process.env});
+ const child=spawn(process.execPath,[fileURLToPath(import.meta.url),'__worker',t.id],{cwd:t.workdir,detached:true,windowsHide:true,stdio:'ignore',env:process.env});
  child.unref();
  console.log('Task '+t.id+' started; use status / log '+t.id);
 }
 async function worker(id){
  const t=readTask(id),log=path.join(tasks,id+'.log');t.status='running';t.startedAt=new Date().toISOString();save(t);
  const out=fs.openSync(log,'a',0o600);
- const exe=process.platform==='win32'?'opencode.cmd':'opencode';
- const args=['run',promptText(t)];
+ const windows=process.platform==='win32';
+ const payload=promptText(t);
+ if(windows && payload.length>25000)throw Error('Prompt too large for Windows process environment; split into smaller tasks');
+ const exe=windows?'powershell.exe':'opencode';
+ const args=windows?['-NoProfile','-NonInteractive','-Command','& opencode run $env:MAJIN_TASK_PROMPT']:['run',payload];
  try {
-  const p=spawn(exe,args,{cwd:t.workdir,env:process.env,shell:process.platform==='win32',windowsHide:true,stdio:['ignore',out,out]});
+  const p=spawn(exe,args,{cwd:t.workdir,env:{...process.env,...(windows?{MAJIN_TASK_PROMPT:payload}:{})},windowsHide:true,stdio:['ignore',out,out]});
   const code=await new Promise((res,rej)=>{p.once('error',rej);p.once('exit',(c,signal)=>res(c??(signal?130:1)));});
   t.status=code===0?'finished':'failed';t.exitCode=code;
  }catch(e){t.status='failed';t.error=String(e.message).slice(0,300);}
