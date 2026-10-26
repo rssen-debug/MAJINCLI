@@ -118,7 +118,9 @@ test('tool parity classifies every unavailable tool and names the current tool c
   // for legacy tools that also mutate provider or memory state.
   assert.equal(byName.get('majin.provider').category, 'host-service');
   assert.equal(byName.get('majin.memory').category, 'host-service');
-  assert.equal(byName.get('browser.clear_marks').category, 'legacy-unported');
+  const clearMarks = byName.get('browser.clear_marks');
+  if (tools.has('browser_clear_marks')) assert.equal(clearMarks, undefined, 'Playwright clear_marks must be directly available when a browser binary exists');
+  else assert.equal(clearMarks?.category, 'missing-dependency', 'without a browser binary, clear_marks is a concrete dependency gap, not an unported capability');
   assert.equal(byName.get('media.speak').category, 'missing-dependency');
   assert.equal(byName.get('majin.configure').category, 'host-service');
   if (process.platform !== 'win32') assert.equal(byName.get('control.click_button').category, 'platform');

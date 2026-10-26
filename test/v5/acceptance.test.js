@@ -361,6 +361,31 @@ test('acceptance: workspace-escape write is refused and the agent recovers insid
   assert.match(run.stderr, /strategy: recover/);
 });
 
+test('acceptance: bare installed-CLI goal registers model criteria and finishes host-verified without owner JSON', async (t) => {
+  const fx = fixture(t);
+  const token = `BARE-CLI-VERIFIED-${Date.now()}`;
+  let calls = 0;
+  const provider = await fakeProvider(t, () => {
+    calls += 1;
+    if (calls === 1) return toolCall('bare-register-criteria', 'goal_criteria', { criteria: [{ kind: 'file', path: 'bare-cli-proof.txt', contains: token }] });
+    if (calls === 2) return toolCall('bare-write-proof', 'fs_write', { path: 'bare-cli-proof.txt', content: token });
+    if (calls === 3) return toolCall('bare-read-proof', 'fs_read', { path: 'bare-cli-proof.txt' });
+    return { role: 'assistant', content: 'Created and read back the bare-goal proof file.' };
+  });
+  await configureProvider(fx.dataDir, provider.baseUrl);
+
+  const run = await runCli(['run', `Create bare-cli-proof.txt containing exactly ${token}`, '--data-dir', fx.dataDir, '--lanes', 'files'], fx);
+  assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
+  assert.match(run.stdout, /Status: COMPLETED/);
+  assert.match(run.stdout, /Acceptance criteria source: model/);
+  assert.match(run.stderr, /acceptance criteria registered by model and locked by host: file bare-cli-proof\.txt/);
+  assert.equal(fs.readFileSync(path.join(fx.workspace, 'bare-cli-proof.txt'), 'utf8'), token);
+  const goal = parseJson(await runCli(['logs', '--data-dir', fx.dataDir, '--json'], fx)).goal;
+  assert.equal(goal.criteria_source, 'model');
+  assert.deepEqual(goal.criteria, [{ kind: 'file', path: 'bare-cli-proof.txt', contains: token }]);
+  assert.equal(goal.verification_evidence.length, 1);
+});
+
 test('acceptance: parallel delegation through the installed CLI feeds a verified summary', async (t) => {
   const fx = fixture(t);
   const stamp = Date.now();

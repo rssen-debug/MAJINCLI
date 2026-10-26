@@ -102,6 +102,54 @@ test('a successful write and model claim do not fabricate task verification or X
   assert.equal(result.status, 'PARTIAL');
   assert.equal(result.xp_award, null); assert.equal(result.verification_evidence.length, 0);
 });
+
+test('bare goal can register locked model criteria, fail independent verification, repair and complete', async t => {
+  const { requests, server } = await setup(t, (body, count) => {
+    if (count === 1) return tool('register-criteria', 'goal_criteria', { criteria: [
+      { kind: 'file', path: 'bare-proof.txt', contains: 'bare verified' },
+      { kind: 'http', url: 'https://example.com/proof', contains: 'ungranted network proof' },
+      { kind: 'dom', url: 'https://example.com/proof', selector: '#proof', executablePath: '/tmp/not-allowed' },
+    ] });
+    if (count === 2) {
+      assert.match(JSON.stringify(body.messages), /No criteria were locked because at least one proposed check was rejected/);
+      return tool('register-file-criterion', 'goal_criteria', { criteria: [{ kind: 'file', path: 'bare-proof.txt', contains: 'bare verified' }] });
+    }
+    if (count === 3) return tool('write-wrong-proof', 'fs_write', { path: 'bare-proof.txt', content: 'wrong content' });
+    if (count === 4) return { role: 'assistant', content: 'Done.' };
+    if (count === 5) {
+      assert.match(JSON.stringify(body.messages), /Host independent verification failed/);
+      return tool('write-correct-proof', 'fs_write', { path: 'bare-proof.txt', content: 'bare verified' });
+    }
+    return { role: 'assistant', content: 'Created and repaired bare-proof.txt.' };
+  });
+
+  const result = await server.providerAgent.execute({ goalText: 'Create bare-proof.txt containing bare verified' });
+  assert.equal(result.status, 'COMPLETED', JSON.stringify(result));
+  assert.equal(result.criteria_source, 'model');
+  assert.deepEqual(result.criteria, [{ kind: 'file', path: 'bare-proof.txt', contains: 'bare verified' }], 'the revised all-valid canonical criterion set is locked');
+  assert.equal(result.adaptive.verificationFailures, 1);
+  assert.equal(result.verification_evidence.length, 1);
+  assert.equal(result.tool_results.filter((row) => row.tool === 'goal_criteria' && row.ok).length, 2);
+  assert.ok(result.trace.some((event) => event.type === 'criteria_registered' && event.source === 'model' && event.rejected.length === 0));
+  assert.match(JSON.stringify(requests[1].body.messages), /requires an owner-granted lane/);
+  assert.equal(fs.readFileSync(path.join(server.architect.workspaceDir, 'bare-proof.txt'), 'utf8'), 'bare verified');
+});
+
+test('model criteria cannot replace owner-supplied acceptance criteria', async t => {
+  const ownerCriteria = [{ kind: 'file', path: 'owner-proof.txt', contains: 'owner verified' }];
+  const { requests, server } = await setup(t, (_body, count) => {
+    if (count === 1) return tool('try-weaken-criteria', 'goal_criteria', { criteria: [{ kind: 'file', path: 'other.txt', contains: 'anything' }] });
+    if (count === 2) return tool('write-owner-proof', 'fs_write', { path: 'owner-proof.txt', content: 'owner verified' });
+    return { role: 'assistant', content: 'Created the owner proof.' };
+  });
+
+  const result = await server.providerAgent.execute({ goalText: 'Create owner-proof.txt', criteria: ownerCriteria });
+  assert.equal(result.status, 'COMPLETED', JSON.stringify(result));
+  assert.equal(result.criteria_source, 'owner');
+  assert.deepEqual(result.criteria, ownerCriteria);
+  assert.match(JSON.stringify(requests[1].body.messages), /owner-supplied acceptance criteria are locked/);
+  assert.equal(result.trace.some((event) => event.type === 'criteria_registered'), false);
+});
 test('conversation survives restart and uses a stable Go session ID without replaying an append', async t => {
   const { server, requests } = await setup(t, (_body, count) => count === 1
     ? tool('append', 'fs_write', { path: 'once.txt', content: 'once', append: true })

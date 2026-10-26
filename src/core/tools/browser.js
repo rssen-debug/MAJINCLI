@@ -9,6 +9,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { def } from './registry.js';
 import { dirs } from '../paths.js';
+import { GROUND_JS, CLEAR_JS, rememberRefs, recallRef, clearRefs, renderElementsText } from '../browser-ground.js';
 
 const sessions = new Map();
 const recentShots = new Map();
@@ -76,6 +77,30 @@ function browserHandoffError(code, message, handoff) {
   error.code = code;
   error.meta = { ownerHandoff: { code, ...handoff } };
   return error;
+}
+
+function groundSession(ctx) {
+  return String(ctx.session || 'desktop');
+}
+
+function groundError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+async function groundPage(p, ctx, { remember = true } = {}) {
+  const payload = await p.evaluate(GROUND_JS);
+  const elements = Array.isArray(payload?.elements) ? payload.elements : [];
+  if (remember) rememberRefs(groundSession(ctx), elements);
+  return { ...(payload || {}), elements, count: elements.length, url: payload?.url || p.url(), title: payload?.title || '' };
+}
+
+function sameGroundDescriptor(a, b) {
+  if (!a || !b) return false;
+  const fields = ['tag', 'role', 'text', 'id', 'name', 'href', 'type'];
+  return fields.every((field) => String(a[field] ?? '') === String(b[field] ?? ''))
+    && Boolean(a.disabled) === Boolean(b.disabled);
 }
 
 async function detectOwnerHandoff(p, ctx) {
@@ -342,6 +367,7 @@ export const browserTools = [
           });
         }
         await state.page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        clearRefs(groundSession(ctx));
         await state.page.waitForTimeout(350);
         await syncBrowserWriteOrigins(state.page, ctx);
         const result = { url: state.page.url(), title: await state.page.title(), headless: state.headless, submissionsBlocked: !browserWriteAllowed(ctx, state.page.url()) };
@@ -355,9 +381,12 @@ export const browserTools = [
     name: 'browser.inspect',
     group: 'browser',
     risk: 'read',
-    desc: 'Inspect the current page: title, URL, visible text and form controls (labels, selectors, selected/checked state). Password and file values are never returned.',
-    params: { maxChars: 'number: maximum page text characters (default 10000)' },
-    async run({ maxChars = 10000 }, ctx) {
+    desc: 'Inspect the current page: title, URL, visible text and form controls (labels, selectors, selected/checked state). Password and file values are never returned. Set marks=true to draw numbered Set-of-Marks refs on visible interactive elements and return refs such as e3 for browser.click.',
+    params: {
+      maxChars: 'number: maximum page text characters (default 10000)',
+      marks: 'boolean: draw numbered Set-of-Marks refs for deterministic browser.click ref calls (optional, default false)',
+    },
+    async run({ maxChars = 10000, marks = false }, ctx) {
       return withPage(ctx, async (p) => {
         const details = await p.evaluate((limit) => {
           const visible = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
@@ -404,8 +433,20 @@ export const browserTools = [
           return { title: document.title, text: (document.body?.innerText || '').slice(0, limit), controls, links };
         }, Math.max(500, Math.min(Number(maxChars) || 10000, 24000)));
         if (stateFor(ctx).blockedRequests.length) details.text += '\nBlocked network writes (owner grant required):\n' + JSON.stringify(stateFor(ctx).blockedRequests);
-        audit(ctx, 'inspect', { controls: details.controls.length });
-        return withOwnerHandoff(p, ctx, { result: `URL: ${p.url()}\nTitle: ${details.title}\n\nVisible text:\n${details.text}\n\nControls (${details.controls.length}, max 100):\n${JSON.stringify(details.controls, null, 2)}\n\nLinks:\n${JSON.stringify(details.links)}`, meta: { url: p.url(), title: details.title, controls: details.controls.length }, summary: `inspected page (${details.controls.length} controls)` });
+        let marksText = '';
+        let marksMeta = {};
+        if (marks === true || String(marks) === 'true') {
+          try {
+            const grounded = await groundPage(p, ctx);
+            marksText = `\n\nSet-of-Marks refs (use browser.click with ref, for example ${grounded.elements[0]?.ref || 'e1'}):\n${renderElementsText(grounded, { cap: 60 })}`;
+            marksMeta = { marks: grounded.count, refs: grounded.elements.slice(0, 60).map((element) => element.ref) };
+          } catch (error) {
+            marksText = `\n\nSet-of-Marks unavailable: ${String(error?.message || error).slice(0, 500)}`;
+            marksMeta = { marks: 0, marksError: String(error?.message || error).slice(0, 500) };
+          }
+        }
+        audit(ctx, 'inspect', { controls: details.controls.length, ...(marksMeta.marks != null ? { marks: marksMeta.marks } : {}) });
+        return withOwnerHandoff(p, ctx, { result: `URL: ${p.url()}\nTitle: ${details.title}\n\nVisible text:\n${details.text}\n\nControls (${details.controls.length}, max 100):\n${JSON.stringify(details.controls, null, 2)}\n\nLinks:\n${JSON.stringify(details.links)}${marksText}`, meta: { url: p.url(), title: details.title, controls: details.controls.length, ...marksMeta }, summary: `inspected page (${details.controls.length} controls${marksMeta.marks ? `, ${marksMeta.marks} marks` : ''})` });
       });
     },
   }),
@@ -451,14 +492,34 @@ export const browserTools = [
     name: 'browser.click',
     group: 'browser',
     risk: 'write',
-    desc: 'Click one page element selected by a Playwright CSS/text selector. By default submit buttons are refused. Owner-authorized origins permit submission; inspect the real confirmation and never repeat an uncertain submission.',
-    params: { selector: 'string: Playwright locator selector, e.g. #next or text=Continue', index: 'number: 0-based match index when selector matches more than once' },
-    required: ['selector'],
-    async run({ selector, index }, ctx) {
+    desc: 'Click one page element selected by a Playwright CSS/text selector or by a Set-of-Marks ref from browser.inspect marks=true. By default submit buttons are refused. Owner-authorized origins permit submission; inspect the real confirmation and never repeat an uncertain submission.',
+    params: {
+      selector: 'string: optional Playwright locator selector, e.g. #next or text=Continue; provide exactly one of selector or ref',
+      ref: 'string: optional Set-of-Marks ref such as e3 from browser.inspect; provide exactly one of selector or ref',
+      index: 'number: optional 0-based match index when selector matches more than once',
+    },
+    required: [],
+    async run({ selector = '', ref = '', index } = {}, ctx) {
       return withPage(ctx, async (p) => {
-        const element = await safeClick(p, selector, index, ctx);
-        audit(ctx, 'click', { selector, index: index ?? 0, element });
-        return withOwnerHandoff(p, ctx, { result: `Clicked ${selector}${element.text ? ` (${element.text})` : ''}. URL: ${p.url()}`, meta: { url: p.url(), selector, element }, summary: `clicked ${selector}` });
+        let targetSelector = String(selector || '');
+        const refName = String(ref || '');
+        if ((targetSelector ? 1 : 0) + (refName ? 1 : 0) !== 1) throw new Error('browser.click requires exactly one of selector or ref');
+        if (refName) {
+          if (index != null) throw new Error('browser.click index is only valid with selector, not ref');
+          if (!/^e[1-9][0-9]*$/.test(refName)) throw groundError('ref_unknown', `ref_unknown: ${refName} is not a Set-of-Marks ref; call browser.inspect with marks=true`);
+          const cached = recallRef(groundSession(ctx), refName);
+          if (!cached) throw groundError('ref_unknown', `ref_unknown: ${refName} is not in the current grounded snapshot; call browser.inspect with marks=true`);
+          const grounded = await groundPage(p, ctx, { remember: false });
+          const current = grounded.elements.find((element) => element.ref === refName);
+          if (!current || !sameGroundDescriptor(cached, current)) {
+            throw groundError('ref_stale', `ref_stale: ${refName} no longer identifies the same visible element; call browser.inspect with marks=true and use a fresh ref`);
+          }
+          rememberRefs(groundSession(ctx), grounded.elements);
+          targetSelector = `[data-majin-ref="${refName}"]`;
+        }
+        const element = await safeClick(p, targetSelector, index, ctx);
+        audit(ctx, 'click', { selector: targetSelector, ...(refName ? { ref: refName } : {}), index: index ?? 0, element });
+        return withOwnerHandoff(p, ctx, { result: `Clicked ${refName || targetSelector}${element.text ? ` (${element.text})` : ''}. URL: ${p.url()}`, meta: { url: p.url(), selector: targetSelector, ...(refName ? { ref: refName } : {}), element }, summary: `clicked ${refName || targetSelector}` });
       });
     },
   }),
@@ -598,6 +659,26 @@ export const browserTools = [
   }),
 
   def({
+    name: 'browser.clear_marks',
+    group: 'browser',
+    risk: 'write',
+    desc: 'Remove MAJIN Set-of-Marks overlays and data-majin-ref attributes from the current page and forget the cached refs. This changes only MAJIN annotations; it does not alter site form values or send a request.',
+    params: {},
+    async run(_args, ctx) {
+      return withPage(ctx, async (p) => {
+        const before = await p.evaluate(() => ({
+          marks: document.querySelectorAll('.majin-mark').length,
+          refs: document.querySelectorAll('[data-majin-ref]').length,
+        }));
+        await p.evaluate(CLEAR_JS);
+        clearRefs(groundSession(ctx));
+        audit(ctx, 'clear-marks', before);
+        return { result: `Cleared ${before.marks} Set-of-Marks overlay(s) and ${before.refs} element ref(s).`, meta: before, summary: 'browser marks cleared' };
+      });
+    },
+  }),
+
+  def({
     name: 'browser.close',
     group: 'browser',
     risk: 'read',
@@ -611,6 +692,7 @@ export const browserTools = [
         state.context = null;
         state.page = null;
         state.browserType = null;
+        clearRefs(groundSession(ctx));
         audit(ctx, 'close', {}, oldPage);
         return { result: 'Browser session closed; the local profile was kept. No form was submitted.', summary: 'browser closed' };
       });

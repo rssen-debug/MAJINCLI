@@ -251,6 +251,7 @@ function formatTraceEvent(event) {
     case 'owner_steering_applied': return `owner steering applied${event.instruction ? `: ${event.instruction}` : ''}`;
     case 'tool_call_started': return `tool ${event.tool || 'unknown'} started${event.args ? ` ${event.args}` : ''}`;
     case 'tool_call_finished': return `tool ${event.tool || 'unknown'} ${event.ok ? 'ok' : 'failed'}${event.durationMs != null ? ` in ${event.durationMs}ms` : ''}${event.status ? ` [${event.status}]` : ''}${event.errorCode ? ` ${event.errorCode}` : ''}${event.blocker ? ` — ${event.blocker}` : ''}`;
+    case 'criteria_registered': return `acceptance criteria registered by ${event.source || 'model'} and locked by host: ${(event.accepted || []).map((check) => `${check.kind} ${check.label}`).join('; ')}${event.rejected?.length ? ` · rejected ${event.rejected.length}` : ''}`;
     case 'verification_started': return `verifying ${Array.isArray(event.checks) ? event.checks.length : 0} acceptance check(s) independently: ${(event.checks || []).map((check) => `${check.kind} ${check.label}`).join('; ')}`;
     case 'verification_passed': return `verified ${event.kind} ${event.label || ''} — ${formatEvidenceLine(event.evidence)}`;
     case 'verification_failed': return `verification failed: ${event.failure?.kind || 'check'} ${event.failure?.label || ''} — ${event.failure?.error || 'not satisfied'}`;
@@ -307,6 +308,7 @@ function printGoalResult(result) {
     }
   }
   const evidence = Array.isArray(goal.verification_evidence) ? goal.verification_evidence : [];
+  if (goal.criteria_source) console.log(`Acceptance criteria source: ${goal.criteria_source}`);
   console.log(`Verification evidence: ${evidence.length}`);
   for (const item of evidence) console.log(`  verified ${formatEvidenceLine(item)}`);
   if (goal.budget?.maxRounds) console.log(`Model round budget: ${goal.budget.maxRounds}`);

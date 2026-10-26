@@ -178,3 +178,56 @@ test('browser_shot captures real PNG evidence that the pixel verifier can indepe
   assert.equal(again.meta.unchanged, true);
   assert.equal(again.meta.path, pngPath);
 });
+
+test('Set-of-Marks refs click deterministically, stale refs are refused, and clear_marks forgets refs', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-browser-marks-'));
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(workspace, { recursive: true });
+  const page = http.createServer((_req, res) => {
+    res.setHeader('content-type', 'text/html');
+    res.end(`<!doctype html><h1>Marks fixture</h1>
+      <button id="advance" type="button" onclick="this.textContent='Done';document.querySelector('#state').textContent='REF CLICKED'">Advance</button>
+      <div id="state">WAITING</div>`);
+  });
+  await new Promise(resolve => page.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${page.address().port}`;
+  const tools = await createDriverTools({ workspace, grantedLanes: ['browser'], browser: true, browserVisible: false });
+  const run = async (name, args = {}) => tools.get(name).run(args);
+  t.after(async () => {
+    try { await run('browser_close'); } catch { /* browser may not have opened on a skipped runner */ }
+    page.closeAllConnections();
+    await new Promise(resolve => page.close(resolve));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  if (!tools.has('browser_open')) { t.skip('No installed Chromium/Edge on this runner'); return; }
+  assert.equal(tools.has('browser_clear_marks'), true);
+
+  await run('browser_open', { url: origin });
+  const grounded = await run('browser_inspect', { marks: true });
+  const ref = /\[(e[0-9]+)\] button "Advance"/.exec(grounded.result)?.[1];
+  assert.ok(ref, `inspect must return a grounded Advance ref:\n${grounded.result}`);
+  assert.ok(grounded.meta.marks >= 1);
+  assert.deepEqual(grounded.meta.refs.includes(ref), true);
+
+  const clicked = await run('browser_click', { ref });
+  assert.equal(clicked.meta.ref, ref);
+  assert.match((await run('browser_inspect')).result, /REF CLICKED/);
+
+  await assert.rejects(
+    run('browser_click', { ref }),
+    (error) => error.code === 'ref_stale' && /ref_stale/.test(error.message),
+    'the same ref must not silently click after the element label changed',
+  );
+
+  const regrounded = await run('browser_inspect', { marks: true });
+  const freshRef = /\[(e[0-9]+)\] button "Done"/.exec(regrounded.result)?.[1];
+  assert.ok(freshRef, `re-inspection must ground the changed button:\n${regrounded.result}`);
+  const cleared = await run('browser_clear_marks');
+  assert.ok(cleared.meta.marks >= 1, JSON.stringify(cleared.meta));
+  assert.ok(cleared.meta.refs >= 1, JSON.stringify(cleared.meta));
+  await assert.rejects(
+    run('browser_click', { ref: freshRef }),
+    (error) => error.code === 'ref_unknown' && /ref_unknown/.test(error.message),
+    'cleared refs must be forgotten instead of remaining clickable',
+  );
+});
