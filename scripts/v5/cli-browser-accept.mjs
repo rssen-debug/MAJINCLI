@@ -15,6 +15,7 @@ const files = [
   'test/v5/cli.test.js',
   'test/v5/provider-agent.test.js',
   'test/v5/full-access.test.js',
+  'test/v5/schedule.test.js',
   'test/v5/cli-live-accept.test.js',
 ];
 const child = spawn(process.execPath, ['--test', '--test-reporter=tap', ...files], {
