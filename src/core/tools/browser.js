@@ -261,6 +261,24 @@ export const browserTools = [
           const launchTimeoutMs = Number(process.env.MAJIN_BROWSER_LAUNCH_TIMEOUT_MS) > 0
             ? Number(process.env.MAJIN_BROWSER_LAUNCH_TIMEOUT_MS)
             : 45000;
+          if (process.platform === 'win32') {
+            // Edge/Chromium resolves DIR_LOCAL_APP_DATA under %USERPROFILE%.
+            // In a sandboxed/portable home (and in spawned-process tests that
+            // point USERPROFILE at an empty temp profile) a missing
+            // AppData\Local makes that lookup fail; Chromium then cannot tell
+            // that our explicit --user-data-dir is non-default and refuses
+            // remote debugging, so Playwright never connects. Creating the
+            // standard, empty AppData folders is sufficient and harmless.
+            const userProfile = process.env.USERPROFILE || os.homedir();
+            if (userProfile) {
+              for (const appDataDir of [
+                path.join(userProfile, 'AppData', 'Local'),
+                path.join(userProfile, 'AppData', 'Roaming'),
+              ]) {
+                try { fs.mkdirSync(appDataDir, { recursive: true }); } catch { /* launch will surface the real error */ }
+              }
+            }
+          }
           try {
             state.context = await state.browserType.launchPersistentContext(profileDir, {
               headless: Boolean(headless),
