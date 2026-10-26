@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { GrandArchitect } from './architect.js';
 import { getV5InventorySummary } from './inventory.js';
 import { ProviderAgent } from './provider-agent.js';
+import { V5Schedule } from './schedule.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.join(__dirname, 'ui');
@@ -93,6 +94,15 @@ export function createV5Server({
     ...(providerMaxRounds ? { maxRounds: providerMaxRounds } : {}),
     ...(providerContextCharBudget ? { contextCharBudget: providerContextCharBudget } : {}),
   });
+  const schedule = new V5Schedule({
+    dataDir,
+    execute: input => providerAgent.execute(input),
+    isBusy: () => Boolean(providerAgent.active) || ['RUNNING', 'WAITING_USER', 'BLOCKED', 'PAUSED'].includes(providerAgent.getGoalState()?.status)
+      || architect.getGoalState()?.status === 'RUNNING',
+    isAllowed: () => !architect.files.stopRequested && Boolean(architect.providers.state.activeModelId)
+      && architect.files.describeAccessState().grantedLanes.includes('sys'),
+  });
+  architect.schedule = schedule;
   const useProviderAgent = body => Boolean(architect.providers.state.activeModelId) &&
     body.actions == null && body.jobAds == null && !body.synthesizeMissingSkill && !body.blocker && !body.requireUserConfirmation;
 
@@ -136,6 +146,11 @@ export function createV5Server({
           app: 'majin-v5',
           ...architect.ops.getVersionInfo(),
         });
+      }
+
+      if (pathname === '/api/v5/schedule') {
+        if (method === 'GET') return sendJson(res, 200, schedule.status());
+        if (method === 'POST') return sendJson(res, 200, schedule.manage(await readJsonBody(req)));
       }
 
       // Unified V5 state endpoint
@@ -352,6 +367,7 @@ export function createV5Server({
   return {
     architect,
     providerAgent,
+    schedule,
     server,
     getPairingCode: () => currentPairingCode,
     async start() {
@@ -359,8 +375,10 @@ export function createV5Server({
         server.once('error', reject);
         server.listen(port, host, resolve);
       });
+      schedule.start();
       const addr = server.address();
       const actualPort = typeof addr === 'object' && addr ? addr.port : port;
+      schedule.verificationUrl = `http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${actualPort}/api/v5/schedule`;
       return {
         host,
         port: actualPort,
@@ -368,7 +386,9 @@ export function createV5Server({
       };
     },
     async stop() {
+      const stoppingSchedule = schedule.stop();
       await providerAgent.close();
+      await stoppingSchedule;
       await new Promise((resolve) => server.close(() => resolve()));
     },
   };

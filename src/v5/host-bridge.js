@@ -17,7 +17,7 @@ const SERVICE_BOUND = [
   [/^majin\.routes$/, 'model routing is owner configuration (`majin-v5 model`); the active selection is visible to the model via majin_provider and majin_status'],
   [/^majin\.skill$/, 'verified procedures are model-reachable via procedures_search and procedures_read; procedures are learned host-side from independently verified goals, and legacy skill file management is not supplied to the isolated driver'],
   [/^majin\.backup$/, 'owner backup surface: `majin-v5 memory export` / `import --yes` covers long-term memory with validated sync records; no full-host backup service is supplied to the isolated driver'],
-  [/^majin\.schedule$/, 'no scheduler service runs in the V5 CLI host, so scheduled execution is not available'],
+  [/^majin\.schedule$/, 'scheduled work is supplied by the provider-host majin_schedule tool while chat/serve is running; it uses saved model/grants, host local time and a bounded run count; the isolated driver has no scheduler'],
   [/^majin\.heartbeat$/, 'the legacy heartbeat daemon does not run in the V5 host'],
   [/^majin\.channel$/, 'external messaging channels require host adapters and credentials configured by the owner; none are supplied to the isolated driver'],
   [/^majin\.(configure|control|guard)$/, 'owner-only configuration/guard surface (`majin-v5 grants`, `majin-v5 doctor`, the UI); settings and permissions are never writable from model text'],
