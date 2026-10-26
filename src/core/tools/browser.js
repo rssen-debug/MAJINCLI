@@ -251,13 +251,35 @@ export const browserTools = [
           fs.mkdirSync(dirs.cache, { recursive: true });
           const executable = executablePath || chromePath();
           const profile = createHash('sha256').update(String(ctx.session || 'desktop')).digest('hex').slice(0, 16);
-          state.context = await state.browserType.launchPersistentContext(path.join(dirs.cache, `browser-profile-${profile}`), {
-            headless: Boolean(headless),
-            ...(executable ? { executablePath: executable } : {}),
-            viewport: { width: 1440, height: 1000 },
-            acceptDownloads: true,
-            serviceWorkers: 'block',
-          });
+          const profileDir = path.join(dirs.cache, `browser-profile-${profile}`);
+          // Playwright's default launch timeout is 180s, which is longer than
+          // the V5 driver's per-operation budget: a stuck Edge/Chromium start
+          // would surface only as a generic driver TIMEOUT with the worker
+          // killed. Bound the launch itself so the real Playwright error
+          // (profile lock, binary failure, CDP handshake) is the observation
+          // the agent and owner can act on.
+          const launchTimeoutMs = Number(process.env.MAJIN_BROWSER_LAUNCH_TIMEOUT_MS) > 0
+            ? Number(process.env.MAJIN_BROWSER_LAUNCH_TIMEOUT_MS)
+            : 45000;
+          try {
+            state.context = await state.browserType.launchPersistentContext(profileDir, {
+              headless: Boolean(headless),
+              ...(executable ? { executablePath: executable } : {}),
+              viewport: { width: 1440, height: 1000 },
+              acceptDownloads: true,
+              serviceWorkers: 'block',
+              timeout: launchTimeoutMs,
+            });
+          } catch (error) {
+            state.context = null;
+            state.page = null;
+            const launchError = new Error(
+              `Browser launch failed (executable: ${executable || 'playwright-managed'}, profile: ${profileDir}, headless: ${Boolean(headless)}, timeoutMs: ${launchTimeoutMs}): ${String(error?.message || error).slice(0, 2000)}`,
+            );
+            launchError.code = 'BROWSER_LAUNCH_FAILED';
+            launchError.cause = error;
+            throw launchError;
+          }
           state.headless = Boolean(headless);
           state.context.setDefaultTimeout(12000);
           state.page = state.context.pages()[0] || await state.context.newPage();
