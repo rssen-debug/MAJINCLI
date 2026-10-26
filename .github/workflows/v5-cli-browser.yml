@@ -21,5 +21,12 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Validate PowerShell CLI launcher syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD "scripts/v5/start-full-cli.ps1"), [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
       - name: Verify V5 CLI tools, real local forms, upload, receipt and resume
         run: node scripts/v5/cli-browser-accept.mjs

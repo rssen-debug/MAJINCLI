@@ -18,7 +18,7 @@ const SERVICE_BOUND = [
   [/^majin\.skill$/, 'verified procedures are model-reachable via procedures_search and procedures_read; procedures are learned host-side from independently verified goals, and legacy skill file management is not supplied to the isolated driver'],
   [/^majin\.backup$/, 'owner backup surface: `majin-v5 memory export` / `import --yes` covers long-term memory with validated sync records; no full-host backup service is supplied to the isolated driver'],
   [/^majin\.schedule$/, 'scheduled work is supplied by the provider-host majin_schedule tool while chat/serve is running; it uses saved model/grants, host local time and a bounded run count; the isolated driver has no scheduler'],
-  [/^majin\.heartbeat$/, 'the legacy heartbeat daemon does not run in the V5 host'],
+  [/^majin\.heartbeat$/, 'the V5 provider-host majin_heartbeat tool observes real goal outcomes and persists a local CLI inbox; the isolated driver has no heartbeat daemon'],
   [/^majin\.channel$/, 'external messaging channels require host adapters and credentials configured by the owner; none are supplied to the isolated driver'],
   [/^majin\.(configure|control|guard)$/, 'owner-only configuration/guard surface (`majin-v5 grants`, `majin-v5 doctor`, the UI); settings and permissions are never writable from model text'],
   [/^majin\.(?!self_audit$)/, 'requires the V1/V5 host service context (config, memory, skills, scheduler, channels, dataset, or adapters); use the corresponding V5 surface until that service is supplied to the isolated driver'],

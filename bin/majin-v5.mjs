@@ -430,6 +430,7 @@ async function postGoalJson(baseUrl, endpoint, body = {}) {
 function createGoalProgressPrinter(srv) {
   if (args.includes('--quiet')) return { begin() {}, flush() {}, end() {}, stop() {} };
   const printedByGoal = new Map();
+  const printedDigests = new Set((srv.heartbeat?.view().notifications || []).map(item => item.id));
   let lastGoalId = '';
   let lastStatus = '';
   let watching = false;
@@ -439,6 +440,12 @@ function createGoalProgressPrinter(srv) {
   };
   const goalKey = (goal) => String(goal?.goal_id || goal?.goalId || 'goal');
   const flush = () => {
+    for (const item of srv.heartbeat?.view().notifications || []) {
+      if (printedDigests.has(item.id)) continue;
+      console.error(`[majin] ${item.text}`);
+      printedDigests.add(item.id);
+      if (printedDigests.size > 200) printedDigests.delete(printedDigests.values().next().value);
+    }
     if (!watching) return;
     const goal = currentGoal();
     if (!goal) return;
