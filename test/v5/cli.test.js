@@ -270,6 +270,19 @@ test('CLI grants persist, doctor reports parity, and tools call executes through
   assert.deepEqual(doctorJson.browser.writeOrigins, ['https://employer.example']);
   assert.equal(doctorJson.browser.visible, true);
   assert.equal(doctorJson.provider.activeModelId, null);
+  assert.equal(doctorJson.toolParity.assessment, 'availability-only');
+  assert.equal(doctorJson.toolParity.executionVerified, false);
+  assert.equal(doctorJson.toolParity.unavailableTools.length, doctorJson.toolParity.unavailable);
+  assert.ok(doctorJson.toolParity.unavailableTools.every(entry => entry.sourceName && entry.category && entry.reason));
+  const inventory = parseJson(await runCli(['tools', '--data-dir', fx.dataDir, '--json'], fx));
+  assert.deepEqual(doctorJson.toolParity.unavailableTools, inventory.toolParity.unavailableTools);
+  const doctorText = await runCli(['doctor', '--data-dir', fx.dataDir], fx);
+  assert.equal(doctorText.status, 0, doctorText.stderr);
+  assert.match(doctorText.stdout, /does not execute tools/);
+  for (const entry of doctorJson.toolParity.unavailableTools) {
+    assert.ok(doctorText.stdout.includes(`${entry.sourceName} [${entry.category}] — ${entry.reason}`));
+  }
+
 
   fs.writeFileSync(path.join(fx.workspace, 'sample.bin'), 'cli proof');
   const call = await runCli([

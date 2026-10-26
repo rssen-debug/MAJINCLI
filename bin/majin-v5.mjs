@@ -1507,6 +1507,9 @@ async function main() {
         capabilityCovered: status.toolParity.capabilityCovered,
         capabilityPercent: status.toolParity.capabilityPercent,
         categories: status.toolParity.categories,
+        unavailableTools: status.toolParity.unavailableTools,
+        assessment: 'availability-only',
+        executionVerified: false,
       },
       driverTools: tools.size,
     };
@@ -1521,6 +1524,13 @@ async function main() {
       console.log(`Owner lanes: ${access.grantedLanes.length ? access.grantedLanes.join(', ') : '(none)'}`);
       console.log(`Tool parity: ${report.toolParity.available}/${report.toolParity.universe} (${report.toolParity.coveragePercent}%) · capability covered: ${report.toolParity.capabilityCovered}/${report.toolParity.universe} (${report.toolParity.capabilityPercent}%) · driver tools: ${report.driverTools}`);
       console.log(`Browser available: ${report.checks.browserAvailable ? 'yes' : 'no'} · interactive Windows: ${report.checks.interactiveWindows ? 'yes' : 'no'} · visible: ${report.browser.visible ? 'yes' : 'no'} · write origins: ${report.browser.writeOrigins.length ? report.browser.writeOrigins.join(', ') : '(none)'}`);
+      console.log('Availability only: this report does not execute tools or verify end-to-end workflows.');
+      if (report.toolParity.unavailableTools.length) {
+        console.log('Unavailable tools and reasons:');
+        for (const entry of report.toolParity.unavailableTools) {
+          console.log(`  ${entry.sourceName} [${entry.category}] — ${entry.reason}`);
+        }
+      }
       if (!access.grantedLanes.length) console.log('Next: run `majin-v5 grants grant --all-lanes` or add --all-lanes to a run command to enable the full owner tool surface.');
       if (!report.checks.providerConfigured) console.log('Next: run `majin-v5 model configure --provider opencode-go --api-key-env OPENCODE_API_KEY --discover`, then `majin-v5 model select <model-id>`; deterministic tools still work via `tools call`.');
     }
