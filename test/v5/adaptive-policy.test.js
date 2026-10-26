@@ -98,3 +98,13 @@ test('failed-step retries remain bounded across plan refreshes and policy transi
   assert.equal(f.goal.adaptive.transitions.length, 64);
   assert.equal(f.goal.adaptive.reason, 'Decision 69');
 });
+
+test('multiple checks on the same artifact do not create a needless dependency plan', () => {
+  assert.equal(chooseAdaptiveMode({ objective: 'Draft an application', criteria: [
+    { kind: 'file', path: 'letter.md', contains: 'Applicant' },
+    { kind: 'file', path: 'letter.md', contains: 'Technical Consultant' },
+  ] }).mode, 'direct');
+  assert.equal(chooseAdaptiveMode({ objective: 'Prepare outputs', criteria: [
+    { kind: 'file', path: 'letter.md' }, { kind: 'file', path: 'cv.md' },
+  ] }).mode, 'plan');
+});

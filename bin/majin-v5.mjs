@@ -1016,6 +1016,10 @@ async function executeChatCommand() {
   async function handleLine(rawLine) {
     const line = String(rawLine || '').trim();
     if (!line) return;
+    if (!activeOperation && /^(?:test|\/test)$/i.test(line)) {
+      console.log('[majin] CLI is responding. No model request was sent and no saved goal was resumed. Type your task, or /resume to continue saved work.');
+      return;
+    }
     if (!line.startsWith('/')) {
       if (activeOperation) await steerActive(line);
       else startGoalText(line);
