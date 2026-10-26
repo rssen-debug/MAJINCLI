@@ -90,11 +90,35 @@ function groundError(code, message) {
   return error;
 }
 
-async function groundPage(p, ctx, { remember = true } = {}) {
-  const payload = await p.evaluate(GROUND_JS);
+/**
+ * Resolve an optional iframe selector (resolved on the top page) to the
+ * locator/evaluate root for frame-scoped tools. Cross-origin iframes are
+ * reachable through Playwright/CDP; a missing, ambiguous or non-iframe match
+ * is an honest error rather than a silent fall-back to the main document.
+ */
+async function locatorRoot(p, frameSelector) {
+  if (!frameSelector) return p;
+  const locator = p.locator(frameSelector);
+  const count = await locator.count();
+  if (count !== 1) throw new Error(count ? `${count} elements matched frame selector; use a unique iframe selector: ${frameSelector}` : `no iframe matched frame selector: ${frameSelector} (browser.inspect lists page iframes)`);
+  const handle = await locator.elementHandle();
+  try {
+    const tag = await handle.evaluate((el) => el.tagName.toLowerCase());
+    if (!['iframe', 'frame'].includes(tag)) throw new Error(`frame selector matched <${tag}>, not an iframe: ${frameSelector}`);
+    const frame = await handle.contentFrame();
+    if (!frame) throw new Error(`iframe has no accessible content frame yet (still loading?): ${frameSelector}`);
+    return frame;
+  } finally {
+    await handle.dispose().catch(() => {});
+  }
+}
+
+async function groundPage(p, ctx, { remember = true, frameSelector = '' } = {}) {
+  const root = await locatorRoot(p, frameSelector);
+  const payload = await root.evaluate(GROUND_JS);
   const elements = Array.isArray(payload?.elements) ? payload.elements : [];
   if (remember) rememberRefs(groundSession(ctx), elements);
-  return { ...(payload || {}), elements, count: elements.length, url: payload?.url || p.url(), title: payload?.title || '' };
+  return { ...(payload || {}), elements, count: elements.length, url: payload?.url || root.url(), title: payload?.title || '' };
 }
 
 function sameGroundDescriptor(a, b) {
@@ -220,9 +244,10 @@ async function loadChromium() {
   }
 }
 
-async function safeClick(p, selector, index, ctx) {
+async function safeClick(p, selector, index, ctx, frameSelector = '') {
   await syncBrowserWriteOrigins(p, ctx);
-  const locator = p.locator(selector);
+  const root = await locatorRoot(p, frameSelector);
+  const locator = root.locator(selector);
   const count = await locator.count();
   if (!count) throw new Error(`no element matched selector: ${selector}`);
   if (index == null && count !== 1) throw new Error(`${count} elements matched; specify index (0-based) to choose one`);
@@ -234,7 +259,11 @@ async function safeClick(p, selector, index, ctx) {
     text: (el.innerText || el.value || el.getAttribute('aria-label') || '').trim().slice(0, 160),
   }));
   const submitLabel = /\b(apply|submit|send application|skicka ansökan|skicka ansokan|skicka ansökan|ansök nu|ansok nu)\b/i.test(meta.text);
-  if (!browserWriteAllowed(ctx, p.url()) && ((meta.tag === 'button' && meta.type === 'submit') || (meta.tag === 'input' && ['submit', 'image'].includes(meta.type)) || meta.role === 'submit' || (['button', 'input'].includes(meta.tag) && submitLabel))) {
+  // A submit inside an iframe posts from the frame document, so an exact
+  // owner grant for either the page origin or the frame origin authorizes it;
+  // the context route guard still blocks any non-GET to ungranted origins.
+  const writeGranted = browserWriteAllowed(ctx, p.url()) || (root !== p && browserWriteAllowed(ctx, root.url()));
+  if (!writeGranted && ((meta.tag === 'button' && meta.type === 'submit') || (meta.tag === 'input' && ['submit', 'image'].includes(meta.type)) || meta.role === 'submit' || (['button', 'input'].includes(meta.tag) && submitLabel))) {
     let origin = null;
     try { origin = new URL(p.url()).origin; } catch { /* URL remains in the handoff record */ }
     throw browserHandoffError(
@@ -449,7 +478,8 @@ export const browserTools = [
               return item;
             });
           const links = [...document.querySelectorAll('a[href]')].filter(visible).slice(0,100).map(el => ({text:el.innerText.trim().slice(0,160),url:el.href,selector:selectorFor(el)}));
-          return { title: document.title, text: (document.body?.innerText || '').slice(0, limit), controls, links };
+          const frames = [...document.querySelectorAll('iframe,frame')].slice(0, 20).map(el => ({ selector: selectorFor(el), src: (el.getAttribute('src') || '').slice(0, 300), name: el.name || '', id: el.id || '', title: el.title || '' }));
+          return { title: document.title, text: (document.body?.innerText || '').slice(0, limit), controls, links, frames };
         }, Math.max(500, Math.min(Number(maxChars) || 10000, 24000)));
         if (stateFor(ctx).blockedRequests.length) details.text += '\nBlocked network writes (owner grant required):\n' + JSON.stringify(stateFor(ctx).blockedRequests);
         let marksText = '';
@@ -464,8 +494,9 @@ export const browserTools = [
             marksMeta = { marks: 0, marksError: String(error?.message || error).slice(0, 500) };
           }
         }
-        audit(ctx, 'inspect', { controls: details.controls.length, ...(marksMeta.marks != null ? { marks: marksMeta.marks } : {}) });
-        return withOwnerHandoff(p, ctx, { result: `URL: ${p.url()}\nTitle: ${details.title}\n\nVisible text:\n${details.text}\n\nControls (${details.controls.length}, max 100):\n${JSON.stringify(details.controls, null, 2)}\n\nLinks:\n${JSON.stringify(details.links)}${marksText}`, meta: { url: p.url(), title: details.title, controls: details.controls.length, ...marksMeta }, summary: `inspected page (${details.controls.length} controls${marksMeta.marks ? `, ${marksMeta.marks} marks` : ''})` });
+        audit(ctx, 'inspect', { controls: details.controls.length, frames: details.frames?.length || 0, ...(frame ? { frame } : {}), ...(marksMeta.marks != null ? { marks: marksMeta.marks } : {}) });
+        const framesText = frame ? '' : `\n\nIframes (${details.frames?.length || 0}; pass frame=<selector> to browser tools to work inside one):\n${JSON.stringify(details.frames || [])}`;
+        return withOwnerHandoff(p, ctx, { result: `URL: ${inspectRoot.url()}${frame ? ` (inside iframe ${frame}; page: ${p.url()})` : ''}\nTitle: ${details.title}\n\nVisible text:\n${details.text}\n\nControls (${details.controls.length}, max 100):\n${JSON.stringify(details.controls, null, 2)}\n\nLinks:\n${JSON.stringify(details.links)}${framesText}${marksText}`, meta: { url: p.url(), ...(frame ? { frame, frameUrl: inspectRoot.url() } : {}), title: details.title, controls: details.controls.length, frames: details.frames?.length || 0, ...marksMeta }, summary: `inspected ${frame ? 'iframe' : 'page'} (${details.controls.length} controls${marksMeta.marks ? `, ${marksMeta.marks} marks` : ''})` });
       });
     },
   }),
@@ -494,6 +525,7 @@ export const browserTools = [
       return withPage(ctx, async (p) => {
         const criteria = verificationCriteria(input);
         if (!criteria.ok) return { ok: false, error: { code: 'bad_expectation', message: criteria.reason }, summary: 'browser verify rejected the expectation' };
+        const verifyRoot = await locatorRoot(p, input.frame);
         const script = VERIFY_JS.replace('__MAJIN_ARGS__', JSON.stringify(criteria));
         const waitMs = Math.min(5000, Math.max(0, Math.trunc(Number(input.waitMs ?? 1800) || 0)));
         const stableMs = Math.min(1500, Math.max(0, Math.trunc(Number(input.stableMs) || 0)));
@@ -583,25 +615,26 @@ export const browserTools = [
     name: 'browser.click',
     group: 'browser',
     risk: 'write',
-    desc: 'Click one page element selected by a Playwright CSS/text selector or by a Set-of-Marks ref from browser.inspect marks=true. By default submit buttons are refused. Owner-authorized origins permit submission; inspect the real confirmation and never repeat an uncertain submission.',
+    desc: 'Click one page element selected by a Playwright CSS/text selector or by a Set-of-Marks ref from browser.inspect marks=true. Pass frame (iframe selector from browser.inspect) when the element lives inside an iframe; ground refs inside that frame first with browser.inspect frame + marks=true. By default submit buttons are refused. Owner-authorized origins permit submission; inspect the real confirmation and never repeat an uncertain submission.',
     params: {
       selector: 'string: optional Playwright locator selector, e.g. #next or text=Continue; provide exactly one of selector or ref',
       ref: 'string: optional Set-of-Marks ref such as e3 from browser.inspect; provide exactly one of selector or ref',
       index: 'number: optional 0-based match index when selector matches more than once',
+      frame: 'string: optional iframe selector containing the element',
     },
     required: [],
-    async run({ selector = '', ref = '', index } = {}, ctx) {
+    async run({ selector = '', ref = '', index, frame = '' } = {}, ctx) {
       return withPage(ctx, async (p) => {
         let targetSelector = String(selector || '');
         const refName = String(ref || '');
         if ((targetSelector ? 1 : 0) + (refName ? 1 : 0) !== 1) throw new Error('browser.click requires exactly one of selector or ref');
         if (refName) {
           if (index != null) throw new Error('browser.click index is only valid with selector, not ref');
-          targetSelector = await resolveGroundedSelector(p, ctx, refName);
+          targetSelector = await resolveGroundedSelector(p, ctx, refName, frame);
         }
-        const element = await safeClick(p, targetSelector, index, ctx);
-        audit(ctx, 'click', { selector: targetSelector, ...(refName ? { ref: refName } : {}), index: index ?? 0, element });
-        return withOwnerHandoff(p, ctx, { result: `Clicked ${refName || targetSelector}${element.text ? ` (${element.text})` : ''}. URL: ${p.url()}`, meta: { url: p.url(), selector: targetSelector, ...(refName ? { ref: refName } : {}), element }, summary: `clicked ${refName || targetSelector}` });
+        const element = await safeClick(p, targetSelector, index, ctx, frame);
+        audit(ctx, 'click', { selector: targetSelector, ...(refName ? { ref: refName } : {}), ...(frame ? { frame } : {}), index: index ?? 0, element });
+        return withOwnerHandoff(p, ctx, { result: `Clicked ${refName || targetSelector}${element.text ? ` (${element.text})` : ''}${frame ? ` inside iframe ${frame}` : ''}. URL: ${p.url()}`, meta: { url: p.url(), selector: targetSelector, ...(refName ? { ref: refName } : {}), ...(frame ? { frame } : {}), element }, summary: `clicked ${refName || targetSelector}` });
       });
     },
   }),
@@ -650,8 +683,8 @@ export const browserTools = [
           );
         }
         await locator.fill(String(value));
-        audit(ctx, 'fill', { selector, valueLength: String(value).length });
-        return withOwnerHandoff(p, ctx, { result: `Filled ${selector} (${String(value).length} characters). Nothing was submitted.`, meta: { selector, valueLength: String(value).length }, summary: `filled ${selector}` });
+        audit(ctx, 'fill', { selector, ...(frame ? { frame } : {}), valueLength: String(value).length });
+        return withOwnerHandoff(p, ctx, { result: `Filled ${selector} (${String(value).length} characters)${frame ? ` inside iframe ${frame}` : ''}. Nothing was submitted.`, meta: { selector, ...(frame ? { frame } : {}), valueLength: String(value).length }, summary: `filled ${selector}` });
       });
     },
   }),
@@ -750,19 +783,20 @@ export const browserTools = [
       ref: 'string: optional Set-of-Marks ref such as e3 from browser.inspect; provide exactly one of selector or ref',
       path: 'string: optional destination path (workspace-relative or absolute inside the workspace); default downloads/<suggested filename>',
       timeoutMs: 'number: optional milliseconds to wait for the download to start, 100-60000 (default 15000)',
+      frame: 'string: optional iframe selector containing the download element',
     },
     required: [],
     examples: ['browser.download({selector:"a#report",path:"downloads/report.pdf"})', 'browser.download({ref:"e4"})'],
-    async run({ selector = '', ref = '', path: requestedPath = '', timeoutMs = 15000 } = {}, ctx) {
+    async run({ selector = '', ref = '', path: requestedPath = '', timeoutMs = 15000, frame = '' } = {}, ctx) {
       return withPage(ctx, async (p) => {
         const refName = String(ref || '');
         let targetSelector = String(selector || '');
         if ((targetSelector ? 1 : 0) + (refName ? 1 : 0) !== 1) throw new Error('browser.download requires exactly one of selector or ref');
         const waitMs = Math.min(60000, Math.max(100, Math.trunc(Number(timeoutMs) || 15000)));
-        if (refName) targetSelector = await resolveGroundedSelector(p, ctx, refName);
+        if (refName) targetSelector = await resolveGroundedSelector(p, ctx, refName, frame);
         const downloadPromise = p.waitForEvent('download', { timeout: waitMs });
         downloadPromise.catch(() => {}); // a refused click must not leave an unhandled rejection behind
-        const element = await safeClick(p, targetSelector, undefined, ctx);
+        const element = await safeClick(p, targetSelector, undefined, ctx, frame);
         let download;
         try {
           download = await downloadPromise;
@@ -876,15 +910,16 @@ export const browserTools = [
     name: 'browser.clear_marks',
     group: 'browser',
     risk: 'write',
-    desc: 'Remove MAJIN Set-of-Marks overlays and data-majin-ref attributes from the current page and forget the cached refs. This changes only MAJIN annotations; it does not alter site form values or send a request.',
-    params: {},
-    async run(_args, ctx) {
+    desc: 'Remove MAJIN Set-of-Marks overlays and data-majin-ref attributes from the current page (or from one iframe via frame) and forget the cached refs. This changes only MAJIN annotations; it does not alter site form values or send a request.',
+    params: { frame: 'string: optional iframe selector whose marks should be cleared instead of the main page' },
+    async run({ frame = '' } = {}, ctx) {
       return withPage(ctx, async (p) => {
-        const before = await p.evaluate(() => ({
+        const clearRoot = await locatorRoot(p, frame);
+        const before = await clearRoot.evaluate(() => ({
           marks: document.querySelectorAll('.majin-mark').length,
           refs: document.querySelectorAll('[data-majin-ref]').length,
         }));
-        await p.evaluate(CLEAR_JS);
+        await clearRoot.evaluate(CLEAR_JS);
         clearRefs(groundSession(ctx));
         audit(ctx, 'clear-marks', before);
         return { result: `Cleared ${before.marks} Set-of-Marks overlay(s) and ${before.refs} element ref(s).`, meta: before, summary: 'browser marks cleared' };

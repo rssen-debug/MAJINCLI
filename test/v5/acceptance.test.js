@@ -519,6 +519,49 @@ test('acceptance: browser download and tab switch through the installed CLI are 
   assert.deepEqual(fs.readFileSync(path.join(fx.workspace, 'downloads', 'report.txt')), payload);
 });
 
+test('acceptance: cross-origin iframe form is completed and verified through the installed CLI', async (t) => {
+  const browserPath = await browserBinary();
+  if (!browserPath) { t.skip('No installed Chromium/Edge on this runner'); return; }
+  const fx = fixture(t);
+  const stamp = Date.now();
+  const frameApp = http.createServer((_req, res) => {
+    res.setHeader('content-type', 'text/html');
+    res.end(`<!doctype html><h1>EMBEDDED FORM</h1><input id="city" name="city">
+      <button id="go" type="button" onclick="document.getElementById('state').textContent='CITY SET '+document.getElementById('city').value">Save city</button>
+      <output id="state">IDLE</output>`);
+  });
+  await new Promise((resolve) => frameApp.listen(0, '127.0.0.1', resolve));
+  const shell = http.createServer((_req, res) => {
+    res.setHeader('content-type', 'text/html');
+    res.end(`<!doctype html><h1>PORTAL SHELL</h1><iframe id="app" src="http://127.0.0.1:${frameApp.address().port}/frame"></iframe>`);
+  });
+  await new Promise((resolve) => shell.listen(0, '127.0.0.1', resolve));
+  t.after(async () => {
+    for (const srv of [shell, frameApp]) { srv.closeAllConnections?.(); await new Promise((resolve) => srv.close(resolve)); }
+  });
+  const pageUrl = `http://127.0.0.1:${shell.address().port}/`;
+  const provider = await fakeProvider(t, (body) => {
+    const done = (name) => (body.messages || []).some((message) => message.role === 'tool' && message.name === name);
+    const verified = (body.messages || []).some((message) => message.role === 'tool' && message.name === 'browser_verify' && String(message.content).includes('Verified live browser outcome'));
+    if (!done('browser_open')) return toolCall('frame-open', 'browser_open', { url: pageUrl });
+    if (!done('browser_fill')) return toolCall('frame-fill', 'browser_fill', { frame: '#app', selector: '#city', value: `STAMP-${stamp}` });
+    if (!done('browser_click')) return toolCall('frame-click', 'browser_click', { frame: '#app', selector: '#go' });
+    if (!verified) return toolCall('frame-verify', 'browser_verify', { frame: '#app', selector: '#state', text: `CITY SET STAMP-${stamp}` });
+    if (!done('fs_write')) return toolCall('frame-receipt', 'fs_write', { path: 'frame-receipt.txt', content: `iframe form verified ${stamp}` });
+    return { role: 'assistant', content: 'Filled and verified the embedded iframe form, then wrote the receipt.' };
+  });
+  await configureProvider(fx.dataDir, provider.baseUrl);
+  const criteria = JSON.stringify([{ kind: 'file', path: 'frame-receipt.txt', contains: `iframe form verified ${stamp}` }]);
+  const run = await runCli(['run', `Open ${pageUrl}, fill the city inside the embedded iframe form, save it, verify the result, and write frame-receipt.txt`,
+    '--data-dir', fx.dataDir, '--criteria', criteria, '--lanes', 'files,browser', '--browser-headless'],
+  { ...fx, timeoutMs: 300000, env: { MAJIN_V4_BROWSER: browserPath } });
+  assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
+  assert.match(run.stdout, /Status: COMPLETED/);
+  assert.match(run.stderr, /tool browser_fill started/);
+  assert.match(run.stderr, /tool browser_verify started/);
+  assert.equal(fs.readFileSync(path.join(fx.workspace, 'frame-receipt.txt'), 'utf8'), `iframe form verified ${stamp}`);
+});
+
 test('acceptance: a long installed-CLI task stays within a bounded model context and finishes verified', async (t) => {
   const fx = fixture(t);
   for (let index = 0; index < 8; index++) {

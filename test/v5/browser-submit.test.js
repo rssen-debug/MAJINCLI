@@ -352,3 +352,73 @@ test('browser_download saves exact bytes into the workspace and browser_tabs lis
   assert.equal(closed.meta.tabs.length, 1);
   assert.match((await run('browser_inspect')).result, /FIRST PAGE/, 'closing the active tab must fall back to the remaining page');
 });
+
+test('frame-scoped inspect, fill, click, check, verify and download work inside a real cross-origin iframe', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'majin-browser-frame-'));
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(workspace, { recursive: true });
+  const framePayload = Buffer.from(`FRAME DOWNLOAD ${randomUUID()}`);
+  const frameApp = http.createServer((req, res) => {
+    if (req.url === '/file') {
+      res.setHeader('content-type', 'application/octet-stream');
+      res.setHeader('content-disposition', 'attachment; filename="frame.txt"');
+      res.end(framePayload);
+      return;
+    }
+    res.setHeader('content-type', 'text/html');
+    res.end(`<!doctype html><title>Frame app</title><h1>FRAME APP</h1>
+      <label>Name <input id="name" name="name"></label>
+      <button id="go" type="button" onclick="document.getElementById('state').textContent='SAVED '+document.getElementById('name').value">Save name</button>
+      <label>Consent <input id="consent" type="checkbox"></label>
+      <a id="dl" href="/file">Download frame file</a>
+      <output id="state">IDLE</output>`);
+  });
+  await new Promise(resolve => frameApp.listen(0, '127.0.0.1', resolve));
+  const frameOrigin = `http://127.0.0.1:${frameApp.address().port}`;
+  const shell = http.createServer((_req, res) => {
+    res.setHeader('content-type', 'text/html');
+    res.end(`<!doctype html><title>Shell</title><h1>SHELL PAGE</h1><iframe id="app" src="${frameOrigin}/frame" width="600" height="400"></iframe>`);
+  });
+  await new Promise(resolve => shell.listen(0, '127.0.0.1', resolve));
+  const shellOrigin = `http://127.0.0.1:${shell.address().port}`;
+  assert.notEqual(shellOrigin, frameOrigin, 'fixture must be genuinely cross-origin');
+  const tools = await createDriverTools({ workspace, grantedLanes: ['browser'], browser: true, browserVisible: false });
+  const run = async (name, args = {}) => tools.get(name).run(args);
+  t.after(async () => {
+    try { await run('browser_close'); } catch { /* browser may not have opened on a skipped runner */ }
+    for (const srv of [shell, frameApp]) { srv.closeAllConnections(); await new Promise(resolve => srv.close(resolve)); }
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  if (!tools.has('browser_open')) { t.skip('No installed Chromium/Edge on this runner'); return; }
+
+  await run('browser_open', { url: shellOrigin });
+  const shellInspect = await run('browser_inspect', {});
+  assert.equal(shellInspect.meta.frames, 1, shellInspect.result);
+  assert.match(shellInspect.result, /"selector": "#app"/);
+  assert.ok(!shellInspect.result.includes('FRAME APP'), 'main-document inspect must not pretend to see cross-origin frame content');
+
+  const badFrame = await run('browser_fill', { frame: '#nope', selector: '#name', value: 'Ada' });
+  assert.equal(badFrame.ok, false, 'an unknown frame selector must fail honestly, not fall back to the main document');
+
+  const frameInspect = await run('browser_inspect', { frame: '#app', marks: true });
+  assert.equal(frameInspect.meta.frameUrl, `${frameOrigin}/frame`);
+  assert.match(frameInspect.result, /FRAME APP/);
+  assert.ok(frameInspect.meta.marks > 0, 'Set-of-Marks grounding must run inside the iframe document');
+  const saveRef = String(frameInspect.result).split('\n').find(line => line.includes('Save name'))?.match(/\be\d+\b/)?.[0];
+  assert.ok(saveRef, `expected a grounded ref for the in-frame button:\n${frameInspect.result.slice(-1500)}`);
+
+  await run('browser_fill', { frame: '#app', selector: '#name', value: 'Ada' });
+  assert.equal((await run('browser_verify', { frame: '#app', selector: '#state', text: 'SAVED', waitMs: 0 })).ok, false);
+  await run('browser_click', { frame: '#app', ref: saveRef });
+  assert.notEqual((await run('browser_verify', { frame: '#app', selector: '#state', text: 'SAVED Ada' })).ok, false);
+
+  await run('browser_check', { frame: '#app', selector: '#consent', checked: true });
+  assert.notEqual((await run('browser_verify', { frame: '#app', selector: '#consent', checked: true })).ok, false);
+
+  const downloaded = await run('browser_download', { frame: '#app', selector: '#dl', path: 'downloads/frame.txt' });
+  assert.notEqual(downloaded.ok, false, JSON.stringify(downloaded.error || downloaded.meta));
+  assert.deepEqual(fs.readFileSync(path.join(workspace, 'downloads', 'frame.txt')), framePayload);
+
+  const cleared = await run('browser_clear_marks', { frame: '#app' });
+  assert.notEqual(cleared.ok, false);
+});
