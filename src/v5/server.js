@@ -397,10 +397,10 @@ export function createV5Server({
       };
     },
     async stop() {
+      heartbeat.stop();
       const stoppingSchedule = schedule.stop();
       await providerAgent.close();
       await stoppingSchedule;
-      heartbeat.stop();
       await new Promise((resolve) => server.close(() => resolve()));
     },
   };
