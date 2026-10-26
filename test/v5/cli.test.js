@@ -19,9 +19,9 @@ test('compact chat starts without inference and can toggle detailed output', t =
     env: { ...process.env, NO_COLOR: '1', HOME: root, USERPROFILE: root, MAJIN_HOME: root },
   });
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /Skriv vad du vill göra/);
-  assert.match(result.stdout, /Detaljerad vy aktiverad/);
-  assert.match(result.stdout, /Kompakt vy aktiverad/);
+  assert.match(result.stdout, /Tell MAJIN what to do/);
+  assert.match(result.stdout, /Detailed view enabled/);
+  assert.match(result.stdout, /Compact view enabled/);
   assert.ok(!result.stdout.includes('\x1b'));
   assert.ok(!fs.existsSync(path.join(dataDir, 'provider-agent', 'current.json')));
 });

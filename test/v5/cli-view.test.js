@@ -7,9 +7,9 @@ test('compact view keeps blockers and verification truthful without duplicating 
     tool_results: [{ ok: true }, { ok: false }], verification_evidence: [], cost: { modelCalls: 2, inputTokens: 1200 } };
   const text = compactResult(goal);
   assert.equal(text.split('Förberedd, inte skickad.').length - 1, 1);
-  assert.match(text, /inte slutverifierat/);
-  assert.match(text, /0 verifieringsbevis/);
-  assert.match(text, /1 fel under körningen/);
+  assert.match(text, /not final-verified/);
+  assert.match(text, /0 verification receipts/);
+  assert.match(text, /1 errors during this run/);
   assert.equal(compactEvent({ type: 'model_output_delta', text: 'duplicate' }), null);
   assert.match(compactEvent({ type: 'tool_call_finished', ok: false, errorCode: 'PATH_DENIED' }), /PATH_DENIED/);
   assert.match(compactResult({ status: 'WAITING_USER', browser_handoff: { action: 'Logga in i webbläsaren.' } }), /Logga in i webbläsaren/);

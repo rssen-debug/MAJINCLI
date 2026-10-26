@@ -643,7 +643,7 @@ async function executeChatCommand() {
   });
 
   function updatePrompt() {
-    if (compactCli) { rl.setPrompt(activeOperation ? 'du (styr arbetet) › ' : 'du › '); return; }
+    if (compactCli) { rl.setPrompt(activeOperation ? 'you (steer) › ' : 'you › '); return; }
     if (activeOperation) rl.setPrompt('majin [running]> ');
     else if (isResumable(goalState())) rl.setPrompt(`majin [${String(goalState().status).toLowerCase()}]> `);
     else rl.setPrompt('majin> ');
@@ -806,7 +806,7 @@ async function executeChatCommand() {
       progress.end();
       promptAgain();
     });
-    console.log(compactCli ? (resume ? 'Fortsätter från sparat läge. /pause pausar.' : 'Arbetar. Skriv för att styra · /pause pausar.') : resume
+    console.log(compactCli ? (resume ? 'Continuing from checkpoint. /pause pauses.' : 'Working. Type to steer · /pause pauses.') : resume
       ? '[majin] Resuming saved checkpoint. Type text to steer, /pause to pause, or /cancel to cancel.'
       : '[majin] Goal started. Type text to steer it live, /pause to pause, /queue <goal> for later, or /cancel to cancel.');
     updatePrompt();
@@ -1024,14 +1024,14 @@ async function executeChatCommand() {
     if (!line) return;
     if (line === '/clear' || (!activeOperation && /^(cls|clear)$/i.test(line))) {
       if (process.stdout.isTTY) console.clear();
-      else console.log('Vyn rensad. Sparad historik finns kvar i /logs.');
+      else console.log('View cleared. Saved history remains in /logs.');
       return;
     }
     if (!activeOperation && /^(?:test|\/test)$/i.test(line)) {
       console.log('[majin] CLI is responding. No model request was sent and no saved goal was resumed. Type your task, or /resume to continue saved work.');
       return;
     }
-    if (line === '/details') { compactCli = !compactCli; console.log(compactCli ? 'Kompakt vy aktiverad. /logs visar alla detaljer.' : 'Detaljerad vy aktiverad. /details återgår till kompakt vy.'); return; }
+    if (line === '/details') { compactCli = !compactCli; console.log(compactCli ? 'Compact view enabled. /logs shows full details.' : 'Detailed view enabled. /details returns to compact view.'); return; }
     if (!line.startsWith('/')) {
       if (activeOperation) await steerActive(line);
       else startGoalText(line);
