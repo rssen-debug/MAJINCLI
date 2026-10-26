@@ -812,7 +812,7 @@ export const browserTools = [
     name: 'browser.tabs',
     group: 'browser',
     risk: 'write',
-    desc: 'List, switch or close tabs in the current browser session. Links that open a new tab do not move the active page by themselves: list tabs, then switch to the index whose URL/title matches the page you need. Switching clears Set-of-Marks refs (they belong to the previous page). Closing the active tab activates the last remaining tab (or a fresh blank page when none remain).',
+    desc: 'List, switch or close tabs in the current browser session. Links that open a new tab do not move the active page by themselves: list tabs, then switch to the index whose URL/title matches the page you need. Internal browser UI pages (edge://, chrome:// and similar, e.g. the downloads hub Edge opens after a download) are never listed. Switching clears Set-of-Marks refs (they belong to the previous page). Closing the active tab activates the last remaining tab (or a fresh blank page when none remain).',
     params: {
       action: 'string: optional action [list|switch|close] (default list)',
       index: 'number: optional 0-based tab index for switch/close',
@@ -828,7 +828,11 @@ export const browserTools = [
           title: await pg.title().catch(() => ''),
           active: pg === state.page,
         })));
-        const openPages = () => state.context.pages().filter((pg) => !pg.isClosed());
+        // Internal browser UI pages (edge://downloads-hub opens by itself after
+        // a download in Edge, chrome:// pages, devtools) are not agent tabs:
+        // listing or switching to them would corrupt indexes and strand the
+        // model on a page no tool can operate.
+        const openPages = () => state.context.pages().filter((pg) => !pg.isClosed() && /^(?:https?|about|data):/i.test(pg.url() || 'about:blank'));
         const act = String(action || 'list').toLowerCase();
         if (act === 'list') {
           const tabs = await describe(openPages());
