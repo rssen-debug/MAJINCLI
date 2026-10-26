@@ -1747,6 +1747,7 @@ async function main() {
       browserWriteOrigins: args.flatMap((value, index) => value === '--submit-origin' && args[index + 1] ? [args[index + 1]] : []),
       browserVisible: browserVisibleOption(true),
     });
+    applyExplicitCliGrants(srv);
     const bound = await srv.start();
     console.log(`MAJIN V5 (${V5_VERSION}) listening on ${bound.url}`);
     const shutdown = async () => {
