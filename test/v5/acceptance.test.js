@@ -442,3 +442,51 @@ test('acceptance: browser page outcome is proven by DOM + pixel + file criteria 
   assert.match(run.stdout, /verified pixel .*matching pixels/);
   assert.ok(fs.existsSync(path.join(fx.workspace, 'shots', 'acceptance.png')));
 });
+
+test('acceptance: a long installed-CLI task stays within a bounded model context and finishes verified', async (t) => {
+  const fx = fixture(t);
+  for (let index = 0; index < 8; index++) {
+    fs.writeFileSync(
+      path.join(fx.workspace, `context-${index}.txt`),
+      `CLI-SEGMENT-${index} ${String.fromCharCode(97 + index).repeat(12_000)}`,
+    );
+  }
+  const provider = await fakeProvider(t, (body, count) => {
+    if (count <= 8) return toolCall(`read-context-${count - 1}`, 'fs_read', { path: `context-${count - 1}.txt` });
+    if (count === 9) {
+      const sent = observedText(body);
+      const compacted = sent.includes('Host context checkpoint:')
+        && !sent.includes('CLI-SEGMENT-0 ')
+        && sent.includes('CLI-SEGMENT-7 ');
+      return toolCall('write-context-proof', 'fs_write', {
+        path: 'cli-context-proof.txt',
+        content: compacted ? 'installed CLI context compacted and completed' : 'installed CLI context was not bounded correctly',
+      });
+    }
+    return { role: 'assistant', content: 'Read all eight context files and wrote the bounded-context proof.' };
+  });
+  await configureProvider(fx.dataDir, provider.baseUrl);
+  const criteria = JSON.stringify([{ kind: 'file', path: 'cli-context-proof.txt', contains: 'installed CLI context compacted and completed' }]);
+  const run = await runCli([
+    'run', 'Read context-0.txt through context-7.txt, then create cli-context-proof.txt',
+    '--data-dir', fx.dataDir, '--criteria', criteria, '--lanes', 'files', '--context-chars', '70000',
+  ], { ...fx, timeoutMs: 300000 });
+
+  assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
+  assert.match(run.stdout, /Status: COMPLETED/);
+  assert.match(run.stdout, /Verification evidence: 1/);
+  assert.match(run.stderr, /context compacted for this model request/);
+  assert.match(run.stderr, /model: Read all eight context files/);
+  assert.equal(provider.requests.length, 10);
+  assert.ok(provider.requests.every((request) => request.body.stream === true));
+  const compactedRequest = observedText(provider.requests[8].body);
+  assert.match(compactedRequest, /Host context checkpoint:/);
+  assert.doesNotMatch(compactedRequest, /CLI-SEGMENT-0 /);
+  assert.match(compactedRequest, /CLI-SEGMENT-7 /);
+  const logs = await runCli(['logs', '--data-dir', fx.dataDir, '--json'], fx);
+  assert.equal(logs.status, 0, `${logs.stdout}\n${logs.stderr}`);
+  const goal = parseJson(logs).goal;
+  assert.equal(goal.context.compacted, true);
+  assert.ok(goal.trace.some((event) => event.type === 'context_compacted' && event.omittedMessages > 0));
+  assert.ok(goal.trace.some((event) => event.type === 'model_output_delta' && /Read all eight context files/.test(event.text)));
+});

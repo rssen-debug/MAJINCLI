@@ -529,6 +529,7 @@ export class ProviderManager {
     signal = null,
     timeoutMs = 20_000,
     maxRetries = 1,
+    onEvent = null,
   } = {}) {
     const providerId = this.state.activeProvider;
     const modelId = this.state.activeModelId;
@@ -539,6 +540,11 @@ export class ProviderManager {
       };
     }
 
+    let primaryEventSeen = false;
+    const primaryOnEvent = onEvent ? (event) => {
+      primaryEventSeen = true;
+      onEvent(event);
+    } : null;
     const primaryRes = await this.#invokeProvider({
       providerId,
       modelId,
@@ -548,6 +554,7 @@ export class ProviderManager {
       signal,
       timeoutMs,
       maxRetries,
+      onEvent: primaryOnEvent,
     });
 
     if (primaryRes.ok) {
@@ -571,6 +578,9 @@ export class ProviderManager {
             fallbackBlockedReason: 'FALLBACK_BLOCKED_BY_DATA_SHARING_POLICY',
           };
         }
+        if (primaryEventSeen && onEvent) {
+          try { onEvent({ type: 'retry', attempt: null, fallback: true }); } catch { /* ignore */ }
+        }
         const fbRes = await this.#invokeProvider({
           providerId: fb.fallbackProvider,
           modelId: fb.fallbackModelId,
@@ -580,6 +590,7 @@ export class ProviderManager {
           signal,
           timeoutMs,
           maxRetries: 0,
+          onEvent,
         });
         return {
           ...fbRes,
@@ -601,6 +612,7 @@ export class ProviderManager {
     signal,
     timeoutMs,
     maxRetries,
+    onEvent = null,
   }) {
     const p = this.state.providers[providerId] || PROVIDER_PRESETS[providerId];
     if (!p) {
@@ -637,6 +649,18 @@ export class ProviderManager {
         : {}),
     };
 
+    // Streaming is strictly opt-in by an event consumer and only requested
+    // when the selected model advertises it. The event callback is still
+    // passed on the non-streaming path because the shared transports emit a
+    // single final-content event there; callers that do not opt in see no
+    // behavioral change.
+    const streamingEnabled = Boolean(onEvent && caps.streaming);
+    let streamEventSeen = false;
+    const emitProviderEvent = onEvent ? (event) => {
+      streamEventSeen = true;
+      try { onEvent(event); } catch { /* visibility callbacks must not break inference */ }
+    } : undefined;
+
     let attempt = 0;
     while (true) {
       attempt += 1;
@@ -666,7 +690,8 @@ export class ProviderManager {
           model: modelId,
           messages: adaptedMessages,
           tools: adaptedTools,
-          stream: false,
+          stream: streamingEnabled,
+          ...(emitProviderEvent ? { onEvent: emitProviderEvent } : {}),
           retries: 0,
           signal: controller.signal,
         });
@@ -692,7 +717,9 @@ export class ProviderManager {
           capabilitiesUsed: {
             toolsSent: adaptedTools.length,
             visionEnabled: caps.vision,
-            streamingEnabled: caps.streaming,
+            streamingRequested: Boolean(onEvent),
+            streamingEnabled,
+            streamingCapable: Boolean(caps.streaming),
           },
           headersSent: headers,
           response,
@@ -706,6 +733,12 @@ export class ProviderManager {
           this.#saveState();
         }
         if (classified.retryable && attempt <= maxRetries && !signal?.aborted) {
+          if (streamEventSeen && onEvent) {
+            // The consumer may already have displayed partial output. Tell it
+            // to discard that partial stream before the retry starts.
+            try { onEvent({ type: 'retry', attempt: attempt + 1 }); } catch { /* ignore */ }
+          }
+          streamEventSeen = false;
           await new Promise((r) => setTimeout(r, 150 * attempt));
           continue;
         }

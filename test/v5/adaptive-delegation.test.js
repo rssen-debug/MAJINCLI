@@ -109,10 +109,16 @@ test('abort joins workers, caches completed observations and resumes only interr
 
 test('three workers truly overlap on a barrier, six tasks complete in waves, and lifecycle events stream', async t => {
   let active = 0; let maxActive = 0; let barrierHit = false; let release;
+  const streamFlags = [];
   const barrier = new Promise((resolve) => { release = resolve; });
-  const { architect, options } = await fixture(t, async ({ messages }) => {
+  const { architect, options } = await fixture(t, async ({ messages, stream, onEvent }) => {
+    streamFlags.push(stream === true && typeof onEvent === 'function');
     const name = sourceName(messages);
-    if (messages.find((message) => message.role === 'tool')) return { content: `Observed ${name}`, usage: { input: 1, output: 1 } };
+    if (messages.find((message) => message.role === 'tool')) {
+      onEvent?.({ type: 'delta', text: `Observed ${name} part one\n` });
+      onEvent?.({ type: 'delta', text: `Observed ${name} part two` });
+      return { content: `Observed ${name}`, usage: { input: 1, output: 1 } };
+    }
     active += 1; maxActive = Math.max(maxActive, active);
     if (active === 3) { barrierHit = true; release(); }
     await Promise.race([barrier, new Promise((resolve) => setTimeout(resolve, 8000))]);
@@ -135,7 +141,12 @@ test('three workers truly overlap on a barrier, six tasks complete in waves, and
   assert.equal(result.concurrency, 3);
   assert.equal(events[0].type, 'delegate_batch_started');
   assert.deepEqual(events[0].tasks, six.map((task) => task.id));
+  assert.ok(streamFlags.length > 0 && streamFlags.every(Boolean), 'every worker provider call must opt into streaming events');
   assert.equal(events.filter((event) => event.type === 'delegate_task_started').length, 6);
+  const deltas = events.filter((event) => event.type === 'delegate_model_output_delta');
+  assert.equal(deltas.length, 12);
+  assert.deepEqual([...new Set(deltas.map((event) => event.taskId))].sort(), six.map((task) => task.id).sort());
+  assert.ok(deltas.every((event) => event.text.includes(`Observed ${event.taskId}`)));
   assert.equal(events.filter((event) => event.type === 'delegate_task_finished' && event.status === 'COMPLETED').length, 6);
   assert.equal(events.at(-1).type, 'delegate_batch_finished');
   await assert.rejects(tool.run({ tasks: [...six, { id: 'eta', task: 'Read eta.txt and report its observed content.' }], reason }));

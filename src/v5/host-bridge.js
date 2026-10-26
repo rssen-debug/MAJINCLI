@@ -263,6 +263,8 @@ export const SUPERSEDED_TOOLS = new Map([
   ['agent.delegate', { coveredBy: ['agent_delegate'], surface: 'provider-host' }],
   ['team.run', { coveredBy: ['agent_plan', 'agent_delegate', 'agent_checkpoint'], surface: 'provider-host' }],
   ['majin.tools', { coveredBy: ['tools_search', 'driver_status'], surface: 'driver' }],
+  ['majin.status', { coveredBy: ['majin_status'], surface: 'provider-host' }],
+  ['majin.doctor', { coveredBy: ['majin_doctor'], surface: 'provider-host' }],
 ]);
 
 export function parityCategory({ sourceName, lane, reason }) {

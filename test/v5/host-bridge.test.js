@@ -109,6 +109,15 @@ test('tool parity classifies every unavailable tool and names the current tool c
   assert.deepEqual(byName.get('agent.plan').coveredBy, ['agent_plan']);
   assert.equal(byName.get('agent.plan').surface, 'provider-host');
   assert.equal(byName.get('majin.tools').category, 'superseded');
+  assert.equal(byName.get('majin.status').category, 'superseded');
+  assert.deepEqual(byName.get('majin.status').coveredBy, ['majin_status']);
+  assert.equal(byName.get('majin.status').surface, 'provider-host');
+  assert.equal(byName.get('majin.doctor').category, 'superseded');
+  assert.deepEqual(byName.get('majin.doctor').coveredBy, ['majin_doctor']);
+  // Read-only subsets are useful, but they are not honest full replacements
+  // for legacy tools that also mutate provider or memory state.
+  assert.equal(byName.get('majin.provider').category, 'host-service');
+  assert.equal(byName.get('majin.memory').category, 'host-service');
   assert.equal(byName.get('browser.clear_marks').category, 'legacy-unported');
   assert.equal(byName.get('media.speak').category, 'missing-dependency');
   assert.equal(byName.get('majin.configure').category, 'host-service');

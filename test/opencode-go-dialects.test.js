@@ -72,6 +72,32 @@ test('Qwen Go sends native Anthropic Messages with session header and tools', as
   } finally {globalThis.fetch=original;}
 });
 
+test('Anthropic stream requests tolerate a gateway that answers with plain JSON', async () => {
+  const r = routeFor(config('qwen3.8-flash'), 'chat', {session:'qa-qwen-json-stream'});
+  const original = globalThis.fetch;
+  const events = [];
+  let sent;
+  globalThis.fetch = async (url, options) => {
+    sent = {url, options};
+    return new Response(JSON.stringify({
+      id:'msg_json_stream',content:[{type:'text',text:'Calling echo'},{type:'tool_use',id:'tool_json',name:'qa_echo',input:{text:'STREAMED'}}],
+      usage:{input_tokens:8,output_tokens:6},stop_reason:'tool_use',
+    }),{status:200,headers:{'content-type':'application/json'}});
+  };
+  try {
+    const out = await complete({
+      route:r,messages:[{role:'user',content:'Call echo'}],
+      tools:[{name:'qa_echo',description:'Echo',parameters:{type:'object',properties:{text:{type:'string'}}}}],
+      stream:true,maxTokens:100,temperature:0,retries:0,onEvent:event=>events.push(event),
+    });
+    assert.equal(JSON.parse(sent.options.body).stream,true);
+    assert.equal(out.text,'Calling echo');
+    assert.equal(out.toolCalls[0].name,'qa_echo');
+    assert.deepEqual(JSON.parse(out.toolCalls[0].argsJson),{text:'STREAMED'});
+    assert.deepEqual(events,[{type:'delta',text:'Calling echo'},{type:'tool',name:'qa_echo'}]);
+  } finally {globalThis.fetch=original;}
+});
+
 test('Responses API encodes tool replay and decodes function calls for Go Grok', async () => {
   const r = routeFor(config('grok-4.6'), 'chat', {session:'qa-grok-go'});
   const original=globalThis.fetch;
@@ -142,6 +168,7 @@ test('Responses stream captures text and completed tool-call arguments', async (
     assert.equal(output.toolCalls.length,1);
     assert.equal(output.toolCalls[0].argsJson,'{"text":"DONE"}');
     assert.equal(events.filter(e=>e.type==='delta').length,1,'canonical SSE completion must not double-emit streamed text');
+    assert.deepEqual(events.filter(e=>e.type==='tool'),[{type:'tool',name:'qa_echo'}],'stream consumers must learn once that a tool call is being prepared');
   }finally{globalThis.fetch=original;}
 });
 

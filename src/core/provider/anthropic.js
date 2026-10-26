@@ -120,13 +120,11 @@ function payload(o, stream) {
   return p;
 }
 
-export async function anthropicOnce(o) {
-  const res = await send(o.route, payload(o, false), { signal: o.signal });
-  if (!res.ok) await fail(res);
-  const j = await res.json();
+function decodeAnthropic(j, o) {
   const text = (j.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
   const toolCalls = (j.content || []).filter((b) => b.type === 'tool_use').map((b) => ({ id: b.id, name: b.name, argsJson: JSON.stringify(b.input || {}) }));
-  o.onEvent?.({ type: 'delta', text });
+  if (text) o.onEvent?.({ type: 'delta', text });
+  for (const call of toolCalls) o.onEvent?.({ type: 'tool', name: call.name });
   return {
     text,
     reasoning: null,
@@ -137,9 +135,18 @@ export async function anthropicOnce(o) {
   };
 }
 
+export async function anthropicOnce(o) {
+  const res = await send(o.route, payload(o, false), { signal: o.signal });
+  if (!res.ok) await fail(res);
+  return decodeAnthropic(await res.json(), o);
+}
+
 export async function anthropicStream(o) {
   const res = await send(o.route, payload(o, true), { signal: o.signal });
   if (!res.ok) await fail(res);
+  // Some Anthropic-compatible gateways answer a stream request with one JSON
+  // document. Decode that honestly instead of treating it as an empty SSE.
+  if (!/event-stream/i.test(res.headers.get('content-type') || '')) return decodeAnthropic(await res.json(), o);
   let text = '';
   let usage = { input: 0, output: 0, reported: true };
   const blocks = new Map();
@@ -159,7 +166,10 @@ export async function anthropicStream(o) {
       } catch {
         continue;
       }
-      if (ev.type === 'content_block_start') blocks.set(ev.index, { type: ev.content_block?.type, name: ev.content_block?.name, id: ev.content_block?.id, json: '' });
+      if (ev.type === 'content_block_start') {
+        blocks.set(ev.index, { type: ev.content_block?.type, name: ev.content_block?.name, id: ev.content_block?.id, json: '' });
+        if (ev.content_block?.type === 'tool_use' && ev.content_block?.name) o.onEvent?.({ type: 'tool', name: ev.content_block.name });
+      }
       if (ev.type === 'content_block_delta') {
         const b = blocks.get(ev.index);
         if (ev.delta?.type === 'text_delta') {

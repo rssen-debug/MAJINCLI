@@ -80,6 +80,56 @@ test('ProviderManager supports OpenCode Go headers, manual model ID fallback, re
   assert.equal(classifyProviderError(new Error('ECONNREFUSED'), 503).code, 'NETWORK_FAILURE');
 });
 
+test('ProviderManager streams only for an event consumer and signals when a retry discards partial output', async () => {
+  const dir = tmpDir();
+  const calls = [];
+  const completeImpl = async (request) => {
+    calls.push({ stream: request.stream, hasOnEvent: typeof request.onEvent === 'function' });
+    if (calls.length === 1) {
+      request.onEvent?.({ type: 'delta', text: 'partial ' });
+      throw Object.assign(new Error('503 Service unavailable - temporary upstream failure'), { status: 503 });
+    }
+    request.onEvent?.({ type: 'delta', text: 'final' });
+    request.onEvent?.({ type: 'tool', name: 'fs_read' });
+    return {
+      text: 'final',
+      reasoning: null,
+      toolCalls: [{ id: 'read-1', name: 'fs_read', argsJson: '{"path":"proof.txt"}' }],
+      usage: { input: 12, output: 4, reported: true },
+      stopReason: 'tool_calls',
+    };
+  };
+  const pm = new ProviderManager({ dataDir: dir, completeImpl });
+  await pm.configureProvider({ providerId: 'opencode-go', apiKey: 'stream-test-key', discover: false });
+  pm.selectModel({ providerId: 'opencode-go', modelId: 'stream-model', allowManualFallback: true });
+
+  const events = [];
+  const streamed = await pm.complete({
+    messages: [{ role: 'user', content: 'Stream a tool call' }],
+    onEvent: (event) => events.push(event),
+    maxRetries: 1,
+  });
+  assert.equal(streamed.ok, true, JSON.stringify(streamed));
+  assert.deepEqual(calls.slice(0, 2), [
+    { stream: true, hasOnEvent: true },
+    { stream: true, hasOnEvent: true },
+  ]);
+  assert.deepEqual(events, [
+    { type: 'delta', text: 'partial ' },
+    { type: 'retry', attempt: 2 },
+    { type: 'delta', text: 'final' },
+    { type: 'tool', name: 'fs_read' },
+  ]);
+  assert.equal(streamed.capabilitiesUsed.streamingRequested, true);
+  assert.equal(streamed.capabilitiesUsed.streamingEnabled, true);
+
+  const plain = await pm.complete({ messages: [{ role: 'user', content: 'No streaming consumer' }] });
+  assert.equal(plain.ok, true);
+  assert.deepEqual(calls.at(-1), { stream: false, hasOnEvent: false });
+  assert.equal(plain.capabilitiesUsed.streamingRequested, false);
+  assert.equal(plain.capabilitiesUsed.streamingEnabled, false);
+});
+
 test('FileAndAccessController handles >6 MB streaming uploads, verifies external portal uploads, enforces revocable Owner Mode, and blocks untrusted prompt-injection escalation', async () => {
   const dir = tmpDir();
   const fac = new FileAndAccessController({ dataDir: dir });

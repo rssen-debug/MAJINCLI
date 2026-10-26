@@ -81,6 +81,7 @@ export function decodeResponses(json, onEvent) {
     throw new ProviderError('Responses API returned no assistant text or tool call', { code: 'empty_response', retryable: true });
   }
   if (text) onEvent?.({ type: 'delta', text });
+  for (const call of toolCalls) onEvent?.({ type: 'tool', name: call.name });
   const usage = json?.usage || {};
   return {
     text, reasoning: null, toolCalls,
@@ -143,6 +144,7 @@ export async function responsesStream(o) {
     let text = '';
     let terminal = null;
     const partialCalls = new Map();
+    const notifiedTools = new Set();
     for await (const chunk of res.body) {
       buffer += decoder.decode(chunk, { stream: true });
       let pos;
@@ -161,6 +163,10 @@ export async function responsesStream(o) {
         if (ev.type === 'response.output_item.added' && ev.item?.type === 'function_call') {
           const key = ev.output_index ?? ev.item.id ?? ev.item.call_id;
           partialCalls.set(key, { id: ev.item.call_id || ev.item.id, name: ev.item.name, argsJson: ev.item.arguments || '' });
+          if (ev.item.name && !notifiedTools.has(ev.item.name)) {
+            notifiedTools.add(ev.item.name);
+            o.onEvent?.({ type: 'tool', name: ev.item.name });
+          }
         }
         if (ev.type === 'response.function_call_arguments.delta') {
           const key = ev.output_index ?? ev.item_id;
@@ -178,8 +184,16 @@ export async function responsesStream(o) {
       }
     }
     if (terminal) {
-      // Use final canonical output instead of partial deltas for tools.
-      return decodeResponses(terminal, text ? null : o.onEvent);
+      // Use final canonical output instead of partial deltas for tools, but
+      // do not replay text or tool-start events that were already streamed.
+      return decodeResponses(terminal, (event) => {
+        if (event.type === 'delta' && text) return;
+        if (event.type === 'tool') {
+          if (notifiedTools.has(event.name)) return;
+          notifiedTools.add(event.name);
+        }
+        o.onEvent?.(event);
+      });
     }
     const toolCalls = [...partialCalls.values()].filter(c => c.name && c.id).map(c => ({ ...c, argsJson: c.argsJson || '{}' }));
     if (!text && !toolCalls.length) throw new ProviderError('Responses stream ended without a completion', { code: 'empty_response', retryable: true });

@@ -77,6 +77,7 @@ export function createV5Server({
   completeImpl = null,
   portalAdapter = null,
   providerMaxRounds = undefined,
+  providerContextCharBudget = undefined,
 } = {}) {
   const architect = new GrandArchitect({
     dataDir,
@@ -85,7 +86,13 @@ export function createV5Server({
     completeImpl,
     portalAdapter,
   });
-  const providerAgent = new ProviderAgent({ architect, browserWriteOrigins, browserVisible, ...(providerMaxRounds ? { maxRounds: providerMaxRounds } : {}) });
+  const providerAgent = new ProviderAgent({
+    architect,
+    browserWriteOrigins,
+    browserVisible,
+    ...(providerMaxRounds ? { maxRounds: providerMaxRounds } : {}),
+    ...(providerContextCharBudget ? { contextCharBudget: providerContextCharBudget } : {}),
+  });
   const useProviderAgent = body => Boolean(architect.providers.state.activeModelId) &&
     body.actions == null && body.jobAds == null && !body.synthesizeMissingSkill && !body.blocker && !body.requireUserConfirmation;
 

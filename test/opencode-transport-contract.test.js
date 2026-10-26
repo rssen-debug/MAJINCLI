@@ -68,6 +68,7 @@ test('OpenCode Go stream assembles cloud tool calls without a network dependency
     assert.equal(result.toolCalls[0].name, 'fs.write');
     assert.deepEqual(JSON.parse(result.toolCalls[0].argsJson), {path:'x.txt',content:'ok'});
     assert.equal(result.stopReason, 'tool_calls');
+    assert.deepEqual(events.filter(e => e.type === 'tool'), [{type:'tool',name:'fs.write'}]);
   } finally { globalThis.fetch = original; }
 });
 

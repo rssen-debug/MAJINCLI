@@ -170,6 +170,7 @@ export async function openaiOnce(o) {
     argsJson: tc.function?.arguments || '{}',
   }));
   onEvent?.({ type: 'delta', text: msg.content || '' });
+  for (const call of toolCalls) if (call.name) onEvent?.({ type: 'tool', name: call.name });
   return {
     text: msg.content || '',
     reasoning: msg.reasoning_content || msg.reasoning || null,
@@ -199,6 +200,7 @@ export async function openaiStream(o) {
       argsJson: tc.function?.arguments || '{}',
     }));
     if (msg.content) onEvent?.({ type: 'delta', text: msg.content });
+    for (const call of toolCalls) if (call.name) onEvent?.({ type: 'tool', name: call.name });
     return { text: msg.content || '', reasoning: msg.reasoning_content || msg.reasoning || null, toolCalls, usage: usage(json.usage, msg.content, toolCalls), stopReason: choice.finish_reason || 'stop', raw: { id: json.id, model: json.model }, fallback: 'json' };
   }
   let text = '';

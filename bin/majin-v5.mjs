@@ -243,6 +243,11 @@ function formatTraceEvent(event) {
     case 'goal_resumed': return 'goal resumed from checkpoint';
     case 'mode_selected': return `strategy: ${event.mode}${event.reason ? ` — ${event.reason}` : ''}`;
     case 'model_round_started': return `model round ${Number(event.round || 0) + 1} (${event.mode || 'direct'})`;
+    case 'context_compacted': return `context compacted for this model request: sent ${event.sentMessages ?? '?'} of ${event.originalMessages ?? '?'} messages (${event.sentChars ?? '?'} of ${event.originalChars ?? '?'} chars; ${event.omittedTurns ?? 0} older turn(s) summarized; full checkpoint retained)`;
+    case 'model_thinking_started': return 'model is reasoning (reasoning content hidden)';
+    case 'model_output_delta': return event.text?.trim() ? `model: ${event.text}` : null;
+    case 'model_tool_started': return `model is preparing tool ${event.tool || 'unknown'}`;
+    case 'model_stream_retry': return `provider stream retrying${event.attempt ? ` (attempt ${event.attempt})` : ''}; partial output discarded`;
     case 'owner_steering_applied': return `owner steering applied${event.instruction ? `: ${event.instruction}` : ''}`;
     case 'tool_call_started': return `tool ${event.tool || 'unknown'} started${event.args ? ` ${event.args}` : ''}`;
     case 'tool_call_finished': return `tool ${event.tool || 'unknown'} ${event.ok ? 'ok' : 'failed'}${event.durationMs != null ? ` in ${event.durationMs}ms` : ''}${event.status ? ` [${event.status}]` : ''}${event.errorCode ? ` ${event.errorCode}` : ''}${event.blocker ? ` — ${event.blocker}` : ''}`;
@@ -254,6 +259,8 @@ function formatTraceEvent(event) {
     case 'repair_requested': return `repairing result (attempt ${event.attempt || 1}) for ${event.kind} ${event.label || ''}`;
     case 'delegate_batch_started': return `delegating ${(event.tasks || []).length} independent subtask(s) to parallel read-only workers (max ${event.concurrency || 3} at once): ${(event.tasks || []).join(', ')}`;
     case 'delegate_task_started': return `delegate ${event.taskId} started${event.task ? `: ${event.task}` : ''}`;
+    case 'delegate_model_output_delta': return event.text?.trim() ? `delegate ${event.taskId}: ${event.text}` : null;
+    case 'delegate_model_stream_retry': return `delegate ${event.taskId} provider stream retrying${event.attempt ? ` (attempt ${event.attempt})` : ''}; partial output discarded`;
     case 'delegate_task_finished': return `delegate ${event.taskId} ${String(event.status || 'finished').toLowerCase()}${event.cached ? ' (cached observation)' : ''}${event.elapsedMs != null ? ` in ${event.elapsedMs}ms` : ''}${event.toolCalls != null ? ` · ${event.toolCalls} tool call(s)` : ''}`;
     case 'delegate_batch_finished': return `delegation ${String(event.status || 'finished').toLowerCase()}${event.wallMs != null ? ` in ${event.wallMs}ms wall time` : ''} — observations are unverified evidence for the main agent`;
     case 'waiting_user': return `waiting for owner (${event.kind || 'OWNER'})${event.origin ? ` at ${event.origin}` : event.url ? ` at ${event.url}` : ''} — nothing submitted without your step`;
@@ -451,17 +458,19 @@ function createGoalProgressPrinter(srv) {
 async function executeGoalCommand({ resume = false } = {}) {
   const dataDir = readArg('--data-dir', resolveV5DataDir());
   const valueFlags = new Set([
-    '--data-dir', '--lanes', '--folder', '--submit-origin', '--browser-origin', '--max-rounds', '--criteria', '--criteria-file', '--file',
+    '--data-dir', '--lanes', '--folder', '--submit-origin', '--browser-origin', '--max-rounds', '--context-chars', '--criteria', '--criteria-file', '--file',
   ]);
   const goalText = positionalsFor(valueFlags).join(' ').trim();
   if (!resume && !goalText) throw new Error('Goal text is required. Example: majin-v5 run "Gör XYZ"');
   const criteria = readCriteria();
   const maxRounds = Number(readArg('--max-rounds', '')) || undefined;
+  const contextChars = Number(readArg('--context-chars', '')) || undefined;
   const srv = createV5Server({
     host: '127.0.0.1',
     port: 0,
     dataDir,
     providerMaxRounds: maxRounds,
+    providerContextCharBudget: contextChars,
     browserWriteOrigins: submitOrigins(),
     browserVisible: browserVisibleOption(true),
   });
@@ -532,8 +541,9 @@ function printChatHelp() {
 async function executeChatCommand() {
   const dataDir = readArg('--data-dir', resolveV5DataDir());
   const maxRounds = Number(readArg('--max-rounds', '')) || undefined;
+  const contextChars = Number(readArg('--context-chars', '')) || undefined;
   const valueFlags = new Set([
-    '--data-dir', '--lanes', '--folder', '--submit-origin', '--browser-origin', '--max-rounds', '--criteria', '--criteria-file', '--file',
+    '--data-dir', '--lanes', '--folder', '--submit-origin', '--browser-origin', '--max-rounds', '--context-chars', '--criteria', '--criteria-file', '--file',
   ]);
   const initialText = positionalsFor(valueFlags).join(' ').trim();
   const srv = createV5Server({
@@ -541,6 +551,7 @@ async function executeChatCommand() {
     port: 0,
     dataDir,
     providerMaxRounds: maxRounds,
+    providerContextCharBudget: contextChars,
     browserWriteOrigins: submitOrigins(),
     browserVisible: browserVisibleOption(true),
   });
@@ -1126,13 +1137,13 @@ async function main() {
         '  majin-v5 "Gör XYZ"                                        Run a goal (bare natural-language form)',
         '  majin-v5 run "Gör XYZ" [options]                          Run a goal with the adaptive V5 agent',
         'Commands:',
-        '  run <goal...> [--criteria <json>|--criteria-file <file>] [--file <path>] [--max-rounds <n>]',
+        '  run <goal...> [--criteria <json>|--criteria-file <file>] [--file <path>] [--max-rounds <n>] [--context-chars <n>]',
         '                [--all-lanes|--lanes <csv>] [--folder <dir>] [--browser-origin <url>|--submit-origin <origin>] [--browser-visible|--browser-headless] [--allow-deterministic] [--quiet] [--json]',
         '                                                            Execute a goal; explicit lanes/folders/browser origins are saved as owner grants (submit-origin is session-only)',
-        '  chat [first goal...] [--resume] [--criteria <json>] [--file <path>] [--max-rounds <n>]',
+        '  chat [first goal...] [--resume] [--criteria <json>] [--file <path>] [--max-rounds <n>] [--context-chars <n>]',
         '                [--all-lanes|--lanes <csv>] [--folder <dir>] [--browser-origin <url>|--submit-origin <origin>] [--browser-visible|--browser-headless] [--quiet]',
         '                                                            Interactive persistent session: live steer, pause, cancel, queue, resume and checkpoints',
-        '  resume [instruction...] [--criteria <json>] [--max-rounds <n>] [--json]',
+        '  resume [instruction...] [--criteria <json>] [--max-rounds <n>] [--context-chars <n>] [--json]',
         '                                                            Resume the saved goal/checkpoint without replaying completed work',
         '  grants [show] [--json]                                    Show persisted owner lanes, folders and browser origins',
         '  grants grant [--all-lanes|--lanes <csv>] [--folder <dir>] [--browser-origin <url>] [--json]',
@@ -1156,7 +1167,7 @@ async function main() {
         '                                                            Call one deterministic tool through the isolated V5 driver',
         '  doctor [--json] [--all-lanes] [--lanes <csv>]             Diagnose data dir, grants, provider and tool parity',
         '  logs [--json]                                             Show the current/last goal, tool results, evidence and activity trace',
-        '  serve [--host 0.0.0.0] [--port 4555] [--data-dir <dir>] [--submit-origin <origin>] [--browser-visible|--browser-headless] [--max-rounds <n>]',
+        '  serve [--host 0.0.0.0] [--port 4555] [--data-dir <dir>] [--submit-origin <origin>] [--browser-visible|--browser-headless] [--max-rounds <n>] [--context-chars <n>]',
         '                                                            Start V5 Black Box UI & HTTP Host; persisted browser origins are read live',
         '  window                                                    Open native MAJIN V5 Electron window',
         '  status [--port 4555]                                      Check running V5 host health',
@@ -1591,6 +1602,7 @@ async function main() {
       port,
       dataDir,
       providerMaxRounds: Number(readArg('--max-rounds', '')) || undefined,
+      providerContextCharBudget: Number(readArg('--context-chars', '')) || undefined,
       browserWriteOrigins: args.flatMap((value, index) => value === '--submit-origin' && args[index + 1] ? [args[index + 1]] : []),
       browserVisible: browserVisibleOption(true),
     });

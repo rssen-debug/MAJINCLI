@@ -122,7 +122,32 @@ export function createDelegationTool({ architect, goal, signal, grantedLanes = [
           for (let round = 0; round < 6; round++) {
             ensureAccess();
             record.cost.modelCalls++; goal.cost.modelCalls = numeric(goal.cost.modelCalls) + 1;
-            const answer = await architect.providers.complete({ messages, tools, sessionId, signal, timeoutMs: 30000, maxRetries: 0 });
+            let workerStreamBuffer = '';
+            let workerStreamChars = 0;
+            const flushWorkerStream = (force = false) => {
+              while (workerStreamBuffer && (force || workerStreamBuffer.length >= 400 || workerStreamBuffer.includes('\n'))) {
+                const part = workerStreamBuffer.slice(0, 600);
+                workerStreamBuffer = workerStreamBuffer.slice(part.length);
+                emit('delegate_model_output_delta', { taskId: task.id, round, text: part, chars: workerStreamChars });
+                if (!force && workerStreamBuffer.length < 400 && !workerStreamBuffer.includes('\n')) break;
+              }
+            };
+            const onWorkerEvent = (event) => {
+              if (!event || typeof event !== 'object') return;
+              if (event.type === 'delta' && event.text) {
+                const text = String(event.text);
+                workerStreamChars += text.length;
+                workerStreamBuffer += text;
+                flushWorkerStream(false);
+              } else if (event.type === 'tool') {
+                flushWorkerStream(true);
+              } else if (event.type === 'retry') {
+                workerStreamBuffer = '';
+                emit('delegate_model_stream_retry', { taskId: task.id, round, attempt: Number(event.attempt) || null });
+              }
+            };
+            const answer = await architect.providers.complete({ messages, tools, sessionId, signal, timeoutMs: 30000, maxRetries: 0, onEvent: onWorkerEvent });
+            flushWorkerStream(true);
             if (answer.usedFallback) { record.cost.modelCalls++; goal.cost.modelCalls++; }
             const response = answer.response || {};
             for (const [field, value] of Object.entries({ inputTokens: response.usage?.input ?? response.usage?.prompt_tokens,

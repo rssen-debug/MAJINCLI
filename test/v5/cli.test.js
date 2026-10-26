@@ -342,17 +342,22 @@ test('CLI run streams the live trace, prints evidence details, and logs replays 
   let completions = 0;
   const provider = await fakeProvider(t, () => {
     completions += 1;
-    if (completions === 1) return toolCall('write-visible-proof', 'fs_write', { path: 'visible-proof.txt', content: 'visible verified secret-body-9e1' });
+    if (completions === 1) return toolCall('inspect-host', 'majin_status', { detail: 'summary' });
+    if (completions === 2) return toolCall('write-visible-proof', 'fs_write', { path: 'visible-proof.txt', content: 'visible verified secret-body-9e1' });
     return { role: 'assistant', content: 'Created visible-proof.txt.' };
   });
   await configureProvider(fx.dataDir, provider.baseUrl);
   const criteria = JSON.stringify([{ kind: 'file', path: 'visible-proof.txt', contains: 'visible verified' }]);
-  const run = await runCli(['run', 'Create visible-proof.txt', '--data-dir', fx.dataDir, '--criteria', criteria, '--lanes', 'sys,re'], fx);
+  const run = await runCli(['run', 'Inspect MAJIN host state and create visible-proof.txt', '--data-dir', fx.dataDir, '--criteria', criteria, '--lanes', 'sys,re'], fx);
   assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
   assert.match(run.stdout, /Status: COMPLETED/);
   assert.match(run.stdout, /Verification evidence: 1/);
   assert.match(run.stdout, / {2}verified file .*visible-proof\.txt — \d+ bytes, sha256 /);
   assert.match(run.stderr, /\[majin\] strategy: /);
+  assert.match(run.stderr, /\[majin\] model is preparing tool majin_status/);
+  assert.match(run.stderr, /\[majin\] tool majin_status started detail=summary/);
+  assert.match(run.stderr, /\[majin\] tool majin_status ok in \d+ms/);
+  assert.match(run.stderr, /\[majin\] model: Created visible-proof\.txt\./);
   assert.match(run.stderr, /\[majin\] tool fs_write started path=visible-proof\.txt content=<\d+ chars>/);
   assert.match(run.stderr, /\[majin\] tool fs_write ok in \d+ms/);
   assert.match(run.stderr, /\[majin\] verified file visible-proof\.txt — file .*visible-proof\.txt — \d+ bytes, sha256 /);
@@ -363,6 +368,8 @@ test('CLI run streams the live trace, prints evidence details, and logs replays 
   assert.equal(logs.status, 0, `${logs.stdout}\n${logs.stderr}`);
   assert.match(logs.stdout, /Trace \(\d+ events\)/);
   assert.match(logs.stdout, /#1 goal started/);
+  assert.match(logs.stdout, /model is preparing tool majin_status/);
+  assert.match(logs.stdout, /model: Created visible-proof\.txt\./);
   assert.match(logs.stdout, /tool fs_write started path=visible-proof\.txt/);
   assert.match(logs.stdout, /goal finished: COMPLETED/);
   assert.doesNotMatch(logs.stdout, /secret-body-9e1/);

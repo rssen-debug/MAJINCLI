@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
 import { createV5Server } from '../../src/v5/server.js';
-import { ProviderAgent, summariseToolArgs } from '../../src/v5/provider-agent.js';
+import { ProviderAgent, buildBoundedProviderMessages, summariseToolArgs } from '../../src/v5/provider-agent.js';
 import { classifyProviderError } from '../../src/v5/providers.js';
 import { responsesInput } from '../../src/core/provider/responses.js';
 import { toAnthropic } from '../../src/core/provider/anthropic.js';
@@ -550,3 +550,124 @@ test('visible login and CAPTCHA signals pause immediately for the owner without 
   }
   assert.equal(server.providerAgent.hasRetainedBrowserDriver(), false);
 });
+
+test('provider loop streams output, runs secret-safe host tools, and uses recalled memory in a verified artifact', async t => {
+  const marker = 'HOST-LOOP-MEMORY-731';
+  const { requests, server } = await setup(t, (body, count) => {
+    if (count === 1) return tool('host-status', 'majin_status', { detail: 'summary' });
+    if (count === 2) return tool('host-doctor', 'majin_doctor', {});
+    if (count === 3) return tool('host-provider', 'majin_provider', { action: 'list' });
+    if (count === 4) return tool('host-memory', 'majin_memory', { action: 'read', kind: 'project', query: marker });
+    if (count === 5) {
+      const observed = JSON.stringify(body.messages).match(/HOST-LOOP-MEMORY-\d+/)?.[0];
+      return tool('host-write', 'fs_write', { path: 'host-tools-proof.txt', content: `host tools verified ${observed || 'MISSING'}` });
+    }
+    return { role: 'assistant', content: 'Host state inspected and the recalled marker was written to the proof file.' };
+  });
+  server.architect.memoryStore.put('project', {
+    key: 'host-loop-marker',
+    text: `The provider-loop release marker is ${marker}.`,
+    tags: ['host-loop'],
+    importance: 0.9,
+  });
+
+  const result = await server.providerAgent.execute({
+    goalText: 'Inspect MAJIN host state, recall the project marker, and write it to host-tools-proof.txt',
+    criteria: [{ kind: 'file', path: 'host-tools-proof.txt', contains: marker }],
+  });
+
+  assert.equal(result.status, 'COMPLETED', JSON.stringify(result));
+  assert.deepEqual(result.tool_results.map((row) => row.tool), ['majin_status', 'majin_doctor', 'majin_provider', 'majin_memory', 'fs_write']);
+  assert.ok(result.tool_results.every((row) => row.ok));
+  assert.equal(requests.length, 6);
+  assert.ok(requests.every((request) => request.body.stream === true), 'the V5 provider path must request streaming when a trace consumer is attached');
+  const advertised = new Set(requests[0].body.tools.map((item) => item.function?.name || item.name));
+  for (const name of ['majin_status', 'majin_doctor', 'majin_provider', 'majin_memory']) assert.ok(advertised.has(name), `${name} must be advertised`);
+  assert.ok(result.trace.some((event) => event.type === 'model_tool_started' && event.tool === 'majin_status'));
+  assert.ok(result.trace.some((event) => event.type === 'model_output_delta' && /Host state inspected/.test(event.text)));
+  const modelVisible = JSON.stringify(requests.map((request) => request.body.messages));
+  assert.doesNotMatch(modelVisible, /local-test-key|maskedKey/);
+  assert.doesNotMatch(JSON.stringify(result.trace), /local-test-key|maskedKey/);
+});
+
+test('bounded provider context preserves atomic tool turns, the original goal and the latest steering', () => {
+  const messages = [
+    { role: 'system', content: 'system instructions' },
+    { role: 'user', content: 'ORIGINAL GOAL: finish the long task' },
+  ];
+  for (let index = 0; index < 24; index++) {
+    const id = `call-${index}`;
+    messages.push({
+      role: 'assistant',
+      content: null,
+      tool_calls: [{ id, type: 'function', function: { name: 'fs_read', arguments: JSON.stringify({ path: `${index}.txt`, padding: 'x'.repeat(700) }) } }],
+    });
+    messages.push({ role: 'tool', tool_call_id: id, name: 'fs_read', content: `OBSERVATION-${index} ${'y'.repeat(700)}` });
+  }
+  messages.push({ role: 'user', content: 'LATEST STEERING: write the final proof now' });
+  const before = structuredClone(messages);
+  const goal = {
+    objective: 'finish the long task',
+    criteria: [{ kind: 'file', path: 'proof.txt' }],
+    tool_results: Array.from({ length: 24 }, (_, index) => ({ tool: 'fs_read', ok: true, operationId: `op-${index}` })),
+    verification_evidence: [],
+    adaptive: { mode: 'direct' },
+  };
+
+  const bounded = buildBoundedProviderMessages(messages, { goal, maxChars: 12000, reservedChars: 1000 });
+
+  assert.deepEqual(messages, before, 'context bounding must never rewrite the persisted conversation');
+  assert.equal(bounded.stats.compacted, true);
+  assert.ok(bounded.stats.sentChars + bounded.stats.reservedChars <= bounded.stats.maxChars, JSON.stringify(bounded.stats));
+  assert.ok(bounded.messages.some((message) => String(message.content || '').includes('ORIGINAL GOAL')));
+  assert.ok(bounded.messages.some((message) => String(message.content || '').includes('LATEST STEERING')));
+  assert.ok(bounded.messages.some((message) => String(message.content || '').startsWith('Host context checkpoint:')));
+  assert.ok(!bounded.messages.some((message) => String(message.content || '').includes('OBSERVATION-0 ')), 'oldest observations should be omitted first');
+  const callIds = new Set();
+  for (const message of bounded.messages) {
+    for (const call of message.tool_calls || []) callIds.add(call.id);
+    if (message.role === 'tool') assert.ok(callIds.has(message.tool_call_id), `orphaned tool result ${message.tool_call_id}`);
+  }
+
+  const roomy = buildBoundedProviderMessages(messages, { goal, maxChars: 10_000_000, reservedChars: 1000 });
+  assert.equal(roomy.stats.compacted, false);
+  assert.equal(roomy.messages, messages);
+});
+
+test('a long real provider conversation compacts old tool observations but keeps the full saved checkpoint', async t => {
+  const { requests, server } = await setup(t, (body, count) => {
+    if (count <= 8) return tool(`read-big-${count - 1}`, 'fs_read', { path: `big-${count - 1}.txt` });
+    if (count === 9) {
+      const sent = JSON.stringify(body.messages);
+      const compacted = sent.includes('Host context checkpoint:') && !sent.includes('SEGMENT-0 ') && sent.includes('SEGMENT-7 ');
+      return tool('write-context-proof', 'fs_write', {
+        path: 'context-proof.txt',
+        content: compacted ? 'context compacted and completed' : 'context was not compacted correctly',
+      });
+    }
+    return { role: 'assistant', content: 'Finished the long reading task from the bounded context.' };
+  });
+  for (let index = 0; index < 8; index++) {
+    fs.writeFileSync(
+      path.join(server.architect.workspaceDir, `big-${index}.txt`),
+      `SEGMENT-${index} ${String.fromCharCode(65 + index).repeat(12_000)}`,
+    );
+  }
+  server.providerAgent.contextCharBudget = 70_000;
+
+  const result = await server.providerAgent.execute({
+    goalText: 'Read big-0.txt through big-7.txt, then create context-proof.txt',
+    criteria: [{ kind: 'file', path: 'context-proof.txt', contains: 'context compacted and completed' }],
+  });
+
+  assert.equal(result.status, 'COMPLETED', JSON.stringify(result));
+  assert.equal(requests.length, 10);
+  const compactedRequest = JSON.stringify(requests[8].body.messages);
+  assert.match(compactedRequest, /Host context checkpoint:/);
+  assert.doesNotMatch(compactedRequest, /SEGMENT-0 /);
+  assert.match(compactedRequest, /SEGMENT-7 /);
+  assert.ok(result.trace.some((event) => event.type === 'context_compacted' && event.omittedMessages > 0));
+  assert.equal(result.context.compacted, true);
+  assert.ok(JSON.stringify(server.providerAgent.current.messages).includes('SEGMENT-0 '), 'the persisted full conversation must remain available for resume');
+});
+
