@@ -135,8 +135,23 @@ export class CodexDriver {
     active.record.blocker = 'Worker stopped. An effect may already have occurred; inspect before retrying. Browser must be reopened.';
     const worker = this.worker;
     if (worker) {
-      if (process.platform === 'win32') await promisify(execFile)('taskkill.exe', ['/PID', String(worker.pid), '/T', '/F'], { windowsHide: true });
-      else process.kill(-worker.pid, 'SIGKILL');
+      if (process.platform === 'win32') {
+        // Give the worker a brief chance to terminate tracked shell trees
+        // itself. Force-killing the worker first can race a shell that is
+        // spawning its command child and leave that child orphaned. The
+        // taskkill below remains the hard fallback for a blocked worker.
+        let exited = worker.exitCode !== null;
+        if (!exited) {
+          const exitSeen = new Promise((resolve) => worker.once('exit', () => { exited = true; resolve(); }));
+          try { if (worker.connected) worker.send({ type: 'shutdown' }); } catch { /* fall through to taskkill */ }
+          await Promise.race([exitSeen, new Promise((resolve) => setTimeout(resolve, 1500))]);
+        }
+        if (!exited && worker.pid) {
+          await promisify(execFile)('taskkill.exe', ['/PID', String(worker.pid), '/T', '/F'], { windowsHide: true }).catch(() => {});
+        }
+      } else {
+        process.kill(-worker.pid, 'SIGKILL');
+      }
       this.worker = null;
     }
     active.resolve({ ok: false }); this.save(active.record);
