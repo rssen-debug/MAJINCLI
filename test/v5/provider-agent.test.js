@@ -812,3 +812,39 @@ test('a long real provider conversation compacts old tool observations but keeps
   assert.ok(JSON.stringify(server.providerAgent.current.messages).includes('SEGMENT-0 '), 'the persisted full conversation must remain available for resume');
 });
 
+
+test('narration-only first turn gets one review and can execute a verified action without owner tool instructions', async t => {
+  const { server, requests } = await setup(t, (body, count) => {
+    if (count === 1) return { role: 'assistant', content: 'Jag sätter igång nu. Först registrerar jag kontroller.' };
+    if (count === 2) {
+      assert.match(body.messages.at(-1).content, /no tool calls have executed/);
+      return tool('criteria-after-review', 'goal_criteria', { criteria: [{ kind: 'file', path: 'action.txt', contains: 'executed' }] });
+    }
+    if (count === 3) return tool('write-after-review', 'fs_write', { path: 'action.txt', content: 'executed' });
+    return { role: 'assistant', content: 'Created action.txt.' };
+  });
+  const result = await server.providerAgent.execute({ goalText: 'Create action.txt containing executed.' });
+  assert.equal(result.status, 'COMPLETED', JSON.stringify(result));
+  assert.equal(requests.length, 4);
+  assert.equal(fs.readFileSync(path.join(server.architect.workspaceDir, 'action.txt'), 'utf8'), 'executed');
+  assert.equal(result.verification_evidence.length, 1);
+  assert.equal(result.trace.filter(e => e.type === 'no_action_review_requested').length, 1);
+});
+
+test('persistent prose-only replies stop after one review without invented tool work or verification', async t => {
+  const { server, requests } = await setup(t, () => ({ role: 'assistant', content: 'Kör. Först verktygskatalogen.' }));
+  const result = await server.providerAgent.execute({ goalText: 'Find my CV on this computer.' });
+  assert.equal(requests.length, 2);
+  assert.equal(result.status, 'PARTIAL');
+  assert.equal(result.tool_results.length, 0);
+  assert.equal(result.verification_evidence.length, 0);
+});
+
+test('a greeting or essential clarification can remain conversational after the bounded review', async t => {
+  const { server, requests } = await setup(t, () => ({ role: 'assistant', content: 'Hej! Vilken stad gäller det?' }));
+  const result = await server.providerAgent.execute({ goalText: 'Hej, hjälp mig hitta något i närheten.' });
+  assert.equal(requests.length, 2);
+  assert.equal(result.tool_results.length, 0);
+  assert.equal(result.model_reply, 'Hej! Vilken stad gäller det?');
+  assert.match(requests[1].body.messages.at(-1).content, /tool use is not required for conversation/);
+});
