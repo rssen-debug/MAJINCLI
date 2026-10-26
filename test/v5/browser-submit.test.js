@@ -394,7 +394,7 @@ test('frame-scoped inspect, fill, click, check, verify and download work inside 
   await run('browser_open', { url: shellOrigin });
   const shellInspect = await run('browser_inspect', {});
   assert.equal(shellInspect.meta.frames, 1, shellInspect.result);
-  assert.match(shellInspect.result, /"selector": "#app"/);
+  assert.match(shellInspect.result, /"selector":"#app"/);
   assert.ok(!shellInspect.result.includes('FRAME APP'), 'main-document inspect must not pretend to see cross-origin frame content');
 
   const badFrame = await run('browser_fill', { frame: '#nope', selector: '#name', value: 'Ada' });
