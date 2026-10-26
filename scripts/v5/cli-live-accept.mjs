@@ -1,5 +1,5 @@
 /**
- * Installed-CLI live acceptance for MAJIN V5 against OpenCode Go.
+ * Installed-CLI live acceptance for MAJIN V5 against OpenCode Go or direct DeepSeek.
  *
  * This is deliberately NOT an in-process provider smoke test. It drives the
  * shipped `bin/majin-v5.mjs` as child processes: live catalog discovery,
@@ -21,9 +21,10 @@
  * inside a temporary directory; this script deletes those secret files and,
  * by default, removes the whole temporary tree when the run ends.
  *
- * MAJIN_LIVE_BASE_URL may point the same opencode-go provider configuration
+ * MAJIN_LIVE_PROVIDER selects opencode-go (default) or deepseek.
+ * MAJIN_LIVE_BASE_URL may point the selected provider configuration
  * at a compatible gateway (used by the local plumbing tests with a fake
- * endpoint). A run against anything other than the real OpenCode Go service
+ * endpoint). A run against anything other than the selected provider’s official service
  * proves only the script/CLI plumbing, never live-account acceptance.
  */
 import fs from 'node:fs';
@@ -34,7 +35,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const BIN = fileURLToPath(new URL('../../bin/majin-v5.mjs', import.meta.url));
-const keyEnv = process.env.MAJIN_LIVE_KEY_ENV || 'OPENCODE_API_KEY';
+const providerId = process.env.MAJIN_LIVE_PROVIDER || 'opencode-go';
+const keyEnv = process.env.MAJIN_LIVE_KEY_ENV || (providerId === 'deepseek' ? 'DEEPSEEK_API_KEY' : 'OPENCODE_API_KEY');
 const apiKey = process.env[keyEnv] || '';
 const requestedModel = String(process.env.MAJIN_LIVE_MODEL || '').trim();
 const baseUrl = String(process.env.MAJIN_LIVE_BASE_URL || '').trim();
@@ -131,7 +133,7 @@ function candidateModels(models) {
   const ids = models.map((model) => typeof model === 'string' ? model : model?.id).filter(Boolean);
   if (requestedModel) {
     if (!ids.includes(requestedModel)) {
-      fail('model-select', `MAJIN_LIVE_MODEL=${requestedModel} was not present in the live OpenCode Go catalog (${ids.length} models)`);
+      fail('model-select', `MAJIN_LIVE_MODEL=${requestedModel} was not present in the live ${providerId} catalog (${ids.length} models)`);
     }
     return [requestedModel];
   }
@@ -146,7 +148,7 @@ function candidateModels(models) {
 async function configureAttempt(root, dataDir) {
   const configure = requireCliOk(await runCli([
     'model', 'configure',
-    '--provider', 'opencode-go',
+    '--provider', providerId,
     '--api-key-env', keyEnv,
     ...(baseUrl ? ['--base-url', baseUrl] : []),
     '--discover',
@@ -170,7 +172,7 @@ async function attemptGoal({ root, modelId, catalogModels }) {
   await configureAttempt(root, dataDir);
   requireCliOk(await runCli([
     'model', 'select', modelId,
-    '--provider', 'opencode-go',
+    '--provider', providerId,
     '--require-discovered',
     '--data-dir', dataDir,
     '--json',
@@ -216,7 +218,7 @@ async function attemptGoal({ root, modelId, catalogModels }) {
   return {
     ok: true,
     verified: true,
-    provider: 'opencode-go',
+    provider: providerId,
     modelId,
     catalogModels,
     baseUrlOverride: Boolean(baseUrl),
@@ -234,6 +236,11 @@ async function attemptGoal({ root, modelId, catalogModels }) {
 }
 
 async function main() {
+  if (!['opencode-go', 'deepseek'].includes(providerId)) {
+    console.log(JSON.stringify({ ok: false, verified: false, stage: 'config', error: 'Unsupported MAJIN_LIVE_PROVIDER; use opencode-go or deepseek' }));
+    process.exitCode = 2;
+    return;
+  }
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(keyEnv)) {
     console.log(JSON.stringify({ ok: false, verified: false, stage: 'credential', error: 'MAJIN_LIVE_KEY_ENV must be an environment variable name' }, null, 2));
     process.exitCode = 2;
@@ -244,7 +251,7 @@ async function main() {
       ok: false,
       verified: false,
       stage: 'credential',
-      error: `NOT VERIFIED: ${keyEnv} is not set; no live OpenCode Go request was attempted.`,
+      error: `NOT VERIFIED: ${keyEnv} is not set; no live ${providerId} request was attempted.`,
     }, null, 2));
     process.exitCode = 2;
     return;
