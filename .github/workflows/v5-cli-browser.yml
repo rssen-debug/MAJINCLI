@@ -1,0 +1,25 @@
+name: V5 CLI browser acceptance (no skipped tests)
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: v5-cli-browser-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  cli-browser:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify V5 CLI tools, real local forms, upload, receipt and resume
+        run: node scripts/v5/cli-browser-accept.mjs
