@@ -626,7 +626,11 @@ export class ProviderManager {
     const caps = this.getCapabilities(providerId, modelId);
 
     // Adapt request to model's actual capabilities
-    const adaptedTools = caps.tools ? tools : [];
+    if (tools.length && caps.tools === false) {
+      return { ok: false, error: { code: 'MODEL_TOOLS_UNAVAILABLE',
+        message: `The saved capabilities for ${providerId}/${modelId} disable tools. Refresh the model catalog or select a tool-capable model; no tool-enabled request was sent.` } };
+    }
+    const adaptedTools = tools;
     const adaptedMessages = caps.vision
       ? messages
       : messages.map((m) => {

@@ -62,7 +62,7 @@ function writePrivate(file, value) {
 }
 
 /** Expand ~ and normalise a folder the owner typed or picked. */
-export function normaliseFolder(raw) {
+export function normaliseFolder(raw, { allowRoot = false } = {}) {
   const value = String(raw ?? '').trim();
   if (!value) throw new OwnerModeError('INVALID_FOLDER', 'a folder path is required');
   if (value.length > 400) throw new OwnerModeError('INVALID_FOLDER', 'the folder path is too long');
@@ -73,11 +73,11 @@ export function normaliseFolder(raw) {
   // because `path.resolve('C:\\')` on Linux yields a relative-looking path and
   // would pass. The grant file can travel between machines, so the guard must
   // not depend on where it runs.
-  if (isFilesystemRoot(expanded)) {
+  if (!allowRoot && isFilesystemRoot(expanded)) {
     throw new OwnerModeError('INVALID_FOLDER', 'granting an entire drive is not allowed; pick a folder inside it');
   }
   const resolved = path.resolve(expanded);
-  if (resolved === path.parse(resolved).root) {
+  if (!allowRoot && resolved === path.parse(resolved).root) {
     throw new OwnerModeError('INVALID_FOLDER', 'granting an entire drive is not allowed; pick a folder inside it');
   }
   return resolved;
@@ -98,8 +98,9 @@ export function isFilesystemRoot(value) {
  * stored. URL credentials are refused because they can visually disguise the
  * real host and must never become a persistent permission.
  */
-export function normaliseBrowserOrigin(raw) {
+export function normaliseBrowserOrigin(raw, { allowAll = false } = {}) {
   const value = String(raw ?? '').trim();
+  if (allowAll && value === '*') return '*';
   if (!value) throw new OwnerModeError('INVALID_BROWSER_ORIGIN', 'a browser origin or URL is required');
   if (value.length > 2048) throw new OwnerModeError('INVALID_BROWSER_ORIGIN', 'the browser origin is too long');
   if (value.includes('\0')) throw new OwnerModeError('INVALID_BROWSER_ORIGIN', 'the browser origin contains a null byte');
@@ -127,7 +128,7 @@ function persistedBrowserOrigins(raw) {
   const origins = [];
   for (const value of Array.isArray(raw.browserOrigins) ? raw.browserOrigins : []) {
     try {
-      origins.push(normaliseBrowserOrigin(value));
+      origins.push(normaliseBrowserOrigin(value, { allowAll: true }));
     } catch {
       // A corrupt or credential-bearing persisted entry is ignored rather
       // than discarding every valid owner grant in the same file.
@@ -222,13 +223,13 @@ export class OwnerMode {
   }
 
   /** Grant lanes, folders and/or exact browser write origins. Returns the new state. */
-  grant({ lanes = [], folders = [], browserOrigins = [], reason = null } = {}) {
+  grant({ lanes = [], folders = [], browserOrigins = [], reason = null, fullAccess = false } = {}) {
     const wanted = [...new Set(lanes)];
     for (const lane of wanted) {
       if (!GRANTABLE_LANES.includes(lane)) throw new OwnerModeError('UNKNOWN_LANE', `unknown lane: ${lane}`);
     }
-    const addedFolders = folders.map(normaliseFolder);
-    const addedBrowserOrigins = normaliseBrowserOrigins(browserOrigins);
+    const addedFolders = folders.map(value => normaliseFolder(value, { allowRoot: fullAccess === true }));
+    const addedBrowserOrigins = fullAccess === true ? ['*'] : normaliseBrowserOrigins(browserOrigins);
     this.#reloadBrowserOrigins();
 
     const nextLanes = new Set(this.state.lanes);
