@@ -6,6 +6,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { GrandArchitect } from '../../src/v5/architect.js';
 import { createHostStatusTools } from '../../src/v5/host-status-tools.js';
+import { MemoryStore } from '../../src/v2/memory/store.js';
 
 const SECRET = 'sk-host-status-secret-1234567890';
 const URL_PASSWORD = 'url-password-secret';
@@ -161,4 +162,59 @@ test('host status schemas reject provider mutation, API keys and destructive mem
     () => tools.get('majin_status').run({ detail: 'full', includeSecrets: true }),
     (error) => error?.name === 'ZodError',
   );
+});
+
+test('majin_memory remember stores a screened durable fact, refuses secrets and host-written kinds, and survives restart', async (t) => {
+  const { root, architect, tools } = await fixture(t);
+  const memory = tools.get('majin_memory');
+
+  const saved = await memory.run({
+    action: 'remember', kind: 'preference', key: 'owner.preferred-language',
+    text: 'Owner prefers answers in Swedish.', tags: ['language'], importance: 0.9,
+  });
+  assert.equal(saved.remembered, true);
+  assert.equal(saved.kind, 'preference');
+  assert.equal(saved.key, 'owner.preferred-language');
+
+  const entry = architect.memoryStore.get('preference', 'owner.preferred-language');
+  assert.equal(entry.text, 'Owner prefers answers in Swedish.');
+  assert.equal(entry.meta.rememberedBy, 'model');
+  assert.equal(entry.meta.goalId, 'goal-host-status');
+  assert.equal(entry.sensitive, undefined);
+
+  const readBack = await memory.run({ action: 'read', kind: 'preference', key: 'owner.preferred-language' });
+  assert.equal(readBack.entries[0].text, 'Owner prefers answers in Swedish.');
+
+  // Restart persistence: a fresh store over the same data dir sees the fact.
+  const reopened = new MemoryStore(path.join(root, 'memory'));
+  assert.equal(reopened.get('preference', 'owner.preferred-language')?.text, 'Owner prefers answers in Swedish.');
+
+  // Secrets are refused outright and never stored (not redacted-and-saved).
+  assert.throws(
+    () => memory.run({ action: 'remember', kind: 'preference', key: 'owner.api-note', text: `The key is ${SECRET}` }),
+    (error) => error?.code === 'memory_secret_refused',
+  );
+  assert.equal(architect.memoryStore.get('preference', 'owner.api-note'), null);
+  assert.throws(
+    () => memory.run({ action: 'remember', kind: 'project', key: 'endpoint', text: 'Use https://user:hunter2@example.test/api' }),
+    (error) => error?.code === 'memory_secret_refused',
+  );
+
+  // Host-verified learning kinds cannot be forged by the model.
+  assert.throws(
+    () => memory.run({ action: 'remember', kind: 'tool-success', key: 'fs-write-works', text: 'fs_write always works.' }),
+    (error) => error?.code === 'memory_kind_not_model_writable',
+  );
+  assert.equal(architect.memoryStore.get('tool-success', 'fs-write-works'), null);
+
+  // Keys must be stable slugs; destructive actions remain schema-rejected.
+  assert.throws(
+    () => memory.run({ action: 'remember', kind: 'preference', key: 'Not A Slug!', text: 'hello' }),
+    (error) => error?.code === 'memory_remember_invalid',
+  );
+  assert.throws(
+    () => memory.run({ action: 'forget', key: 'owner.preferred-language' }),
+    (error) => error?.name === 'ZodError',
+  );
+  assert.ok(architect.memoryStore.get('preference', 'owner.preferred-language'), 'a rejected forget must not delete the entry');
 });

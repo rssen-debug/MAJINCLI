@@ -16,12 +16,13 @@ import { FileAndAccessController } from '../src/v5/files-access.js';
 import { GRANTABLE_LANES } from '../src/v4/owner-mode.js';
 import { V5_VERSION, resolveBuildSha } from '../src/v5/ops.js';
 import { resolveV5DataDir } from '../scripts/v5/desktop-host.mjs';
+import { MemoryStore, MEMORY_KINDS } from '../src/v2/memory/store.js';
 
 let [command = 'serve', ...args] = process.argv.slice(2);
 
 const KNOWN_COMMANDS = new Set([
   'serve', 'start', 'tools', 'status', 'url', 'window', 'ui', 'app', 'version', '--version', '-v',
-  'help', '--help', '-h', 'run', 'goal', 'ask', 'chat', 'repl', 'session', 'resume', 'grants', 'access', 'doctor', 'logs', 'history',
+  'help', '--help', '-h', 'run', 'goal', 'ask', 'chat', 'repl', 'session', 'resume', 'grants', 'access', 'doctor', 'logs', 'history', 'memory',
   'model', 'models', 'provider',
 ]);
 
@@ -1172,6 +1173,11 @@ async function main() {
         '                                                            Call one deterministic tool through the isolated V5 driver',
         '  doctor [--json] [--all-lanes] [--lanes <csv>]             Diagnose data dir, grants, provider and tool parity',
         '  logs [--json]                                             Show the current/last goal, tool results, evidence and activity trace',
+        '  memory [list] [--kind <kind>] [--limit <n>] [--json]      Review long-term memory MAJIN keeps between goals (owner surface)',
+        '  memory search <query...> [--kind <kind>] [--json]         Search stored memory entries',
+        '  memory get <key> [--kind <kind>] [--json]                 Show one exact memory entry',
+        '  memory forget <key> [--kind <kind>] [--json]              Delete one memory entry permanently (owner-only)',
+        '  memory clear [--kind <kind>] --yes [--json]               Delete all memory entries, or one kind (owner-only, requires --yes)',
         '  serve [--host 0.0.0.0] [--port 4555] [--data-dir <dir>] [--submit-origin <origin>] [--browser-visible|--browser-headless] [--max-rounds <n>] [--context-chars <n>]',
         '                                                            Start V5 Black Box UI & HTTP Host; persisted browser origins are read live',
         '  window                                                    Open native MAJIN V5 Electron window',
@@ -1450,6 +1456,59 @@ async function main() {
     printGoalResult({ goal });
     printGoalTrace(goal);
     return;
+  }
+
+  if (command === 'memory') {
+    const dataDir = readArg('--data-dir', resolveV5DataDir());
+    const json = args.includes('--json');
+    const kind = readArg('--kind', '');
+    if (kind && !MEMORY_KINDS.includes(kind)) throw new Error(`Unknown memory kind "${kind}". Kinds: ${MEMORY_KINDS.join(', ')}`);
+    const limit = Math.min(200, Math.max(1, Number(readArg('--limit', '50')) || 50));
+    const positionals = positionalsFor(new Set(['--data-dir', '--kind', '--limit']));
+    const subcommand = positionals[0] || 'list';
+    const store = new MemoryStore(path.join(dataDir, 'memory'));
+    const kinds = kind ? [kind] : [...MEMORY_KINDS];
+    const shape = (entryKind, entry) => ({
+      kind: entryKind, key: entry.key, text: entry.text, tags: entry.tags || [],
+      importance: entry.importance, at: entry.at || null, rememberedBy: entry.meta?.rememberedBy || null,
+    });
+    const printEntries = (entries) => {
+      if (json) { console.log(JSON.stringify({ count: entries.length, entries }, null, 2)); return; }
+      if (!entries.length) { console.log('No memory entries found.'); return; }
+      for (const entry of entries) console.log(`[${entry.kind}] ${entry.key} — ${entry.text}${entry.rememberedBy ? ` (remembered by ${entry.rememberedBy})` : ''}`);
+      console.log(`${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}.`);
+    };
+    if (subcommand === 'list') {
+      printEntries(kinds.flatMap((k) => store.list(k, { last: limit }).map((entry) => shape(k, entry))).slice(0, limit));
+      return;
+    }
+    if (subcommand === 'search') {
+      const query = positionals.slice(1).join(' ');
+      if (!query) throw new Error('Usage: majin-v5 memory search <query...> [--kind <kind>]');
+      printEntries(kinds.flatMap((k) => store.search(k, query, { limit }).map((entry) => shape(k, entry))).slice(0, limit));
+      return;
+    }
+    if (subcommand === 'get' || subcommand === 'forget') {
+      const key = positionals[1];
+      if (!key) throw new Error(`Usage: majin-v5 memory ${subcommand} <key> [--kind <kind>]`);
+      const found = kinds.flatMap((k) => {
+        const entry = store.get(k, key);
+        return entry ? [shape(k, entry)] : [];
+      });
+      if (subcommand === 'get') { printEntries(found); return; }
+      for (const entry of found) store.delete(entry.kind, entry.key);
+      if (json) console.log(JSON.stringify({ forgotten: found.map((entry) => `${entry.kind}:${entry.key}`) }, null, 2));
+      else console.log(found.length ? `Forgot ${found.length} memory entr${found.length === 1 ? 'y' : 'ies'} with key "${key}".` : `No memory entry with key "${key}"${kind ? ` in kind ${kind}` : ''}. Nothing was deleted.`);
+      return;
+    }
+    if (subcommand === 'clear') {
+      if (!args.includes('--yes')) throw new Error('Refusing to clear memory without --yes. Review first with: majin-v5 memory list');
+      store.clear(kind || null);
+      if (json) console.log(JSON.stringify({ cleared: kind || 'all' }, null, 2));
+      else console.log(`Cleared ${kind ? `memory kind "${kind}"` : 'all long-term memory'}.`);
+      return;
+    }
+    throw new Error('Usage: majin-v5 memory [list|search <query>|get <key>|forget <key>|clear --yes] [--kind <kind>] [--json]');
   }
 
   if (command === 'tools') {

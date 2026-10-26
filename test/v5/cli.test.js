@@ -8,6 +8,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ProviderManager } from '../../src/v5/providers.js';
 import { browserBinary } from '../../src/v4/tools/host.js';
+import { MemoryStore } from '../../src/v2/memory/store.js';
 
 const BIN = fileURLToPath(new URL('../../bin/majin-v5.mjs', import.meta.url));
 
@@ -770,4 +771,43 @@ test('CLI chat queues the next goal without losing the active checkpoint and can
   assert.equal(closed.status, 1, 'the final cancelled goal determines the interactive process exit code');
   assert.equal(fs.existsSync(path.join(fx.workspace, 'cancelled-chat.txt')), false);
   assert.equal(completions, 5);
+});
+
+test('CLI memory command lets the owner review, search, forget and clear long-term memory', async (t) => {
+  const fx = fixture(t);
+  const store = new MemoryStore(path.join(fx.dataDir, 'memory'));
+  store.put('preference', { key: 'owner.language', text: 'Owner prefers Swedish answers.', tags: ['language'], importance: 0.9, meta: { via: 'majin_memory', rememberedBy: 'model' } });
+  store.put('project', { key: 'garden.plan', text: 'Plant tomatoes in May.', tags: ['garden'], importance: 0.6 });
+
+  const listed = await runCli(['memory', 'list', '--data-dir', fx.dataDir, '--json'], fx);
+  assert.equal(listed.status, 0, `${listed.stdout}\n${listed.stderr}`);
+  const listedJson = parseJson(listed);
+  assert.equal(listedJson.count, 2);
+  assert.equal(listedJson.entries.find((entry) => entry.key === 'owner.language')?.rememberedBy, 'model');
+
+  const searched = parseJson(await runCli(['memory', 'search', 'tomatoes', '--data-dir', fx.dataDir, '--json'], fx));
+  assert.deepEqual(searched.entries.map((entry) => entry.key), ['garden.plan']);
+
+  const got = parseJson(await runCli(['memory', 'get', 'owner.language', '--data-dir', fx.dataDir, '--json'], fx));
+  assert.equal(got.entries[0].text, 'Owner prefers Swedish answers.');
+
+  const clearRefused = await runCli(['memory', 'clear', '--data-dir', fx.dataDir], fx);
+  assert.notEqual(clearRefused.status, 0, 'clear without --yes must be refused');
+  assert.match(`${clearRefused.stdout}\n${clearRefused.stderr}`, /without --yes/);
+  assert.ok(new MemoryStore(path.join(fx.dataDir, 'memory')).get('preference', 'owner.language'));
+
+  const forgotten = parseJson(await runCli(['memory', 'forget', 'owner.language', '--data-dir', fx.dataDir, '--json'], fx));
+  assert.deepEqual(forgotten.forgotten, ['preference:owner.language']);
+  assert.equal(new MemoryStore(path.join(fx.dataDir, 'memory')).get('preference', 'owner.language'), null);
+
+  const forgetMissing = await runCli(['memory', 'forget', 'owner.language', '--data-dir', fx.dataDir], fx);
+  assert.equal(forgetMissing.status, 0);
+  assert.match(forgetMissing.stdout, /Nothing was deleted/);
+
+  const cleared = await runCli(['memory', 'clear', '--data-dir', fx.dataDir, '--yes'], fx);
+  assert.equal(cleared.status, 0, `${cleared.stdout}\n${cleared.stderr}`);
+  assert.equal(new MemoryStore(path.join(fx.dataDir, 'memory')).get('project', 'garden.plan'), null);
+
+  const badKind = await runCli(['memory', 'list', '--kind', 'secrets', '--data-dir', fx.dataDir], fx);
+  assert.notEqual(badKind.status, 0);
 });

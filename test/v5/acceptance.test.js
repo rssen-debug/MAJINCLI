@@ -562,6 +562,35 @@ test('acceptance: cross-origin iframe form is completed and verified through the
   assert.equal(fs.readFileSync(path.join(fx.workspace, 'frame-receipt.txt'), 'utf8'), `iframe form verified ${stamp}`);
 });
 
+test('acceptance: model remembers a durable fact through the installed CLI and a later CLI process reads it back', async (t) => {
+  const fx = fixture(t);
+  const stamp = Date.now();
+  const provider = await fakeProvider(t, (body) => {
+    const remembered = (body.messages || []).some((message) => message.role === 'tool' && message.name === 'majin_memory' && String(message.content).includes('owner.favourite-city'));
+    const wrote = (body.messages || []).some((message) => message.role === 'tool' && message.name === 'fs_write');
+    if (!remembered) return toolCall('remember-city', 'majin_memory', { action: 'remember', kind: 'preference', key: 'owner.favourite-city', text: `Owner favourite city marker ${stamp} is Gothenburg.`, tags: ['city'] });
+    if (!wrote) return toolCall('remember-receipt', 'fs_write', { path: 'remember-receipt.txt', content: `remembered ${stamp}` });
+    return { role: 'assistant', content: 'Stored the favourite-city fact in long-term memory and wrote the receipt.' };
+  });
+  await configureProvider(fx.dataDir, provider.baseUrl);
+  const criteria = JSON.stringify([{ kind: 'file', path: 'remember-receipt.txt', contains: `remembered ${stamp}` }]);
+  const run = await runCli(['run', 'Remember that my favourite city is Gothenburg for future goals, then write remember-receipt.txt',
+    '--data-dir', fx.dataDir, '--criteria', criteria, '--lanes', 'files'],
+  { ...fx, timeoutMs: 300000 });
+  assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
+  assert.match(run.stdout, /Status: COMPLETED/);
+  assert.match(run.stderr, /tool majin_memory started/);
+
+  // Independent cross-process proof: a fresh CLI invocation (new process,
+  // owner surface) reads the exact entry the model stored during the goal.
+  const readBack = await runCli(['memory', 'get', 'owner.favourite-city', '--kind', 'preference', '--data-dir', fx.dataDir, '--json'], fx);
+  assert.equal(readBack.status, 0, `${readBack.stdout}\n${readBack.stderr}`);
+  const parsed = JSON.parse(readBack.stdout);
+  assert.equal(parsed.entries.length, 1);
+  assert.match(parsed.entries[0].text, new RegExp(`marker ${stamp} is Gothenburg`));
+  assert.equal(parsed.entries[0].rememberedBy, 'model');
+});
+
 test('acceptance: a long installed-CLI task stays within a bounded model context and finishes verified', async (t) => {
   const fx = fixture(t);
   for (let index = 0; index < 8; index++) {
