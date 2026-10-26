@@ -33,13 +33,13 @@ const KNOWN_SKILLS = [
   'postgresql', 'docker', 'kubernetes', 'aws', 'azure', 'gcp', 'git', 'linux',
   'windows', 'c#', '.net', 'java', 'go', 'golang', 'rust', 'graphql', 'rest',
   'playwright', 'testing', 'ci/cd', 'scrum', 'agile', 'figma', 'css', 'html',
-  'intune', 'entra id', 'azure ad', 'microsoft 365', 'm365', 'apple business manager',
+  'intune', 'entra id', 'azure ad', 'azure active directory', 'microsoft 365', 'm365', 'apple business manager',
   'active directory', 'endpoint management', 'local it', 'sentinel', 'defender',
 ];
 
 const KNOWN_LANGUAGES = [
-  { id: 'svenska', patterns: /\b(svenska|swedish|modersmål)\b/i }, // input vocabulary, never rendered
-  { id: 'engelska', patterns: /\b(engelska|english|fluent)\b/i }, // input vocabulary, never rendered
+  { id: 'svenska', patterns: /\b(svenska|swedish)\b/i }, // input vocabulary, never rendered
+  { id: 'engelska', patterns: /\b(engelska|english)\b/i }, // input vocabulary, never rendered
   { id: 'danska', patterns: /\b(danska|danish)\b/i }, // input vocabulary, never rendered
   { id: 'tyska', patterns: /\b(tyska|german)\b/i }, // input vocabulary, never rendered
 ];
@@ -49,6 +49,21 @@ const KNOWN_LOCATIONS = [
   'oslo', 'helsinki', 'remote', 'distans', 'lund', 'linköping', 'helsingborg', 'landskrona', 'københavn', // input vocabulary, never rendered
 ];
 
+// These aliases normalize vocabulary, not seniority or broader product expertise.
+function qualificationKey(value) {
+  const key = String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const aliases = {
+    'm365': 'microsoft 365', 'nodejs': 'node.js',
+    'azure ad': 'entra id', 'azure active directory': 'entra id', 'microsoft entra id': 'entra id',
+    'microsoft intune': 'intune', 'swedish': 'svenska', 'english': 'engelska', // input vocabulary, never rendered
+    'danish': 'danska', 'german': 'tyska', // input vocabulary, never rendered
+  };
+  return aliases[key] || key;
+}
+
+// A conservative lexical filter, not an NLP proof of every possible CV claim.
+const UNCERTAIN_CLAIM = /\b(no|not|without|lack|lacking|expired|revoked|aspiring|seeking|studying for|preparing for|plan to|ingen|inget|inga|inte|saknar|nej|planerar|studerar till|krävs|behövs)\b/i; // input vocabulary, never rendered
+
 /**
  * 1. Extract strictly verifiable facts from CV text.
  * Never invents missing degrees, certificates, work permits or years of experience.
@@ -56,6 +71,8 @@ const KNOWN_LOCATIONS = [
 export function extractVerifiableCvFacts(cvText = '', { cvFileName = 'cv.pdf', cvSha256 = null } = {}) {
   const raw = String(cvText || '');
   const lower = raw.toLowerCase();
+  const assertedClauses = raw.split(/(?:[\r\n;]+|(?<=[.!?])\s+)/).map(s => s.trim()).filter(s => s && !UNCERTAIN_CLAIM.test(s));
+  const asserted = assertedClauses.join('\n');
 
   const emailMatch = raw.match(/\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b/);
   const phoneMatch = raw.match(/(?<![\w+])(?:\+(?:46|45)(?:[ \t-]*\d){7,10}|07\d(?:[ \t-]*\d){7})\b/);
@@ -73,10 +90,12 @@ export function extractVerifiableCvFacts(cvText = '', { cvFileName = 'cv.pdf', c
 
   const skills = KNOWN_SKILLS.filter((s) => {
     const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`(?:^|[^\\w])${escaped}(?:$|[^\\w])`, 'i').test(lower);
+    const prefix = s === 'active directory' ? '(?<!azure\\s)' : '';
+    const suffix = s === 'azure' ? '(?!\\s+(?:ad|active directory)\\b)' : '';
+    return new RegExp(`(?:^|[^\\w])${prefix}${escaped}${suffix}(?:$|[^\\w])`, 'i').test(asserted);
   }).map((s) => (s === 'nodejs' ? 'node.js' : s));
 
-  const languages = KNOWN_LANGUAGES.filter((l) => l.patterns.test(raw)).map((l) => l.id);
+  const languages = KNOWN_LANGUAGES.filter((l) => l.patterns.test(asserted)).map((l) => l.id);
   const locations = KNOWN_LOCATIONS.filter((loc) => lower.includes(loc));
 
   const roles = [];
@@ -93,29 +112,28 @@ export function extractVerifiableCvFacts(cvText = '', { cvFileName = 'cv.pdf', c
     { id: 'software engineer', re: /\b(software engineer|mjukvaruutvecklare|utvecklare|developer)\b/i }, // input vocabulary, never rendered
   ];
   for (const rp of rolePatterns) {
-    if (rp.re.test(raw)) roles.push(rp.id);
+    if (rp.re.test(asserted)) roles.push(rp.id);
   }
 
-  const yearsMatch = raw.match(/\b(\d{1,2})\+?\s*(?:års?\s+erfarenhet|years?\s+(?:of\s+)?experience)\b/i); // input vocabulary, never rendered
+  const yearsMatch = asserted.match(/\b(\d{1,2})\+?\s*(?:års?\s+erfarenhet|years?\s+(?:of\s+)?experience)\b/i); // input vocabulary, never rendered
   const experienceYears = yearsMatch ? Number(yearsMatch[1]) : null;
 
   const education = [];
   if (/\b(civilingenjör|master|m\.sc|bachelor|kandidat|högskoleingenjör|universitet|university|yrkeshögskola)\b/i.test(raw)) { // input vocabulary, never rendered
-    const eduLines = lines.filter((l) =>
+    const eduLines = assertedClauses.filter((l) =>
       /\b(civilingenjör|master|m\.sc|bachelor|kandidat|högskoleingenjör|universitet|university|yrkeshögskola)\b/i.test(l), // input vocabulary, never rendered
     );
     education.push(...eduLines.slice(0, 3));
   }
 
   const certificates = [];
-  const certMatches = raw.match(/\b(AWS Certified[^\n,;.]*|Azure Certified[^\n,;.]*|CKA|PMP|Scrum Master)\b/gi);
+  const certMatches = asserted.match(/\b(AWS Certified[^\n,;.]*|Azure Certified[^\n,;.]*|CKA|PMP|Scrum Master)\b/gi);
   if (certMatches) certificates.push(...new Set(certMatches.map((c) => c.trim())));
 
-  // Work permit is ONLY recorded if explicitly stated in the CV
-  let workPermit = null;
-  if (/\b(eu-medborgare|svenskt medborgarskap|eu citizen|arbejdstilladelse|arbetstillstånd)\b/i.test(raw)) { // input vocabulary, never rendered
-    workPermit = 'explicitly_stated_in_cv';
-  }
+  // A mention, question or nationality alone is not an affirmative permit claim.
+  const permitStatement = assertedClauses.find(line =>
+    /(?:\b(?:has|have|har|valid|giltigt)\s+(?:a\s+)?(?:work permit|arbetstillstånd|arbejdstilladelse)\b|\b(?:work permit|arbetstillstånd|arbejdstilladelse)\s*:\s*(?:valid|yes|ja|giltigt|eu-medborgare)\b)/i.test(line)); // input vocabulary, never rendered
+  const workPermit = permitStatement ? 'explicitly_stated_in_cv' : null;
 
   return {
     verifiableOnly: true,
@@ -215,8 +233,8 @@ function normalizeLocationToken(loc = '') {
  * from PREFERRED (`meriterande`) skills!
  */
 export function evaluateJobMatch(ad, cvFacts, criteria = {}) {
-  const cvSkills = new Set((cvFacts?.skills || []).map((s) => s.toLowerCase()));
-  const cvLangs = new Set((cvFacts?.languages || []).map((l) => l.toLowerCase()));
+  const cvSkills = new Set((cvFacts?.skills || []).map(qualificationKey));
+  const cvLangs = new Set((cvFacts?.languages || []).map(qualificationKey));
 
   // Geography filter (supports mid-flight steering like "bara jobb i Köpenhamn")
   const requiredLocations = (Array.isArray(criteria.locations) ? criteria.locations : [])
@@ -242,16 +260,16 @@ export function evaluateJobMatch(ad, cvFacts, criteria = {}) {
     ? ad.preferredSkills.map((s) => String(s).toLowerCase())
     : [];
 
-  const requiredMet = requiredList.filter((req) => cvSkills.has(req) || cvLangs.has(req));
-  const requiredMissing = requiredList.filter((req) => !cvSkills.has(req) && !cvLangs.has(req));
+  const requiredMet = requiredList.filter((req) => cvSkills.has(qualificationKey(req)) || cvLangs.has(qualificationKey(req)));
+  const requiredMissing = requiredList.filter((req) => !cvSkills.has(qualificationKey(req)) && !cvLangs.has(qualificationKey(req)));
 
-  const preferredMet = preferredList.filter((pref) => cvSkills.has(pref) || cvLangs.has(pref));
-  const preferredMissing = preferredList.filter((pref) => !cvSkills.has(pref) && !cvLangs.has(pref));
+  const preferredMet = preferredList.filter((pref) => cvSkills.has(qualificationKey(pref)) || cvLangs.has(qualificationKey(pref)));
+  const preferredMissing = preferredList.filter((pref) => !cvSkills.has(qualificationKey(pref)) && !cvLangs.has(qualificationKey(pref)));
 
   // Experience requirement check
   const minYears = Number(ad.minExperienceYears) || 0;
   const yearsOk = minYears === 0
-    || (cvFacts?.experienceYears !== null && cvFacts.experienceYears >= minYears);
+    || (Number.isFinite(cvFacts?.experienceYears) && cvFacts.experienceYears >= minYears);
 
   // Required skills must be met (or at least criteria.minRequiredRatio, default 1.0)
   const minRequiredRatio = criteria.minRequiredRatio ?? 1.0;
@@ -262,7 +280,7 @@ export function evaluateJobMatch(ad, cvFacts, criteria = {}) {
   const score = Number(((reqRatio * 0.7 + prefRatio * 0.3) * 100).toFixed(1));
 
   const motivation = matched
-    ? `Uppfyller samtliga ${requiredMet.length}/${requiredList.length} skall-krav (${requiredMet.join(', ') || 'grundkrav'}) samt ${preferredMet.length}/${preferredList.length} meriterande kompetenser (${preferredMet.join(', ') || 'inga angivna'}) i ${ad.location || 'angiven ort'}.` // input vocabulary, never rendered
+    ? `Matchar ${requiredMet.length}/${requiredList.length} skall-krav (${requiredMet.join(', ') || 'grundkrav'}) samt ${preferredMet.length}/${preferredList.length} meriterande kompetenser (${preferredMet.join(', ') || 'inga angivna'}) i ${ad.location || 'angiven ort'}.` // input vocabulary, never rendered
     : `Saknar obligatoriska krav: ${requiredMissing.join(', ') || (!yearsOk ? `${minYears} års erfarenhet` : 'kriterier')}.`; // input vocabulary, never rendered
 
   return {
