@@ -96,6 +96,10 @@ export const PROVIDER_PRESETS = Object.freeze({
 export function classifyProviderError(err, status = null) {
   const msg = String(err?.message || err || '');
   const code = Number(status || err?.status || err?.statusCode || 0);
+  if (['invalid_stream_data', 'provider_stream_error'].includes(err?.code)) {
+    return { code: 'PROVIDER_STREAM_ERROR', retryable: false, message: 'The provider stream failed or contained invalid data. Incomplete tool calls were discarded; retry the goal when the provider is available.' };
+  }
+
   if (err?.name === 'AbortError' || /abort|timed?\s*out/i.test(msg)) {
     return { code: 'TIMEOUT', retryable: true, message: 'Provider request timed out or was aborted.' };
   }

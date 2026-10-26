@@ -252,7 +252,20 @@ export async function openaiStream(o) {
       try {
         ev = JSON.parse(data);
       } catch {
-        continue;
+        throw new ProviderError('The provider sent malformed stream data; incomplete tool calls were discarded.', {
+          code: 'invalid_stream_data', retryable: false,
+        });
+      }
+      if (ev?.error) {
+        // Do not echo upstream payloads: they can contain request data or secrets.
+        throw new ProviderError('The provider reported a stream error; incomplete tool calls were discarded.', {
+          code: 'provider_stream_error', retryable: false,
+        });
+      }
+      if (!ev || typeof ev !== 'object' || Array.isArray(ev)) {
+        throw new ProviderError('The provider sent an invalid stream event; incomplete tool calls were discarded.', {
+          code: 'invalid_stream_data', retryable: false,
+        });
       }
       if (ev.usage) usageObj = ev.usage;
       const choice = ev.choices?.[0];
