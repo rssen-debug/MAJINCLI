@@ -542,6 +542,8 @@ export class ProviderAgent {
       budget: roundLimit,
       lanes: [...lanes],
     });
+    const initialToolResultCount = goal.tool_results.length;
+    let noActionReviewRequested = false;
     let repeatedFailures = 0, verificationRepairs = 0, usedBrowser = false, ownerHandoff = null;
     this.#save();
     const onAbort = () => { if (driver.active) driver.cancel(driver.active.record.operationId).catch(() => {}); };
@@ -934,6 +936,18 @@ export class ProviderAgent {
         // Owner steering arriving during inference supersedes the proposed batch before any effect.
         if (this.active.steering.length) continue;
         const calls = response.toolCalls || [];
+        if (!calls.length && !criteria.length && goal.tool_results.length === initialToolResultCount
+          && !noActionReviewRequested && round < roundLimit) {
+          // A narration-only response is not evidence that an action was
+          // attempted. Give the selected model one bounded review, without
+          // forcing tools for greetings, factual answers or clarifications.
+          noActionReviewRequested = true;
+          messages.push({ role: 'assistant', content: response.text || response.content || '' });
+          messages.push({ role: 'user', content: 'Host execution check: no tool calls have executed in this run. Re-evaluate the latest owner request using the retained conversation. If it requires an action and enough information is available, use the supplied tools now instead of promising future work. If it is a question, greeting, or needs essential clarification, give the actual answer or ask only for the missing information; tool use is not required for conversation. Do not expand the owner mandate, invent observations, or repeat uncertain external effects. If tools are unavailable, explain the concrete limitation. This is a single execution check, not permission to run another agent loop.' });
+          trace('no_action_review_requested', { round, advertisedTools: toolsForRound.length, toolsSent: answer.capabilitiesUsed?.toolsSent ?? null });
+          this.#save();
+          continue;
+        }
         if (!calls.length) {
           goal.model_reply = response.text || response.content || '';
           goal.summaryText = goal.model_reply || 'The model returned no result.';
