@@ -337,6 +337,37 @@ test('CLI run, bare goal form, logs and completed resume use the live provider a
   assert.equal(provider.requests.length, beforeResume, 'completed resume must not call the model or replay tools');
 });
 
+test('CLI run streams the live trace, prints evidence details, and logs replays the trace', async (t) => {
+  const fx = fixture(t);
+  let completions = 0;
+  const provider = await fakeProvider(t, () => {
+    completions += 1;
+    if (completions === 1) return toolCall('write-visible-proof', 'fs_write', { path: 'visible-proof.txt', content: 'visible verified secret-body-9e1' });
+    return { role: 'assistant', content: 'Created visible-proof.txt.' };
+  });
+  await configureProvider(fx.dataDir, provider.baseUrl);
+  const criteria = JSON.stringify([{ kind: 'file', path: 'visible-proof.txt', contains: 'visible verified' }]);
+  const run = await runCli(['run', 'Create visible-proof.txt', '--data-dir', fx.dataDir, '--criteria', criteria, '--lanes', 'sys,re'], fx);
+  assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
+  assert.match(run.stdout, /Status: COMPLETED/);
+  assert.match(run.stdout, /Verification evidence: 1/);
+  assert.match(run.stdout, / {2}verified file .*visible-proof\.txt — \d+ bytes, sha256 /);
+  assert.match(run.stderr, /\[majin\] strategy: /);
+  assert.match(run.stderr, /\[majin\] tool fs_write started path=visible-proof\.txt content=<\d+ chars>/);
+  assert.match(run.stderr, /\[majin\] tool fs_write ok in \d+ms/);
+  assert.match(run.stderr, /\[majin\] verified file visible-proof\.txt — file .*visible-proof\.txt — \d+ bytes, sha256 /);
+  assert.match(run.stderr, /\[majin\] goal finished: COMPLETED/);
+  assert.doesNotMatch(`${run.stdout}\n${run.stderr}`, /secret-body-9e1/, 'file contents must never be echoed into the terminal trace');
+
+  const logs = await runCli(['logs', '--data-dir', fx.dataDir], fx);
+  assert.equal(logs.status, 0, `${logs.stdout}\n${logs.stderr}`);
+  assert.match(logs.stdout, /Trace \(\d+ events\)/);
+  assert.match(logs.stdout, /#1 goal started/);
+  assert.match(logs.stdout, /tool fs_write started path=visible-proof\.txt/);
+  assert.match(logs.stdout, /goal finished: COMPLETED/);
+  assert.doesNotMatch(logs.stdout, /secret-body-9e1/);
+});
+
 test('CLI model commands configure from env, discover a live catalog, and never echo the secret', async (t) => {
   const fx = fixture(t);
   const provider = await fakeProvider(t, () => ({ role: 'assistant', content: 'not used in this test' }));
@@ -494,6 +525,90 @@ test('CLI chat grants a blocked browser origin in the same host and resumes the 
   assert.deepEqual(submissions, [{ name: 'Chat User', marker }], 'resume submitted the already-filled page exactly once');
   assert.equal(fs.readFileSync(path.join(fx.workspace, 'chat-browser-receipt.txt'), 'utf8'), `Chat portal receipt ${marker}`);
   assert.equal(completions, 9);
+});
+
+test('CLI chat keeps a queued goal parked across WAITING_USER and starts it only after grant, resume and completion', async (t) => {
+  const browserPath = await browserBinary();
+  if (!browserPath) { t.skip('No installed Chromium/Edge on this runner'); return; }
+  const fx = fixture(t);
+  const marker = `queue-wait-${Date.now()}`;
+  const submissions = [];
+  const portal = http.createServer(async (req, res) => {
+    if (req.method === 'POST') {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      submissions.push(Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString('utf8'))));
+      res.setHeader('content-type', 'text/html');
+      res.end('<h1>QUEUE PORTAL RECEIVED</h1>');
+      return;
+    }
+    res.setHeader('content-type', 'text/html');
+    res.end(`<h1>Queue application portal</h1><form method="post" action="/submit">
+      <label>Name <input name="name" required></label>
+      <label>Marker <input name="marker" required></label>
+      <button type="submit">Send application</button>
+    </form>`);
+  });
+  await new Promise((resolve) => portal.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${portal.address().port}`;
+  t.after(async () => {
+    portal.closeAllConnections();
+    await new Promise((resolve) => portal.close(resolve));
+  });
+
+  let completions = 0;
+  const provider = await fakeProvider(t, () => {
+    completions += 1;
+    if (completions === 1) return toolCall('queue-open-portal', 'browser_open', { url: origin });
+    if (completions === 2) return toolCall('queue-fill-name', 'browser_fill', { selector: 'input[name="name"]', value: 'Queue User' });
+    if (completions === 3) return toolCall('queue-fill-marker', 'browser_fill', { selector: 'input[name="marker"]', value: marker });
+    if (completions === 4) return toolCall('queue-submit-blocked', 'browser_click', { selector: 'button[type="submit"]' });
+    if (completions === 5) return toolCall('queue-inspect-retained', 'browser_inspect', {});
+    if (completions === 6) return toolCall('queue-submit-granted', 'browser_click', { selector: 'button[type="submit"]' });
+    if (completions === 7) return toolCall('queue-inspect-receipt', 'browser_inspect', {});
+    if (completions === 8) return toolCall('queue-write-receipt', 'fs_write', { path: 'queue-wait-receipt.txt', content: `Queue wait receipt ${marker}` });
+    if (completions === 9) return { role: 'assistant', content: 'Submitted the retained form and saved the receipt.' };
+    if (completions === 10) return toolCall('queued-write', 'fs_write', { path: 'queued-after-wait.txt', content: 'queued goal ran after resume' });
+    return { role: 'assistant', content: 'Queued goal done.' };
+  });
+  await configureProvider(fx.dataDir, provider.baseUrl);
+  const criteria = JSON.stringify([{ kind: 'file', path: 'queue-wait-receipt.txt', contains: marker }]);
+  const queuedPath = path.join(fx.workspace, 'queued-after-wait.txt');
+
+  const session = startCliSession([
+    'chat', '--data-dir', fx.dataDir, '--criteria', criteria,
+    '--lanes', 'files,browser', '--browser-headless',
+  ], { ...fx, timeoutMs: 600000, env: { MAJIN_V4_BROWSER: browserPath } });
+  t.after(() => session.terminate());
+  await session.waitFor('Type a goal', 'stdout', 60000);
+  session.write(`Open ${origin}, fill it for Queue User with marker ${marker}, submit it, and save queue-wait-receipt.txt`);
+  await waitForCondition(() => completions >= 1, 'the first provider request of the waiting goal', 60000);
+  session.write('/queue Create queued-after-wait.txt');
+  await session.waitFor('Queued after the active goal', 'stdout', 60000);
+  await session.waitFor(/Status: (WAITING_USER|COMPLETED|PARTIAL|BLOCKED|CANCELLED)/, 'stdout', 240000);
+  assert.match(session.stdout, /Status: WAITING_USER/, `the blocked submit must pause for the owner\nSTDOUT:\n${session.stdout}\nSTDERR:\n${session.stderr}`);
+  // The queue must stay parked: blindly starting the next goal here would
+  // replace the WAITING_USER checkpoint and its retained filled page.
+  await session.waitFor('Queued goal kept', 'stdout', 60000);
+  assert.equal(fs.existsSync(queuedPath), false, 'queued goal must not run while the checkpoint waits for the owner');
+  assert.deepEqual(submissions, [], 'the blocked submit must not reach the portal');
+  assert.equal(completions, 4);
+
+  session.write(`/browser-origin grant ${origin}/submit`);
+  await session.waitFor(`Browser write origins (1): ${origin}`, 'stdout', 60000);
+  session.write('/resume');
+  await session.waitFor('Status: COMPLETED', 'stdout', 240000);
+  await session.waitFor('Starting queued goal: Create queued-after-wait.txt', 'stdout', 120000);
+  await waitForCondition(
+    () => fs.existsSync(queuedPath) && fs.readFileSync(queuedPath, 'utf8').includes('queued goal ran after resume'),
+    'the queued goal to run after the resumed goal completed',
+    120000,
+  );
+  const closed = await session.exit();
+  assert.equal(closed.status, 0, `${closed.stdout}\n${closed.stderr}`);
+  assert.deepEqual(submissions, [{ name: 'Queue User', marker }], 'resume submitted the already-filled page exactly once');
+  assert.equal(fs.readFileSync(path.join(fx.workspace, 'queue-wait-receipt.txt'), 'utf8'), `Queue wait receipt ${marker}`);
+  assert.equal(completions, 11);
 });
 
 test('CLI chat steers the live provider goal before its stale tool batch can execute', async (t) => {

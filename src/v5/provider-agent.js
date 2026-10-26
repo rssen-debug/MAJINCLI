@@ -144,6 +144,66 @@ function normaliseAcceptanceCheck(check, workspaceDir) {
   }
 }
 
+const MAX_TRACE_EVENTS = 1000;
+const TRACE_SECRET_KEY = /pass(word)?|secret|token|api[-_]?key|otp|pin\b|credential|auth|cookie|session[-_]?id|private[-_]?key/i;
+const TRACE_CONTENT_KEY = /content|body|html|script|code|value|text|data|base64/i;
+
+function truncateTraceText(value, max = 160) {
+  const text = String(value ?? '');
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+function summariseTraceUrl(raw) {
+  try {
+    const url = new URL(String(raw));
+    // Origin + path only: query strings and fragments can carry tokens.
+    return truncateTraceText(`${url.origin}${url.pathname}`, 120);
+  } catch {
+    return truncateTraceText(raw, 120);
+  }
+}
+
+function summariseTraceValue(key, value) {
+  if (TRACE_SECRET_KEY.test(key)) return '[redacted]';
+  if (value == null) return String(value);
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    if (/names?/i.test(key) && value.every((item) => typeof item === 'string')) return truncateTraceText(value.join(','), 80);
+    return `<${value.length} items>`;
+  }
+  if (typeof value === 'object') return `<${Object.keys(value).join(',') || 'object'}>`;
+  const text = String(value);
+  if (/url/i.test(key)) return summariseTraceUrl(text);
+  if (TRACE_CONTENT_KEY.test(key)) return `<${text.length} chars>`;
+  return truncateTraceText(text, 100);
+}
+
+/**
+ * One-line, secret-safe summary of tool arguments for the persisted activity
+ * trace. The owner must be able to see WHAT the agent is doing (which file,
+ * which origin, which selector) without file contents, typed secrets or
+ * token-bearing URLs ever landing in the checkpoint or terminal.
+ */
+export function summariseToolArgs(input) {
+  try {
+    if (!input || typeof input !== 'object') return '';
+    const parts = Object.entries(input)
+      .filter(([key]) => key !== 'operationId')
+      .map(([key, value]) => `${key}=${summariseTraceValue(key, value)}`);
+    return truncateTraceText(parts.join(' '), 240);
+  } catch {
+    return '';
+  }
+}
+
+function compactTraceEvidence(evidence) {
+  const compact = {};
+  for (const [key, value] of Object.entries(evidence || {})) {
+    compact[key] = typeof value === 'string' ? truncateTraceText(value, 160) : value;
+  }
+  return compact;
+}
+
 const ADAPTIVE_INSTRUCTIONS = `Choose the least expensive useful method: act directly for simple tasks; use agent_plan for dependent or multi-output work; discover and read matching verified procedures before adapting them; use agent_delegate only for independent read-only analysis that benefits from concurrency. Delegates use the same selected model and cannot write or control the shared browser/desktop. You remain responsible for reconciling and verifying their observations. Use agent_checkpoint with actual successful operation IDs to record observed plan progress. Plan completion and worker prose never establish acceptance. When independent verification fails, repair the artifact and check again. Persisted checkpoints survive pauses and restarts; inspect uncertain effects before continuing.`;
 
 /** One selected provider drives the same deterministic tool runtime as Codex. */
@@ -266,7 +326,7 @@ export class ProviderAgent {
     const goalId = resume ? this.current.goal.goal_id : `provider-${randomUUID()}`;
     const runId = randomUUID();
     const goal = resume ? this.current.goal : { goal_id: goalId, objective: String(goalText), status: 'RUNNING', summaryText: '',
-      tool_results: [], verification_evidence: [], xp_award: null, cost: { modelCalls: 0, inputTokens: 0, outputTokens: 0 },
+      tool_results: [], verification_evidence: [], trace: [], trace_seq: 0, xp_award: null, cost: { modelCalls: 0, inputTokens: 0, outputTokens: 0 },
       budget: { maxRounds: roundLimit },
       toolExposure: { activated: [] },
       created_at: new Date().toISOString(), criteria, model_reply: '' };
@@ -299,6 +359,20 @@ export class ProviderAgent {
     const adaptive = ensureAdaptiveState(goal);
     if (!goal.toolExposure || !Array.isArray(goal.toolExposure.activated)) goal.toolExposure = { activated: [] };
     const failed = new Set(adaptive.failedActions || []);
+    if (!Array.isArray(goal.trace)) goal.trace = [];
+    if (!Number.isInteger(goal.trace_seq)) goal.trace_seq = goal.trace.length;
+    // Persisted, bounded activity trace: the CLI streams these events live
+    // and `logs` replays them after the fact, across processes and resumes.
+    const trace = (type, fields = {}) => {
+      goal.trace.push({ seq: ++goal.trace_seq, at: new Date().toISOString(), type, ...fields });
+      if (goal.trace.length > MAX_TRACE_EVENTS) goal.trace = goal.trace.slice(-MAX_TRACE_EVENTS);
+    };
+    trace(resume ? 'goal_resumed' : 'goal_started', {
+      objective: truncateTraceText(goal.objective, 160),
+      criteria: criteria.length,
+      budget: roundLimit,
+      lanes: [...lanes],
+    });
     let repeatedFailures = 0, verificationRepairs = 0, usedBrowser = false, ownerHandoff = null;
     this.#save();
     const onAbort = () => { if (driver.active) driver.cancel(driver.active.record.operationId).catch(() => {}); };
@@ -401,11 +475,16 @@ export class ProviderAgent {
         for (const text of this.active.steering.splice(0)) {
           adaptive.needsReplan = true;
           messages.push({ role: 'user', content: text });
+          trace('owner_steering_applied', { round, instruction: truncateTraceText(text, 160) });
         }
         const candidates = procedures.get('procedures_search').run({ query: goal.objective }).procedures;
         const decision = chooseAdaptiveMode({ objective: goal.objective, criteria, procedures: candidates, adaptiveState: adaptive, toolResults: goal.tool_results });
         const previousMode = adaptive.mode;
         recordAdaptiveTransition(goal, decision);
+        if (previousMode !== decision.mode || round === 0) {
+          trace('mode_selected', { round, mode: decision.mode, reason: truncateTraceText(decision.reason, 200) });
+        }
+        trace('model_round_started', { round, mode: decision.mode });
         if (previousMode !== decision.mode || round === 0) messages.push({ role: 'user', content: `Host execution checkpoint: ${JSON.stringify(decision)}. ${decision.mode === 'skill' ? 'Read a relevant procedure with procedures_read before adapting it.' : decision.mode === 'plan' ? 'Create or revise actionable dependencies with agent_plan; preserve already observed work.' : decision.mode === 'delegate' ? 'Consider agent_delegate for independent ready read-only tasks, then reconcile the observations.' : decision.mode === 'recover' ? 'Inspect the failure and make a meaningful correction; do not repeat the same failing action.' : 'Execute the task with the available tools.'}` });
         this.#save();
         const answer = await architect.providers.complete({ messages, tools: providerTools(), sessionId: conversationId, signal: abort.signal, timeoutMs: 120000, maxRetries: 1 });
@@ -437,7 +516,14 @@ export class ProviderAgent {
               .map((item) => `#${item.index + 1} ${item.kind} ${item.label} (${item.reason})`)
               .join('; ')}`;
             goal.errorCode = 'UNVERIFIABLE_ACCEPTANCE_CRITERIA';
+            trace('verification_unsupported', {
+              checks: unsupportedChecks.map((item) => ({ index: item.index, kind: item.kind, label: truncateTraceText(item.label, 120), reason: item.reason })),
+            });
           } else if (preparedChecks.length) {
+            trace('verification_started', {
+              checks: preparedChecks.map((item) => ({ index: item.index, kind: item.kind, label: truncateTraceText(item.label, 120) })),
+            });
+            this.#save(); // Surface "verifying" live before slower checks (e.g. DOM) run.
             const evidence = []; let failure;
             for (const item of preparedChecks) {
               try {
@@ -457,6 +543,7 @@ export class ProviderAgent {
                   throw error;
                 }
                 evidence.push({ id: `provider-proof-${goalId}-${evidence.length}`, kind: item.kind, verifier: item.kind, verified: true, ...verified.evidence });
+                trace('verification_passed', { index: item.index, kind: item.kind, label: truncateTraceText(item.label, 120), evidence: compactTraceEvidence(verified.evidence) });
               } catch (error) {
                 failure = {
                   index: item.index,
@@ -473,11 +560,14 @@ export class ProviderAgent {
             if (failure) {
               adaptive.verificationFailures = (adaptive.verificationFailures || 0) + 1;
               adaptive.recoveryPending = true;
+              trace('verification_failed', { failure });
               if (verificationRepairs++ >= 2) throw new Error(`Acceptance verification still failed after repair attempts: ${failure.error}`);
+              trace('repair_requested', { attempt: adaptive.verificationFailures, kind: failure.kind, label: truncateTraceText(failure.label, 120) });
               messages.push({ role: 'user', content: `Host independent verification failed: ${JSON.stringify(failure)}. Repair the result to meet the original acceptance checks: ${JSON.stringify(criteria)}. Preserve completed effects.` });
               goal.status = 'RUNNING'; this.#save(); continue;
             }
             goal.verification_evidence = evidence;
+            trace('verification_completed', { evidence: evidence.length });
             goal.status = 'COMPLETED'; adaptive.recoveryPending = false;
             goal.blocker = null; goal.errorCode = null;
           }
@@ -501,10 +591,16 @@ export class ProviderAgent {
           let argKeys = [];
           let signature;
           const operationId = `${goalId}:${runId}:${round}:${driverFingerprint(call.function.name, { id: call.id }).slice(0, 16)}`;
+          const callStartedAt = performance.now();
           try {
             const input = JSON.parse(call.function.arguments);
             if (!input || typeof input !== 'object' || Array.isArray(input) || 'operationId' in input) throw new Error('Tool arguments must be an object without operationId');
             argKeys = Object.keys(input);
+            trace('tool_call_started', { tool: call.function.name, operationId, args: summariseToolArgs(input) });
+            // Tool identities were already persisted before the batch; this
+            // save only makes the start event visible live, so a checkpoint
+            // write hiccup must never fail the tool call itself.
+            try { this.#save(); } catch { /* live visibility only */ }
             signature = driverFingerprint(call.function.name, input);
             if (failed.has(signature)) {
               repeatedFailures++;
@@ -542,9 +638,17 @@ export class ProviderAgent {
             adaptive.needsReplan = true;
           } else if (result.isError) adaptive.recoveryPending = true;
           else if (!hostTools.has(call.function.name)) adaptive.recoveryPending = false;
+          const durationMs = Math.max(0, Math.round(performance.now() - callStartedAt));
           goal.tool_results.push({ tool: call.function.name, argKeys, ok: !result.isError, operationId: record.operationId,
-            status: record.status, errorCode: record.errorCode, blocker: record.blocker,
+            status: record.status, errorCode: record.errorCode, blocker: record.blocker, durationMs,
             ...(browserHandoff ? { browser_handoff: browserHandoff } : {}) });
+          trace('tool_call_finished', {
+            tool: call.function.name, operationId: record.operationId || operationId,
+            ok: !result.isError, durationMs,
+            ...(record.status ? { status: record.status } : {}),
+            ...(record.errorCode ? { errorCode: record.errorCode } : {}),
+            ...(record.blocker ? { blocker: truncateTraceText(record.blocker, 200) } : {}),
+          });
           const imageParts = result.content?.filter(part => part.type === 'image') || [];
           if (imageParts.length && architect.providers.getCapabilities().vision) images.push(...imageParts.map(part => ({ type: 'image_url', image_url: { url: `data:${part.mimeType};base64,${part.data}` } })));
           const text = JSON.stringify(record);
@@ -561,6 +665,12 @@ export class ProviderAgent {
             };
             goal.browser_handoff = ownerHandoff;
             goal.status = 'WAITING_USER';
+            trace('waiting_user', {
+              kind: ownerHandoff.kind || 'OWNER',
+              tool: call.function.name,
+              ...(ownerHandoff.origin ? { origin: ownerHandoff.origin } : {}),
+              ...(ownerHandoff.url ? { url: summariseTraceUrl(ownerHandoff.url) } : {}),
+            });
             goal.errorCode = ownerHandoff.code || 'BROWSER_OWNER_HANDOFF_REQUIRED';
             goal.blocker = record.blocker || `Browser owner handoff required (${ownerHandoff.kind || 'OWNER'}): ${ownerHandoff.signal || ownerHandoff.action || 'complete the owner step in MAJIN\'s browser session'}`;
             goal.summaryText = ownerHandoff.kind === 'BROWSER_ORIGIN'
@@ -607,7 +717,9 @@ export class ProviderAgent {
         }
         await driver.close();
       }
-      this.active = null; goal.finished_at = new Date().toISOString(); this.#save();
+      this.active = null; goal.finished_at = new Date().toISOString();
+      trace('goal_finished', { status: goal.status });
+      this.#save();
     }
     return goal;
   }

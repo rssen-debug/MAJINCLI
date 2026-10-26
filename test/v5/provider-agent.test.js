@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
 import { createV5Server } from '../../src/v5/server.js';
-import { ProviderAgent } from '../../src/v5/provider-agent.js';
+import { ProviderAgent, summariseToolArgs } from '../../src/v5/provider-agent.js';
 import { classifyProviderError } from '../../src/v5/providers.js';
 import { responsesInput } from '../../src/core/provider/responses.js';
 import { toAnthropic } from '../../src/core/provider/anthropic.js';
@@ -191,6 +191,62 @@ test('independent http and file verification repairs a premature completion clai
   assert.equal(result.adaptive.verificationFailures, 1);
   assert.equal(requests.length, 3);
   assert.match(JSON.stringify(requests[1].body.messages), /Host independent verification failed/);
+});
+
+test('trace argument summaries never leak secrets, file contents or URL tokens', () => {
+  const summary = summariseToolArgs({
+    path: 'report.txt',
+    content: 'x'.repeat(500),
+    password: 'hunter2-never-print',
+    apiKey: 'sk-never-print',
+    url: 'https://example.com/callback?token=abc123secret#frag',
+    selector: '#submit',
+    count: 3,
+  });
+  assert.match(summary, /path=report\.txt/);
+  assert.match(summary, /content=<500 chars>/);
+  assert.match(summary, /password=\[redacted\]/);
+  assert.match(summary, /apiKey=\[redacted\]/);
+  assert.match(summary, /url=https:\/\/example\.com\/callback/);
+  assert.match(summary, /selector=#submit/);
+  assert.doesNotMatch(summary, /hunter2|sk-never-print|abc123secret|xxxx/);
+  assert.equal(summariseToolArgs(null), '');
+  assert.equal(summariseToolArgs('not-an-object'), '');
+});
+
+test('persisted trace records strategy, tool lifecycle and verification repair without argument values', async t => {
+  const secretBody = 'trace-private-body-7f3a';
+  const { server } = await setup(t, (_body, count) => {
+    if (count === 1) return { role: 'assistant', content: 'Done already.' };
+    if (count === 2) return tool('write-trace-proof', 'fs_write', { path: 'trace-proof.txt', content: `trace verified ${secretBody}` });
+    return { role: 'assistant', content: 'Created the proof file.' };
+  });
+  const result = await server.providerAgent.execute({
+    goalText: 'Create trace-proof.txt',
+    criteria: [{ kind: 'file', path: 'trace-proof.txt', contains: 'trace verified' }],
+  });
+  assert.equal(result.status, 'COMPLETED');
+  const types = result.trace.map((event) => event.type);
+  const expectedOrder = ['goal_started', 'mode_selected', 'model_round_started', 'verification_started', 'verification_failed', 'repair_requested', 'tool_call_started', 'tool_call_finished', 'verification_passed', 'verification_completed', 'goal_finished'];
+  let cursor = -1;
+  for (const type of expectedOrder) {
+    const index = types.indexOf(type, cursor + 1);
+    assert.ok(index > cursor, `trace must contain ${type} in order; got ${types.join(',')}`);
+    cursor = index;
+  }
+  assert.ok(result.trace.every((event, index) => event.seq === index + 1), 'trace sequence numbers must be strictly increasing for live cursors');
+  const started = result.trace.find((event) => event.type === 'tool_call_started');
+  assert.equal(started.tool, 'fs_write');
+  assert.match(started.args, /path=trace-proof\.txt/);
+  assert.match(started.args, /content=<\d+ chars>/);
+  const finished = result.trace.find((event) => event.type === 'tool_call_finished');
+  assert.equal(finished.ok, true);
+  assert.equal(typeof finished.durationMs, 'number');
+  assert.equal(typeof result.tool_results[0].durationMs, 'number');
+  assert.doesNotMatch(JSON.stringify(result.trace), new RegExp(secretBody));
+  assert.doesNotMatch(JSON.stringify(result.tool_results), new RegExp(secretBody));
+  const onDisk = JSON.parse(fs.readFileSync(path.join(server.architect.dataDir, 'provider-agent', 'current.json'), 'utf8'));
+  assert.ok(Array.isArray(onDisk.goal.trace) && onDisk.goal.trace.length >= expectedOrder.length, 'trace must persist in the checkpoint for logs/resume');
 });
 
 test('independent pixel verification can complete a mixed-criteria goal', async t => {

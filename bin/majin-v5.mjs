@@ -214,6 +214,50 @@ function printAccess(access, ownerView = null) {
   console.log(`OS administrator elevated: ${access.osAdminElevated ? 'yes' : 'no'} — separate from MAJIN owner mode.`);
 }
 
+function shortSha(value) {
+  const text = String(value || '');
+  return text.length > 16 ? `${text.slice(0, 12)}…` : text;
+}
+
+function formatEvidenceLine(evidence) {
+  if (!evidence || typeof evidence !== 'object') return 'unknown evidence';
+  if (evidence.kind === 'file') {
+    return `file ${evidence.path || ''} — ${evidence.bytes ?? '?'} bytes${evidence.sha256 ? `, sha256 ${shortSha(evidence.sha256)}` : ''}`;
+  }
+  if (evidence.kind === 'http') {
+    return `http ${evidence.url || ''} — status ${evidence.status ?? '?'}${evidence.contains ? `, contains ${JSON.stringify(String(evidence.contains).slice(0, 60))}` : ''}${evidence.bytes != null ? `, ${evidence.bytes} bytes` : ''}${evidence.sha256 ? `, sha256 ${shortSha(evidence.sha256)}` : ''}`;
+  }
+  if (evidence.kind === 'pixel') {
+    return `pixel ${evidence.pngPath || evidence.path || ''} — ${evidence.hits ?? '?'} matching pixels${evidence.width ? ` in ${evidence.width}x${evidence.height}` : ''}`;
+  }
+  if (evidence.kind === 'dom') {
+    return `dom ${evidence.url || ''} ${evidence.selector || ''} — visible${evidence.text ? `, text ${JSON.stringify(String(evidence.text).slice(0, 60))}` : ''}`;
+  }
+  return `${evidence.kind || 'evidence'} ${JSON.stringify(evidence).slice(0, 160)}`;
+}
+
+function formatTraceEvent(event) {
+  if (!event || typeof event !== 'object' || !event.type) return null;
+  switch (event.type) {
+    case 'goal_started': return `goal started${event.criteria ? ` · ${event.criteria} acceptance check(s)` : ''}${event.budget ? ` · budget ${event.budget} model rounds` : ''}`;
+    case 'goal_resumed': return 'goal resumed from checkpoint';
+    case 'mode_selected': return `strategy: ${event.mode}${event.reason ? ` — ${event.reason}` : ''}`;
+    case 'model_round_started': return `model round ${Number(event.round || 0) + 1} (${event.mode || 'direct'})`;
+    case 'owner_steering_applied': return `owner steering applied${event.instruction ? `: ${event.instruction}` : ''}`;
+    case 'tool_call_started': return `tool ${event.tool || 'unknown'} started${event.args ? ` ${event.args}` : ''}`;
+    case 'tool_call_finished': return `tool ${event.tool || 'unknown'} ${event.ok ? 'ok' : 'failed'}${event.durationMs != null ? ` in ${event.durationMs}ms` : ''}${event.status ? ` [${event.status}]` : ''}${event.errorCode ? ` ${event.errorCode}` : ''}${event.blocker ? ` — ${event.blocker}` : ''}`;
+    case 'verification_started': return `verifying ${Array.isArray(event.checks) ? event.checks.length : 0} acceptance check(s) independently: ${(event.checks || []).map((check) => `${check.kind} ${check.label}`).join('; ')}`;
+    case 'verification_passed': return `verified ${event.kind} ${event.label || ''} — ${formatEvidenceLine(event.evidence)}`;
+    case 'verification_failed': return `verification failed: ${event.failure?.kind || 'check'} ${event.failure?.label || ''} — ${event.failure?.error || 'not satisfied'}`;
+    case 'verification_unsupported': return `verification cannot prove: ${(event.checks || []).map((check) => `${check.kind} (${check.reason})`).join('; ')}`;
+    case 'verification_completed': return `all acceptance checks verified (${event.evidence ?? 0} evidence)`;
+    case 'repair_requested': return `repairing result (attempt ${event.attempt || 1}) for ${event.kind} ${event.label || ''}`;
+    case 'waiting_user': return `waiting for owner (${event.kind || 'OWNER'})${event.origin ? ` at ${event.origin}` : event.url ? ` at ${event.url}` : ''} — nothing submitted without your step`;
+    case 'goal_finished': return `goal finished: ${event.status || 'UNKNOWN'}`;
+    default: return String(event.type).replaceAll('_', ' ');
+  }
+}
+
 function printGoalResult(result) {
   if (args.includes('--json')) {
     console.log(JSON.stringify(result, null, 2));
@@ -238,6 +282,7 @@ function printGoalResult(result) {
     if (handoff.action) console.log(`Owner action: ${handoff.action}`);
     if (handoff.kind === 'BROWSER_ORIGIN' && handoff.origin) {
       console.log(`Grant from CLI: majin-v5 grants browser-origin grant ${JSON.stringify(handoff.origin)} --data-dir ${JSON.stringify(dataDir)}`);
+      console.log(`Then resume: majin-v5 resume --data-dir ${JSON.stringify(dataDir)}`);
       console.log(`In chat: /browser-origin grant ${handoff.origin} then /resume`);
     } else {
       console.log('Complete the step in MAJIN\'s browser, then resume with `majin-v5 resume` or `/resume` in chat. Do not paste passwords or one-time codes into chat.');
@@ -252,8 +297,20 @@ function printGoalResult(result) {
   }
   const evidence = Array.isArray(goal.verification_evidence) ? goal.verification_evidence : [];
   console.log(`Verification evidence: ${evidence.length}`);
+  for (const item of evidence) console.log(`  verified ${formatEvidenceLine(item)}`);
   if (goal.budget?.maxRounds) console.log(`Model round budget: ${goal.budget.maxRounds}`);
   if (goal.cost) console.log(`Model calls: ${goal.cost.modelCalls || 0}, input tokens: ${goal.cost.inputTokens || 0}, output tokens: ${goal.cost.outputTokens || 0}`);
+}
+
+function printGoalTrace(goal) {
+  const events = Array.isArray(goal?.trace) ? goal.trace : [];
+  if (!events.length || args.includes('--json')) return;
+  const shown = events.slice(-200);
+  console.log(`Trace (${events.length} events${shown.length < events.length ? `; showing last ${shown.length}, use --json for the full trace` : ''}):`);
+  for (const event of shown) {
+    const line = formatTraceEvent(event);
+    if (line) console.log(`  #${event.seq} ${line}`);
+  }
 }
 
 function goalExitCode(result) {
@@ -329,17 +386,32 @@ function createGoalProgressPrinter(srv) {
     if (!goal) return;
     const key = goalKey(goal);
     const rows = Array.isArray(goal.tool_results) ? goal.tool_results : [];
-    if (!printedByGoal.has(key)) printedByGoal.set(key, 0);
-    if (goal.status && (key !== lastGoalId || goal.status !== lastStatus)) {
-      console.error(`[majin] ${goal.status}${goal.budget?.maxRounds ? ` · budget ${goal.budget.maxRounds} model rounds` : ''}`);
+    const events = Array.isArray(goal.trace) ? goal.trace : [];
+    if (!printedByGoal.has(key)) printedByGoal.set(key, { rows: 0, seq: 0 });
+    const cursor = printedByGoal.get(key);
+    if (events.length) {
+      // The persisted provider trace is the live source of truth: strategy,
+      // model rounds, tool start/finish and independent verification stream
+      // here as they happen. Tool-result rows would only duplicate it.
+      for (const event of events) {
+        if (!(event.seq > cursor.seq)) continue;
+        const line = formatTraceEvent(event);
+        if (line) console.error(`[majin] ${line}`);
+        cursor.seq = event.seq;
+      }
+      cursor.rows = rows.length;
+    } else {
+      if (goal.status && (key !== lastGoalId || goal.status !== lastStatus)) {
+        console.error(`[majin] ${goal.status}${goal.budget?.maxRounds ? ` · budget ${goal.budget.maxRounds} model rounds` : ''}`);
+      }
+      let printed = cursor.rows || 0;
+      if (printed > rows.length) printed = 0;
+      for (; printed < rows.length; printed++) {
+        const row = rows[printed];
+        console.error(`[majin] tool ${row.tool || 'unknown'} ${row.ok ? 'ok' : 'failed'}${row.status ? ` [${row.status}]` : ''}${row.errorCode ? ` ${row.errorCode}` : ''}${row.blocker ? ` — ${row.blocker}` : ''}`);
+      }
+      cursor.rows = printed;
     }
-    let printed = printedByGoal.get(key) || 0;
-    if (printed > rows.length) printed = 0;
-    for (; printed < rows.length; printed++) {
-      const row = rows[printed];
-      console.error(`[majin] tool ${row.tool || 'unknown'} ${row.ok ? 'ok' : 'failed'}${row.status ? ` [${row.status}]` : ''}${row.errorCode ? ` ${row.errorCode}` : ''}${row.blocker ? ` — ${row.blocker}` : ''}`);
-    }
-    printedByGoal.set(key, printed);
     lastGoalId = key;
     lastStatus = goal.status || lastStatus;
   };
@@ -354,7 +426,11 @@ function createGoalProgressPrinter(srv) {
       // live progress, and an idle chat must not re-announce a saved goal.
       if (goal) {
         const key = goalKey(goal);
-        printedByGoal.set(key, Array.isArray(goal.tool_results) ? goal.tool_results.length : 0);
+        const events = Array.isArray(goal.trace) ? goal.trace : [];
+        printedByGoal.set(key, {
+          rows: Array.isArray(goal.tool_results) ? goal.tool_results.length : 0,
+          seq: events.length ? Number(events[events.length - 1].seq || 0) : Number(goal.trace_seq || 0),
+        });
         lastGoalId = key;
         lastStatus = goal.status || '';
       } else {
@@ -432,7 +508,7 @@ function printChatHelp() {
     '  /new <text>                    Start a new goal instead of resuming a paused/blocked checkpoint',
     '  /status                        Show model, grants, queue and current goal state',
     '  /checkpoint                    Show the persisted checkpoint location and adaptive plan state',
-    '  /logs                          Show tool results, blockers and verification evidence',
+    '  /logs                          Show tool results, blockers, verification evidence and the full activity trace',
     '  /model [status|list|verify]   Inspect provider state or refresh its live catalog',
     '  /model select <model-id>      Select a model for the next goal',
     '  /tools [query]                 Search all 155 tools and show availability/reasons',
@@ -541,6 +617,8 @@ async function executeChatCommand() {
         blocker: goal.blocker || null,
         toolResults: Array.isArray(goal.tool_results) ? goal.tool_results.length : 0,
         verificationEvidence: Array.isArray(goal.verification_evidence) ? goal.verification_evidence.length : 0,
+        traceEvents: Array.isArray(goal.trace) ? goal.trace.length : 0,
+        lastActivity: Array.isArray(goal.trace) && goal.trace.length ? formatTraceEvent(goal.trace[goal.trace.length - 1]) : null,
         resumeCount: goal.resume_count || 0,
         adaptiveMode: goal.adaptive?.mode || null,
         browserHandoff: goal.browser_handoff || null,
@@ -559,6 +637,7 @@ async function executeChatCommand() {
     if (goal) {
       console.log(`Goal: ${goal.status || 'UNKNOWN'} ${goal.goal_id || goal.goalId || ''} — ${goal.objective || ''}`);
       console.log(`Tool results: ${payload.goal.toolResults} · verification evidence: ${payload.goal.verificationEvidence} · resumes: ${payload.goal.resumeCount}${payload.goal.adaptiveMode ? ` · adaptive mode: ${payload.goal.adaptiveMode}` : ''}`);
+      if (payload.goal.lastActivity) console.log(`Last activity: ${payload.goal.lastActivity}`);
       if (goal.blocker) console.log(`Blocker: ${goal.blocker}`);
       if (goal.browser_handoff) console.log(`Browser handoff: ${goal.browser_handoff.kind || 'OWNER'} at ${goal.browser_handoff.url || goal.browser_handoff.origin || '(current page)'} — ${goal.browser_handoff.action || 'complete the owner step, then resume.'}`);
     } else {
@@ -892,7 +971,7 @@ async function executeChatCommand() {
       case 'history': {
         const goal = goalState();
         if (!goal) console.log('No saved V5 goal yet. Type a goal to start one.');
-        else printGoalResult({ goal });
+        else { printGoalResult({ goal }); printGoalTrace(goal); }
         return;
       }
       case 'steer':
@@ -1072,7 +1151,7 @@ async function main() {
         '  tools call <tool_name> [--args <json>|--args-file <file>] [--operation-id <id>] [--timeout-ms <n>] [--all-lanes|--lanes <csv>] [--json]',
         '                                                            Call one deterministic tool through the isolated V5 driver',
         '  doctor [--json] [--all-lanes] [--lanes <csv>]             Diagnose data dir, grants, provider and tool parity',
-        '  logs [--json]                                             Show the current/last goal, tool results and blockers',
+        '  logs [--json]                                             Show the current/last goal, tool results, evidence and activity trace',
         '  serve [--host 0.0.0.0] [--port 4555] [--data-dir <dir>] [--submit-origin <origin>] [--browser-visible|--browser-headless] [--max-rounds <n>]',
         '                                                            Start V5 Black Box UI & HTTP Host; persisted browser origins are read live',
         '  window                                                    Open native MAJIN V5 Electron window',
@@ -1346,6 +1425,7 @@ async function main() {
       return;
     }
     printGoalResult({ goal });
+    printGoalTrace(goal);
     return;
   }
 
