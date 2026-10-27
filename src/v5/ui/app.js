@@ -259,9 +259,28 @@ export function bootV5App(doc = globalThis.document, fetchImpl = globalThis.fetc
       card.appendChild(badge);
     }
     const p = doc.createElement('p');
-    p.textContent = safeText;
+    // Render only safe, simple emphasis and URLs. Never interpret arbitrary HTML.
+    const parts = safeText.split(/(https?:\/\/[^\s<>]+|\*\*[^*\n]+\*\*)/g);
+    for (const part of parts) {
+      if (/^\*\*[^*\n]+\*\*$/.test(part)) {
+        const strong = doc.createElement('strong');
+        strong.textContent = part.slice(2, -2);
+        p.appendChild(strong);
+      } else if (/^https?:\/\/[^\s<>]+$/.test(part)) {
+        const link = doc.createElement('a');
+        link.href = part;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = part;
+        p.appendChild(link);
+      } else {
+        p.appendChild(doc.createTextNode(part));
+      }
+    }
     card.appendChild(p);
     conversation.appendChild(card);
+    const stage = doc.getElementById('stage');
+    if (stage && typeof stage.scrollTo === 'function') stage.scrollTo({ top: stage.scrollHeight, behavior: 'auto' });
   }
 
   drawerBackdrop?.addEventListener('click', () => {
