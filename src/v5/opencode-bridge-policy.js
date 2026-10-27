@@ -11,8 +11,9 @@ export function requiredLane(entry) {
   if (name.startsWith('jobs_')) return 'jobs';
   if (name.startsWith('browser_')) return 'browser';
   if (name.startsWith('fs_')) return 'files';
-  const source = String(entry?.source || '').trim();
-  if (!source) return 'unknown';
+  // CodexDriver deliberately removes .source from published schemas; infer the
+  // conservative lane from the exported tool name, never infer permission.
+  const source = String(entry?.source || '').trim() || name.replace(/^([^_]+)_/, '$1.');
   return String(entry.lane || laneForSourceTool(source));
 }
 

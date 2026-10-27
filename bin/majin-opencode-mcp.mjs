@@ -132,7 +132,12 @@ export function createBridge({ workspace, dataDir, Driver = CodexDriver, getOwne
       if (name === 'majin_tool_schema') {
         const entry = catalog.find(t => t.name === args.name && isAuthorized(t, lanes));
         if (!entry) throw new Error('MAJIN tool not found or not authorized');
-        return textResult({ name: entry.name, source: entry.source || null, lane: entry.lane || null, inputSchema: entry.inputSchema });
+        // operationId is the bridge's outer argument, NOT a tool argument.
+        const { operationId: _driverOnly, ...properties } = entry.inputSchema?.properties || {};
+        const schema = { ...entry.inputSchema, properties,
+          required: (entry.inputSchema?.required || []).filter(x => x !== 'operationId') };
+        return textResult({ name: entry.name, lane: entry.lane || null, inputSchema: schema,
+          operationId: 'Pass on majin_tool_call, not inside arguments' });
       }
       if (typeof args.name !== 'string' || typeof args.operationId !== 'string' ||
           !args.operationId || args.operationId.length > 160 ||
