@@ -172,7 +172,7 @@ export function readSnapshot(dataDir) {
 function saveLocal(outputDir, report) {
   fs.mkdirSync(outputDir, { recursive: true, mode: 0o700 });
   fs.writeFileSync(path.join(outputDir, 'overview.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
-  fs.writeFileSync(path.join(outputDir, 'OVERVIEW.md'), markdownOverview(report), { mode: 0o600 });
+  fs.writeFileSync(path.join(outputDir, 'DEBUGGER.md'), markdownOverview(report), { mode: 0o600 });
 }
 function main() {
   const dataDir = path.resolve(arg('--data-dir', defaultDataDir()));
@@ -196,7 +196,7 @@ function main() {
     saveLocal(outputDir, overview);
     if (!repo || fingerprint === lastContentHash || Date.now() - lastPush < 60000) return;
     uploadPrivate(repo, 'debug/majin-v5/latest.json', json);
-    uploadPrivate(repo, 'debug/majin-v5/OVERVIEW.md', markdownOverview(overview));
+    uploadPrivate(repo, 'debug/majin-v5/DEBUGGER.md', markdownOverview(overview));
     lastContentHash = fingerprint;
     lastPush = Date.now();
     console.log('Private debug overview updated; status: ' + overview.goal.status +
