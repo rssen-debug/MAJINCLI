@@ -33,8 +33,8 @@ accessible as a **private** repository to the locally authenticated GitHub CLI
 
 The observer watches the checkpoint in `%LOCALAPPDATA%MAJIN5provider-agentcurrent.json`.
 Each snapshot creates *allowlisted* `private-debug/overview.json` and
-`private-debug/OVERVIEW.md` on the same local data profile. If configured,
-it updates `debug/majin-v5/latest.json` and `debug/majin-v5/OVERVIEW.md`
+`private-debug/DEBUGGER.md` on the same local data profile. If configured,
+it updates `debug/majin-v5/latest.json` and `debug/majin-v5/DEBUGGER.md`
 **inside the private repository only**, after verifying that its GitHub API
 visibility is private. The report includes goal status, resumptions, tool names,
 tool results as boolean success/failure, error codes, verification counts,
