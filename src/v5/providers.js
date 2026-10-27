@@ -390,7 +390,8 @@ export class ProviderManager {
         };
       }
       if (id === 'opencode-go' && this.state.activeProvider === id && !this.state.activeModelId) {
-        const preferred = p.discoveredModels.find(model => model === 'deepseek-v4-pro') ||
+        const preferred = p.discoveredModels.find(model => /^deepseek[-_/].*flash$/i.test(model)) ||
+          p.discoveredModels.find(model => /^deepseek[-_/].*flash/i.test(model)) ||
           p.discoveredModels.find(model => /^deepseek-/i.test(model));
         if (preferred) this.selectModel({ providerId: id, modelId: preferred });
       }
