@@ -1,0 +1,42 @@
+name: V5 private-debug safety QA
+on:
+  pull_request:
+    paths:
+      - 'scripts/v5/private-debug-overview.mjs'
+      - 'scripts/v5/start-safe-restart.ps1'
+      - 'scripts/v5/start-safe-with-private-debug.ps1'
+      - 'test/v5/private-debug-overview.test.js'
+      - '.github/workflows/v5-private-debug-qa.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v5/private-debug-overview.mjs'
+      - 'test/v5/private-debug-overview.test.js'
+      - '.github/workflows/v5-private-debug-qa.yml'
+permissions:
+  contents: read
+jobs:
+  privacy-tests:
+    name: private debugger content-leak tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check scripts/v5/private-debug-overview.mjs
+      - run: node --test test/v5/private-debug-overview.test.js
+      - name: Parse PowerShell scripts on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($p in @('scripts/v5/start-safe-restart.ps1','scripts/v5/start-safe-with-private-debug.ps1')) {
+            $tok = $null
+            $err = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $p).Path, [ref]$tok, [ref]$err) | Out-Null
+            if ($err.Count -gt 0) { throw "PowerShell parse errors in $p : $($err -join '; ')" }
+          }
