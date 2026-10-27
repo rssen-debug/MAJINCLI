@@ -1,7 +1,7 @@
 {
   "name": "majin",
   "version": "4.0.0-alpha.3",
-  "description": "MAJIN — private, mobile-first AI assistant that executes on your own Windows machine.",
+  "description": "MAJIN \u2014 private, mobile-first AI assistant that executes on your own Windows machine.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -10,7 +10,8 @@
   "bin": {
     "majin": "./bin/majin.mjs",
     "majin-v2": "./bin/majin-v2.mjs",
-    "majin-v5": "./bin/majin-v5.mjs"
+    "majin-v5": "./bin/majin-v5.mjs",
+    "majin-v6": "./bin/majin-v6.mjs"
   },
   "main": "./src/core/runtime.js",
   "exports": {
@@ -72,7 +73,14 @@
     "v5:test": "node --test test/v5/*.test.js",
     "v5:accept": "node ./scripts/v5/accept.mjs",
     "v5:build": "node ./scripts/v5/build-package.mjs",
-    "v5:screenshots": "node ./scripts/v5/render-screenshots.mjs"
+    "v5:screenshots": "node ./scripts/v5/render-screenshots.mjs",
+    "v6": "node ./bin/majin-v6.mjs",
+    "v6:mcp": "node ./bin/majin-v6.mjs mcp",
+    "v6:worker": "node ./bin/majin-v6.mjs worker",
+    "v6:status": "node ./bin/majin-v6.mjs status",
+    "v6:doctor": "node ./bin/majin-v6.mjs doctor",
+    "v6:inventory": "node ./bin/majin-v6.mjs inventory --deep --history --write --json",
+    "v6:test": "node --test test/v6/*.test.js"
   },
   "optionalDependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",

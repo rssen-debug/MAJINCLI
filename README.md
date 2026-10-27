@@ -33,6 +33,10 @@ node src/cli/majin.js
 * [docs/EXE.md](docs/EXE.md) — how the single-file exe is built and why CI builds it
 * [docs/BENCHMARKS.md](docs/BENCHMARKS.md) — deterministic scenario harness + reference numbers
 * [docs/DATA.md](docs/DATA.md) — what MAJIN may record about its own runs, and how to keep it off
+* [docs/v6/HANDOVER.md](docs/v6/HANDOVER.md) — OpenCode V6 orchestration: what runs, what is blocked
+* [docs/v6/OPERATIONS.md](docs/v6/OPERATIONS.md) — V6 commands, Windows launcher, MCP registration
+* [docs/v6/PRIVATE_TELEMETRY.md](docs/v6/PRIVATE_TELEMETRY.md) — optional private sync and its exact payload
+* [docs/v6/ACCEPTANCE.md](docs/v6/ACCEPTANCE.md) — measured status, including NOT_TESTED items
 
 ## What it does
 
@@ -247,6 +251,27 @@ everything else needs `?t=`, `authorization: Bearer`, the `majin=` cookie or `x-
 Set `server.trustLocal: false` to require a token even locally. The loopback trust only applies to
 packets that really come from loopback, so a remote request forging `Host: localhost` gets 401 —
 `server.allowRemote: true` is what opts into host-based trust from any peer (tunnel/VPN first).
+
+## OpenCode V6 (experimental)
+
+V6 turns the existing MAJIN tools into a durable, observable layer behind
+**OpenCode CLI**. OpenCode keeps its own model (DeepSeek via your existing
+setup); V6 never starts a second provider or a second chat UI.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-v6.ps1 -Action Doctor
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\register-opencode-mcp.ps1           # dry run
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\register-opencode-mcp.ps1 -Apply    # opt-in, backed up
+```
+
+V6 adds an MCP bridge with dynamic tool discovery, a durable task queue and
+bounded worker, a heartbeat/watchdog, a strict job-application state machine,
+read-only Gmail verification, a local JSONL event log with a real status report,
+and optional private sync without `gh`. It never writes the V5 profile or your
+OpenCode settings. **No employer-portal submission adapter is included**, so
+`job.submit` reports a blocker instead of pretending to apply. See
+[docs/v6/HANDOVER.md](docs/v6/HANDOVER.md) for verified capabilities and the
+NOT_TESTED Windows/Gmail items.
 
 ## Development
 
