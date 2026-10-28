@@ -75,10 +75,13 @@ if ((Test-PathInside $v6Path $v5Path)) {
 
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) { throw 'Node.js was not found in PATH. Install Node 22+ separately; this launcher does not install it.' }
-& node -e "process.exit(Number(process.versions.node.split('.')[0]) -ge 22 ? 0 : 1)"
-if ($LASTEXITCODE -ne 0) {
-  $version = (& node --version)
-  throw "Node $version is too old. V6 requires Node 22+."
+$nodeVersion = ((& node --version) | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) { throw 'Could not read the Node.js version.' }
+if ($nodeVersion -notmatch '^v(?<major>[0-9]+)\.') {
+  throw "Unexpected Node.js version: $nodeVersion"
+}
+if ([int]$Matches['major'] -lt 22) {
+  throw "Node $nodeVersion is too old. V6 requires Node 22+."
 }
 
 if (-not (Test-Path -LiteralPath $v5Path -PathType Container)) {
