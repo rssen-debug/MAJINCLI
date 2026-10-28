@@ -128,37 +128,37 @@ function zip(files) {
 function writeXlsx(file, rows, applications) {
   const summary = [
     ...[
-      ['MAJIN V6 — JOB HUNTER RAPPORT'],
-      ['Genererad', rows.generatedAt],
+      ['MAJIN V6 — JOB HUNTER REPORT'],
+      ['Generated', rows.generatedAt],
       ['Session', rows.sessionId],
       ['Status', rows.status],
       ['Start', rows.startedAt],
       ['Deadline', rows.deadlineAt],
-      ['Tid kvar', rows.remaining],
+      ['Time remaining', rows.remaining],
       [],
-      ['MÄTVÄRDE', 'VÄRDE'],
-      ['Granskade poster', rows.reviewed],
+      ['METRIC', 'VALUE'],
+      ['Reviewed records', rows.reviewed],
       ['Verified', rows.verified],
-      ['Nya verified', rows.newVerified],
-      ['Skickade', rows.submitted],
+      ['New verified', rows.newVerified],
+      ['Submitted', rows.submitted],
       ['SENT_UNCONFIRMED', rows.sentUnconfirmed],
       ['PREPARED_NOT_SENT', rows.preparedNotSent],
-      ['Blockerade', rows.blocked],
+      ['Blocked', rows.blocked],
       ['Not qualified', rows.notQualified],
-      ['Nya ansökningar', rows.newApplications],
-      ['Portalinskick', rows.portalSubmits],
-      ['E-postinskick', rows.emailSubmits],
-      ['Kvitton', rows.receipts],
-      ['Dubbletter undveks', rows.duplicatesAvoided],
+      ['New applications', rows.newApplications],
+      ['Portal submissions', rows.portalSubmits],
+      ['Email submissions', rows.emailSubmits],
+      ['Receipts', rows.receipts],
+      ['Duplicates avoided', rows.duplicatesAvoided],
       [],
-      ['BEGRÄNSNINGAR'],
+      ['LIMITATIONS'],
       ...rows.limitations.map((item) => [item]),
     ].map((entry, index) => ({
       values: entry,
-      style: index === 0 || entry[0] === 'MÄTVÄRDE' ? 1 : 0,
+      style: index === 0 || entry[0] === 'METRIC' ? 1 : 0,
     })),
   ];
-  const header = { values: ['Arbetsgivare', 'Tjänst', 'Ort', 'Status', 'V6-state', 'Källa', 'Datum', 'Bevis', 'Länk'], style: 1 };
+  const header = { values: ['Employer', 'Role', 'Location', 'Status', 'V6-state', 'Source', 'Date', 'Evidence', 'Link'], style: 1 };
   const appRows = applications.map((app) => ({
     values: [app.company, app.title, app.city, app.status, app.v6State, app.source, app.date, app.evidence, app.url],
   }));
@@ -174,7 +174,7 @@ function writeXlsx(file, rows, applications) {
     },
     {
       name: `${root}/workbook.xml`,
-      data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Översikt" sheetId="1" r:id="rId1"/><sheet name="Ansökningar" sheetId="2" r:id="rId2"/></sheets></workbook>',
+      data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Overview" sheetId="1" r:id="rId1"/><sheet name="Applications" sheetId="2" r:id="rId2"/></sheets></workbook>',
     },
     {
       name: `${root}/_rels/workbook.xml.rels`,
@@ -209,10 +209,10 @@ function classify(app) {
 function evidenceText(app) {
   const relevant = (app.evidence || []).filter((item) => ['gmail-confirmation', 'gmail-verification-request', 'submission-receipt'].includes(item.type));
   const item = relevant.at(-1);
-  if (!item) return app.match?.missing?.length ? `Saknar: ${app.match.missing.slice(0, 4).join(', ')}` : 'Ingen kvitto postad';
-  if (item.type === 'submission-receipt') return `Kvitto: ${item.receipt?.kind || 'okänd'} ${item.receipt?.reference || item.receipt?.url || item.receipt?.text || ''}`.trim();
-  if (item.type === 'gmail-confirmation') return `Gmail: ${item.messageId || item.reference || 'bekräftelse'}`;
-  return `Gmail: ${item.messageId || 'verifieringsmejl'}`;
+  if (!item) return app.match?.missing?.length ? `Missing: ${app.match.missing.slice(0, 4).join(', ')}` : 'No receipt recorded';
+  if (item.type === 'submission-receipt') return `Receipt: ${item.receipt?.kind || 'unknown'} ${item.receipt?.reference || item.receipt?.url || item.receipt?.text || ''}`.trim();
+  if (item.type === 'gmail-confirmation') return `Gmail: ${item.messageId || item.reference || 'confirmation'}`;
+  return `Gmail: ${item.messageId || 'verification email'}`;
 }
 
 export async function writeJobHuntReports({ ctx, session, finalStatus = null, now = Date.now() } = {}) {
@@ -261,7 +261,7 @@ export async function writeJobHuntReports({ ctx, session, finalStatus = null, no
       city: app.job?.city || '',
       status,
       v6State: app.state,
-      source: app.job?.site || app.job?.apply?.type || 'okänd',
+      source: app.job?.site || app.job?.apply?.type || 'unknown',
       date: String(app.updatedAt || app.createdAt || '').slice(0, 10),
       evidence: evidenceText(app),
       url: app.job?.apply?.url || app.job?.url || '',
@@ -283,11 +283,11 @@ export async function writeJobHuntReports({ ctx, session, finalStatus = null, no
     applications,
     queue: queueStats,
     limitations: [
-      'Ingen ansökan räknas som VERIFIED utan ett verkligt mottagningsbevis.',
-      'En portal som kräver inloggning, MFA eller CAPTCHA markeras som BLOCKED och kringgås inte.',
-      'V6 skickar endast när en owner-godkänd submit-adapter är konfigurerad.',
-      'Denna rapport beskriver endast persistent V6-state; den ersätter inte Lavinias externa huvudledger.',
-      'Job Hunter kan inte fortsätta när datorn eller worker-processen är avstängd; deadline återupptas vid restart.',
+      'No application is VERIFIED without an observed receipt.',
+      'Portals requiring login, MFA or CAPTCHA remain BLOCKED until resolved.',
+      'V6 submits only through a configured adapter with owner approval.',
+      'This report describes persisted V6 state; it does not replace the external application ledger.',
+      'Job Hunter cannot run while the computer or worker is off. Restart preserves the original deadline.',
     ],
   };
   fs.mkdirSync(ctx.reportsDir, { recursive: true });
@@ -312,17 +312,17 @@ function renderHtml(report) {
   const statuses = ['VERIFIED', 'SENT_UNCONFIRMED', 'PREPARED_NOT_SENT', 'BLOCKED', 'NOT_QUALIFIED', 'UNCERTAIN'];
   const statusCounts = Object.fromEntries(statuses.map((status) => [status, report.applications.filter((app) => app.status === status).length]));
   const cards = [
-    ['Totalt granskade', report.reviewed],
+    ['Total reviewed', report.reviewed],
     ['Verified', report.verified],
-    ['Nya verified', report.newVerified],
-    ['Skickade', report.submitted],
-    ['Obekräftade', report.sentUnconfirmed],
-    ['Blockerade', report.blocked],
-    ['Nya ansökningar', report.newApplications],
-    ['Dubbletter undveks', report.duplicatesAvoided],
+    ['New verified', report.newVerified],
+    ['Submitted', report.submitted],
+    ['Unconfirmed', report.sentUnconfirmed],
+    ['Blocked', report.blocked],
+    ['New applications', report.newApplications],
+    ['Duplicates avoided', report.duplicatesAvoided],
   ];
-  const rows = report.applications.map((app) => `<tr><td>${html(app.company)}</td><td>${html(app.title)}</td><td>${html(app.city)}</td><td><span class="badge ${html(app.status.toLowerCase())}">${html(app.status)}</span></td><td>${html(app.source)}</td><td>${html(app.date)}</td><td>${html(app.evidence)}</td><td>${app.url ? `<a href="${html(app.url)}">Öppna</a>` : ''}</td></tr>`).join('');
-  return `<!doctype html><html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MAJIN V6 Job Hunter</title><style>
+  const rows = report.applications.map((app) => `<tr><td>${html(app.company)}</td><td>${html(app.title)}</td><td>${html(app.city)}</td><td><span class="badge ${html(app.status.toLowerCase())}">${html(app.status)}</span></td><td>${html(app.source)}</td><td>${html(app.date)}</td><td>${html(app.evidence)}</td><td>${app.url ? `<a href="${html(app.url)}">Open</a>` : ''}</td></tr>`).join('');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MAJIN V6 Job Hunter</title><style>
 :root{--navy:#0b1f33;--teal:#1f7a8c;--green:#2a9d8f;--amber:#e9c46a;--red:#e63946;--gray:#6c757d;--bg:#f4f7f6}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:#1f2d36;font:14px/1.45 Calibri,Segoe UI,sans-serif}
 header{background:var(--navy);color:#fff;padding:28px 22px}header h1{margin:0;font-size:28px}header p{margin:6px 0 0;opacity:.8}
@@ -332,11 +332,11 @@ main{max-width:1280px;margin:0 auto;padding:20px}.cards{display:grid;grid-templa
 table{border-collapse:collapse;width:100%;min-width:900px;font-size:12px}th{background:var(--navy);color:#fff;text-align:left;padding:8px}td{border-bottom:1px solid #e3e9e7;padding:8px;vertical-align:top}
 .badge{display:inline-block;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:700}.verified{background:#d8f3ec;color:#146c60}.sent_unconfirmed{background:#fff0c7;color:#6b5200}.blocked{background:#ffd9dc;color:#8a1c25}.not_qualified{background:#e9ecef;color:#495057}.prepared_not_sent{background:#e2eef8;color:#205375}.uncertain{background:#f1e4ff;color:#5b2d8e}
 ul{margin:8px 0 0;padding-left:20px}li{margin:4px 0}.muted{color:#52636b;font-size:12px}a{color:#0563c1}
-</style></head><body><header><h1>MAJIN V6 — Job Hunter</h1><p>Session ${html(report.sessionId)} · ${html(report.status)} · genererad ${html(report.generatedAt)} · deadline ${html(report.deadlineAt)} · kvar ${html(report.remaining)}</p></header><main>
+</style></head><body><header><h1>MAJIN V6 — Job Hunter</h1><p>Session ${html(report.sessionId)} · ${html(report.status)} · generated ${html(report.generatedAt)} · deadline ${html(report.deadlineAt)} · remaining ${html(report.remaining)}</p></header><main>
 <div class="cards">${cards.map(([label, value]) => `<div class="card"><b>${value}</b><span>${html(label)}</span></div>`).join('')}</div>
-<div class="panel"><h2>Status</h2><table><thead><tr><th>Status</th><th>Antal</th></tr></thead><tbody>${statuses.map((status) => `<tr><td><span class="badge ${status.toLowerCase()}">${status}</span></td><td>${statusCounts[status]}</td></tr>`).join('')}</tbody></table></div>
-<div class="panel"><h2>Ansökningar</h2><table><thead><tr><th>Arbetsgivare</th><th>Tjänst</th><th>Ort</th><th>Status</th><th>Källa</th><th>Datum</th><th>Bevis</th><th>Länk</th></tr></thead><tbody>${rows || '<tr><td colspan="8">Inga poster i V6-store ännu.</td></tr>'}</tbody></table></div>
-<div class="panel"><h2>Begränsningar</h2><ul>${report.limitations.map((item) => `<li>${html(item)}</li>`).join('')}</ul><p class="muted">Queue: ${html(JSON.stringify(report.queue?.byState || {}))}</p></div>
+<div class="panel"><h2>Status</h2><table><thead><tr><th>Status</th><th>Count</th></tr></thead><tbody>${statuses.map((status) => `<tr><td><span class="badge ${status.toLowerCase()}">${status}</span></td><td>${statusCounts[status]}</td></tr>`).join('')}</tbody></table></div>
+<div class="panel"><h2>Applications</h2><table><thead><tr><th>Employer</th><th>Role</th><th>Location</th><th>Status</th><th>Source</th><th>Date</th><th>Evidence</th><th>Link</th></tr></thead><tbody>${rows || '<tr><td colspan="8">No records in the V6 store yet.</td></tr>'}</tbody></table></div>
+<div class="panel"><h2>Limitations</h2><ul>${report.limitations.map((item) => `<li>${html(item)}</li>`).join('')}</ul><p class="muted">Queue: ${html(JSON.stringify(report.queue?.byState || {}))}</p></div>
 </main></body></html>`;
 }
 

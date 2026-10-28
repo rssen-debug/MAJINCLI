@@ -43,13 +43,13 @@ export function buildHeadPrompt({ mission, session, queue, jobs, checkpoint, all
     '',
     `MISSION_ID: ${mission.id}`,
     `MISSION_KIND: ${mission.kind || 'jobhunt'}`,
-    `MISSION_GOAL: ${mission.goal || 'Sök jobb'}`,
+    `MISSION_GOAL: ${mission.goal || 'Find jobs'}`,
     `DEADLINE: ${mission.deadlineAt}`,
     `ROUND: ${session.round || 0}`,
     `QUEUE: ${JSON.stringify(queue.byState || {})}`,
     `COUNTS: ${JSON.stringify(session.counts || {})}`,
     `CANDIDATE: ${session.candidateId || mission.candidateId || 'lavinia'}`,
-    `REGION_FOCUS: Copenhagen / Greater Copenhagen; Malmö–Skåne is acceptable; Stockholm only hybrid/remote.`,
+    `REGION_FOCUS: Copenhagen / Greater Copenhagen; Malmo / Skane is acceptable; Stockholm only hybrid/remote.`,
     `CANDIDATE_CONTEXT: ${String(context || '').slice(0, 4000)}`,
     `OWNER_REVIEW: ${allowSubmit ? 'submit adapter available only for approved applications' : 'do not submit; collect approval evidence and continue other safe work'}`,
     '',
@@ -68,7 +68,7 @@ export function buildHeadPrompt({ mission, session, queue, jobs, checkpoint, all
     'If no meaningful task exists, return an empty tasks array and say why.',
     '',
     'Return ONLY this JSON shape:',
-    '{"message":"kort naturlig svensk uppdatering","strategy":"kort strategi","tasks":[{"kind":"job.discover","query":"content creator","limit":50}]}',
+    '{"message":"brief natural Swedish update","strategy":"brief strategy","tasks":[{"kind":"job.discover","query":"content creator","limit":50}]}',
   ].join('\n');
 }
 
@@ -139,7 +139,7 @@ export async function askHead({
     createdAt: startedAt,
     completedAt: nowIso(now),
     status: result.ok ? 'COMPLETED' : 'FAILED',
-    messageText: parsed.message || (result.ok ? 'AI returnerade inget meddelande.' : 'AI-anropet misslyckades.'),
+    messageText: parsed.message || (result.ok ? 'AI returned no message.' : 'AI call failed.'),
     strategy: parsed.strategy,
     tasks,
     relatedTaskIds: [],

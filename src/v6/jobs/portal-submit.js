@@ -34,7 +34,7 @@ const SELECTORS = {
   coverLetter: ['#candidate_job_applications_attributes_0_cover_letter', 'textarea[name*="cover"]', 'textarea[name*="message"]', 'textarea[name*="motivation"]'],
   consent: ['#candidate_consent_given', 'input[type="checkbox"][name*="consent"]', '#acceptterms', 'input[type="checkbox"][name*="privacy"]'],
   cv: ['#candidate_resume_remote_url', '#candidate_file_remote_url', 'input[type="file"][name="resume"]', 'input[type="file"][name="cv"]'],
-  submit: ['button[type="submit"]', 'input[type="submit"]', 'button:has-text("Skicka ansökan")', 'button:has-text("Submit application")', 'button:has-text("Send application")', 'button:has-text("Apply")', '#quick-apply-submit-btn'],
+  submit: ['button[type="submit"]', 'input[type="submit"]', 'button:has-text("Skicka ansökan")', 'button:has-text("Submit application")', 'button:has-text("Send application")', 'button:has-text("Apply")', '#quick-apply-submit-btn'], // input vocabulary, never rendered
 };
 
 export function detectPortal(url = '') {
