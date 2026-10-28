@@ -17,7 +17,7 @@ export function priorApplication(application, entries) {
   const urls = [job.url, job.apply?.url].map(applicationUrl).filter(Boolean);
   const title = new Set(words(job.title).split(' ').filter(Boolean));
   return entries.find(entry => {
-    if (entry.id === application.id || (entry.candidateId || entry.profile) !== application.candidateId || !effectStates.has(entry.state || entry.status)) return false;
+    if ((application.id && entry.id === application.id) || (entry.candidateId || entry.profile) !== application.candidateId || !effectStates.has(entry.state || entry.status)) return false;
     const old = entry.job || entry;
     if ([old.url, old.apply?.url].map(applicationUrl).some(u => u && urls.includes(u))) return true;
     if (words(old.company || old.employer) !== words(job.company || job.employer)) return false;

@@ -64,6 +64,7 @@ test('cross-ledger employer/title aliases block a previous application with a di
   const app = { id: 'new', candidateId: 'lavinia', job: { company: 'Hairplant ApS', title: 'Junior Content Creator / Videographer', url: 'https://jobindex.dk/new' } };
   const row = { jobId: 'old', profile: 'lavinia', employer: 'Hairplant', title: 'Junior Content Creator / Videographer (Copenhagen)', status: 'waiting' };
   assert.equal(priorApplication(app, [row]), row);
+  assert.equal(priorApplication({ ...app, id: undefined }, [row]), row);
   assert.equal(priorApplication(app, [{ ...row, profile: 'kristjan' }]), undefined);
 });
 test('factory refuses unapproved or wrong-candidate jobs before browser creation', async () => {
