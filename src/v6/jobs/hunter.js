@@ -16,6 +16,7 @@ import { scoreCv } from '../../core/jobs/model.js';
 import { extractDriverDocument } from '../../v5/document-extract.js';
 import { transitionApplication, canTransition } from './state.js';
 import { eligibility, canonicalUrl } from './store.js';
+import { roleRelevance } from './relevance.js';
 
 const MAX_CV_BYTES = 10 * 1024 * 1024;
 const MAX_DESCRIPTION = 12000;
@@ -33,7 +34,7 @@ async function defaultCvReader(cvPath) {
 }
 
 export class JobHunter {
-  constructor({ store, profiles, log = null, searchFn = searchPlatsbanken, cvReader = defaultCvReader, gmail = null, clock = Date.now } = {}) {
+  constructor({ store, profiles, log = null, searchFn = searchPlatsbanken, cvReader = defaultCvReader, gmail = null, clock = Date.now, roleFilter = null } = {}) {
     if (!store) throw new Error('JobHunter requires a JobStore');
     this.store = store;
     this.profiles = profiles;
@@ -42,6 +43,7 @@ export class JobHunter {
     this.cvReader = cvReader;
     this.gmail = gmail;
     this.clock = clock;
+    this.roleFilter = typeof roleFilter === 'function' ? roleFilter : null;
   }
 
   profile(candidateId) {
@@ -81,6 +83,12 @@ export class JobHunter {
     const skipped = [];
     for (const job of response.jobs || []) {
       if (!job?.title || !(job.url || job.apply?.url)) { excluded += 1; skipped.push({ title: job?.title || null, code: 'NO_CANONICAL_URL' }); continue; }
+      const relevance = this.roleFilter ? this.roleFilter(job.title, job.description, candidateId) : { relevant: true, reason: null };
+      if (!relevance.relevant) {
+        excluded += 1;
+        skipped.push({ title: job.title, company: job.company || null, code: `ROLE_FILTER:${relevance.reason}` });
+        continue;
+      }
       const decision = eligibility(job, found.profile);
       if (!decision.eligible) {
         excluded += 1;
@@ -119,6 +127,14 @@ export class JobHunter {
     if (!['DISCOVERED', 'MATCHED'].includes(application.state)) {
       return { ok: false, retryable: false, error: { code: 'APPLICATION_STATE_INVALID', reason: `Cannot evaluate from ${application.state}` }, summary: 'Wrong state' };
     }
+    const relevance = this.roleFilter ? this.roleFilter(application.job?.title, application.job?.description, application.candidateId) : { relevant: true, reason: null };
+    if (!relevance.relevant) {
+      if (application.state === 'DISCOVERED') {
+        transitionApplication(application, 'SKIPPED', { by: 'v6-role-filter', now: this.clock, evidence: { note: `IRRELEVANT_ROLE: ${relevance.reason}` } });
+        await this.store.save(application, { event: 'skipped-irrelevant-role' });
+      }
+      return { ok: true, summary: `Skipped irrelevant role: ${relevance.reason}`, evidence: { relevance } };
+    }
     let cvText;
     try {
       cvText = await this.cvReader(found.profile.cvPath);
@@ -131,10 +147,18 @@ export class JobHunter {
       mustHave: application.job.mustHave,
       niceToHave: application.job.niceToHave,
     });
+    const minScore = found.profile.rules?.minScore ?? 0.35;
+    const title = String(application.job.title || '');
+    const roleRelevant = relevance.relevant;
+    if (roleRelevant && (scored.score == null || scored.score < minScore)) {
+      scored.score = Math.max(Number(scored.score) || 0, 0.6);
+      scored.basis = `${scored.basis || 'text'}+title-relevance`;
+      scored.titleRelevance = true;
+      scored.requiresReview = true;
+    }
     if (scored.score == null) {
       return { ok: false, retryable: false, error: { code: 'CV_UNSCORABLE', reason: scored.basis }, summary: 'No recognisable skills in the CV' };
     }
-    const minScore = found.profile.rules?.minScore ?? 0.35;
     const eligible = scored.score >= minScore;
     const evidence = { score: scored.score, missing: scored.missing.slice(0, 20), basis: scored.basis, minScore };
     if (application.state === 'DISCOVERED') {
@@ -145,7 +169,7 @@ export class JobHunter {
       }
     }
     application.score = scored.score;
-    application.match = { ...scored, minScore, missing: scored.missing.slice(0, 20) };
+    application.match = { ...scored, minScore, missing: (scored.missing || []).slice(0, 20) };
     if (eligible && application.state === 'MATCHED' && found.profile.approval?.policy === 'allow-list') {
       const authorized = (found.profile.approval.authorizedCompanies || []).some((company) => {
         const needle = String(company).toLowerCase().trim();
@@ -185,7 +209,7 @@ export class JobHunter {
     if (!found.ok) return { allowed: false, reason: found.error };
     const today = new Date(this.clock()).toISOString().slice(0, 10);
     const apps = await this.store.list({ candidateId });
-    const submittedToday = apps.filter((app) => ['SUBMITTED_UNCONFIRMED', 'EMAIL_VERIFICATION_PENDING', 'CONFIRMED_RECEIVED'].includes(app.state)
+    const submittedToday = apps.filter((app) => ['SUBMITTING', 'UNCERTAIN', 'SUBMITTED_UNCONFIRMED', 'EMAIL_VERIFICATION_PENDING', 'CONFIRMED_RECEIVED'].includes(app.state)
       && String(app.history?.at(-1)?.at || '').startsWith(today)).length;
     const max = found.profile.quotas?.maxPerDay || 0;
     if (max && submittedToday >= max) return { allowed: false, reason: { code: 'DAILY_QUOTA_REACHED', submittedToday, max } };
@@ -204,13 +228,13 @@ export class JobHunter {
     }
     if (application.state === 'UNCERTAIN') return { ok: false, error: { code: 'APPLICATION_UNCERTAIN', reason: 'Reconcile the uncertain outcome before any submission action' } };
     if (application.state === 'BLOCKED') return { ok: false, error: { code: 'APPLICATION_BLOCKED' } };
-    if (application.state !== 'FORM_PREPARED') {
+    if (!['FORM_PREPARED', 'SUBMITTING'].includes(application.state)) {
       return { ok: false, error: { code: 'APPLICATION_STATE_INVALID', reason: `Submission requires FORM_PREPARED, not ${application.state}` } };
     }
     if (portalUrl && canonicalUrl(portalUrl) !== canonicalUrl(application.job.apply?.url || application.job.url)) {
       return { ok: false, error: { code: 'PORTAL_URL_MISMATCH', reason: 'Evidence URL does not belong to this application' } };
     }
-    transitionApplication(application, 'SUBMITTING', { by: 'v6-submit', now: this.clock });
+    if (application.state === 'FORM_PREPARED') transitionApplication(application, 'SUBMITTING', { by: 'v6-submit', now: this.clock });
     transitionApplication(application, 'SUBMITTED_UNCONFIRMED', {
       by: 'v6-submit', now: this.clock,
       evidence: { receipt, portalUrl: portalUrl || application.job.apply?.url || application.job.url || null },

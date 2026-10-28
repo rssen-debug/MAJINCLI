@@ -105,6 +105,9 @@ export function buildHandlers({ hunter = null, submitAdapter = null, clock = Dat
     };
     handlers['gmail.verify'] = async (ctx) => {
       const result = await hunter.checkVerificationEmail({ applicationId: ctx.task.payload?.applicationId });
+      if (!result.ok && result.error?.code === 'GMAIL_NOT_CONFIGURED') {
+        return { blocked: { code: 'GMAIL_NOT_CONFIGURED', reason: result.error.reason || 'Gmail is not configured; owner action is required.', requiresOwner: true } };
+      }
       if (!result.ok) return { ok: false, retryable: result.retryable !== false, error: result.error, summary: result.summary };
       return { ok: true, summary: result.summary, evidence: result.evidence };
     };

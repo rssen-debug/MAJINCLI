@@ -50,12 +50,35 @@ export function readJson(file, fallback = null) {
   }
 }
 
+function sleepSync(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { /* best effort */ }
+}
+
 export function atomicWriteJson(file, value, { mode = 0o600 } = {}) {
   ensureDir(path.dirname(file));
   const tmp = `${file}.${process.pid}.${randomUUID().slice(0, 6)}.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, { mode });
-  fs.renameSync(tmp, file);
-  return file;
+  let lastError = null;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      fs.renameSync(tmp, file);
+      return file;
+    } catch (error) {
+      lastError = error;
+      if (!['EPERM', 'EACCES', 'EBUSY', 'ENOTEMPTY'].includes(error.code)) break;
+      sleepSync(20 * (attempt + 1));
+    }
+  }
+  // Antivirus and indexers can briefly hold a Windows file open. A complete
+  // copy is preferable to losing a durable checkpoint, but only after retries.
+  try {
+    fs.copyFileSync(tmp, file);
+    fs.unlinkSync(tmp);
+    return file;
+  } catch {
+    fs.rmSync(tmp, { force: true });
+    throw lastError || Object.assign(new Error('Atomic JSON replace failed'), { code: 'STATE_WRITE_FAILED' });
+  }
 }
 
 export function sleep(ms) {

@@ -1,13 +1,15 @@
 /**
- * MAJIN V6 — command line (non-graphical).
+ * MAJIN V6 â€” command line (non-graphical).
  *
  * Commands either read real state or perform the action they name. OpenCode
  * remains the interactive AI CLI; this binary provides the MCP server, the
  * worker, owner decisions and diagnostics.
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { openV6, resolveV5DataDir, resolveV6Home, stopRequested, ensureLayout } from './home.js';
 import { createBridge, parseBridgeOptions } from './bridge.js';
@@ -18,13 +20,19 @@ import { Supervisor } from './supervisor.js';
 import { buildReport, renderReport } from './report.js';
 import { loadProfiles } from './jobs/store.js';
 import { JobHunter } from './jobs/hunter.js';
+import { roleRelevance } from './jobs/relevance.js';
+import { createPortalSubmitAdapter } from './jobs/portal-submit.js';
 import { loadGmailCredentials, GmailClient } from './gmail.js';
 import { loadSyncConfig, pushTelemetry, writeLocalReport } from './sync.js';
 import { collectInventory, renderInventoryMarkdown } from './inventory.js';
+import { parseDuration, formatDuration } from './jobhunt/duration.js';
+import { JobHuntSession } from './jobhunt/session.js';
+import { runJobHunt, DEFAULT_QUERIES } from './jobhunt/runner.js';
+import { writeJobHuntReports } from './jobhunt/report.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-const BOOLEAN_FLAGS = new Set(['json', 'deep', 'history', 'write', 'yes', 'dry-run', 'once', 'irreversible', 'help']);
+const BOOLEAN_FLAGS = new Set(['json', 'deep', 'history', 'write', 'yes', 'dry-run', 'once', 'irreversible', 'help', 'foreground', 'no-ai']);
 
 export function parseArgs(argv = []) {
   const positional = [];
@@ -52,7 +60,7 @@ export function parseArgs(argv = []) {
 const bool = (value) => value === true || value === 'true' || value === '1';
 
 function usage() {
-  return `MAJIN V6 — OpenCode integration (no separate UI)
+  return `MAJIN V6 â€” OpenCode integration (no separate UI)
 
   majin-v6 doctor [--json]
   majin-v6 status [--json]
@@ -68,6 +76,9 @@ function usage() {
   majin-v6 jobs approve --id APP_ID --ref POLICY_REFERENCE      (owner decision)
   majin-v6 jobs verify --id APP_ID                              (read-only Gmail)
   majin-v6 jobs quota --candidate ID
+  majin-v6 jobhunt <30m|2h|1d> [--candidate ID] [--queries a,b] [--foreground]
+  majin-v6 jobhunt status|pause|resume|stop|report|extend <duration> [--json]
+  majin-v6 jobhunt run --v6-home <v6>                                  (internal worker)
   majin-v6 gmail status
   majin-v6 sync status
   majin-v6 sync push [--yes] [--dry-run]
@@ -75,6 +86,155 @@ function usage() {
 
 Global: --v6-home, --workspace, --data-dir. V6 never changes OpenCode settings,
 never writes owner grants and never installs anything.`;
+}
+
+
+function spawnJobHuntWorker({ home, candidateId, stderr }) {
+  const bin = path.join(REPO_ROOT, 'bin', 'majin-v6.mjs');
+  const child = spawn(process.execPath, [bin, 'jobhunt', 'run', '--v6-home', home, '--candidate', candidateId], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+    env: { ...process.env, MAJIN_V6_JOBHUNT_WORKER: '1' },
+  });
+  child.once('error', (error) => {
+    try { stderr.write(`JOBHUNT_SPAWN_FAILED: ${error.message}\n`); } catch { /* no-op */ }
+  });
+  child.unref();
+  return child.pid;
+}
+
+function renderJobHuntStatus(status, jobs, queue) {
+  const lines = [];
+  lines.push('MAJIN V6 â€” JOB HUNTER');
+  lines.push('');
+  lines.push(`Session:   ${status.id || 'none'}`);
+  lines.push(`Status:    ${status.effectiveStatus}`);
+  lines.push(`Candidate: ${status.candidateId || 'none'}`);
+  lines.push(`Started:   ${status.startedAt || 'none'}`);
+  lines.push(`Deadline:  ${status.deadlineAt || 'none'}`);
+  lines.push(`Elapsed:   ${formatDuration(status.elapsedMs || 0)}`);
+  lines.push(`Remaining: ${status.remainingHuman}`);
+  lines.push(`Worker:    ${status.runnerAlive ? `ACTIVE (pid ${status.runnerPid})` : 'NOT RUNNING'}`);
+  lines.push(`Round:     ${status.round || 0}`);
+  lines.push(`Counts:    ${JSON.stringify(status.counts || {})}`);
+  lines.push('');
+  lines.push('JOBS');
+  const byState = jobs?.byState || {};
+  const entries = Object.entries(byState).sort(([a], [b]) => a.localeCompare(b));
+  if (!entries.length) lines.push('  none recorded');
+  for (const [state, count] of entries) lines.push(`  ${state.padEnd(26)} ${count}`);
+  lines.push('');
+  lines.push('QUEUE');
+  const q = queue?.byState || {};
+  for (const state of ['RUNNING', 'QUEUED', 'FAILED_RETRYABLE', 'BLOCKED', 'UNCERTAIN', 'COMPLETED', 'FAILED_FINAL']) {
+    lines.push(`  ${state.padEnd(18)} ${q[state] || 0}`);
+  }
+  lines.push('');
+  lines.push('REPORTS');
+  lines.push(`  HTML:  ${status.reports?.html || 'not generated'}`);
+  lines.push(`  Excel: ${status.reports?.xlsx || 'not generated'}`);
+  return lines.join('\n');
+}
+
+async function jobhuntCommand(ctx, { sub, positional, flags, home, stdout, stderr }) {
+  if (bool(flags['no-ai'])) process.env.MAJIN_V6_AI_DISABLED = '1';
+  const session = new JobHuntSession({ home });
+  const command = sub || 'status';
+  const asJson = bool(flags.json);
+  const status = async () => {
+    const current = session.describe(undefined, Date.now());
+    const jobs = await ctx.jobs.stats();
+    const queue = await ctx.queue.stats();
+    if (!current) {
+      if (asJson) stdout.write(`${JSON.stringify({ state: 'NONE', jobs, queue }, null, 2)}\n`);
+      else stdout.write('No Job Hunter session exists. Start one with `jobhunt 120m`.\n');
+      return 0;
+    }
+    if (asJson) stdout.write(`${JSON.stringify({ session: current, jobs, queue }, null, 2)}\n`);
+    else stdout.write(`${renderJobHuntStatus(current, jobs, queue)}\n`);
+    return 0;
+  };
+
+  if (command === 'status') return status();
+  if (command === 'report') {
+    const current = await session.read();
+    if (!current) throw Object.assign(new Error('No Job Hunter session exists'), { code: 'JOBHUNT_NOT_FOUND' });
+    const report = await writeJobHuntReports({ ctx, session, finalStatus: current.status, now: Date.now() });
+    await session.checkpoint({ reports: { html: report.html, xlsx: report.xlsx } });
+    if (asJson) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    else stdout.write(`HTML: ${report.html}\nExcel: ${report.xlsx}\n`);
+    return 0;
+  }
+  if (command === 'run') {
+    const current = await session.read();
+    if (!current) throw Object.assign(new Error('No Job Hunter session exists'), { code: 'JOBHUNT_NOT_FOUND' });
+    const result = await runJobHunt({ ctx, session, runnerPid: process.pid });
+    if (asJson) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stdout.write(`Job Hunter finished: ${result.status}\n`);
+    return result.status === 'FAILED' ? 1 : 0;
+  }
+  if (command === 'extend') {
+    const duration = parseDuration(positional[2] || flags.duration);
+    const current = await session.extend({ ms: duration.ms, now: Date.now() });
+    const described = session.describe(current, Date.now());
+    if (asJson) stdout.write(`${JSON.stringify({ ...described, extendedBy: duration.human }, null, 2)}\n`);
+    else stdout.write(`Job Hunter extended by ${duration.human}. New deadline: ${described.deadlineAt} · remaining ${described.remainingHuman}\n`);
+    return 0;
+  }
+  if (command === 'pause') {
+    const current = await session.pause();
+    const described = session.describe(current, Date.now());
+    if (asJson) stdout.write(`${JSON.stringify(described, null, 2)}\n`);
+    else stdout.write(`Job Hunter paused. Remaining: ${described.remainingHuman}\n`);
+    return 0;
+  }
+  if (command === 'resume') {
+    const current = await session.resume();
+    const described = session.describe(current, Date.now());
+    if (!described.runnerAlive && !bool(flags.foreground)) {
+      const pid = spawnJobHuntWorker({ home, candidateId: current.candidateId, stderr });
+      if (asJson) stdout.write(`${JSON.stringify({ ...described, spawnedPid: pid }, null, 2)}\n`);
+      else stdout.write(`Job Hunter resumed; worker started (pid ${pid}). Remaining: ${described.remainingHuman}\n`);
+      return 0;
+    }
+    if (asJson) stdout.write(`${JSON.stringify(described, null, 2)}\n`);
+    else stdout.write(`Job Hunter resumed. Remaining: ${described.remainingHuman}\n`);
+    return 0;
+  }
+  if (command === 'stop') {
+    const current = await session.stop({ reason: 'owner' });
+    if (asJson) stdout.write(`${JSON.stringify(session.describe(current, Date.now()), null, 2)}\n`);
+    else stdout.write('Job Hunter stop requested. The current task is allowed to finish; a partial report will be written.\n');
+    return 0;
+  }
+
+  const durationText = command === 'start' ? positional[2] : command;
+  const duration = parseDuration(durationText);
+  if (!ctx.hunter) {
+    stderr.write(`BLOCKED: ${ctx.profiles.error.reason}\nProfiles file: ${ctx.profilesFile}\n`);
+    return 1;
+  }
+  const candidateId = String(flags.candidate || ctx.profiles.candidates[0]?.id || '');
+  const found = ctx.hunter.profile(candidateId);
+  if (!found.ok) throw Object.assign(new Error(found.error.reason), { code: found.error.code });
+  const queries = typeof flags.queries === 'string'
+    ? flags.queries.split(',').map((entry) => entry.trim()).filter(Boolean)
+    : DEFAULT_QUERIES;
+  const started = await session.start({ durationMs: duration.ms, candidateId, queries, aiDisabled: process.env.MAJIN_V6_AI_DISABLED === '1', now: Date.now() });
+  if (bool(flags.foreground)) {
+    const result = await runJobHunt({ ctx, session, runnerPid: process.pid });
+    if (asJson) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else stdout.write(`Job Hunter finished: ${result.status}\n`);
+    return result.status === 'FAILED' ? 1 : 0;
+  }
+  const pid = spawnJobHuntWorker({ home, candidateId, stderr });
+  const described = session.describe(started, Date.now());
+  if (asJson) stdout.write(`${JSON.stringify({ ...described, spawnedPid: pid }, null, 2)}\n`);
+  else {
+    stdout.write(`Job Hunter started.\nSession: ${described.id}\nDuration: ${duration.human}\nDeadline: ${described.deadlineAt}\nWorker: pid ${pid}\nQueries: ${queries.join(', ')}\n`);
+  }
+  return 0;
 }
 
 async function makeContext({ home, workspace, dataDir, log }) {
@@ -89,13 +249,18 @@ async function makeContext({ home, workspace, dataDir, log }) {
   } else {
     gmailStatus = { state: creds.error.code === 'GMAIL_NOT_CONFIGURED' ? 'NOT_CONFIGURED' : 'BLOCKED', reason: creds.error.reason };
   }
-  const hunter = profiles.ok ? new JobHunter({ store: v6.jobs, profiles, log: v6.log, gmail }) : null;
+  const hunter = profiles.ok ? new JobHunter({ store: v6.jobs, profiles, log: v6.log, gmail, roleFilter: (title, description, candidateId) => candidateId === 'lavinia' ? roleRelevance(title, description) : { relevant: true, reason: null } }) : null;
+  const submitAdapter = hunter ? createPortalSubmitAdapter({ hunter, profiles, log: v6.log,
+    ownerGrantsFile: path.join(dataDir, 'owner-mode.json'),
+    priorLedgerFiles: { lavinia: path.join(os.homedir(), 'Desktop', 'Jobbradar-Lavinia-status.json') },
+    evidenceDir: path.join(v6.reportsDir, 'submissions'),
+  }) : null;
   const sync = loadSyncConfig({ tokenFile: v6.syncTokenFile });
   const syncStatus = sync.ok
     ? { state: 'CONFIGURED', repo: sync.repo }
     : { state: 'NOT_CONFIGURED', reason: sync.error.reason };
   void log; void workspace; void dataDir;
-  return { ...v6, profiles, gmail, gmailStatus, hunter, sync, syncStatus };
+  return { ...v6, profiles, gmail, gmailStatus, hunter, submitAdapter, sync, syncStatus };
 }
 
 async function reportFor(ctx) {
@@ -131,7 +296,7 @@ async function doctor(ctx, { dataDir, workspace, json }) {
   if (json) {
     process.stdout.write(`${JSON.stringify({ checks, report }, null, 2)}\n`);
   } else {
-    process.stdout.write('MAJIN V6 — DOCTOR\n\n');
+    process.stdout.write('MAJIN V6 â€” DOCTOR\n\n');
     for (const check of checks) process.stdout.write(`${check.status.padEnd(16)} ${check.name.padEnd(28)} ${check.detail}\n`);
   }
   return checks.some((check) => check.status === 'FAIL') ? 1 : 0;
@@ -175,7 +340,7 @@ async function runWorker(ctx, { flags }) {
   const invoker = bridge
     ? createToolInvoker({ callToolFn: (name, args) => bridge.callTool(name, args), log: ctx.log })
     : null;
-  const handlers = buildHandlers({ hunter: ctx.hunter, submitAdapter: null });
+  const handlers = buildHandlers({ hunter: ctx.hunter, submitAdapter: ctx.submitAdapter });
   const supervisor = new Supervisor({
     queue: ctx.queue, log: ctx.log, handlers,
     workerId,
@@ -338,6 +503,9 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
         }
         throw Object.assign(new Error(`Unknown queue command: ${sub}`), { code: 'USAGE' });
       }
+
+      case 'jobhunt':
+        return await jobhuntCommand(ctx, { sub, positional, flags, home, stdout, stderr });
 
       case 'jobs': {
         if (!ctx.hunter) {

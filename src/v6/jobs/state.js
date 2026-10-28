@@ -114,6 +114,23 @@ export function transitionApplication(application, to, { by = 'automation', evid
 }
 
 /** Reconcile an uncertain submission with observed proof, never by retrying. */
+/**
+ * Owner-audit only: reopen a SKIPPED application for re-evaluation after a
+ * matcher/filter bug. The old decision remains in history; no external effect
+ * is replayed.
+ */
+export function reopenSkipped(application, { by = 'owner-audit', reason = 'Re-evaluate skipped application', evidence = null, now = Date.now } = {}) {
+  if (!application || application.state !== 'SKIPPED') {
+    throw new ApplicationStateError('Only a SKIPPED application can be reopened for audit', 'APPLICATION_REOPEN_INVALID');
+  }
+  const from = application.state;
+  application.previousState = from;
+  application.state = 'DISCOVERED';
+  application.updatedAt = new Date(now()).toISOString();
+  application.history.push({ state: 'DISCOVERED', at: application.updatedAt, by, evidence: { reason, ...(evidence || {}) } });
+  return application;
+}
+
 export function reconcileApplication(application, { outcome, evidence, by = 'owner', now = Date.now }) {
   if (!['confirmed', 'failed_final'].includes(outcome)) throw new ApplicationStateError('outcome must be confirmed or failed_final', 'APPLICATION_RECONCILE_INVALID');
   if (!evidence) throw new ApplicationStateError('Reconciliation requires evidence', 'APPLICATION_RECONCILE_EVIDENCE_REQUIRED');
