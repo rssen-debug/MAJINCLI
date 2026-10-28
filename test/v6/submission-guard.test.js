@@ -73,6 +73,13 @@ test('factory refuses unapproved or wrong-candidate jobs before browser creation
   assert.equal(result.blocked.code, 'APPLICATION_NOT_APPROVED');
 });
 
+test('employer aliases across an agency and job board still block resubmission', () => {
+  const app = { candidateId: 'candidate', job: { company: 'Miele Professional Sverige / HRonline', title: 'Marketing Coordinator (Stockholm)' } };
+  const previous = { profile: 'candidate', employer: 'Miele Professional / HRonline Sweden AB', title: 'Marketing Coordinator Miele Professional Sverige (Solna, vikariat)', status: 'verified' };
+  assert.equal(priorApplication(app, [previous]), previous);
+  assert.equal(priorApplication({ ...app, job: { ...app.job, company: 'Other Employer / HRonline' } }, [previous]), undefined);
+});
+
 test('lost response leaves durable uncertainty and restart cannot click again', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'submit-restart-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

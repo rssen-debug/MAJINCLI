@@ -20,7 +20,15 @@ export function priorApplication(application, entries) {
     if ((application.id && entry.id === application.id) || (entry.candidateId || entry.profile) !== application.candidateId || !effectStates.has(entry.state || entry.status)) return false;
     const old = entry.job || entry;
     if ([old.url, old.apply?.url].map(applicationUrl).some(u => u && urls.includes(u))) return true;
-    if (words(old.company || old.employer) !== words(job.company || job.employer)) return false;
+    const company = words(job.company || job.employer);
+    const oldCompany = words(old.company || old.employer);
+    if (!company || !oldCompany) return false;
+    if (company !== oldCompany) {
+      const currentWords = new Set(company.split(' '));
+      const priorWords = new Set(oldCompany.split(' '));
+      const shared = [...currentWords].filter(word => priorWords.has(word)).length;
+      if (shared < 2 || shared / Math.min(currentWords.size, priorWords.size) < 0.75) return false;
+    }
     const oldTitle = new Set(words(old.title).split(' ').filter(Boolean));
     const common = [...title].filter(word => oldTitle.has(word)).length;
     return common > 0 && common / Math.min(title.size, oldTitle.size) >= 0.6;

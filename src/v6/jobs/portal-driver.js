@@ -30,10 +30,12 @@ export async function createPlaywrightDriver({ log = null } = {}) {
     { headless: process.env.MAJIN_PORTAL_HEADLESS !== 'false', executablePath, viewport: { width: 1440, height: 1000 } },
   );
   let page = context.pages()[0] || await context.newPage();
+  const uploadedFiles = new Map();
   const noop = (line) => { try { log?.append?.('portal.driver', { line }); } catch { /* log is optional */ } };
 
   const driver = {
     async open(url) {
+      uploadedFiles.clear();
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
       return true;
     },
@@ -73,6 +75,18 @@ export async function createPlaywrightDriver({ log = null } = {}) {
         if ((await locator.count()) === 0) return false;
         await locator.setInputFiles(filePath);
         const expected = fs.statSync(filePath);
+        const id = await locator.getAttribute('id');
+        const remoteName = id === 'candidate_resume_remote_url' ? 'candidate[resume_remote_url]' : id === 'candidate_file_remote_url' ? 'candidate[file_remote_url]' : null;
+        if (remoteName) {
+          const name = path.basename(filePath);
+          await page.waitForFunction(({ remoteName, name }) => {
+            const reference = document.getElementsByName(remoteName)[0]?.value;
+            return Boolean(reference && document.body.innerText.includes(name));
+          }, { remoteName, name }, { timeout: 15000 });
+          const reference = await page.locator(`[name="${remoteName}"]`).inputValue();
+          uploadedFiles.set(id, { id, remoteName, name, reference });
+          return true;
+        }
         return await locator.evaluate((el, file) => el.files?.length === 1 && el.files[0].name === file.name && el.files[0].size === file.size, { name: path.basename(filePath), size: expected.size });
       } catch { return false; }
     },
@@ -127,20 +141,24 @@ export async function createPlaywrightDriver({ log = null } = {}) {
       await page.waitForTimeout(Math.max(0, Number(ms) || 0));
     },
     async validateForm() {
-      return page.locator('form').evaluateAll(forms => {
+      return page.locator('form').evaluateAll((forms, uploaded) => {
         const form = forms.find(f => f.querySelector('input[type="file"]'));
-        if (!form || !form.checkValidity()) return false;
+        if (!form) return false;
+        const attached = el => uploaded.some(file => file.id === el.id
+          && form.querySelector(`[name="${file.remoteName}"]`)?.value === file.reference
+          && form.innerText.includes(file.name));
         return [...form.querySelectorAll('input, textarea, select')].every(el => {
           if (el.disabled || ['hidden', 'submit', 'button', 'search'].includes(el.type)) return true;
+          if (!el.validity.valid && !(el.type === 'file' && attached(el))) return false;
           const labels = [...(el.labels || [])].map(l => l.innerText).join(' ');
           const required = el.required || el.getAttribute('aria-required') === 'true' || /\*|\bRequired\b/i.test(labels);
           if (!required) return true;
           if (el.type === 'checkbox') return el.checked;
           if (el.type === 'radio') return [...form.elements].some(other => other.name === el.name && other.checked);
-          if (el.type === 'file') return el.files?.length > 0;
+          if (el.type === 'file') return el.files?.length > 0 || attached(el);
           return Boolean(el.value?.trim());
         });
-      });
+      }, [...uploadedFiles.values()]);
     },
     async inspectForm() {
       return page.locator('input, textarea, select, button[type="submit"]').evaluateAll(elements => elements.map(el => ({
