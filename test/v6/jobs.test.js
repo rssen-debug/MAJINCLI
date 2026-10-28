@@ -1,11 +1,11 @@
-import test from 'node:test';
+﻿import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { EventLog } from '../../src/v6/events.js';
 import { JobStore, PROFILE_SCHEMA, canonicalUrl, jobFingerprint, loadProfiles, eligibility } from '../../src/v6/jobs/store.js';
-import { transitionApplication, reconcileApplication } from '../../src/v6/jobs/state.js';
+import { transitionApplication, reconcileApplication, reopenSkipped } from '../../src/v6/jobs/state.js';
 import { JobHunter } from '../../src/v6/jobs/hunter.js';
 
 const profile = {
@@ -16,7 +16,7 @@ const profile = {
     cvPath: '/owner/cv/it.pdf',
     contactEmail: 'candidate@example.com',
     gmailAccount: 'candidate@example.com',
-    exclusions: { companies: ['Atea', 'Gigstep', 'Poolia'], roles: ['säljare'], locations: ['Kiruna'], salaryMin: 40000 },
+    exclusions: { companies: ['Atea', 'Gigstep', 'Poolia'], roles: ['sÃ¤ljare'], locations: ['Kiruna'], salaryMin: 40000 },
     rules: { locationsAllow: ['stockholm', 'remote'], minScore: 0.5 },
     approval: { policy: 'allow-list', authorizedCompanies: ['Acme'] },
     quotas: { maxPerDay: 3 },
@@ -65,9 +65,9 @@ test('employer, role, location and salary exclusions are enforced per candidate'
   assert.equal(eligibility({ company: 'Atea AB', city: 'Stockholm' }, candidate).reason.code, 'COMPANY_EXCLUDED');
   assert.equal(eligibility({ company: 'Gigstep', city: 'Stockholm' }, candidate).reason.code, 'COMPANY_EXCLUDED');
   assert.equal(eligibility({ company: 'Poolia Sverige AB', city: 'Stockholm' }, candidate).reason.code, 'COMPANY_EXCLUDED');
-  assert.equal(eligibility({ company: 'Acme', title: 'Säljare', city: 'Stockholm' }, candidate).reason.code, 'ROLE_EXCLUDED');
+  assert.equal(eligibility({ company: 'Acme', title: 'SÃ¤ljare', city: 'Stockholm' }, candidate).reason.code, 'ROLE_EXCLUDED');
   assert.equal(eligibility({ company: 'Acme', title: 'Dev', city: 'Kiruna' }, candidate).reason.code, 'LOCATION_EXCLUDED');
-  assert.equal(eligibility({ company: 'Acme', title: 'Dev', city: 'Göteborg' }, candidate).reason.code, 'LOCATION_NOT_ALLOWED');
+  assert.equal(eligibility({ company: 'Acme', title: 'Dev', city: 'GÃ¶teborg' }, candidate).reason.code, 'LOCATION_NOT_ALLOWED');
   assert.equal(eligibility({ company: 'Acme', title: 'Dev', city: 'Stockholm', salary: 30000 }, candidate).reason.code, 'SALARY_BELOW_MINIMUM');
   assert.equal(eligibility({ company: 'Acme', title: 'Dev', city: 'Stockholm', salary: 50000 }, candidate).eligible, true);
 });
@@ -190,4 +190,31 @@ test('without a Gmail client the check is an explicit blocker, not a success', a
   const result = await hunter.checkVerificationEmail({ applicationId: 'missing' });
   assert.equal(result.ok, false);
   assert.equal(result.error.code, 'GMAIL_NOT_CONFIGURED');
+});
+
+
+test('a title-relevant content role is not silently skipped when skill extraction finds no keywords', async (t) => {
+  const { log, store, loaded } = fixture(t);
+  const hunter = new JobHunter({
+    store, profiles: loaded, log,
+    searchFn: async () => ({ ok: true, jobs: [{ site: 'jobindex', siteId: 'cph-1', title: 'Junior Content Creator / Videographer', company: 'Hairplant ApS', city: 'Stockholm', url: 'https://example.com/cph-1', description: '' }] }),
+    cvReader: async () => 'unrelated cv text without extracted skill labels',
+  });
+  await hunter.discover({ candidateId: 'it-candidate', query: 'content creator' });
+  const [app] = await store.list({ candidateId: 'it-candidate' });
+  const result = await hunter.evaluate({ applicationId: app.id });
+  assert.equal(result.ok, true);
+  const stored = await store.get(app.id);
+  assert.equal(stored.state, 'MATCHED');
+  assert.ok(stored.score >= 0.6);
+  assert.equal(stored.match.titleRelevance, true);
+});
+
+test('an owner audit can reopen a SKIPPED application without erasing the old decision', () => {
+  const app = { id: 'app_audit', state: 'SKIPPED', history: [{ state: 'SKIPPED', at: '2026-10-27T00:00:00.000Z', by: 'filter', evidence: { note: 'false positive' } }] };
+  reopenSkipped(app, { by: 'owner-audit', reason: 'False skip', now: () => Date.parse('2026-10-27T01:00:00.000Z') });
+  assert.equal(app.state, 'DISCOVERED');
+  assert.equal(app.previousState, 'SKIPPED');
+  assert.equal(app.history.length, 2);
+  assert.equal(app.history[1].state, 'DISCOVERED');
 });

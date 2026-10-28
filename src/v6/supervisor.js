@@ -27,7 +27,7 @@ export const DEFAULT_LIMITS = Object.freeze({
 export class Supervisor {
   constructor({
     queue, log, handlers, workerId = `w-${process.pid}-${randomUUID().slice(0, 6)}`,
-    heartbeatFile, stopFile = null, clock = Date.now, limits = {}, toolInvoker = null,
+    heartbeatFile, stopFile = null, clock = Date.now, limits = {}, toolInvoker = null, onTaskSettled = null, shouldClaim = null,
   } = {}) {
     if (!queue) throw new Error('Supervisor requires a TaskQueue');
     this.queue = queue;
@@ -42,6 +42,8 @@ export class Supervisor {
     this.limits = { ...DEFAULT_LIMITS, ...limits };
     this.stopFile = stopFile;
     this.toolInvoker = toolInvoker;
+    this.onTaskSettled = typeof onTaskSettled === 'function' ? onTaskSettled : null;
+    this.shouldClaim = typeof shouldClaim === 'function' ? shouldClaim : null;
     this.heartbeat = new WorkerHeartbeat({
       file: heartbeatFile || path.join(path.dirname(queue.file), '..', 'worker-heartbeat.json'),
       workerId,
@@ -76,6 +78,7 @@ export class Supervisor {
       while (true) {
         const stop = this.#stopRequested();
         if (stop) { reason = stop; break; }
+        if (this.shouldClaim && !(await this.shouldClaim())) { reason = 'paused'; this.#emit('engine.paused', {}); break; }
         const elapsed = this.clock() - started;
         if (executed >= maxTasks) { reason = 'task budget reached'; this.#emit('engine.budget_reached', { budget: 'maxTasks', maxTasks }); break; }
         if (elapsed >= maxRuntimeMs) { reason = 'runtime budget reached'; this.#emit('engine.budget_reached', { budget: 'maxRuntimeMs', maxRuntimeMs }); break; }
@@ -220,6 +223,7 @@ export class Supervisor {
     try {
       const outcome = await Promise.race([Promise.resolve().then(() => handler(ctx)), timeout, aborted]);
       await this.#applyOutcome(task, outcome);
+      await this.#settled(task, outcome);
     } catch (error) {
       const code = error?.code || 'TASK_ERROR';
       const retryable = error?.retryable !== false && !['WATCHDOG_STALL', 'TASK_TIMEOUT'].includes(code);
@@ -235,12 +239,22 @@ export class Supervisor {
         this.stats.failed += 1;
         this.heartbeat.beat({ tasksFailed: this.heartbeat.tasksFailed + 1 });
       }
+      await this.#settled(task, null, error);
     } finally {
       clearInterval(stallTimer);
       clearInterval(heartbeatTimer);
       clearTimeout(timeoutTimer);
       abort.signal.removeEventListener('abort', onAbort);
       this.heartbeat.beat({ currentTaskId: null, state: 'ACTIVE', lastAction: `${task.kind} finished` });
+    }
+  }
+
+  async #settled(task, outcome, error = null) {
+    if (!this.onTaskSettled) return;
+    try {
+      await this.onTaskSettled({ task, outcome, error, stats: this.stats });
+    } catch (settledError) {
+      this.#emit('checkpoint.failed', { taskId: task.id, code: settledError?.code || 'CHECKPOINT_FAILED' });
     }
   }
 

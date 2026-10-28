@@ -69,6 +69,12 @@ export function loadProfiles(file) {
       displayName: String(item.displayName || id),
       cvPath: path.resolve(item.cvPath),
       contactEmail: item.contactEmail,
+      phone: String(item.phone || ''),
+      addressStreet: String(item.addressStreet || ''),
+      postalCode: String(item.postalCode || ''),
+      city: String(item.city || ''),
+      country: String(item.country || ''),
+      coverLetter: String(item.coverLetter || ''),
       gmailAccount: item.gmailAccount || item.contactEmail,
       exclusions: {
         companies: (item.exclusions?.companies || []).map(String),
