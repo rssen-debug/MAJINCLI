@@ -45,7 +45,7 @@ node bin/majin-v6.mjs status          # real persisted state
 node bin/majin-v6.mjs mcp --workspace . --data-dir <v5> --v6-home <v6>
 node bin/majin-v6.mjs worker --max-tasks 10 --max-runtime-ms 900000
 node bin/majin-v6.mjs inventory --deep --history --write
-node bin/majin-v6.mjs arena init|doctor|status|task|poll|serve|watch   # see docs/v6/ARENA_BRIDGE.md
+node bin/majin-v6.mjs arena init|doctor|status|task|poll|serve|watch|provider|plan|mission   # see docs/v6/ARENA_BRIDGE.md
 ```
 
 npm aliases: `npm run v6:doctor`, `v6:status`, `v6:mcp`, `v6:worker`,
@@ -82,6 +82,7 @@ on failure. JSONC configs are refused rather than rewritten. OpenCode's default
 | Windows behaviour | **NOT_TESTED** | Linux sandbox; run the launcher on the target machine |
 | Employer-portal submission adapter | **IMPLEMENTED (owner-authored HTTP adapter)**; real employer **NOT_TESTED** | `src/v6/jobs/portal.js` + `test/v6/arena/e2e-controlled.test.js` submit to a controlled endpoint with a real multipart body and acknowledgement rule. Without an adapter file `job.submit` stays BLOCKED |
 | Arena bridge → real tool → real result | **PASS (live on Linux)** | `fs_write`/`re_hash` through `POST /v1/tasks`, executed by a real worker; returned SHA-256 matched `sha256sum` |
+| Arena autonomous mission loop | **PASS (local, scripted model)** | `arena mission` ran plan → tool → result → plan → stop; hash matched `sha256sum`; budgets, stuck detection, irreversible gate and `--resume` tested. A real provider is **NOT_TESTED** here (no model API is reachable from this sandbox). |
 | Arena crash recovery | **PASS** | `test/v6/arena/recovery.test.js` — SIGKILL mid-submission, one POST ever, UNCERTAIN, no resend |
 | Arena relay and loopback bridge | **PASS (controlled e2e)** | `test/v6/arena/*` — signed envelopes, replay refusal, policy gating, real sockets, durable execution; live GitHub relay **BLOCKED** (403), see `docs/v6/ARENA_BRIDGE.md` |
 | Real Gmail OAuth | **BLOCKED** | No owner credentials here; the client never fabricates access |
@@ -109,6 +110,9 @@ reproduce the V6 suite and `npm test` for the repository suite.
 | `src/v6/arena/relay.js` | GitHub private-repo relay and generic HTTP relay, token-scoped, no redirects |
 | `src/v6/arena/agent.js` | Policy loading, poll/ack/publish loop, result scrubbing, on-disk secret/policy paths |
 | `src/v6/arena/server.js` | Loopback bridge: bearer token, Host check, body cap, rate limit, no CORS |
+| `src/v6/arena/planner.js` | One-decision-per-step planner over MAJIN's existing provider transport; strict JSON, typed errors, usage/cost accounting |
+| `src/v6/arena/orchestrator.js` | The local loop: budgeted, journalled, resumable, irreversible-gated |
+| `src/v6/arena/mission.js` | Mission schema, strict validation, durable journal, prompt digest |
 | `src/v6/jobs/store.js` | Durable applications, canonical URLs, candidate profiles, eligibility |
 | `src/v6/jobs/hunter.js` | Discovery → match → approval → preparation → receipt → email confirmation |
 | `src/v6/gmail.js` | OAuth2 refresh-token client, read-only search, classification, matching |

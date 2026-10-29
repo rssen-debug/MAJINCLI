@@ -135,6 +135,7 @@ Full detail in `docs/v6/ARENA_BRIDGE.md`. Short version:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Start    # doctor + loopback bridge
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Relay    # continuous relay polling
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Mission -MissionPath .\arena\missions\find-jobs.json   # the loop
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Init
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Status
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Serve    # loopback API
@@ -175,6 +176,10 @@ The model must call `majin_tools_search` and `majin_tool_schema` before
 | `ARENA_REPLAY` | envelope already consumed | expected on redelivery; nothing executed |
 | `ARENA_KIND_NOT_ALLOWED` / `ARENA_TOOL_NOT_ALLOWED` | outside the owner policy | edit `arena/policy.json` deliberately |
 | `arena poll` exits with a relay error | token missing or repo not writable | check the token file; the poller never retries an unverified envelope |
+| Mission stops with `needs_owner` | the agent reached a decision the owner must make | read the journal, resolve it, then `-Action Mission -Resume` |
+| Mission stops with `stuck` | the same action failed repeatedly | grant the missing lane or narrow `allowedTools`; nothing was retried blindly |
+| Mission stops with `budget_*` | the owner-set budget was reached | raise it in the mission file deliberately; resume continues where it stopped |
+| `PLANNER_KEY_MISSING` | no provider key for the configured planner | set the provider's env var or save a key to `arena/planner-key` (mode 600) |
 | `SYNC_TOKEN_SCOPE_DENIED` | the token is valid but the private repo is not on its access list | grant Contents: Read and write on that repo, then `arena doctor --probe` |
 | `arena doctor` exit 1 | a check is FAIL or BLOCKED | fix the `next actions` printed at the bottom; `-Action Start` refuses to listen |
 

@@ -90,10 +90,13 @@ check is FAIL/BLOCKED. Everything else is a flag on the same script:
 | `Poll` | one relay pass |
 | `Relay` | continuous relay polling |
 | `Watch` | live activity from the real event log |
+| `Provider [-Probe]` | planner provider readiness; `-Probe` makes one live call |
+| `Plan -MissionPath f` | one reasoning step, executes nothing |
+| `Mission -MissionPath f [-Resume] [-AllowIrreversible] [-MaxSteps n]` | the autonomous loop |
 | `Task -Kind K -Payload J` | enqueue one signed task locally |
 | `InstallTask [-Apply]` | scheduled poller (dry run unless `-Apply`) |
 
-Equivalent CLI: `majin-v6 arena init|doctor|status|task|poll|serve|watch`.
+Equivalent CLI: `majin-v6 arena init|doctor|status|task|poll|serve|watch|provider|plan|mission`.
 
 Loopback API (token at `<v6>/arena/bridge-token`):
 
@@ -164,6 +167,10 @@ execution, a real receipt and a result checked against the operating system.
 | `e2e-controlled.test.js` (4) | **PASS** | full chain over real sockets: discover → evaluate → approve → submit (one POST with CV) → receipt → confirmation → `CONFIRMED_RECEIVED`; replay sends nothing; unacknowledged answer → `UNCERTAIN` |
 | `recovery.test.js` (1) | **PASS** | a worker **SIGKILLed** while the employer endpoint holds the request: exactly one submission ever left, state `UNCERTAIN`/`WORKER_LOST_IRREVERSIBLE`, effect marked uncertain, restarted worker executes nothing, `requeue` refuses, reconciliation never resends |
 | `doctor-activity.test.js` (7) | **PASS** | doctor refuses to call an unconfigured bridge healthy; real relay probe over a socket; 403 mapped to a scope fix; sequence numbers unique across processes; `/v1/activity` auth + cursor; `watch` prints real lines |
+| `planner.test.js` (5) | **PASS** | missing key is BLOCKED (never a mock); decision parsing rejects non-JSON, unknown actions and unlisted tools; usage and cost read from a real HTTP response; provider 401 becomes a typed stop |
+| `orchestrator.test.js` (8) | **PASS** | a real 3-step loop: writes a note, hashes it, reads the hash back and stops; the hash matches `sha256sum`; budgets (steps and cost) stop it; an un-granted lane stops it as `stuck`; an irreversible mission refuses to start without the flag; resume continues without re-running a completed step |
+| `mission-cli.test.js` (3) | **PASS** | the same loop through the real CLI in a subprocess: budget stop → `--resume` → done, exactly two tasks, no duplicate step; irreversible mission exits fast with zero model calls; `--dry-run` calls nothing and writes nothing |
+| `arena mission` against a real provider | **NOT_TESTED** | no model API is reachable from this sandbox (see §6); the loop was driven by a scripted OpenAI-compatible endpoint over real HTTP |
 | Real GitHub relay round trip | **BLOCKED** | the token cannot reach the private repo (see 4a) |
 | Real Gmail | **BLOCKED** | no owner OAuth credentials |
 | Real employer submission | **NOT_TESTED** | see §5 — needs an owner adapter and a real posting |
@@ -196,7 +203,84 @@ On your Windows machine, in order:
 Until step 4 exists, `job.submit` answers
 `SUBMISSION_ADAPTER_NOT_CONFIGURED` — by design, not by accident.
 
-## 6. Honest limits of "Arena as the brain"
+## 6. Who runs the loop (measured, not assumed)
+
+The question "can Arena itself keep working on a mission?" was answered by
+measurement before anything was built:
+
+| Question | Measurement | Consequence |
+| --- | --- | --- |
+| Connector from Arena to your PC | `list_connector_tools("arena")` → **unsupported**; no host/desktop connector exists | this chat cannot call your machine |
+| Model APIs reachable from this sandbox | `api.openai.com`, `api.deepseek.com`, `api.anthropic.com`, `openrouter.ai`, `generativelanguage.googleapis.com` → **no TLS (000)** | this chat cannot call a model either |
+| Inbound route to the PC | none (no public address, no tunnel) | there is nothing here for the PC to reach |
+| Lifetime of a chat turn / sandbox process | a turn ends; the sandbox is session-scoped | a daemon here would not outlive the work |
+
+**Verdict: Arena as a chat is a planner, author and reviewer — not the runner.**
+Claiming otherwise would be false. The loop therefore runs *on the machine that
+owns the tools*, and the reasoning comes from a provider that machine can reach.
+
+### `arena mission` — the local loop
+
+```json
+{
+  "schema": "majin.v6.arena.mission/v1",
+  "id": "find-frontend-stockholm",
+  "goal": "Find senior frontend roles in Stockholm and prepare applications for owner approval.",
+  "constraints": ["never submit without approval", "stay inside the workspace folder"],
+  "allowedActions": ["tool", "job.discover", "job.evaluate", "gmail.verify"],
+  "allowedTools": ["jobs_search", "fs_read", "re_hash"],
+  "stopWhen": "three applications are APPROVED",
+  "budget": { "maxSteps": 12, "maxTokens": 60000, "maxWallMs": 1800000, "maxCostUsd": 0.5, "maxSubmissions": 0 }
+}
+```
+
+One step is: real state → one model call → one validated action → one durable
+task → the real result → journalled → repeat. What the model gets is a compact
+digest of *persisted* state (task states, summaries, bounded tool output,
+application states, budget left). It never sees the signing secret, CV contents,
+email bodies or tokens, and we never ask for or store chain-of-thought — only a
+≤240-character rationale, for the owner's audit trail.
+
+Stop conditions are explicit and all of them are enforced in code:
+
+`done` · `budget_steps` · `budget_tokens` · `budget_time` · `budget_cost` ·
+`budget_submissions` · `needs_owner` · `stuck` · `planner_error` ·
+`stop_requested` · `error`
+
+Safety properties:
+
+- An action that is not in `allowedActions`, or a tool that is not in
+  `allowedTools`, is refused — the model cannot widen its own permissions.
+- `job.submit` requires `--allow-irreversible` **and** an owner policy that
+  already allows it; otherwise the mission stops before queueing anything.
+- Every irreversible step carries a per-application effect key, so a resumed
+  mission (or a second worker) physically cannot send the same application twice.
+- The journal (`<v6>/arena/missions/<id>.jsonl`, mode 600) records every
+  decision, dispatch and result; `--resume` continues after the last *finished*
+  step and never re-executes one.
+
+### Provider
+
+The planner reuses MAJIN's existing provider transport (`src/core/provider/chat.js`)
+— same dialects, retries, rate-limit admission and token/cost accounting. No
+second provider stack, and OpenCode's configuration is untouched.
+
+```powershell
+# DeepSeek (cheap; used by default if a key exists)
+$env:DEEPSEEK_API_KEY = '<your key>'
+node bin\majin-v6.mjs arena provider            # config only, no spend
+node bin\majin-v6.mjs arena provider --live     # one real call
+
+# or a local model, so the loop costs nothing per step
+# <v6>/arena/policy.json -> "planner": { "provider": "openai",
+#   "baseUrl": "http://127.0.0.1:11434/v1", "model": "llama3.1", "maxTokens": 800 }
+$env:OPENAI_API_KEY = 'local'
+```
+
+Cost is bounded twice: the provider reports usage and MAJIN prices it from
+`planner.pricing`, and the mission stops when `maxCostUsd` is reached.
+
+## 7. Honest limits of "Arena as the brain"
 
 - **This chat cannot hold the signing key.** Arena's sandbox has no token for
   your private repo (403) and no route to your PC. A continuous
@@ -212,5 +296,13 @@ Until step 4 exists, `job.submit` answers
   the inventory marks those tools unavailable for a real reason (no browser
   binary, Windows-only, no OAuth). On your Windows machine the tools exist but
   each lane still needs the owner grant, and Gmail needs your OAuth client.
-- **Model choice is unchanged.** Nothing here calls OpenCode Go or any provider;
-  `arena poll` performs zero inference.
+- **Model choice is unchanged for the relay.** `arena poll` performs zero
+  inference; only `arena mission` calls a provider, and only the one the owner
+  configured.
+- **`arena mission` has not run against a real provider here.** No model API is
+  reachable from this sandbox, so the loop was proven with a scripted
+  OpenAI-compatible endpoint over real HTTP, real queue, real supervisor and real
+  V5 tool drivers. The provider path itself is MAJIN's production transport,
+  already used by the rest of the product.
+- **Windows is still unverified.** Everything above ran on Linux. The mission
+  entry point on Windows is `-Action Mission`; the first real run is yours.

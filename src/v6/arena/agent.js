@@ -45,6 +45,9 @@ export function loadArenaPolicy(file = null, { fsImpl = fs } = {}) {
     relay: raw.relay || null,
     server: raw.server || { port: 8787 },
     submission: raw.submission || null,
+    // Optional planner block (provider/model/baseUrl). Never contains a key:
+    // keys come from the environment or a mode-600 file, not from the policy.
+    planner: raw.planner && typeof raw.planner === 'object' ? { ...raw.planner } : null,
     profilesFile: raw.profilesFile || null,
     candidates: Array.isArray(raw.candidates) ? raw.candidates.map(String) : [],
   };

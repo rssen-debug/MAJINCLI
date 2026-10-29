@@ -29,7 +29,7 @@
 #>
 [CmdletBinding()]
 param(
-  [ValidateSet('Init', 'Doctor', 'Start', 'Status', 'Serve', 'Poll', 'Relay', 'Watch', 'Task', 'InstallTask', 'UninstallTask')]
+  [ValidateSet('Init', 'Doctor', 'Start', 'Status', 'Serve', 'Poll', 'Relay', 'Watch', 'Task', 'Provider', 'Plan', 'Mission', 'InstallTask', 'UninstallTask')]
   [string]$Action = 'Status',
 
   [string]$V6Home = (Join-Path $env:LOCALAPPDATA 'MAJIN\v6'),
@@ -54,6 +54,12 @@ param(
   [int]$EveryMinutes = 5,
 
   [string]$TaskName = 'MAJIN-Arena-Poller',
+
+  # Mission (autonomous loop) options
+  [string]$MissionPath = '',
+  [switch]$Resume,
+  [switch]$AllowIrreversible,
+  [int]$MaxSteps = 0,
 
   [switch]$Probe,
   [switch]$Apply,
@@ -170,6 +176,31 @@ switch ($Action) {
     # Continuous outbound polling: this is the mode a Windows PC runs when Arena
     # is the planner and the machine is remote.
     exit (Invoke-Majin (@($cliScript, 'arena', 'poll') + $common + @('--max-tasks', "$MaxTasks", '--workspace', $workspacePath, '--data-dir', $v5Path)))
+  }
+
+  'Provider' {
+    $cliArgs = @($cliScript, 'arena', 'provider') + $common
+    if ($Probe) { $cliArgs += @('--live') }
+    exit (Invoke-Majin $cliArgs)
+  }
+
+  'Plan' {
+    if (-not $MissionPath) { throw 'Plan needs -MissionPath <mission.json>.' }
+    exit (Invoke-Majin (@($cliScript, 'arena', 'plan', '--mission', (Resolve-FullPath $MissionPath)) + $common))
+  }
+
+  'Mission' {
+    if (-not $MissionPath) { throw 'Mission needs -MissionPath <mission.json>.' }
+    $missionFull = Resolve-FullPath $MissionPath
+    if (-not (Test-Path -LiteralPath $missionFull -PathType Leaf)) { throw "Mission file not found: $missionFull" }
+    $cliArgs = @($cliScript, 'arena', 'mission', '--mission', $missionFull) + $common +
+              @('--workspace', $workspacePath, '--data-dir', $v5Path)
+    if ($Resume) { $cliArgs += @('--resume') }
+    if ($AllowIrreversible) { $cliArgs += @('--allow-irreversible') }
+    if ($MaxSteps -gt 0) { $cliArgs += @('--max-steps', "$MaxSteps") }
+    Write-Host 'The loop runs locally on this machine; the chat cannot run it for you.' -ForegroundColor Cyan
+    Write-Host 'Ctrl+C stops it between steps. The journal lets you resume with -Resume.' -ForegroundColor Cyan
+    exit (Invoke-Majin $cliArgs)
   }
 
   'Watch' {

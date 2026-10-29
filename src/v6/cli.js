@@ -26,6 +26,9 @@ import { createSecret, generateKeyId, signEnvelope, POLICY_SCHEMA } from './aren
 import { relayFromPolicy } from './arena/relay.js';
 import { createBridgeServer, loadBridgeToken } from './arena/server.js';
 import { runArenaDoctor, renderDoctor } from './arena/doctor.js';
+import { loadPlannerConfig, askPlanner, parseDecision } from './arena/planner.js';
+import { loadMission, MissionJournal, buildStateDigest } from './arena/mission.js';
+import { MissionOrchestrator } from './arena/orchestrator.js';
 import { formatActivityLine } from './activity.js';
 import { loadPortalAdapters, createPortalSubmitAdapter } from './jobs/portal.js';
 
@@ -82,6 +85,10 @@ function usage() {
   majin-v6 arena status [--json]
   majin-v6 arena doctor [--probe] [--json]              real readiness check (exit 1 on FAIL/BLOCKED)
   majin-v6 arena watch [--once] [--json] [--lines N]    live activity from real events
+  majin-v6 arena provider [--live]                      planner provider readiness
+  majin-v6 arena plan --mission FILE [--json]           one reasoning step, executes nothing
+  majin-v6 arena mission --mission FILE [--resume]      run/resume the autonomous loop
+        [--allow-irreversible] [--max-steps N] [--dry-run] [--json]
   majin-v6 arena task --kind KIND [--payload JSON] [--title T] [--ttl MS]
   majin-v6 arena poll [--once] [--max-tasks N] [--token-file PATH]
   majin-v6 arena serve [--port N]
@@ -532,6 +539,199 @@ function loadArenaSubmission(ctx, policy, hunter = ctx.hunter) {
   };
 }
 
+
+function plannerFor(ctx, config) {
+  return {
+    ask: ({ mission, state, catalog = '', signal = null }) => askPlanner({ config, mission, state, catalog, signal }),
+  };
+}
+
+function journalFor(ctx, missionId) {
+  return new MissionJournal({ dir: path.join(ctx.home, 'arena', 'missions'), missionId });
+}
+
+function missionDigestTasks(tasks, journal) {
+  return tasks.map((task) => ({
+    step: journal.find((entry) => entry.taskId === task.id)?.step ?? null,
+    kind: task.kind,
+    state: task.state,
+    summary: task.result?.summary || null,
+    output: task.result?.output ?? null,
+    errorCode: task.lastError?.code || null,
+  }));
+}
+
+async function arenaProvider(ctx, { flags, stdout }) {
+  const policy = arenaPolicyOrThrow(ctx).policy;
+  const loaded = loadPlannerConfig({ policy, keyFile: path.join(ctx.home, 'arena', 'planner-key') });
+  if (!loaded.ok) {
+    stdout.write(`${JSON.stringify({ ok: false, ...loaded.error, hint: 'set MAJIN_ARENA_PROVIDER / MAJIN_ARENA_MODEL / <provider>_API_KEY, or save the key to arena/planner-key' }, null, 2)}\n`);
+    return 1;
+  }
+  const { config } = loaded;
+  let live = null;
+  if (bool(flags.live)) {
+    const answer = await askPlanner({
+      config,
+      mission: { id: 'provider-check', goal: 'Answer to prove the planner endpoint works.', allowedActions: [], allowedTools: [], constraints: [], stopWhen: null },
+      state: { step: 0, budgetLeft: {}, tasks: [], applications: { counts: {}, recent: [] }, lastResult: null, notes: 'provider check' },
+    });
+    live = answer.ok
+      ? { ok: true, action: answer.decision.action, usage: answer.usage }
+      : { ok: false, error: answer.error };
+  }
+  stdout.write(`${JSON.stringify({
+    ok: true,
+    provider: config.provider,
+    model: config.model,
+    endpoint: config.route.endpoint,
+    keySource: config.keySource,
+    maxTokens: config.route.maxTokens,
+    live,
+  }, null, 2)}\n`);
+  return live && live.ok === false ? 1 : 0;
+}
+
+async function arenaPlan(ctx, { flags, stdout }) {
+  const file = flags.mission ? String(flags.mission) : null;
+  if (!file) { stdout.write('usage: arena plan --mission FILE\n'); return 1; }
+  const loadedMission = loadMission(file);
+  if (!loadedMission.ok) { stdout.write(`${JSON.stringify(loadedMission.error, null, 2)}\n`); return 1; }
+  const policy = arenaPolicyOrThrow(ctx).policy;
+  const plannerConfig = loadPlannerConfig({ policy, keyFile: path.join(ctx.home, 'arena', 'planner-key') });
+  if (!plannerConfig.ok) { stdout.write(`${JSON.stringify(plannerConfig.error, null, 2)}\n`); return 1; }
+
+  const journal = journalFor(ctx, loadedMission.mission.id);
+  const history = journal.read();
+  const tasks = await ctx.queue.list({});
+  const applications = await ctx.jobs.list({});
+  const state = buildStateDigest({
+    mission: loadedMission.mission,
+    step: history.length,
+    tasks: missionDigestTasks(tasks, history),
+    applications,
+    lastResult: history.at(-1) || null,
+  });
+  const answer = await askPlanner({ config: plannerConfig.config, mission: loadedMission.mission, state });
+  if (!answer.ok) { stdout.write(`${JSON.stringify({ ok: false, ...answer.error, usage: answer.usage }, null, 2)}\n`); return 1; }
+  stdout.write(`${JSON.stringify({ ok: true, decision: answer.decision, usage: answer.usage, executed: false }, null, 2)}\n`);
+  return 0;
+}
+
+/**
+ * The autonomous loop. It runs here, on the owner's machine, because a chat
+ * turn cannot: see docs/v6/ARENA_BRIDGE.md §7. Every step is journalled and the
+ * queue's effect ledger makes a restart safe.
+ */
+async function arenaMission(ctx, { flags, stdout, workspace, dataDir }) {
+  const file = flags.mission ? String(flags.mission) : null;
+  if (!file) { stdout.write('usage: arena mission --mission FILE [--resume] [--allow-irreversible]\n'); return 1; }
+  const loadedMission = loadMission(file);
+  if (!loadedMission.ok) { stdout.write(`${JSON.stringify(loadedMission.error, null, 2)}\n`); return 1; }
+  let mission = loadedMission.mission;
+  if (flags['max-steps']) {
+    const n = Number(flags['max-steps']);
+    if (Number.isFinite(n) && n > 0) mission = { ...mission, budget: { ...mission.budget, maxSteps: Math.min(n, mission.budget.maxSteps) } };
+  }
+
+  const { policy } = arenaPolicyOrThrow(ctx);
+  const plannerConfig = loadPlannerConfig({ policy, keyFile: path.join(ctx.home, 'arena', 'planner-key') });
+  if (!plannerConfig.ok) {
+    stdout.write(`${JSON.stringify({ ok: false, ...plannerConfig.error, note: 'The mission did not start; no work was queued.' }, null, 2)}\n`);
+    return 1;
+  }
+
+  const irreversible = bool(flags['allow-irreversible']);
+  if (mission.allowedActions.includes('job.submit') && !irreversible) {
+    stdout.write(`${JSON.stringify({ ok: false, code: 'MISSION_IRREVERSIBLE_NOT_ENABLED', note: 'This mission can submit applications; restart with --allow-irreversible after reviewing the adapters.' }, null, 2)}\n`);
+    return 1;
+  }
+  if (irreversible && (policy.allowIrreversible !== true || !policy.allowedKinds.includes('job.submit'))) {
+    stdout.write(`${JSON.stringify({ ok: false, code: 'POLICY_BLOCKS_IRREVERSIBLE', note: 'The owner policy still blocks job.submit. Nothing was queued.' }, null, 2)}\n`);
+    return 1;
+  }
+
+  if (bool(flags['dry-run'])) {
+    const journal = journalFor(ctx, mission.id);
+    const tasks = await ctx.queue.list({});
+    const applications = await ctx.jobs.list({});
+    const state = buildStateDigest({
+      mission, step: journal.read().length,
+      tasks: missionDigestTasks(tasks, journal.read()), applications, lastResult: journal.read().at(-1) || null,
+    });
+    stdout.write(`${JSON.stringify({
+      ok: true, dryRun: true, mission: { id: mission.id, goal: mission.goal, budget: mission.budget },
+      provider: { provider: plannerConfig.config.provider, model: plannerConfig.config.model },
+      wouldStartAtStep: journal.read().length, state,
+    }, null, 2)}\n`);
+    return 0;
+  }
+
+  // Execution context: the same real drivers the worker uses.
+  let bridge = null;
+  try {
+    bridge = createBridge({
+      workspace, dataDir, v6Home: ctx.home, log: ctx.log,
+      driverStateDir: path.join(ctx.home, 'drivers', 'arena-mission'),
+    });
+    await bridge.start();
+  } catch (error) {
+    bridge = null;
+    ctx.log.append('permission.blocked', { workerId: 'orchestrator', code: error.code || 'TOOL_BRIDGE_UNAVAILABLE', reason: String(error.message || error).slice(0, 300) });
+  }
+  const invoker = bridge ? createToolInvoker({ callToolFn: (name, args) => bridge.callTool(name, args), log: ctx.log }) : null;
+  const missionHunter = hunterForPolicy(ctx, policy) || ctx.hunter;
+  let submission = { adapter: null, status: { state: 'NOT_CONFIGURED' } };
+  try {
+    submission = loadArenaSubmission(ctx, policy, missionHunter);
+  } catch (error) {
+    submission = { adapter: null, status: { state: 'BLOCKED', reason: error.code || String(error.message || error) } };
+  }
+  const supervisor = new Supervisor({
+    queue: ctx.queue, log: ctx.log, workerId: 'arena-mission',
+    handlers: buildHandlers({ hunter: missionHunter, submitAdapter: submission.adapter }),
+    heartbeatFile: path.join(ctx.workersDir, 'arena-mission.json'),
+    stopFile: ctx.stopFile, toolInvoker: invoker,
+    limits: { maxTasks: 1, maxRuntimeMs: Math.min(mission.budget.maxWallMs, 15 * 60 * 1000) },
+  });
+
+  const controller = new AbortController();
+  const onSignal = () => { controller.abort(); supervisor.requestStop('signal'); };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
+
+  const journal = journalFor(ctx, mission.id);
+  const orchestrator = new MissionOrchestrator({
+    mission,
+    planner: plannerFor(ctx, plannerConfig.config),
+    queue: ctx.queue,
+    log: ctx.log,
+    journal,
+    runWork: () => supervisor.run({ maxTasks: 1, maxRuntimeMs: Math.min(mission.budget.maxWallMs, 15 * 60 * 1000) }),
+    readApplications: () => ctx.jobs.list({}),
+    allowIrreversible: irreversible,
+  });
+
+  ctx.log.append('arena.accepted', { workerId: 'orchestrator', missionId: mission.id, note: `mission started (${bool(flags.resume) ? 'resumed' : 'fresh'})` });
+  const summary = await orchestrator.run({ resume: bool(flags.resume) });
+  ctx.log.append('arena.published', { workerId: 'orchestrator', missionId: mission.id, state: summary.stopReason });
+  process.removeListener('SIGINT', onSignal);
+  process.removeListener('SIGTERM', onSignal);
+  await bridge?.close().catch(() => {});
+
+  if (bool(flags.json)) {
+    stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
+  } else {
+    stdout.write(`MAJIN V6 — mission ${summary.missionId}\n`);
+    stdout.write(`steps:        ${summary.steps} (resumed from ${summary.resumedFrom})\n`);
+    stdout.write(`stopped:      ${summary.stopReason}${summary.detail ? ` — ${summary.detail}` : ''}\n`);
+    stdout.write(`spent:        ${summary.spent.tokens} tokens, $${summary.spent.costUsd.toFixed(4)}, ${Math.round(summary.spent.wallMs / 1000)}s\n`);
+    stdout.write(`submissions:  ${summary.submissions}\n`);
+    stdout.write(`journal:      ${summary.journalFile}\n`);
+  }
+  return summary.stopReason === 'done' ? 0 : summary.stopReason === 'needs_owner' ? 2 : 3;
+}
+
 async function arenaDoctorCommand(ctx, { flags, stdout, workspace, dataDir }) {
   const report = await runArenaDoctor({
     home: ctx.home, dataDir, workspace, probe: bool(flags.probe),
@@ -805,6 +1005,9 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
         if (sub === 'serve') return await arenaServe(ctx, { flags, stdout });
         if (sub === 'doctor') return await arenaDoctorCommand(ctx, { flags, stdout, workspace, dataDir });
         if (sub === 'watch') return await arenaWatch(ctx, { flags, stdout });
+        if (sub === 'provider') return await arenaProvider(ctx, { flags, stdout });
+        if (sub === 'plan') return await arenaPlan(ctx, { flags, stdout });
+        if (sub === 'mission') return await arenaMission(ctx, { flags, stdout, workspace, dataDir });
         throw Object.assign(new Error('arena needs init|status|task|poll|serve'), { code: 'USAGE' });
       }
 

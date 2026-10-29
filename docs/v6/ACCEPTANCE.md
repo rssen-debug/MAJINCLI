@@ -9,10 +9,10 @@ was available.
 Reproduce:
 
 ```bash
-npm run v6:test            # 77 tests, 0 fail (incl. test/v6/arena)
+npm run v6:test            # 93 tests, 0 fail (incl. test/v6/arena)
 npm run v6:test:arena      # 20 tests, 0 fail (signed relay + loopback bridge)
 npm test                   # 1457 pass, 0 fail, 19 skipped (164 s)
-node scripts/parse-all.js  # 835/835 files parse cleanly
+node scripts/parse-all.js  # 841/841 files parse cleanly
 node scripts/release-gate.mjs  # local checks GREEN
 ```
 
@@ -41,6 +41,8 @@ is absent by design or scope; **NOT_TESTED** means no evidence either way.
 | 16 | Arena as the reasoning brain (signed task relay) | **PASS (machinery)**, live relay/Gmail/portal **BLOCKED / NOT_TESTED** |
 | 16b | Arena → MAJIN → real tool → real result | **PASS (live, this host)** | `fs_write` and `re_hash` executed through the bridge by a real worker; the returned SHA-256 matched `sha256sum` byte for byte. See `docs/v6/ARENA_BRIDGE.md` §4b. |
 | 16c | GitHub relay 403 | **DIAGNOSED, BLOCKED on an owner grant** | Valid token, repository not on its access list → now reported as `SYNC_TOKEN_SCOPE_DENIED` with the exact fix. `arena doctor --probe` performs the real write/read/delete round trip once granted. |
+| 16e | Autonomous mission loop (plan → execute → read result → plan) | **PASS (local, scripted model)**; real provider **NOT_TESTED**, Windows **NOT_TESTED** | `arena mission`: 3-step live run wrote a file, hashed it, read the hash back and stopped; SHA-256 matched `sha256sum`. Budgets, stuck detection, irreversible gating and `--resume` covered by 8 + 3 tests. No model API is reachable from this sandbox, so the reasoning step was driven by a scripted OpenAI-compatible endpoint. |
+| 16f | Does Arena itself run the loop? | **NO — measured** | No connector to the PC, no reachable model API, no inbound route, session-scoped lifetime. The loop runs on the machine that owns the tools; the chat plans and reviews. |
 | 16d | Crash recovery and double-submission protection | **PASS** | `recovery.test.js`: worker `SIGKILL` mid-submission → one POST ever, `UNCERTAIN`, uncertain effect, restarted worker executes nothing, `requeue` refused. | Signed, expiring, replay-proof envelopes; owner policy for task kinds, tools and irreversible work; loopback bridge with bearer token, host check and rate limit; durable execution through the existing supervisor. `test/v6/arena/*` = 20 tests. Not proven here: GitHub relay (token 403), real Gmail, real employer. See `docs/v6/ARENA_BRIDGE.md`. |
 | 17 | Explicit permissions and logging for Arena | **PASS** | No shell envelope exists. Unknown kind/tool/irreversible → refused before execution; every accepted/rejected envelope is logged (`arena.*` events) and an action is only claimed when a real receipt exists. |
 | 14 | Deliverables 1–16 | **PARTIAL** | See table below. |

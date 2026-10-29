@@ -61,7 +61,10 @@ test('V6 never shells out to the GitHub CLI or rewrites the active installation'
 
 test('the Arena bridge script is dry-run capable, loopback-only and never elevates', () => {
   const bridge = read('scripts/v6/start-arena-bridge.ps1');
-  assert.match(bridge, /\[ValidateSet\('Init', 'Doctor', 'Start', 'Status', 'Serve', 'Poll', 'Relay', 'Watch', 'Task', 'InstallTask', 'UninstallTask'\)\]/);
+  assert.match(bridge, /\[ValidateSet\('Init', 'Doctor', 'Start', 'Status', 'Serve', 'Poll', 'Relay', 'Watch', 'Task', 'Provider', 'Plan', 'Mission', 'InstallTask', 'UninstallTask'\)\]/);
+  assert.match(bridge, /'Mission' \{/, 'the autonomous loop needs a single entry point');
+  assert.match(bridge, /\[switch\]\$AllowIrreversible/, 'irreversible work must be an explicit switch');
+  assert.match(bridge, /\[switch\]\$Resume/, 'a stopped mission must be resumable');
   assert.match(bridge, /'Start' \{/, 'there must be a single command that checks and then starts');
   assert.match(bridge, /The bridge was NOT started/, 'Start must refuse to listen when the doctor fails');
   assert.match(bridge, /'Relay' \{/, 'outbound polling must be a first-class action');
