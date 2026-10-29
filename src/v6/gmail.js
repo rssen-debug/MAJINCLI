@@ -171,12 +171,19 @@ export function matchEmailToApplication(email = {}, applications = []) {
 }
 
 export class GmailClient {
-  constructor({ credentials, fetchImpl = globalThis.fetch, clock = Date.now, log = null } = {}) {
+  constructor({
+    credentials, fetchImpl = globalThis.fetch, clock = Date.now, log = null,
+    apiBase = null, tokenUrl = null,
+  } = {}) {
     if (!credentials) throw new Error('GmailClient requires credentials');
     this.credentials = credentials;
     this.fetchImpl = fetchImpl;
     this.clock = clock;
     this.log = log;
+    // The defaults are Google's real endpoints. A controlled test server can
+    // override them explicitly; production never sets these.
+    this.apiBase = apiBase || API;
+    this.tokenUrl = tokenUrl || TOKEN_URL;
     this.account = credentials.account || null;
     this.cachedToken = null;
     this.tokenExpiresAt = 0;
@@ -192,7 +199,7 @@ export class GmailClient {
     });
     let response;
     try {
-      response = await this.fetchImpl(TOKEN_URL, {
+      response = await this.fetchImpl(this.tokenUrl, {
         method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body, signal: AbortSignal.timeout(20000),
       });
@@ -214,7 +221,7 @@ export class GmailClient {
 
   async #request(pathAndQuery) {
     const token = await this.accessToken();
-    const response = await this.fetchImpl(`${API}/${pathAndQuery}`, {
+    const response = await this.fetchImpl(`${this.apiBase}/${pathAndQuery}`, {
       headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
       signal: AbortSignal.timeout(25000),
     });

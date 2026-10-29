@@ -1,15 +1,18 @@
 # V6 acceptance evidence
 
-Environment: Linux sandbox, Node `v22.22.3`, repository commit
-`ea439ec` + this branch. No Windows host, OpenCode binary, OpenCode config,
-V5 user profile, Gmail account or GitHub sync token was available.
+Environment: Linux sandbox, Node `v22.22.3`. V6 core was built on
+`arena/abdefe02-majincli` (merged as PR #479, `9b9a272`); the Arena bridge was
+built on `arena/49646924-majincli`. No Windows host, OpenCode binary, OpenCode
+config, V5 user profile, Gmail account, employer portal or GitHub relay token
+was available.
 
 Reproduce:
 
 ```bash
-npm run v6:test          # 48 tests, 0 fail (2.5 s)
-npm test                 # 1457 pass, 0 fail, 19 skipped (162 s)
-node scripts/parse-all.js  # 823/823 files parse cleanly
+npm run v6:test            # 68 tests, 0 fail (incl. test/v6/arena)
+npm run v6:test:arena      # 20 tests, 0 fail (signed relay + loopback bridge)
+npm test                   # 1457 pass, 0 fail, 19 skipped (164 s)
+node scripts/parse-all.js  # 832/832 files parse cleanly
 node scripts/release-gate.mjs  # local checks GREEN
 ```
 
@@ -35,6 +38,8 @@ is absent by design or scope; **NOT_TESTED** means no evidence either way.
 | 11 | OpenCode experience | **PASS (server side)**; OpenCode UI **NOT_TESTED** | Native MCP tools, lazy search/schema discovery, commands documented in `docs/v6/OPERATIONS.md`. No OpenCode binary was available to verify end-to-end prompts, themes or session history. |
 | 12 | Real testing, no false success | **PASS (Linux)**; Windows/Gmail/job portal **NOT_TESTED / BLOCKED** | 48 V6 tests include real subprocess MCP/worker runs; full repo suite green. No Windows acceptance was possible. |
 | 13 | Work autonomously through the session | **PASS (this session)** | Implementation, tests, fixes, inventory generation, launcher, docs and checks were executed without asking for "continue". Durable backlog maintained. |
+| 16 | Arena as the reasoning brain (signed task relay) | **PASS (machinery)**, live relay/Gmail/portal **BLOCKED / NOT_TESTED** | Signed, expiring, replay-proof envelopes; owner policy for task kinds, tools and irreversible work; loopback bridge with bearer token, host check and rate limit; durable execution through the existing supervisor. `test/v6/arena/*` = 20 tests. Not proven here: GitHub relay (token 403), real Gmail, real employer. See `docs/v6/ARENA_BRIDGE.md`. |
+| 17 | Explicit permissions and logging for Arena | **PASS** | No shell envelope exists. Unknown kind/tool/irreversible → refused before execution; every accepted/rejected envelope is logged (`arena.*` events) and an action is only claimed when a real receipt exists. |
 | 14 | Deliverables 1–16 | **PARTIAL** | See table below. |
 | 15 | Definition of done | **NOT MET** | Several required end-to-end proofs (OpenCode+DeepSeek live, real Gmail, real receipts, Windows acceptance) are absent. No readiness percentage is claimed. |
 
@@ -57,7 +62,8 @@ is absent by design or scope; **NOT_TESTED** means no evidence either way.
 | Preserved/migrated skills and memory | **NOT_IMPLEMENTED** | Existing data untouched, no migration |
 | Automated tests and Windows acceptance | **PARTIAL** | Tests PASS; Windows acceptance absent |
 | Single safe PowerShell launch | **PASS (static)**; execution NOT_TESTED | `start-v6.ps1` + opt-in registration with backup |
-| Complete handover | **PASS** | `HANDOVER.md`, `OPERATIONS.md`, `PRIVATE_TELEMETRY.md`, this file |
+| Arena bridge | **PASS (controlled e2e)**; live relay **BLOCKED** | `ARENA_BRIDGE.md`, `src/v6/arena/*`, `src/v6/jobs/portal.js`, `scripts/v6/start-arena-bridge.ps1` |
+| Complete handover | **PASS** | `HANDOVER.md`, `OPERATIONS.md`, `PRIVATE_TELEMETRY.md`, `ARENA_BRIDGE.md`, this file |
 
 ## What a "PASS" here does not mean
 
@@ -67,3 +73,9 @@ is absent by design or scope; **NOT_TESTED** means no evidence either way.
   the generated inventory.
 - No application was submitted anywhere. No real Gmail message was read in this
   environment. No telemetry was uploaded.
+- The Arena end-to-end test ran against controlled loopback endpoints with real
+  sockets, real signatures and the real queue. It proves the machinery, not that
+  a company or a mailbox received anything.
+- `start-arena-bridge.ps1` is checked statically (brace/quote balance plus
+  contract assertions in `test/v6/launcher.test.js`); it has never been executed
+  because this environment has no PowerShell and no Windows host.

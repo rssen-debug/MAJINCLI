@@ -124,7 +124,25 @@ node bin/majin-v6.mjs jobs list
 
 Submission is gated: `job.submit` returns `BLOCKED` with
 `SUBMISSION_ADAPTER_NOT_CONFIGURED` unless an owner-provided adapter exists.
-No built-in adapter clicks employer portals.
+No built-in adapter clicks employer portals; the adapter is an HTTP POST with an
+explicit URL/origin allowlist, field map, CV upload and acknowledgement rule
+(`src/v6/jobs/portal.js`, adapter file at `arena/adapters.json`).
+
+## Arena bridge
+
+Full detail in `docs/v6/ARENA_BRIDGE.md`. Short version:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Init
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Status
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Serve    # loopback API
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Poll     # drain relay once
+```
+
+`-Action Poll` is what a scheduled task runs; `-Action InstallTask` prints the
+command and only registers with `-Apply`. Only signed envelopes within the
+policy's `allowedKinds`/`allowedTools` execute, and `job.submit` additionally
+needs `allowIrreversible: true` plus a configured adapter.
 
 ## From OpenCode
 
@@ -151,6 +169,10 @@ The model must call `majin_tools_search` and `majin_tool_schema` before
 | Worker heartbeat `STALLED` | no write within 45 s | check the PID and logs; leases recover automatically |
 | `QUEUE_LOCK_TIMEOUT` | another writer holds the lock | wait; a stale lock is removed after 30 s |
 | Repeated `FAILED_RETRYABLE` | transient tool/network failure | check `lastError.code`; retries use exponential backoff |
+| `ARENA_BAD_SIGNATURE` / `ARENA_UNKNOWN_KEY` | envelope not signed with the current key | re-run `arena init --force` only if you intend to rotate; update the signer |
+| `ARENA_REPLAY` | envelope already consumed | expected on redelivery; nothing executed |
+| `ARENA_KIND_NOT_ALLOWED` / `ARENA_TOOL_NOT_ALLOWED` | outside the owner policy | edit `arena/policy.json` deliberately |
+| `arena poll` exits with a relay error | token missing or repo not writable | check the token file; the poller never retries an unverified envelope |
 
 Uncertain task handling is intentionally not exposed as a one-line CLI escape
 hatch. A human must confirm the real outcome with evidence; the queue API
@@ -167,7 +189,8 @@ hatch. A human must confirm the real outcome with evidence; the queue API
 ## Tests
 
 ```bash
-npm run v6:test          # V6 unit/integration/live (Linux)
+npm run v6:test          # V6 unit/integration/live (Linux), incl. test/v6/arena
+npm run v6:test:arena    # signed relay + loopback bridge only
 npm test                 # repository suite
 node scripts/parse-all.js
 ```

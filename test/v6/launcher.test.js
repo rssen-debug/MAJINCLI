@@ -51,7 +51,29 @@ test('V6 never shells out to the GitHub CLI or rewrites the active installation'
     assert.doesNotMatch(content, /npm\s+(install|ci)\s+-g/i, `${file} must not install global packages`);
   }
   const network = files.filter((file) => /\bfetch(Impl)?\s*\(/.test(read(file))).map((file) => path.basename(file)).sort();
-  assert.deepEqual(network, ['gmail.js', 'sync.js'], 'network access is limited to Gmail and the private sync API');
+  assert.deepEqual(network, ['agent.js', 'gmail.js', 'portal.js', 'relay.js', 'sync.js'],
+    'network access is limited to Gmail, the private sync API and the Arena relay/portal transports');
+  // Each networked module must carry its own guard: no generic "fetch whatever URL" path.
+  assert.match(read('src/v6/arena/relay.js'), /redirect:\s*'error'/, 'relay must refuse redirects');
+  assert.match(read('src/v6/jobs/portal.js'), /servesOrigin|allowOrigin/, 'portal must check the employer origin');
+  assert.match(read('src/v6/arena/server.js'), /127\.0\.0\.1|loopback/i, 'the bridge must stay on loopback');
+});
+
+test('the Arena bridge script is dry-run capable, loopback-only and never elevates', () => {
+  const bridge = read('scripts/v6/start-arena-bridge.ps1');
+  assert.match(bridge, /\[ValidateSet\('Init', 'Status', 'Serve', 'Poll', 'Task', 'InstallTask', 'UninstallTask'\)\]/);
+  assert.match(bridge, /\[switch\]\$DryRun/);
+  assert.match(bridge, /-RunLevel Limited/, 'the scheduled task must not run elevated');
+  assert.match(bridge, /Refusing to run: the V6 home must not be the V5 data directory or inside it/);
+  assert.match(bridge, /Refusing to run: the V5 data directory must not be inside the V6 home/);
+  assert.match(bridge, /\(job\.submit\) stays disabled until you enable it deliberately/);
+  assert.match(bridge, /if \(-not \$Apply\)/, 'registering or removing a scheduled task requires -Apply');
+  assert.match(bridge, /Format-Argument/, 'scheduled task arguments must be quoted for paths with spaces');
+  assert.match(bridge, /\| Out-Host/, 'child output must not leak into the function return value');
+  assert.doesNotMatch(bridge, /C:\\MAJINCLI[^']*\$/, 'the protected install may only appear as a refusal guard');
+  assert.doesNotMatch(bridge, /npm\s+(install|ci|i)\b/i);
+  assert.doesNotMatch(bridge, /opencode\s+(auth|run|upgrade)\b/i);
+  assert.doesNotMatch(bridge, /Register-ScheduledTask[^\n]*-RunLevel Highest/);
 });
 
 test('the calculated inventory matches the real registries', async () => {

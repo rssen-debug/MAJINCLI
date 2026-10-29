@@ -20,6 +20,8 @@ export const EVENT_TYPES = Object.freeze([
   'permission.blocked', 'browser.blocker', 'checkpoint.written', 'receipt.observed',
   'job.discovered', 'job.matched', 'job.state', 'job.submitted', 'job.confirmed', 'gmail.checked',
   'sync.skipped', 'sync.completed', 'sync.refused', 'mcp.started', 'mcp.stopped', 'mcp.call',
+  'arena.accepted', 'arena.refused', 'arena.published', 'arena.poll_failed',
+  'arena.ack_failed', 'arena.publish_failed',
 ]);
 
 export class EventLog {
