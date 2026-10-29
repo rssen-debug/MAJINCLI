@@ -31,7 +31,12 @@ Do not mark an item DONE without a reproducible check.
   for irreversible work relies on the queue effect ledger.
 - `v6_work_start` allows up to four live workers; there is no fairness scheduler
   beyond priority.
-- The launcher's PowerShell execution is unverified on Windows.
+- The launcher's and the Arena bridge script's PowerShell execution is unverified
+  on Windows (static checks only).
+- The Arena relay has only been exercised on loopback; the GitHub relay leg is
+  blocked here because this environment's token gets 403 on the private repo.
+- The portal submission adapter speaks HTTP forms only; browser-DOM employers
+  are still out of scope.
 - The release-gate/i18n policies required markers on Swedish Gmail input
   vocabulary; those are input-only strings, never rendered.
 

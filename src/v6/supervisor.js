@@ -295,6 +295,7 @@ export class Supervisor {
       summary: outcome.summary || `Completed ${task.kind}`,
       receipt: outcome.receipt || null,
       evidence: outcome.evidence || null,
+      output: outcome.output ?? null,
     });
     this.stats.completed += 1;
     this.heartbeat.beat({ tasksCompleted: this.heartbeat.tasksCompleted + 1 });

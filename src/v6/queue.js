@@ -360,12 +360,19 @@ export class TaskQueue {
     });
   }
 
-  #finish(state, task, nextState, { by = 'v6-supervisor', summary = null, receipt = null, evidence = null, error = null, blocked = null, progress = null } = {}) {
+  #finish(state, task, nextState, { by = 'v6-supervisor', summary = null, receipt = null, evidence = null, output = null, error = null, blocked = null, progress = null } = {}) {
     task.state = nextState;
     task.lease = null;
     task.updatedAt = nowIso(this.clock);
     if (progress) task.progress = { ...(task.progress || {}), ...progress };
-    if (summary != null) task.result = { ...(task.result || {}), summary, ...(receipt ? { receipt } : {}), ...(evidence ? { evidence } : {}) };
+    if (summary != null) {
+      task.result = {
+        ...(task.result || {}), summary,
+        ...(receipt ? { receipt } : {}),
+        ...(evidence ? { evidence } : {}),
+        ...(output != null ? { output } : {}),
+      };
+    }
     if (error) task.lastError = error;
     task.blocked = blocked || null;
     task.history.push({ at: task.updatedAt, state: nextState, by });

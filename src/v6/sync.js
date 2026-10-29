@@ -51,8 +51,25 @@ async function gh({ token, method = 'GET', route, body = null, fetchImpl = globa
 
 export async function verifyPrivateRepo({ token, repo, fetchImpl = globalThis.fetch }) {
   const result = await gh({ token, route: `/repos/${repo}`, fetchImpl });
-  if (result.status === 401 || result.status === 403) {
-    return { ok: false, error: { code: 'SYNC_AUTH_FAILED', reason: `GitHub authentication failed (HTTP ${result.status})` } };
+  if (result.status === 401) {
+    return { ok: false, error: { code: 'SYNC_AUTH_FAILED', reason: 'GitHub rejected the token (HTTP 401): it is invalid, expired or revoked' } };
+  }
+  if (result.status === 403) {
+    // A fine-grained token without this repository on its access list answers
+    // 403 "Resource not accessible by integration", which is a *scope* problem,
+    // not a bad password. Saying "authentication failed" here sends the owner
+    // to the wrong place, so the two cases are reported separately.
+    const message = String(result.json?.message || '');
+    const scoped = /not accessible|resource not accessible/i.test(message) || !message;
+    return {
+      ok: false,
+      error: {
+        code: scoped ? 'SYNC_TOKEN_SCOPE_DENIED' : 'SYNC_AUTH_FAILED',
+        reason: scoped
+          ? `The token is valid but is not granted access to ${repo}. For a fine-grained token: Repository access → select ${repo} → Permissions → Contents: Read and write. (HTTP 403: ${message || 'no message'})`
+          : `GitHub refused the request (HTTP 403${message ? `: ${message}` : ''}) — check rate limits and token permissions`,
+      },
+    };
   }
   if (result.status === 404) {
     return { ok: false, error: { code: 'SYNC_REPO_NOT_ACCESSIBLE', reason: 'Repository not found or not accessible with the supplied token; refusing to upload' } };

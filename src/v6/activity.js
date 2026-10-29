@@ -32,6 +32,12 @@ const KNOWN = new Map([
   ['sync.skipped', (e) => `Private sync skipped: ${e.data.code || 'not configured'}`],
   ['sync.refused', (e) => `Private sync refused: ${e.data.code || 'policy'}`],
   ['sync.completed', (e) => `Private report uploaded: ${e.data.path || 'unknown path'}`],
+  ['arena.accepted', (e) => `Arena task accepted: ${e.data.kind || ''}`.trim()],
+  ['arena.refused', (e) => `Arena task refused: ${e.data.code || 'policy'}`],
+  ['arena.published', (e) => `Arena result published: ${e.data.state || ''}`.trim()],
+  ['arena.poll_failed', (e) => `Arena relay poll failed: ${e.data.code || 'error'}`],
+  ['arena.ack_failed', (e) => `Arena acknowledgement failed: ${e.data.code || 'error'}`],
+  ['arena.publish_failed', (e) => `Arena result publication failed: ${e.data.code || 'error'}`],
   ['mcp.started', () => 'MAJIN MCP bridge started'],
   ['mcp.stopped', () => 'MAJIN MCP bridge stopped'],
 ]);

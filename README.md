@@ -37,6 +37,7 @@ node src/cli/majin.js
 * [docs/v6/OPERATIONS.md](docs/v6/OPERATIONS.md) — V6 commands, Windows launcher, MCP registration
 * [docs/v6/PRIVATE_TELEMETRY.md](docs/v6/PRIVATE_TELEMETRY.md) — optional private sync and its exact payload
 * [docs/v6/ACCEPTANCE.md](docs/v6/ACCEPTANCE.md) — measured status, including NOT_TESTED items
+* [docs/v6/ARENA_BRIDGE.md](docs/v6/ARENA_BRIDGE.md) — Arena ⇄ MAJIN: signed task relay, loopback API, limits
 
 ## What it does
 
@@ -272,6 +273,11 @@ OpenCode settings. **No employer-portal submission adapter is included**, so
 `job.submit` reports a blocker instead of pretending to apply. See
 [docs/v6/HANDOVER.md](docs/v6/HANDOVER.md) for verified capabilities and the
 NOT_TESTED Windows/Gmail items.
+
+Arena can drive MAJIN through a **signed task relay** or a **loopback API** —
+never through a shell. See [docs/v6/ARENA_BRIDGE.md](docs/v6/ARENA_BRIDGE.md)
+for the measured constraints (no inbound path to your PC) and the exact
+permissions.
 
 ## Development
 

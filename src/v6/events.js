@@ -20,6 +20,8 @@ export const EVENT_TYPES = Object.freeze([
   'permission.blocked', 'browser.blocker', 'checkpoint.written', 'receipt.observed',
   'job.discovered', 'job.matched', 'job.state', 'job.submitted', 'job.confirmed', 'gmail.checked',
   'sync.skipped', 'sync.completed', 'sync.refused', 'mcp.started', 'mcp.stopped', 'mcp.call',
+  'arena.accepted', 'arena.refused', 'arena.published', 'arena.poll_failed',
+  'arena.ack_failed', 'arena.publish_failed',
 ]);
 
 export class EventLog {
@@ -30,6 +32,24 @@ export class EventLog {
     this.keepArchives = keepArchives;
     this.clock = clock;
     this.seq = this.#lastSeq();
+    this.knownSize = this.#size();
+  }
+
+  #size() {
+    try { return fs.statSync(this.file).size; } catch { return 0; }
+  }
+
+  /**
+   * Another MAJIN process may have appended since our last write. A sequence
+   * number that repeats across processes breaks cursors, live views and
+   * ordering, so re-read the tail whenever the file changed underneath us.
+   */
+  #syncSeq() {
+    const size = this.#size();
+    if (size !== this.knownSize) {
+      this.seq = Math.max(this.seq, this.#lastSeq());
+      this.knownSize = size;
+    }
   }
 
   #lastSeq() {
@@ -73,6 +93,7 @@ export class EventLog {
       throw Object.assign(new Error(`Unknown V6 event type: ${type}`), { code: 'EVENT_TYPE_UNKNOWN' });
     }
     this.#rotateIfNeeded();
+    this.#syncSeq();
     const event = {
       schema: EVENT_SCHEMA,
       seq: ++this.seq,
@@ -83,6 +104,7 @@ export class EventLog {
       data: scrub(data || {}),
     };
     fs.appendFileSync(this.file, `${JSON.stringify(event)}\n`, { mode: 0o600 });
+    this.knownSize = this.#size();
     return event;
   }
 

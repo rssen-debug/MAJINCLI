@@ -80,7 +80,11 @@
     "v6:status": "node ./bin/majin-v6.mjs status",
     "v6:doctor": "node ./bin/majin-v6.mjs doctor",
     "v6:inventory": "node ./bin/majin-v6.mjs inventory --deep --history --write --json",
-    "v6:test": "node --test test/v6/*.test.js"
+    "v6:test": "node --test test/v6/*.test.js test/v6/arena/*.test.js",
+    "v6:arena": "node ./bin/majin-v6.mjs arena status",
+    "v6:arena:poll": "node ./bin/majin-v6.mjs arena poll",
+    "v6:arena:serve": "node ./bin/majin-v6.mjs arena serve",
+    "v6:test:arena": "node --test test/v6/arena/*.test.js"
   },
   "optionalDependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",

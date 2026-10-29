@@ -38,43 +38,48 @@ export function canTransition(from, to) {
 const nonEmpty = (value) => typeof value === 'string' && value.trim().length > 0;
 
 function requireEvidence(to, evidence) {
+  const failWith = (message, code = 'APPLICATION_EVIDENCE_INVALID') => {
+    const error = new Error(message);
+    error.code = code;
+    throw error;
+  };
   const e = evidence || {};
   switch (to) {
     case 'MATCHED':
-      if (!Number.isFinite(Number(e.score))) throw new Error('MATCHED requires a numeric match score');
+      if (!Number.isFinite(Number(e.score))) failWith('MATCHED requires a numeric match score');
       break;
     case 'APPROVED':
-      if (!nonEmpty(e.approvalRef)) throw new Error('APPROVED requires the owner policy reference that authorized it');
+      if (!nonEmpty(e.approvalRef)) failWith('APPROVED requires the owner policy reference that authorized it');
       break;
     case 'FORM_STARTED':
       if (!nonEmpty(e.portalUrl) || !/^https:\/\//i.test(e.portalUrl)) throw new Error('FORM_STARTED requires the real https portal URL');
       break;
     case 'FORM_PREPARED':
-      if (e.fieldsVerified !== true) throw new Error('FORM_PREPARED requires fieldsVerified=true after an actual field check');
-      if (!nonEmpty(e.cvFileName)) throw new Error('FORM_PREPARED requires the CV file name that was attached');
+      if (e.fieldsVerified !== true) failWith('FORM_PREPARED requires fieldsVerified=true after an actual field check');
+      if (!nonEmpty(e.cvFileName)) failWith('FORM_PREPARED requires the CV file name that was attached');
       break;
     case 'SUBMITTED_UNCONFIRMED': {
-      if (!e.receipt || typeof e.receipt !== 'object') throw new Error('SUBMITTED_UNCONFIRMED requires a receipt object; a click or HTTP 200 is not proof');
+      if (!e.receipt || typeof e.receipt !== 'object') failWith('SUBMITTED_UNCONFIRMED requires a receipt object; a click or HTTP 200 is not proof');
       const receipt = e.receipt;
       if (!nonEmpty(receipt.kind) || !(nonEmpty(receipt.reference) || nonEmpty(receipt.url) || nonEmpty(receipt.evidencePath) || nonEmpty(receipt.text))) {
-        throw new Error('SUBMITTED_UNCONFIRMED receipt must carry a concrete acknowledgement (reference, url, evidence path or text)');
+        failWith('SUBMITTED_UNCONFIRMED receipt must carry a concrete acknowledgement (reference, url, evidence path or text)');
       }
       break;
     }
     case 'EMAIL_VERIFICATION_PENDING':
-      if (!nonEmpty(e.emailMessageId)) throw new Error('EMAIL_VERIFICATION_PENDING requires the matched Gmail message id');
-      if (!nonEmpty(e.receivedAt)) throw new Error('EMAIL_VERIFICATION_PENDING requires the email received timestamp');
+      if (!nonEmpty(e.emailMessageId)) failWith('EMAIL_VERIFICATION_PENDING requires the matched Gmail message id');
+      if (!nonEmpty(e.receivedAt)) failWith('EMAIL_VERIFICATION_PENDING requires the email received timestamp');
       break;
     case 'CONFIRMED_RECEIVED':
-      if (!(nonEmpty(e.confirmationId) || nonEmpty(e.emailMessageId))) throw new Error('CONFIRMED_RECEIVED requires a portal confirmation id or a matched confirmation email');
-      if (!nonEmpty(e.confirmedAt)) throw new Error('CONFIRMED_RECEIVED requires the time the confirmation was observed');
+      if (!(nonEmpty(e.confirmationId) || nonEmpty(e.emailMessageId))) failWith('CONFIRMED_RECEIVED requires a portal confirmation id or a matched confirmation email');
+      if (!nonEmpty(e.confirmedAt)) failWith('CONFIRMED_RECEIVED requires the time the confirmation was observed');
       break;
     case 'BLOCKED':
-      if (!nonEmpty(e.code) || !nonEmpty(e.reason)) throw new Error('BLOCKED requires a code and a concrete reason');
+      if (!nonEmpty(e.code) || !nonEmpty(e.reason)) failWith('BLOCKED requires a code and a concrete reason');
       break;
     case 'FAILED_RETRYABLE':
     case 'FAILED_FINAL':
-      if (!nonEmpty(e.error || e.note)) throw new Error('A failure must say why');
+      if (!nonEmpty(e.error || e.note)) failWith('A failure must say why');
       break;
     default:
       break;

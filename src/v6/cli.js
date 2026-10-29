@@ -21,6 +21,16 @@ import { JobHunter } from './jobs/hunter.js';
 import { loadGmailCredentials, GmailClient } from './gmail.js';
 import { loadSyncConfig, pushTelemetry, writeLocalReport } from './sync.js';
 import { collectInventory, renderInventoryMarkdown } from './inventory.js';
+import { createArenaPaths, ArenaAgent, loadArenaPolicy, sanitizeResult } from './arena/agent.js';
+import { createSecret, generateKeyId, signEnvelope, POLICY_SCHEMA } from './arena/envelope.js';
+import { relayFromPolicy } from './arena/relay.js';
+import { createBridgeServer, loadBridgeToken } from './arena/server.js';
+import { runArenaDoctor, renderDoctor } from './arena/doctor.js';
+import { loadPlannerConfig, askPlanner, parseDecision } from './arena/planner.js';
+import { loadMission, MissionJournal, buildStateDigest } from './arena/mission.js';
+import { MissionOrchestrator } from './arena/orchestrator.js';
+import { formatActivityLine } from './activity.js';
+import { loadPortalAdapters, createPortalSubmitAdapter } from './jobs/portal.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -71,6 +81,17 @@ function usage() {
   majin-v6 gmail status
   majin-v6 sync status
   majin-v6 sync push [--yes] [--dry-run]
+  majin-v6 arena init [--repo owner/private] [--relay github|http] [--port N] [--force]
+  majin-v6 arena status [--json]
+  majin-v6 arena doctor [--probe] [--json]              real readiness check (exit 1 on FAIL/BLOCKED)
+  majin-v6 arena watch [--once] [--json] [--lines N]    live activity from real events
+  majin-v6 arena provider [--live]                      planner provider readiness
+  majin-v6 arena plan --mission FILE [--json]           one reasoning step, executes nothing
+  majin-v6 arena mission --mission FILE [--resume]      run/resume the autonomous loop
+        [--allow-irreversible] [--max-steps N] [--dry-run] [--json]
+  majin-v6 arena task --kind KIND [--payload JSON] [--title T] [--ttl MS]
+  majin-v6 arena poll [--once] [--max-tasks N] [--token-file PATH]
+  majin-v6 arena serve [--port N]
   majin-v6 inventory [--deep] [--history] [--write] [--json]
 
 Global: --v6-home, --workspace, --data-dir. V6 never changes OpenCode settings,
@@ -175,7 +196,20 @@ async function runWorker(ctx, { flags }) {
   const invoker = bridge
     ? createToolInvoker({ callToolFn: (name, args) => bridge.callTool(name, args), log: ctx.log })
     : null;
-  const handlers = buildHandlers({ hunter: ctx.hunter, submitAdapter: null });
+  let submission = { adapter: null, status: { state: 'NOT_CONFIGURED' } };
+  let hunter = ctx.hunter;
+  const loadedPolicy = loadArenaPolicy(createArenaPaths(ctx.home).policy);
+  if (loadedPolicy.ok) {
+    hunter = hunterForPolicy(ctx, loadedPolicy.policy) || hunter;
+    // A broken adapter file must never cost the worker its other handlers.
+    try {
+      submission = loadArenaSubmission(ctx, loadedPolicy.policy, hunter);
+    } catch (error) {
+      submission = { adapter: null, status: { state: 'BLOCKED', reason: error.code || String(error.message || error) } };
+      ctx.log.append('permission.blocked', { workerId, code: error.code || 'ARENA_SUBMISSION_UNAVAILABLE', reason: String(error.message || error).slice(0, 300) });
+    }
+  }
+  const handlers = buildHandlers({ hunter, submitAdapter: submission.adapter });
   const supervisor = new Supervisor({
     queue: ctx.queue, log: ctx.log, handlers,
     workerId,
@@ -235,6 +269,552 @@ async function collectAndMaybeWriteInventory({ deep, history, write, json, stdou
   }
   if (json) stdout.write(`${JSON.stringify(inventory, null, 2)}\n`);
   else stdout.write(`${renderInventoryMarkdown(inventory)}\n`);
+  return 0;
+}
+
+
+/* ------------------------------- Arena ---------------------------------- */
+
+const ARENA_DEFAULT_TOOLS = Object.freeze([
+  'fs_read', 'fs_list', 'fs_write', 'fs_search', 'web_search', 'web_fetch',
+  're_hash', 'documents_extract', 'jobs_search', 'driver_status',
+]);
+
+function writePrivate(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+  return file;
+}
+
+function readPrivate(file) {
+  return fs.readFileSync(file, 'utf8').trim();
+}
+
+async function arenaInit(ctx, { flags, stdout, stderr }) {
+  const paths = createArenaPaths(ctx.home);
+  fs.mkdirSync(paths.root, { recursive: true, mode: 0o700 });
+  const force = bool(flags.force);
+  const existing = fs.existsSync(paths.policy) || fs.existsSync(paths.secret);
+  if (existing && !force) {
+    stderr.write(`BLOCKED: ${paths.policy} or the signing secret already exists.\nRe-run with --force only if you intend to rotate the key (old envelopes stop verifying).\n`);
+    return 1;
+  }
+  const keyId = generateKeyId();
+  const secret = createSecret();
+  const bridgeToken = createSecret();
+  const repo = typeof flags.repo === 'string' ? flags.repo : 'rssen-debug/majin2026';
+  const relayType = flags.relay === 'http' ? 'http' : 'github';
+  const policy = {
+    schema: POLICY_SCHEMA,
+    keyId,
+    allowedKinds: ['tool', 'health.delay', 'job.discover', 'job.evaluate', 'gmail.verify'],
+    allowedTools: [...ARENA_DEFAULT_TOOLS],
+    allowIrreversible: false,
+    clockSkewMs: 60000,
+    envelopeTtlMs: 900000,
+    pollIntervalMs: 15000,
+    maxTasksPerPoll: 5,
+    relay: relayType === 'github'
+      ? { type: 'github', repo, path: 'arena', branch: null }
+      : { type: 'http', url: String(flags['relay-url'] || 'http://127.0.0.1:8788') },
+    server: { port: Number(flags.port) || 8787 },
+    submission: { adaptersFile: null, adapterId: null },
+    profilesFile: path.join(ctx.home, 'jobs', 'profiles.json'),
+    candidates: [],
+  };
+  writePrivate(paths.secret, secret);
+  writePrivate(paths.token, bridgeToken);
+  writePrivate(paths.policy, policy);
+  fs.mkdirSync(paths.evidence, { recursive: true, mode: 0o700 });
+
+  stdout.write('MAJIN V6 — Arena bridge initialised\n\n');
+  stdout.write(`V6 home:        ${ctx.home}\n`);
+  stdout.write(`Policy:         ${paths.policy}\n`);
+  stdout.write(`Signing secret: ${paths.secret}   (mode 600 — never share, never commit)\n`);
+  stdout.write(`Bridge token:   ${paths.token}   (mode 600 — local client only)\n`);
+  stdout.write(`keyId:          ${keyId}\n\n`);
+  stdout.write('Defaults: no irreversible work. job.submit is NOT allowed until you opt in.\n');
+  stdout.write('Allowed tools: ' + policy.allowedTools.join(', ') + '\n\n');
+  stdout.write('Next steps:\n');
+  stdout.write('  1. majin-v6 arena status                      show policy and relay\n');
+  stdout.write('  2. majin-v6 arena serve                       start the loopback bridge\n');
+  stdout.write('  3. majin-v6 arena task --kind health.delay --payload \'{"ms":10}\'\n');
+  stdout.write('  4. majin-v6 arena poll --once                 consume relay work once\n\n');
+  stdout.write('To enable real submissions later, edit allowedKinds/allowIrreversible and the\n');
+  stdout.write('submission adapter file deliberately. Review docs/v6/ARENA_BRIDGE.md first.\n');
+  return 0;
+}
+
+function arenaPolicyOrThrow(ctx) {
+  const paths = createArenaPaths(ctx.home);
+  const loaded = loadArenaPolicy(paths.policy);
+  if (!loaded.ok) throw Object.assign(new Error(loaded.error.reason), { code: loaded.error.code });
+  return { paths, policy: loaded.policy };
+}
+
+async function arenaStatus(ctx, { stdout, flags }) {
+  const paths = createArenaPaths(ctx.home);
+  const loaded = loadArenaPolicy(paths.policy);
+  const secretPresent = fs.existsSync(paths.secret);
+  const tokenPresent = fs.existsSync(paths.token);
+  const relayHealth = loaded.ok && loaded.policy.relay ? `${loaded.policy.relay.type}` : 'not configured';
+  const queueStats = await ctx.queue.stats();
+  const value = {
+    schema: 'majin.v6.arena.status/v1',
+    home: ctx.home,
+    policyState: loaded.ok ? 'CONFIGURED' : loaded.error.code,
+    keyId: loaded.ok ? loaded.policy.keyId : null,
+    secretPresent,
+    bridgeTokenPresent: tokenPresent,
+    allowedKinds: loaded.ok ? loaded.policy.allowedKinds : [],
+    allowedTools: loaded.ok ? loaded.policy.allowedTools : [],
+    allowIrreversible: loaded.ok ? loaded.policy.allowIrreversible : false,
+    relay: loaded.ok ? loaded.policy.relay : null,
+    relayTransport: relayHealth,
+    serverPort: loaded.ok ? loaded.policy.server?.port : null,
+    queue: queueStats,
+    note: 'A configured policy is not proof that a planner can reach this host. Verify with a real poll or bridge call.',
+  };
+  if (bool(flags.json)) { stdout.write(`${JSON.stringify(value, null, 2)}\n`); return 0; }
+  stdout.write('MAJIN V6 — ARENA BRIDGE\n\n');
+  stdout.write(`Policy:          ${value.policyState}\n`);
+  stdout.write(`keyId:           ${value.keyId || '(none)'}\n`);
+  stdout.write(`Signing secret:  ${secretPresent ? 'present (mode 600)' : 'MISSING'}\n`);
+  stdout.write(`Bridge token:    ${tokenPresent ? 'present (mode 600)' : 'MISSING'}\n`);
+  stdout.write(`Relay:           ${value.relay ? `${value.relay.type} ${value.relay.repo || value.relay.url || ''}` : 'not configured'}\n`);
+  stdout.write(`Allowed kinds:   ${value.allowedKinds.join(', ') || '(none)'}\n`);
+  stdout.write(`Irreversible:    ${value.allowIrreversible ? 'ALLOWED' : 'blocked'}\n`);
+  stdout.write(`Queue:           ${value.queue.byState?.COMPLETED || 0} completed, ${value.queue.byState?.QUEUED || 0} queued, ${value.queue.byState?.BLOCKED || 0} blocked\n`);
+  stdout.write('\nNote: a policy is not proof of reachability. Run a real poll or bridge call.\n');
+  return 0;
+}
+
+function arenaComponents(ctx) {
+  const { paths, policy } = arenaPolicyOrThrow(ctx);
+  const secret = readPrivate(paths.secret);
+  return { paths, policy, secret };
+}
+
+async function arenaTask(ctx, { flags, stdout }) {
+  const { paths, policy, secret } = arenaComponents(ctx);
+  if (!policy.allowedKinds.includes(flags.kind)) {
+    throw Object.assign(new Error(`Kind ${flags.kind} is not allowed by policy`), { code: 'ARENA_KIND_NOT_ALLOWED' });
+  }
+  let payload = {};
+  if (typeof flags.payload === 'string') {
+    try { payload = JSON.parse(flags.payload); } catch { throw Object.assign(new Error('--payload must be JSON'), { code: 'USAGE' }); }
+  }
+  if (flags.kind === 'tool' && !policy.allowedTools.includes(payload.tool)) {
+    throw Object.assign(new Error(`Tool ${payload.tool} is not in the owner allowlist`), { code: 'ARENA_TOOL_NOT_ALLOWED' });
+  }
+  const irreversible = bool(flags.irreversible) || flags.kind === 'job.submit';
+  if (irreversible && !policy.allowIrreversible) {
+    throw Object.assign(new Error('Owner policy does not allow irreversible tasks'), { code: 'ARENA_IRREVERSIBLE_NOT_ALLOWED' });
+  }
+  const envelope = signEnvelope({
+    secret, keyId: policy.keyId,
+    ttlMs: Number(flags.ttl) || policy.envelopeTtlMs,
+    task: { kind: flags.kind, title: flags.title, payload, irreversible, maxAttempts: Number(flags['max-attempts']) || 1 },
+    policy: { allowTools: flags.kind === 'tool' ? [payload.tool] : [] },
+  });
+  const added = await ctx.queue.add({
+    kind: envelope.kind, title: envelope.title, payload: envelope.payload,
+    dedupeKey: `arena:${envelope.id}`,
+    effectKey: envelope.irreversible ? `arena-effect:${envelope.id}` : null,
+    irreversible: envelope.irreversible,
+    maxAttempts: envelope.maxAttempts,
+    by: 'arena-local',
+  });
+  ctx.log.append('arena.accepted', { workerId: 'cli', envelopeId: envelope.id, taskId: added.task.id, kind: envelope.kind });
+  fs.mkdirSync(paths.outbox, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(path.join(paths.outbox, `${envelope.id}.envelope.json`), `${JSON.stringify(envelope, null, 2)}\n`, { mode: 0o600 });
+  stdout.write(`${JSON.stringify({ envelopeId: envelope.id, keyId: envelope.keyId, task: added.task, deduplicated: added.deduplicated }, null, 2)}\n`);
+  return 0;
+}
+
+function acquirePollerLock(paths, { clock = Date.now } = {}) {
+  const lockFile = path.join(paths.root, 'poller.lock');
+  if (fs.existsSync(lockFile)) {
+    const raw = Number(fs.readFileSync(lockFile, 'utf8'));
+    let alive = false;
+    if (Number.isInteger(raw)) {
+      try { process.kill(raw, 0); alive = true; } catch (error) { alive = error.code === 'EPERM'; }
+    }
+    if (alive) throw Object.assign(new Error(`Another Arena poller is running (pid ${raw})`), { code: 'ARENA_POLLER_BUSY' });
+    fs.rmSync(lockFile, { force: true });
+  }
+  fs.writeFileSync(lockFile, String(process.pid), { mode: 0o600 });
+  void clock;
+  return () => fs.rmSync(lockFile, { force: true });
+}
+
+async function arenaPoll(ctx, { flags, stdout, workspace, dataDir }) {
+  const { paths, policy } = arenaComponents(ctx);
+  const release = acquirePollerLock(paths);
+  const once = bool(flags.once);
+  const tokenFile = flags['token-file'] || (fs.existsSync(ctx.syncTokenFile) ? ctx.syncTokenFile : null);
+  const relayToken = tokenFile ? readPrivate(tokenFile) : (process.env.MAJIN_V6_SYNC_TOKEN || null);
+  let bridge = null;
+  let supervisor = null;
+  try {
+    const relay = relayFromPolicy({ policy, token: relayToken, log: ctx.log });
+    if (fs.existsSync(dataDir)) {
+      bridge = createBridge({
+        workspace, dataDir, v6Home: ctx.home, log: ctx.log,
+        driverStateDir: path.join(ctx.home, 'drivers', 'arena-poller'),
+      });
+      await bridge.start();
+    }
+    const invoker = bridge ? createToolInvoker({ callToolFn: (name, args) => bridge.callTool(name, args), log: ctx.log }) : null;
+    const pollHunter = hunterForPolicy(ctx, policy) || ctx.hunter;
+    let submission = { adapter: null, status: { state: 'NOT_CONFIGURED' } };
+    try {
+      submission = loadArenaSubmission(ctx, policy, pollHunter);
+    } catch (error) {
+      submission = { adapter: null, status: { state: 'BLOCKED', reason: error.code || String(error.message || error) } };
+    }
+    const handlers = buildHandlers({ hunter: pollHunter, submitAdapter: submission.adapter });
+    const limits = {
+      maxTasks: Number(flags['max-tasks']) || policy.maxTasksPerPoll,
+      maxRuntimeMs: Number(flags['max-runtime-ms']) || 10 * 60 * 1000,
+    };
+    supervisor = new Supervisor({
+      queue: ctx.queue, log: ctx.log, handlers, workerId: 'arena-poller',
+      heartbeatFile: path.join(ctx.workersDir, 'arena-poller.json'),
+      stopFile: ctx.stopFile, toolInvoker: invoker, limits,
+    });
+    const agent = new ArenaAgent({
+      relay, secret: readPrivate(paths.secret), policy, queue: ctx.queue, log: ctx.log,
+      ledgerFile: paths.ledger, workerId: 'arena-poller',
+      runWork: ({ maxTasks }) => supervisor.run({ maxTasks, maxRuntimeMs: limits.maxRuntimeMs }),
+    });
+    for (;;) {
+      if (stopRequested(ctx.home)) { stdout.write('STOP marker present; poller exiting.\n'); break; }
+      let summary;
+      try {
+        summary = await agent.pollOnce();
+      } catch (error) {
+        ctx.log.append('arena.poll_failed', { workerId: 'arena-poller', code: error.code || 'ARENA_POLL_FAILED', reason: String(error.message || error).slice(0, 300) });
+        stdout.write(`${JSON.stringify({ ok: false, code: error.code || 'ARENA_POLL_FAILED', message: error.message })}\n`);
+        if (once) return 1;
+        await new Promise((resolve) => setTimeout(resolve, policy.pollIntervalMs));
+        continue;
+      }
+      stdout.write(`${JSON.stringify({ ok: true, ...summary }, null, 2)}\n`);
+      if (once) return 0;
+      await new Promise((resolve) => setTimeout(resolve, policy.pollIntervalMs));
+    }
+    return 0;
+  } finally {
+    await bridge?.close().catch(() => {});
+    release();
+  }
+}
+
+/**
+ * The owner policy may point at its own profiles file (arena init does exactly
+ * that). Honour it, otherwise job.* handlers would silently be missing from the
+ * worker even though the policy allows them.
+ */
+function hunterForPolicy(ctx, policy) {
+  const file = policy?.profilesFile;
+  if (!file || file === ctx.profilesFile) return ctx.hunter;
+  const profiles = loadProfiles(file);
+  if (!profiles.ok) return ctx.hunter;
+  return new JobHunter({ store: ctx.jobs, profiles, log: ctx.log, gmail: ctx.gmail });
+}
+
+function loadArenaSubmission(ctx, policy, hunter = ctx.hunter) {
+  const cfg = policy.submission || {};
+  if (!cfg.adaptersFile) return { adapter: null, status: { state: 'NOT_CONFIGURED' } };
+  const loaded = loadPortalAdapters(cfg.adaptersFile);
+  if (!loaded.ok) return { adapter: null, status: { state: 'BLOCKED', reason: loaded.error.reason } };
+  if (!policy.allowIrreversible) return { adapter: null, status: { state: 'BLOCKED', reason: 'allowIrreversible is false' } };
+  return {
+    adapter: createPortalSubmitAdapter({
+      adapters: loaded.adapters, adapterId: cfg.adapterId || null, hunter,
+      evidenceDir: createArenaPaths(ctx.home).evidence, log: ctx.log,
+    }),
+    status: { state: 'CONFIGURED', adapters: [...loaded.adapters.keys()] },
+  };
+}
+
+
+function plannerFor(ctx, config) {
+  return {
+    ask: ({ mission, state, catalog = '', signal = null }) => askPlanner({ config, mission, state, catalog, signal }),
+  };
+}
+
+function journalFor(ctx, missionId) {
+  return new MissionJournal({ dir: path.join(ctx.home, 'arena', 'missions'), missionId });
+}
+
+function missionDigestTasks(tasks, journal) {
+  return tasks.map((task) => ({
+    step: journal.find((entry) => entry.taskId === task.id)?.step ?? null,
+    kind: task.kind,
+    state: task.state,
+    summary: task.result?.summary || null,
+    output: task.result?.output ?? null,
+    errorCode: task.lastError?.code || null,
+  }));
+}
+
+async function arenaProvider(ctx, { flags, stdout }) {
+  const policy = arenaPolicyOrThrow(ctx).policy;
+  const loaded = loadPlannerConfig({ policy, keyFile: path.join(ctx.home, 'arena', 'planner-key') });
+  if (!loaded.ok) {
+    stdout.write(`${JSON.stringify({ ok: false, ...loaded.error, hint: 'set MAJIN_ARENA_PROVIDER / MAJIN_ARENA_MODEL / <provider>_API_KEY, or save the key to arena/planner-key' }, null, 2)}\n`);
+    return 1;
+  }
+  const { config } = loaded;
+  let live = null;
+  if (bool(flags.live)) {
+    const answer = await askPlanner({
+      config,
+      mission: { id: 'provider-check', goal: 'Answer to prove the planner endpoint works.', allowedActions: [], allowedTools: [], constraints: [], stopWhen: null },
+      state: { step: 0, budgetLeft: {}, tasks: [], applications: { counts: {}, recent: [] }, lastResult: null, notes: 'provider check' },
+    });
+    live = answer.ok
+      ? { ok: true, action: answer.decision.action, usage: answer.usage }
+      : { ok: false, error: answer.error };
+  }
+  stdout.write(`${JSON.stringify({
+    ok: true,
+    provider: config.provider,
+    model: config.model,
+    endpoint: config.route.endpoint,
+    keySource: config.keySource,
+    maxTokens: config.route.maxTokens,
+    live,
+  }, null, 2)}\n`);
+  return live && live.ok === false ? 1 : 0;
+}
+
+async function arenaPlan(ctx, { flags, stdout }) {
+  const file = flags.mission ? String(flags.mission) : null;
+  if (!file) { stdout.write('usage: arena plan --mission FILE\n'); return 1; }
+  const loadedMission = loadMission(file);
+  if (!loadedMission.ok) { stdout.write(`${JSON.stringify(loadedMission.error, null, 2)}\n`); return 1; }
+  const policy = arenaPolicyOrThrow(ctx).policy;
+  const plannerConfig = loadPlannerConfig({ policy, keyFile: path.join(ctx.home, 'arena', 'planner-key') });
+  if (!plannerConfig.ok) { stdout.write(`${JSON.stringify(plannerConfig.error, null, 2)}\n`); return 1; }
+
+  const journal = journalFor(ctx, loadedMission.mission.id);
+  const history = journal.read();
+  const tasks = await ctx.queue.list({});
+  const applications = await ctx.jobs.list({});
+  const state = buildStateDigest({
+    mission: loadedMission.mission,
+    step: history.length,
+    tasks: missionDigestTasks(tasks, history),
+    applications,
+    lastResult: history.at(-1) || null,
+  });
+  const answer = await askPlanner({ config: plannerConfig.config, mission: loadedMission.mission, state });
+  if (!answer.ok) { stdout.write(`${JSON.stringify({ ok: false, ...answer.error, usage: answer.usage }, null, 2)}\n`); return 1; }
+  stdout.write(`${JSON.stringify({ ok: true, decision: answer.decision, usage: answer.usage, executed: false }, null, 2)}\n`);
+  return 0;
+}
+
+/**
+ * The autonomous loop. It runs here, on the owner's machine, because a chat
+ * turn cannot: see docs/v6/ARENA_BRIDGE.md §7. Every step is journalled and the
+ * queue's effect ledger makes a restart safe.
+ */
+async function arenaMission(ctx, { flags, stdout, workspace, dataDir }) {
+  const file = flags.mission ? String(flags.mission) : null;
+  if (!file) { stdout.write('usage: arena mission --mission FILE [--resume] [--allow-irreversible]\n'); return 1; }
+  const loadedMission = loadMission(file);
+  if (!loadedMission.ok) { stdout.write(`${JSON.stringify(loadedMission.error, null, 2)}\n`); return 1; }
+  let mission = loadedMission.mission;
+  if (flags['max-steps']) {
+    const n = Number(flags['max-steps']);
+    if (Number.isFinite(n) && n > 0) mission = { ...mission, budget: { ...mission.budget, maxSteps: Math.min(n, mission.budget.maxSteps) } };
+  }
+
+  const { policy } = arenaPolicyOrThrow(ctx);
+  const plannerConfig = loadPlannerConfig({ policy, keyFile: path.join(ctx.home, 'arena', 'planner-key') });
+  if (!plannerConfig.ok) {
+    stdout.write(`${JSON.stringify({ ok: false, ...plannerConfig.error, note: 'The mission did not start; no work was queued.' }, null, 2)}\n`);
+    return 1;
+  }
+
+  const irreversible = bool(flags['allow-irreversible']);
+  if (mission.allowedActions.includes('job.submit') && !irreversible) {
+    stdout.write(`${JSON.stringify({ ok: false, code: 'MISSION_IRREVERSIBLE_NOT_ENABLED', note: 'This mission can submit applications; restart with --allow-irreversible after reviewing the adapters.' }, null, 2)}\n`);
+    return 1;
+  }
+  if (irreversible && (policy.allowIrreversible !== true || !policy.allowedKinds.includes('job.submit'))) {
+    stdout.write(`${JSON.stringify({ ok: false, code: 'POLICY_BLOCKS_IRREVERSIBLE', note: 'The owner policy still blocks job.submit. Nothing was queued.' }, null, 2)}\n`);
+    return 1;
+  }
+
+  if (bool(flags['dry-run'])) {
+    const journal = journalFor(ctx, mission.id);
+    const tasks = await ctx.queue.list({});
+    const applications = await ctx.jobs.list({});
+    const state = buildStateDigest({
+      mission, step: journal.read().length,
+      tasks: missionDigestTasks(tasks, journal.read()), applications, lastResult: journal.read().at(-1) || null,
+    });
+    stdout.write(`${JSON.stringify({
+      ok: true, dryRun: true, mission: { id: mission.id, goal: mission.goal, budget: mission.budget },
+      provider: { provider: plannerConfig.config.provider, model: plannerConfig.config.model },
+      wouldStartAtStep: journal.read().length, state,
+    }, null, 2)}\n`);
+    return 0;
+  }
+
+  // Execution context: the same real drivers the worker uses.
+  let bridge = null;
+  try {
+    bridge = createBridge({
+      workspace, dataDir, v6Home: ctx.home, log: ctx.log,
+      driverStateDir: path.join(ctx.home, 'drivers', 'arena-mission'),
+    });
+    await bridge.start();
+  } catch (error) {
+    bridge = null;
+    ctx.log.append('permission.blocked', { workerId: 'orchestrator', code: error.code || 'TOOL_BRIDGE_UNAVAILABLE', reason: String(error.message || error).slice(0, 300) });
+  }
+  const invoker = bridge ? createToolInvoker({ callToolFn: (name, args) => bridge.callTool(name, args), log: ctx.log }) : null;
+  const missionHunter = hunterForPolicy(ctx, policy) || ctx.hunter;
+  let submission = { adapter: null, status: { state: 'NOT_CONFIGURED' } };
+  try {
+    submission = loadArenaSubmission(ctx, policy, missionHunter);
+  } catch (error) {
+    submission = { adapter: null, status: { state: 'BLOCKED', reason: error.code || String(error.message || error) } };
+  }
+  const supervisor = new Supervisor({
+    queue: ctx.queue, log: ctx.log, workerId: 'arena-mission',
+    handlers: buildHandlers({ hunter: missionHunter, submitAdapter: submission.adapter }),
+    heartbeatFile: path.join(ctx.workersDir, 'arena-mission.json'),
+    stopFile: ctx.stopFile, toolInvoker: invoker,
+    limits: { maxTasks: 1, maxRuntimeMs: Math.min(mission.budget.maxWallMs, 15 * 60 * 1000) },
+  });
+
+  const controller = new AbortController();
+  const onSignal = () => { controller.abort(); supervisor.requestStop('signal'); };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
+
+  const journal = journalFor(ctx, mission.id);
+  const orchestrator = new MissionOrchestrator({
+    mission,
+    planner: plannerFor(ctx, plannerConfig.config),
+    queue: ctx.queue,
+    log: ctx.log,
+    journal,
+    runWork: () => supervisor.run({ maxTasks: 1, maxRuntimeMs: Math.min(mission.budget.maxWallMs, 15 * 60 * 1000) }),
+    readApplications: () => ctx.jobs.list({}),
+    allowIrreversible: irreversible,
+  });
+
+  ctx.log.append('arena.accepted', { workerId: 'orchestrator', missionId: mission.id, note: `mission started (${bool(flags.resume) ? 'resumed' : 'fresh'})` });
+  const summary = await orchestrator.run({ resume: bool(flags.resume) });
+  ctx.log.append('arena.published', { workerId: 'orchestrator', missionId: mission.id, state: summary.stopReason });
+  process.removeListener('SIGINT', onSignal);
+  process.removeListener('SIGTERM', onSignal);
+  await bridge?.close().catch(() => {});
+
+  if (bool(flags.json)) {
+    stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
+  } else {
+    stdout.write(`MAJIN V6 — mission ${summary.missionId}\n`);
+    stdout.write(`steps:        ${summary.steps} (resumed from ${summary.resumedFrom})\n`);
+    stdout.write(`stopped:      ${summary.stopReason}${summary.detail ? ` — ${summary.detail}` : ''}\n`);
+    stdout.write(`spent:        ${summary.spent.tokens} tokens, $${summary.spent.costUsd.toFixed(4)}, ${Math.round(summary.spent.wallMs / 1000)}s\n`);
+    stdout.write(`submissions:  ${summary.submissions}\n`);
+    stdout.write(`journal:      ${summary.journalFile}\n`);
+  }
+  return summary.stopReason === 'done' ? 0 : summary.stopReason === 'needs_owner' ? 2 : 3;
+}
+
+async function arenaDoctorCommand(ctx, { flags, stdout, workspace, dataDir }) {
+  const report = await runArenaDoctor({
+    home: ctx.home, dataDir, workspace, probe: bool(flags.probe),
+  });
+  stdout.write(bool(flags.json) ? `${JSON.stringify(report, null, 2)}\n` : renderDoctor(report));
+  return report.verdict === 'PASS' || report.verdict === 'NOT_TESTED' ? 0 : 1;
+}
+
+/**
+ * Live view of what MAJIN is actually doing. Reads the append-only event log and
+ * the queue — the same state the status report uses. It never invents a line:
+ * every row is an event that was written by a real execution.
+ */
+async function arenaWatch(ctx, { flags, stdout }) {
+  const json = bool(flags.json);
+  const once = bool(flags.once);
+  const limit = Math.max(1, Math.min(500, Number(flags.lines) || 25));
+  const interval = Math.max(250, Number(flags.interval) || 1000);
+
+  const seen = new Set();
+  const render = (event) => ({
+    seq: event.seq,
+    at: event.at,
+    type: event.type,
+    ...(event.taskId ? { taskId: event.taskId } : {}),
+    line: formatActivityLine(event),
+  });
+
+  const drain = async ({ initial = false } = {}) => {
+    const events = ctx.log.read({ limit: initial ? limit : 500 });
+    const fresh = events.filter((event) => !seen.has(event.seq));
+    for (const event of fresh) seen.add(event.seq);
+    const rows = fresh.map(render);
+    if (json) {
+      if (rows.length || initial) {
+        const stats = await ctx.queue.stats();
+        stdout.write(`${JSON.stringify({ schema: 'majin.v6.arena.watch/v1', at: new Date().toISOString(), home: ctx.home, queue: stats, items: rows })}\n`);
+      }
+      return rows.length;
+    }
+    if (initial) {
+      const stats = await ctx.queue.stats();
+      stdout.write(`MAJIN V6 — Arena activity (${ctx.home})\n`);
+      stdout.write(`queue: ${stats.total} task(s)${Object.keys(stats.byState || {}).length ? ` (${Object.entries(stats.byState).map(([k, v]) => `${k} ${v}`).join(', ')})` : ''}\n\n`);
+    }
+    for (const row of rows) stdout.write(`${row.line}\n`);
+    return rows.length;
+  };
+
+  await drain({ initial: true });
+  if (once) return 0;
+
+  const stop = () => { stdout.write('\nwatch stopped.\n'); process.exit(0); };
+  process.once('SIGINT', stop);
+  for (;;) {
+    if (stopRequested(ctx.home)) { stdout.write('STOP marker present; watch exiting.\n'); return 0; }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+    await drain();
+  }
+}
+
+async function arenaServe(ctx, { flags, stdout }) {
+  const { paths, policy, secret } = arenaComponents(ctx);
+  const token = loadBridgeToken(paths.token);
+  const bridge = createBridgeServer({
+    token, policy, secret, queue: ctx.queue, log: ctx.log, home: ctx.home,
+    port: Number(flags.port) || policy.server?.port || 8787,
+  });
+  const address = await bridge.listen();
+  ctx.log.append('mcp.started', { workerId: 'arena-bridge', note: `local bridge listening on ${address.url}` });
+  stdout.write(`MAJIN V6 — local Arena bridge\n`);
+  stdout.write(`Listening: ${address.url} (loopback only)\n`);
+  stdout.write(`Token:     ${paths.token} (mode 600; send as 'Authorization: Bearer <token>')\n`);
+  stdout.write('Endpoints: GET /healthz, GET /v1/status, POST /v1/tasks, GET /v1/tasks/:id, POST /v1/stop\n');
+  stdout.write('Press Ctrl+C to stop. Nothing is exposed beyond 127.0.0.1.\n');
+  const shutdown = async () => {
+    await bridge.close();
+    ctx.log.append('mcp.stopped', { workerId: 'arena-bridge' });
+    process.exit(0);
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+  await new Promise(() => {});
   return 0;
 }
 
@@ -415,6 +995,20 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
           return 0;
         }
         throw Object.assign(new Error('sync needs status|push|local'), { code: 'USAGE' });
+      }
+
+      case 'arena': {
+        if (sub === 'init') return await arenaInit(ctx, { flags, stdout, stderr });
+        if (sub === 'status') return await arenaStatus(ctx, { stdout, flags });
+        if (sub === 'task') return await arenaTask(ctx, { flags, stdout });
+        if (sub === 'poll') return await arenaPoll(ctx, { flags, stdout, workspace, dataDir });
+        if (sub === 'serve') return await arenaServe(ctx, { flags, stdout });
+        if (sub === 'doctor') return await arenaDoctorCommand(ctx, { flags, stdout, workspace, dataDir });
+        if (sub === 'watch') return await arenaWatch(ctx, { flags, stdout });
+        if (sub === 'provider') return await arenaProvider(ctx, { flags, stdout });
+        if (sub === 'plan') return await arenaPlan(ctx, { flags, stdout });
+        if (sub === 'mission') return await arenaMission(ctx, { flags, stdout, workspace, dataDir });
+        throw Object.assign(new Error('arena needs init|status|task|poll|serve'), { code: 'USAGE' });
       }
 
       case 'inventory':

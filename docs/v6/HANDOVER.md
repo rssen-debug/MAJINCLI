@@ -20,7 +20,8 @@ It does **not** add a GUI, EXE, Electron app or a second model runtime.
 | --- | --- |
 | Source repository | `rssen-debug/MAJINCLI` |
 | Checkout commit used for this work | `ea439ec89aeee430d70f7f3afc91a11c4cbec8a2` (`main`) |
-| Development branch | `arena/abdefe02-majincli` |
+| Development branch (V6 core) | `arena/abdefe02-majincli` — merged as PR #479 (`9b9a272`) |
+| Development branch (Arena bridge) | `arena/49646924-majincli` |
 | Reference tag created | `v6-reference-checkout-ea439ec-20261027` |
 | Pre-change bundle | `.majin-v6-safety/pre-v6.bundle` (tag-anchored; not committed, excluded by `.majin-*/`) |
 | PR #478 head observed | `a47999da38a0d32bf73ff67ea2ee95d7c3819027` (open, not merged) |
@@ -44,10 +45,12 @@ node bin/majin-v6.mjs status          # real persisted state
 node bin/majin-v6.mjs mcp --workspace . --data-dir <v5> --v6-home <v6>
 node bin/majin-v6.mjs worker --max-tasks 10 --max-runtime-ms 900000
 node bin/majin-v6.mjs inventory --deep --history --write
+node bin/majin-v6.mjs arena init|doctor|status|task|poll|serve|watch|provider|plan|mission   # see docs/v6/ARENA_BRIDGE.md
 ```
 
 npm aliases: `npm run v6:doctor`, `v6:status`, `v6:mcp`, `v6:worker`,
-`v6:inventory`, `v6:test`.
+`v6:inventory`, `v6:test`, `v6:test:arena`, `v6:arena`, `v6:arena:poll`,
+`v6:arena:serve`.
 
 PowerShell (see `docs/v6/OPERATIONS.md` for full detail):
 
@@ -77,7 +80,11 @@ on failure. JSONC configs are refused rather than rewritten. OpenCode's default
 | Launcher and registration safety | **PASS (static)**; PowerShell execution `NOT_TESTED` | `test/v6/launcher.test.js`; `pwsh` is unavailable in this environment |
 | OpenCode CLI + DeepSeek live | **NOT_TESTED** | No OpenCode binary, config or model account in this sandbox |
 | Windows behaviour | **NOT_TESTED** | Linux sandbox; run the launcher on the target machine |
-| Employer-portal submission | **NOT_IMPLEMENTED** | Deliberate: only an owner-provided adapter may submit; otherwise the task is BLOCKED |
+| Employer-portal submission adapter | **IMPLEMENTED (owner-authored HTTP adapter)**; real employer **NOT_TESTED** | `src/v6/jobs/portal.js` + `test/v6/arena/e2e-controlled.test.js` submit to a controlled endpoint with a real multipart body and acknowledgement rule. Without an adapter file `job.submit` stays BLOCKED |
+| Arena bridge → real tool → real result | **PASS (live on Linux)** | `fs_write`/`re_hash` through `POST /v1/tasks`, executed by a real worker; returned SHA-256 matched `sha256sum` |
+| Arena autonomous mission loop | **PASS (local, scripted model)** | `arena mission` ran plan → tool → result → plan → stop; hash matched `sha256sum`; budgets, stuck detection, irreversible gate and `--resume` tested. A real provider is **NOT_TESTED** here (no model API is reachable from this sandbox). |
+| Arena crash recovery | **PASS** | `test/v6/arena/recovery.test.js` — SIGKILL mid-submission, one POST ever, UNCERTAIN, no resend |
+| Arena relay and loopback bridge | **PASS (controlled e2e)** | `test/v6/arena/*` — signed envelopes, replay refusal, policy gating, real sockets, durable execution; live GitHub relay **BLOCKED** (403), see `docs/v6/ARENA_BRIDGE.md` |
 | Real Gmail OAuth | **BLOCKED** | No owner credentials here; the client never fabricates access |
 | Private telemetry upload | **BLOCKED** | No owner token here; dry-run/refusal paths are tested |
 | Browser automation | **BLOCKED on this host** | No browser binary; the inventory reports the real reason |
@@ -98,6 +105,14 @@ reproduce the V6 suite and `npm test` for the repository suite.
 | `src/v6/handlers.js` | Task handlers (`tool`, `health.delay`, job discovery/evaluation/submission gate, Gmail verify) |
 | `src/v6/tool-invoker.js` | Converts driver receipts/uncertainty into structured task outcomes |
 | `src/v6/jobs/state.js` | Strict application state machine with evidence requirements |
+| `src/v6/jobs/portal.js` | Owner-authored HTTP submission adapter: URL/origin allowlist, field map, CV upload, acknowledgement rule, local evidence |
+| `src/v6/arena/envelope.js` | `majin.v6.arena.task/v1` envelope: HMAC-SHA256 signing, key/TTL/skew checks, replay ledger, kind+tool allowlists |
+| `src/v6/arena/relay.js` | GitHub private-repo relay and generic HTTP relay, token-scoped, no redirects |
+| `src/v6/arena/agent.js` | Policy loading, poll/ack/publish loop, result scrubbing, on-disk secret/policy paths |
+| `src/v6/arena/server.js` | Loopback bridge: bearer token, Host check, body cap, rate limit, no CORS |
+| `src/v6/arena/planner.js` | One-decision-per-step planner over MAJIN's existing provider transport; strict JSON, typed errors, usage/cost accounting |
+| `src/v6/arena/orchestrator.js` | The local loop: budgeted, journalled, resumable, irreversible-gated |
+| `src/v6/arena/mission.js` | Mission schema, strict validation, durable journal, prompt digest |
 | `src/v6/jobs/store.js` | Durable applications, canonical URLs, candidate profiles, eligibility |
 | `src/v6/jobs/hunter.js` | Discovery → match → approval → preparation → receipt → email confirmation |
 | `src/v6/gmail.js` | OAuth2 refresh-token client, read-only search, classification, matching |
@@ -212,9 +227,12 @@ There is no `gh` dependency.
    `<v6-home>/drivers/`. Cross-process duplicate protection for irreversible
    work comes from the queue's effect ledger, not from the driver's per-process
    operation ledger.
-4. `job.submit` has no built-in portal implementation. This is intentional and
-   must not be described as working until an adapter is configured and tested
-   against an authorized test application.
+4. `job.submit` has no built-in portal implementation. Deliberate: it needs an
+   owner-authored adapter (`arena/adapters.json`). The adapter path is proven
+   only against a controlled endpoint; it must not be described as working
+   against a real employer until one real acknowledgement is observed.
+   Note: the adapter speaks **HTTP POST with a field map**. Employers that need
+   real browser DOM interaction are still out of scope.
 5. Gmail classification is heuristic and fixture-tested only; real inbox
    validation is required before relying on it.
 6. `job.evaluate` depends on the existing document extractor for PDF/DOCX CVs;
@@ -224,6 +242,13 @@ There is no `gh` dependency.
    ever registered".
 8. OpenCode's model identity and token usage are not visible to MAJIN. The
    report says so instead of guessing.
+9. The Arena bridge is **outbound-polling only**. This sandbox cannot reach a
+   private machine (Arena has no host connector) and its token is rejected by
+   the private relay repo (403), so the GitHub relay leg is **BLOCKED** and the
+   HTTP relay leg is proven only on loopback.
+10. Nothing here hosts a continuous "Arena thinks while you sleep" loop inside a
+    chat window: a key holder outside the chat (GitHub Actions, local client or
+    your own scheduler) must sign envelopes.
 
 ## 10. Continuing the work
 
@@ -236,7 +261,13 @@ The durable backlog is `docs/v6/BACKLOG.md`. The next tasks, in order:
 3. Configure a test Gmail account and run `majin-v6 jobs verify` against a
    controlled message.
 4. Build and test an owner-approved submission adapter against a test endpoint.
-5. Only then consider invoking real applications, with quotas and receipts.
+5. Run `scripts/v6/start-arena-bridge.ps1 -Action Init` on Windows, then
+   `-Action Status`; the script has only been checked statically.
+6. Wire one relay (GitHub private repo token or the HTTP relay), deliver one
+   `health.delay` envelope, and prove `arena poll --once` executes it.
+7. Write one portal adapter for one employer and observe one real
+   acknowledgement before enabling `job.submit` in the policy.
+8. Only then consider invoking real applications, with quotas and receipts.
 
 If a session ends, no work is lost: the queue, profiles, events and receipts
 are on disk. Start the worker again with the same `--v6-home`.

@@ -16,7 +16,8 @@ export class ToolInvocationError extends Error {
 }
 
 const PERMANENT_CODES = new Set([
-  'UNKNOWN_TOOL', 'TOOL_NOT_FOUND', 'PERMISSION_DENIED', 'PATH_DENIED', 'VALIDATION_ERROR', 'INVALID_ARGUMENTS',
+  'UNKNOWN_TOOL', 'TOOL_NOT_FOUND', 'TOOL_NOT_AUTHORIZED', 'PERMISSION_DENIED', 'PATH_DENIED',
+  'VALIDATION_ERROR', 'INVALID_ARGUMENTS',
 ]);
 
 export function classifyDriverResult(record) {

@@ -7,6 +7,29 @@
  */
 import { ToolInvocationError } from './tool-invoker.js';
 
+const MAX_OUTPUT_BYTES = 8 * 1024;
+
+/**
+ * Arena needs the *content* of a tool result, not just "completed" — but the
+ * queue and the relay must stay bounded. Keep the real payload when it fits,
+ * otherwise return an explicit truncation marker instead of a silent cut.
+ */
+export function boundedOutput(value, { limitBytes = MAX_OUTPUT_BYTES } = {}) {
+  if (value == null) return null;
+  let text;
+  try { text = JSON.stringify(value); } catch { return { truncated: true, reason: 'not serializable' }; }
+  if (text === undefined) return null;
+  const bytes = Buffer.byteLength(text, 'utf8');
+  if (bytes <= limitBytes) return value;
+  return {
+    truncated: true,
+    bytes,
+    limitBytes,
+    note: 'Tool output exceeded the bound; request a narrower operation instead of the full payload.',
+    preview: text.slice(0, Math.min(2000, limitBytes)),
+  };
+}
+
 /** General-purpose handler that calls one discovered MAJIN tool. */
 export function toolHandler() {
   return async (ctx) => {
@@ -22,10 +45,14 @@ export function toolHandler() {
         progressLabel: `tool ${name} started`,
       });
       const record = result?.record || {};
-      const summary = result?.result?.summary ?? result?.result?.result?.summary;
+      // `result.result` is the driver's own payload: { ok, result, meta, summary }.
+      // Keeping it whole is what lets Arena read a hash, a file or a job list.
+      const payload = result?.result ?? null;
+      const summary = result?.result?.summary;
       return {
         ok: true,
         summary: typeof summary === 'string' ? summary.slice(0, 300) : `${name} completed`,
+        output: boundedOutput(payload),
         evidence: {
           tool: name,
           operationId: record.operationId || null,
