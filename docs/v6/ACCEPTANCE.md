@@ -9,10 +9,10 @@ was available.
 Reproduce:
 
 ```bash
-npm run v6:test            # 68 tests, 0 fail (incl. test/v6/arena)
+npm run v6:test            # 77 tests, 0 fail (incl. test/v6/arena)
 npm run v6:test:arena      # 20 tests, 0 fail (signed relay + loopback bridge)
 npm test                   # 1457 pass, 0 fail, 19 skipped (164 s)
-node scripts/parse-all.js  # 832/832 files parse cleanly
+node scripts/parse-all.js  # 835/835 files parse cleanly
 node scripts/release-gate.mjs  # local checks GREEN
 ```
 
@@ -38,7 +38,10 @@ is absent by design or scope; **NOT_TESTED** means no evidence either way.
 | 11 | OpenCode experience | **PASS (server side)**; OpenCode UI **NOT_TESTED** | Native MCP tools, lazy search/schema discovery, commands documented in `docs/v6/OPERATIONS.md`. No OpenCode binary was available to verify end-to-end prompts, themes or session history. |
 | 12 | Real testing, no false success | **PASS (Linux)**; Windows/Gmail/job portal **NOT_TESTED / BLOCKED** | 48 V6 tests include real subprocess MCP/worker runs; full repo suite green. No Windows acceptance was possible. |
 | 13 | Work autonomously through the session | **PASS (this session)** | Implementation, tests, fixes, inventory generation, launcher, docs and checks were executed without asking for "continue". Durable backlog maintained. |
-| 16 | Arena as the reasoning brain (signed task relay) | **PASS (machinery)**, live relay/Gmail/portal **BLOCKED / NOT_TESTED** | Signed, expiring, replay-proof envelopes; owner policy for task kinds, tools and irreversible work; loopback bridge with bearer token, host check and rate limit; durable execution through the existing supervisor. `test/v6/arena/*` = 20 tests. Not proven here: GitHub relay (token 403), real Gmail, real employer. See `docs/v6/ARENA_BRIDGE.md`. |
+| 16 | Arena as the reasoning brain (signed task relay) | **PASS (machinery)**, live relay/Gmail/portal **BLOCKED / NOT_TESTED** |
+| 16b | Arena → MAJIN → real tool → real result | **PASS (live, this host)** | `fs_write` and `re_hash` executed through the bridge by a real worker; the returned SHA-256 matched `sha256sum` byte for byte. See `docs/v6/ARENA_BRIDGE.md` §4b. |
+| 16c | GitHub relay 403 | **DIAGNOSED, BLOCKED on an owner grant** | Valid token, repository not on its access list → now reported as `SYNC_TOKEN_SCOPE_DENIED` with the exact fix. `arena doctor --probe` performs the real write/read/delete round trip once granted. |
+| 16d | Crash recovery and double-submission protection | **PASS** | `recovery.test.js`: worker `SIGKILL` mid-submission → one POST ever, `UNCERTAIN`, uncertain effect, restarted worker executes nothing, `requeue` refused. | Signed, expiring, replay-proof envelopes; owner policy for task kinds, tools and irreversible work; loopback bridge with bearer token, host check and rate limit; durable execution through the existing supervisor. `test/v6/arena/*` = 20 tests. Not proven here: GitHub relay (token 403), real Gmail, real employer. See `docs/v6/ARENA_BRIDGE.md`. |
 | 17 | Explicit permissions and logging for Arena | **PASS** | No shell envelope exists. Unknown kind/tool/irreversible → refused before execution; every accepted/rejected envelope is logged (`arena.*` events) and an action is only claimed when a real receipt exists. |
 | 14 | Deliverables 1–16 | **PARTIAL** | See table below. |
 | 15 | Definition of done | **NOT MET** | Several required end-to-end proofs (OpenCode+DeepSeek live, real Gmail, real receipts, Windows acceptance) are absent. No readiness percentage is claimed. |

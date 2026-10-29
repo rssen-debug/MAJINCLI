@@ -147,6 +147,26 @@ export class GitHubRelay {
     await this.#put(`${this.root}/outbox/${id}.json`, result, `v6 arena: result ${id}`);
     return { ok: true, path: `${this.root}/outbox/${id}.json` };
   }
+
+  /**
+   * Real round trip against the configured repository.
+   *   read  — repository is visible, private, and has a default branch
+   *   write — a tiny probe object is written, read back and deleted
+   * Never writes when `write` is false, so a read-only diagnosis stays read-only.
+   */
+  async probe({ id = `probe-${Date.now()}`, write = false } = {}) {
+    const verified = await this.#verify();
+    const base = { repo: verified.repo, branch: this.branch, path: `${this.root}/.probe/${id}.json`, readable: true };
+    if (!write) return { ok: true, repo: verified.repo, ...base, wrote: false };
+    const payload = { schema: 'majin.v6.arena.probe/v1', id, at: new Date().toISOString() };
+    await this.#put(base.path, payload, `v6 arena: probe ${id}`);
+    const read = await this.#get(base.path);
+    if (!read.ok) throw new ArenaError(`Probe written but not readable back (HTTP ${read.status})`, 'ARENA_RELAY_READ_FAILED');
+    const body = JSON.parse(Buffer.from(read.json.content, 'base64').toString('utf8'));
+    if (body?.id !== id) throw new ArenaError('Probe read back a different object', 'ARENA_RELAY_PROBE_MISMATCH');
+    await this.#delete(base.path, read.json.sha, `v6 arena: probe cleanup ${id}`);
+    return { ok: true, repo: verified.repo, branch: this.branch, path: base.path, wrote: true, readBack: true, cleanedUp: true };
+  }
 }
 
 /**
@@ -204,6 +224,22 @@ export class HttpRelay {
     const body = JSON.stringify(result);
     if (Buffer.byteLength(body) > MAX_RESULT_BYTES) throw new ArenaError('Result is too large for the relay', 'ARENA_RESULT_TOO_LARGE');
     return this.#request(`/relay/outbox/${encodeURIComponent(id)}`, { method: 'PUT', body: result });
+  }
+
+  /** Real round trip: write a probe object, read it back, remove it when supported. */
+  async probe({ id = `probe-${Date.now()}` } = {}) {
+    const payload = { schema: 'majin.v6.arena.probe/v1', id, at: new Date().toISOString() };
+    const pathName = `/relay/outbox/${encodeURIComponent(id)}`;
+    await this.#request(pathName, { method: 'PUT', body: payload });
+    const back = await this.#request(pathName).catch(() => null);
+    const readBack = Boolean(back && back.id === id);
+    let cleanedUp = false;
+    try {
+      await this.#request(pathName, { method: 'DELETE' });
+      cleanedUp = true;
+    } catch { /* the relay may not implement DELETE; the probe object is inert */ }
+    if (!readBack) throw new ArenaError('Relay accepted the probe but did not return it', 'ARENA_RELAY_PROBE_MISMATCH');
+    return { ok: true, path: pathName, wrote: true, readBack, cleanedUp };
   }
 }
 

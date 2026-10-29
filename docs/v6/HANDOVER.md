@@ -45,7 +45,7 @@ node bin/majin-v6.mjs status          # real persisted state
 node bin/majin-v6.mjs mcp --workspace . --data-dir <v5> --v6-home <v6>
 node bin/majin-v6.mjs worker --max-tasks 10 --max-runtime-ms 900000
 node bin/majin-v6.mjs inventory --deep --history --write
-node bin/majin-v6.mjs arena init|status|task|poll|serve   # see docs/v6/ARENA_BRIDGE.md
+node bin/majin-v6.mjs arena init|doctor|status|task|poll|serve|watch   # see docs/v6/ARENA_BRIDGE.md
 ```
 
 npm aliases: `npm run v6:doctor`, `v6:status`, `v6:mcp`, `v6:worker`,
@@ -81,6 +81,8 @@ on failure. JSONC configs are refused rather than rewritten. OpenCode's default
 | OpenCode CLI + DeepSeek live | **NOT_TESTED** | No OpenCode binary, config or model account in this sandbox |
 | Windows behaviour | **NOT_TESTED** | Linux sandbox; run the launcher on the target machine |
 | Employer-portal submission adapter | **IMPLEMENTED (owner-authored HTTP adapter)**; real employer **NOT_TESTED** | `src/v6/jobs/portal.js` + `test/v6/arena/e2e-controlled.test.js` submit to a controlled endpoint with a real multipart body and acknowledgement rule. Without an adapter file `job.submit` stays BLOCKED |
+| Arena bridge → real tool → real result | **PASS (live on Linux)** | `fs_write`/`re_hash` through `POST /v1/tasks`, executed by a real worker; returned SHA-256 matched `sha256sum` |
+| Arena crash recovery | **PASS** | `test/v6/arena/recovery.test.js` — SIGKILL mid-submission, one POST ever, UNCERTAIN, no resend |
 | Arena relay and loopback bridge | **PASS (controlled e2e)** | `test/v6/arena/*` — signed envelopes, replay refusal, policy gating, real sockets, durable execution; live GitHub relay **BLOCKED** (403), see `docs/v6/ARENA_BRIDGE.md` |
 | Real Gmail OAuth | **BLOCKED** | No owner credentials here; the client never fabricates access |
 | Private telemetry upload | **BLOCKED** | No owner token here; dry-run/refusal paths are tested |

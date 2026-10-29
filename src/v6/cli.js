@@ -25,6 +25,8 @@ import { createArenaPaths, ArenaAgent, loadArenaPolicy, sanitizeResult } from '.
 import { createSecret, generateKeyId, signEnvelope, POLICY_SCHEMA } from './arena/envelope.js';
 import { relayFromPolicy } from './arena/relay.js';
 import { createBridgeServer, loadBridgeToken } from './arena/server.js';
+import { runArenaDoctor, renderDoctor } from './arena/doctor.js';
+import { formatActivityLine } from './activity.js';
 import { loadPortalAdapters, createPortalSubmitAdapter } from './jobs/portal.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -78,6 +80,8 @@ function usage() {
   majin-v6 sync push [--yes] [--dry-run]
   majin-v6 arena init [--repo owner/private] [--relay github|http] [--port N] [--force]
   majin-v6 arena status [--json]
+  majin-v6 arena doctor [--probe] [--json]              real readiness check (exit 1 on FAIL/BLOCKED)
+  majin-v6 arena watch [--once] [--json] [--lines N]    live activity from real events
   majin-v6 arena task --kind KIND [--payload JSON] [--title T] [--ttl MS]
   majin-v6 arena poll [--once] [--max-tasks N] [--token-file PATH]
   majin-v6 arena serve [--port N]
@@ -186,11 +190,19 @@ async function runWorker(ctx, { flags }) {
     ? createToolInvoker({ callToolFn: (name, args) => bridge.callTool(name, args), log: ctx.log })
     : null;
   let submission = { adapter: null, status: { state: 'NOT_CONFIGURED' } };
-  try {
-    const loaded = loadArenaPolicy(createArenaPaths(ctx.home).policy);
-    if (loaded.ok) submission = loadArenaSubmission(ctx, loaded.policy);
-  } catch { /* no arena policy: submission stays unavailable */ }
-  const handlers = buildHandlers({ hunter: ctx.hunter, submitAdapter: submission.adapter });
+  let hunter = ctx.hunter;
+  const loadedPolicy = loadArenaPolicy(createArenaPaths(ctx.home).policy);
+  if (loadedPolicy.ok) {
+    hunter = hunterForPolicy(ctx, loadedPolicy.policy) || hunter;
+    // A broken adapter file must never cost the worker its other handlers.
+    try {
+      submission = loadArenaSubmission(ctx, loadedPolicy.policy, hunter);
+    } catch (error) {
+      submission = { adapter: null, status: { state: 'BLOCKED', reason: error.code || String(error.message || error) } };
+      ctx.log.append('permission.blocked', { workerId, code: error.code || 'ARENA_SUBMISSION_UNAVAILABLE', reason: String(error.message || error).slice(0, 300) });
+    }
+  }
+  const handlers = buildHandlers({ hunter, submitAdapter: submission.adapter });
   const supervisor = new Supervisor({
     queue: ctx.queue, log: ctx.log, handlers,
     workerId,
@@ -447,8 +459,14 @@ async function arenaPoll(ctx, { flags, stdout, workspace, dataDir }) {
       await bridge.start();
     }
     const invoker = bridge ? createToolInvoker({ callToolFn: (name, args) => bridge.callTool(name, args), log: ctx.log }) : null;
-    const submission = loadArenaSubmission(ctx, policy);
-    const handlers = buildHandlers({ hunter: ctx.hunter, submitAdapter: submission.adapter });
+    const pollHunter = hunterForPolicy(ctx, policy) || ctx.hunter;
+    let submission = { adapter: null, status: { state: 'NOT_CONFIGURED' } };
+    try {
+      submission = loadArenaSubmission(ctx, policy, pollHunter);
+    } catch (error) {
+      submission = { adapter: null, status: { state: 'BLOCKED', reason: error.code || String(error.message || error) } };
+    }
+    const handlers = buildHandlers({ hunter: pollHunter, submitAdapter: submission.adapter });
     const limits = {
       maxTasks: Number(flags['max-tasks']) || policy.maxTasksPerPoll,
       maxRuntimeMs: Number(flags['max-runtime-ms']) || 10 * 60 * 1000,
@@ -486,7 +504,20 @@ async function arenaPoll(ctx, { flags, stdout, workspace, dataDir }) {
   }
 }
 
-function loadArenaSubmission(ctx, policy) {
+/**
+ * The owner policy may point at its own profiles file (arena init does exactly
+ * that). Honour it, otherwise job.* handlers would silently be missing from the
+ * worker even though the policy allows them.
+ */
+function hunterForPolicy(ctx, policy) {
+  const file = policy?.profilesFile;
+  if (!file || file === ctx.profilesFile) return ctx.hunter;
+  const profiles = loadProfiles(file);
+  if (!profiles.ok) return ctx.hunter;
+  return new JobHunter({ store: ctx.jobs, profiles, log: ctx.log, gmail: ctx.gmail });
+}
+
+function loadArenaSubmission(ctx, policy, hunter = ctx.hunter) {
   const cfg = policy.submission || {};
   if (!cfg.adaptersFile) return { adapter: null, status: { state: 'NOT_CONFIGURED' } };
   const loaded = loadPortalAdapters(cfg.adaptersFile);
@@ -494,11 +525,72 @@ function loadArenaSubmission(ctx, policy) {
   if (!policy.allowIrreversible) return { adapter: null, status: { state: 'BLOCKED', reason: 'allowIrreversible is false' } };
   return {
     adapter: createPortalSubmitAdapter({
-      adapters: loaded.adapters, adapterId: cfg.adapterId || null, hunter: ctx.hunter,
+      adapters: loaded.adapters, adapterId: cfg.adapterId || null, hunter,
       evidenceDir: createArenaPaths(ctx.home).evidence, log: ctx.log,
     }),
     status: { state: 'CONFIGURED', adapters: [...loaded.adapters.keys()] },
   };
+}
+
+async function arenaDoctorCommand(ctx, { flags, stdout, workspace, dataDir }) {
+  const report = await runArenaDoctor({
+    home: ctx.home, dataDir, workspace, probe: bool(flags.probe),
+  });
+  stdout.write(bool(flags.json) ? `${JSON.stringify(report, null, 2)}\n` : renderDoctor(report));
+  return report.verdict === 'PASS' || report.verdict === 'NOT_TESTED' ? 0 : 1;
+}
+
+/**
+ * Live view of what MAJIN is actually doing. Reads the append-only event log and
+ * the queue — the same state the status report uses. It never invents a line:
+ * every row is an event that was written by a real execution.
+ */
+async function arenaWatch(ctx, { flags, stdout }) {
+  const json = bool(flags.json);
+  const once = bool(flags.once);
+  const limit = Math.max(1, Math.min(500, Number(flags.lines) || 25));
+  const interval = Math.max(250, Number(flags.interval) || 1000);
+
+  const seen = new Set();
+  const render = (event) => ({
+    seq: event.seq,
+    at: event.at,
+    type: event.type,
+    ...(event.taskId ? { taskId: event.taskId } : {}),
+    line: formatActivityLine(event),
+  });
+
+  const drain = async ({ initial = false } = {}) => {
+    const events = ctx.log.read({ limit: initial ? limit : 500 });
+    const fresh = events.filter((event) => !seen.has(event.seq));
+    for (const event of fresh) seen.add(event.seq);
+    const rows = fresh.map(render);
+    if (json) {
+      if (rows.length || initial) {
+        const stats = await ctx.queue.stats();
+        stdout.write(`${JSON.stringify({ schema: 'majin.v6.arena.watch/v1', at: new Date().toISOString(), home: ctx.home, queue: stats, items: rows })}\n`);
+      }
+      return rows.length;
+    }
+    if (initial) {
+      const stats = await ctx.queue.stats();
+      stdout.write(`MAJIN V6 — Arena activity (${ctx.home})\n`);
+      stdout.write(`queue: ${stats.total} task(s)${Object.keys(stats.byState || {}).length ? ` (${Object.entries(stats.byState).map(([k, v]) => `${k} ${v}`).join(', ')})` : ''}\n\n`);
+    }
+    for (const row of rows) stdout.write(`${row.line}\n`);
+    return rows.length;
+  };
+
+  await drain({ initial: true });
+  if (once) return 0;
+
+  const stop = () => { stdout.write('\nwatch stopped.\n'); process.exit(0); };
+  process.once('SIGINT', stop);
+  for (;;) {
+    if (stopRequested(ctx.home)) { stdout.write('STOP marker present; watch exiting.\n'); return 0; }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+    await drain();
+  }
 }
 
 async function arenaServe(ctx, { flags, stdout }) {
@@ -711,6 +803,8 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
         if (sub === 'task') return await arenaTask(ctx, { flags, stdout });
         if (sub === 'poll') return await arenaPoll(ctx, { flags, stdout, workspace, dataDir });
         if (sub === 'serve') return await arenaServe(ctx, { flags, stdout });
+        if (sub === 'doctor') return await arenaDoctorCommand(ctx, { flags, stdout, workspace, dataDir });
+        if (sub === 'watch') return await arenaWatch(ctx, { flags, stdout });
         throw Object.assign(new Error('arena needs init|status|task|poll|serve'), { code: 'USAGE' });
       }
 

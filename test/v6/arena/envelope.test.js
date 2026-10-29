@@ -57,21 +57,24 @@ test('tampering with any field invalidates the signature', () => {
 
 test('expiry, clock skew and excessive lifetime are enforced', () => {
   const secret = createSecret();
-  const short = signEnvelope({ secret, keyId: 'ark_test', task: { kind: 'health.delay' }, ttlMs: 30_000 });
+  // Fixed base clock: a wall-clock jump in the sandbox must never turn this
+  // security assertion into a flake in either direction.
+  const base = Date.parse('2026-10-29T12:00:00.000Z');
+  const short = signEnvelope({ secret, keyId: 'ark_test', task: { kind: 'health.delay' }, ttlMs: 30_000, now: () => base });
   assert.throws(
-    () => verifyEnvelope(short, { secret, policy, now: Date.now() + 60_000 }),
+    () => verifyEnvelope(short, { secret, policy, now: base + 60_000 }),
     (error) => error.code === 'ARENA_EXPIRED',
   );
-  const future = signEnvelope({ secret, keyId: 'ark_test', task: { kind: 'health.delay' }, now: () => Date.now() + 120_000 });
+  const future = signEnvelope({ secret, keyId: 'ark_test', task: { kind: 'health.delay' }, now: () => base + 120_000 });
   assert.throws(
-    () => verifyEnvelope(future, { secret, policy }),
+    () => verifyEnvelope(future, { secret, policy, now: base }),
     (error) => error.code === 'ARENA_NOT_YET_VALID',
   );
   // Signing clamps to the 24 h horizon; verifying rejects anything beyond it.
-  const longLived = signEnvelope({ secret, keyId: 'ark_test', task: { kind: 'health.delay' }, ttlMs: 48 * 60 * 60 * 1000 });
+  const longLived = signEnvelope({ secret, keyId: 'ark_test', task: { kind: 'health.delay' }, ttlMs: 48 * 60 * 60 * 1000, now: () => base });
   const lifetime = Date.parse(longLived.expiresAt) - Date.parse(longLived.issuedAt);
   assert.equal(lifetime, 24 * 60 * 60 * 1000);
-  assert.equal(verifyEnvelope(longLived, { secret, policy }).kind, 'health.delay');
+  assert.equal(verifyEnvelope(longLived, { secret, policy, now: base }).kind, 'health.delay');
 });
 
 test('task kinds, tool allowlists and irreversible work are owner-controlled', () => {

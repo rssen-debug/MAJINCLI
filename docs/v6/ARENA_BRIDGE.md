@@ -67,110 +67,150 @@ Guarantees enforced in code (all covered by tests):
 Secrets live in `<v6>/arena/` with mode 600 (`secret`, `bridge-token`,
 `github-token` if used). They are never committed, logged or sent to the relay.
 
-## 3. Commands
+## 3. The two commands you actually need
 
 ```powershell
-# one-time: create policy + secrets (no irreversible work enabled)
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Init
+# day to day: check first, then start the loopback bridge
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Start
 
-# inspect the real policy/queue state
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Status
-
-# local planner: authenticated loopback API
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Serve
-
-# consume relay work once (or run continuously without --once)
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Poll
-
-# always-on: scheduled poller (dry run unless -Apply)
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action InstallTask
+# remote mode (Arena is the planner, this PC is the executor): poll the relay forever
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Relay
 ```
 
-Equivalent CLI:
+`-Action Start` runs `arena doctor` first and **refuses to open the listener** if a
+check is FAIL/BLOCKED. Everything else is a flag on the same script:
 
-```bash
-node bin/majin-v6.mjs arena init [--repo owner/private] [--relay github|http]
-node bin/majin-v6.mjs arena status [--json]
-node bin/majin-v6.mjs arena task --kind KIND --payload JSON
-node bin/majin-v6.mjs arena poll [--once] [--token-file PATH]
-node bin/majin-v6.mjs arena serve [--port N]
-```
+| Action | What it does |
+| --- | --- |
+| `Init` | creates policy, signing secret and bridge token (mode 600) |
+| `Doctor [-Probe]` | real readiness check; `-Probe` performs a real relay write+read |
+| `Start` | doctor, then `arena serve` on `127.0.0.1` |
+| `Status` | policy, relay, queue and irreversible state |
+| `Serve` | the loopback API only |
+| `Poll` | one relay pass |
+| `Relay` | continuous relay polling |
+| `Watch` | live activity from the real event log |
+| `Task -Kind K -Payload J` | enqueue one signed task locally |
+| `InstallTask [-Apply]` | scheduled poller (dry run unless `-Apply`) |
 
-Loopback API (token from `<v6>/arena/bridge-token`):
+Equivalent CLI: `majin-v6 arena init|doctor|status|task|poll|serve|watch`.
+
+Loopback API (token at `<v6>/arena/bridge-token`):
 
 ```text
-GET  /healthz              no auth, no payload
-GET  /v1/status            report
-POST /v1/tasks             {kind, payload, title?, irreversible?}
-GET  /v1/tasks/:id         task state/progress/receipt
-POST /v1/stop              stop marker
+GET  /healthz        no auth, no payload
+GET  /v1/status      real status report
+GET  /v1/activity    live activity items + queue counts (cursor = last seq)
+POST /v1/tasks       {kind, payload, title?, irreversible?}  -> 202 + durable task
+GET  /v1/tasks/:id   state, progress, real result/output, receipt
+POST /v1/stop        stop marker
 ```
 
 ## 4. What was verified here
 
+### 4a. The GitHub 403 — root cause, measured
+
+The first failure said "authentication failed", which was wrong and sent the
+owner to the wrong place. Probing the actual token showed what it is:
+
+| Probe | Result |
+| --- | --- |
+| `GET /repos/rssen-debug/majin2026` | **403** `Resource not accessible by integration` |
+| Repositories the token can see | 5, all **public**; `majin2026` is not among them |
+| Creating a repository / gist with that token | 403 — not permitted |
+| The same call from Node | `UNABLE_TO_VERIFY_LEAF_SIGNATURE` until `NODE_EXTRA_CA_CERTS` points at the system CA bundle |
+
+So it is a **scope** problem, not a credential problem: the token is valid but
+`rssen-debug/majin2026` is not on its repository access list. `verifyPrivateRepo`
+now reports `SYNC_TOKEN_SCOPE_DENIED` with the exact fix instead of
+`SYNC_AUTH_FAILED`, and the doctor prints it as a BLOCKED check with the action:
+
+> Fine-grained token → Repository access → select `rssen-debug/majin2026` →
+> Permissions → **Contents: Read and write** → save to
+> `<v6-home>/arena/github-token` → `-Action Doctor -Probe`.
+
+`arena doctor --probe` then performs a real write, read-back and delete of
+`arena/.probe/<id>.json`, which is what proves *both* sides can read and write.
+That verification is **not done yet** — it needs the grant above.
+
+### 4b. Execution through the bridge, live
+
+Run against a fresh V6 home on this Linux host: `arena serve` on
+`127.0.0.1:8899`, tasks posted as Arena would, executed by a real worker process
+using the real V5 tool drivers.
+
+| Step | Result |
+| --- | --- |
+| `POST /v1/tasks` `{tool:"fs_write"}` | 202, task queued |
+| worker executes | `COMPLETED`, file on disk (36 B), receipt `v6-74815264…` |
+| `POST /v1/tasks` `{tool:"re_hash"}` | `FAILED_FINAL` `TOOL_NOT_AUTHORIZED` — lane `re` not granted by the owner |
+| after granting lane `re` | `COMPLETED`, and the reply carries `output.meta.hashes[0].sha256` |
+| independent check `sha256sum` | `bdb115ad…87320fd` — **identical** |
+| `browser.open` | 403 `TOOL_NOT_ALLOWED` (not in the owner's tool allowlist) |
+| `shell_run` | 403 `TOOL_NOT_ALLOWED` |
+| `job.submit` | 403 `KIND_NOT_ALLOWED` (irreversible work disabled) |
+| `GET /v1/activity` | real event items + queue counts, cursor advanced |
+| `arena watch --once` | prints the same lines from the same log |
+
+This is a genuine round trip: Arena's request, MAJIN's queue, a real tool
+execution, a real receipt and a result checked against the operating system.
+
+### 4c. Tests
+
 | Test | Status | What it proves |
 | --- | --- | --- |
-| `test/v6/arena/envelope.test.js` (8) | **PASS** | signing, tamper refusal, expiry/skew/TTL, kind+tool allowlists, irreversible gating, replay ledger, size limit, policy validation |
-| `test/v6/arena/bridge-server.test.js` (8) | **PASS** | loopback bind, 401 without token, 421 on foreign Host, 202 task creation, 403 for unlisted kind/tool/irreversible, 415/400/oversize handling, 429 rate limit |
-| `test/v6/arena/e2e-controlled.test.js` (4) | **PASS** | real HTTP relay → signed envelope → durable queue → supervisor → job pipeline → multipart submission with CV → acknowledgement receipt → Gmail-shaped confirmation → `CONFIRMED_RECEIVED`; unacknowledged answer → `UNCERTAIN`; replay never resends; CLI poller in a real subprocess |
-| Real GitHub relay | **BLOCKED** | sandbox token is rejected by the private repo (403); needs your token on your PC |
+| `envelope.test.js` (8) | **PASS** | signing, tamper refusal, expiry/skew/TTL, kind+tool allowlists, irreversible gating, replay ledger, policy validation (clock is now fixed, so it cannot flake) |
+| `bridge-server.test.js` (8) | **PASS** | loopback bind, 401, 421 on foreign Host, 202 task creation, 403 for unlisted kind/tool/irreversible, oversize, rate limit |
+| `e2e-controlled.test.js` (4) | **PASS** | full chain over real sockets: discover → evaluate → approve → submit (one POST with CV) → receipt → confirmation → `CONFIRMED_RECEIVED`; replay sends nothing; unacknowledged answer → `UNCERTAIN` |
+| `recovery.test.js` (1) | **PASS** | a worker **SIGKILLed** while the employer endpoint holds the request: exactly one submission ever left, state `UNCERTAIN`/`WORKER_LOST_IRREVERSIBLE`, effect marked uncertain, restarted worker executes nothing, `requeue` refuses, reconciliation never resends |
+| `doctor-activity.test.js` (7) | **PASS** | doctor refuses to call an unconfigured bridge healthy; real relay probe over a socket; 403 mapped to a scope fix; sequence numbers unique across processes; `/v1/activity` auth + cursor; `watch` prints real lines |
+| Real GitHub relay round trip | **BLOCKED** | the token cannot reach the private repo (see 4a) |
 | Real Gmail | **BLOCKED** | no owner OAuth credentials |
-| Real employer submission | **NOT_TESTED** | see below |
-| Windows execution / scheduled task | **NOT_TESTED** | no Windows host or PowerShell available in this environment |
-| Loopback bridge, executed for real | **PASS** | `arena serve` on `127.0.0.1:8899` with a fresh V6 home: `/healthz` → 200, `/v1/status` without token → 401, with token → the real status report, `Host: evil.example` → 421, `POST /v1/tasks {kind:"job.submit"}` → `KIND_NOT_ALLOWED`, `POST /v1/tasks {kind:"health.delay"}` → 202 with a durable task id |
-| PowerShell script syntax and contract | **PASS (static only)** | `test/v6/launcher.test.js` asserts the dry-run switch, the `-Apply` gate, the refusal guards, quoted task arguments and that child output cannot corrupt the exit code; a tokenizer check confirms balanced quotes/braces. **It has never been executed.** |
-
-### The end-to-end test, stated precisely
-
-The controlled test uses **real** sockets, **real** signatures, the **real** V6
-queue/supervisor, the **real** portal adapter and a **real** Gmail-shaped HTTP
-API. The employer (`127.0.0.1`) and the mailbox are controlled endpoints on the
-test machine.
-
-It therefore proves: the machinery works end to end, a submission is only marked
-submitted when an acknowledgement is observed, evidence is stored locally, and
-replays cannot double-send.
-
-It does **not** prove that a real company received an application. No real
-application was submitted from this session, and none should be claimed.
+| Real employer submission | **NOT_TESTED** | see §5 — needs an owner adapter and a real posting |
+| Windows execution / scheduled task | **NOT_TESTED** | no PowerShell or Windows host in this environment |
+| PowerShell script | **PASS (static only)** | brace/quote balance plus contract assertions in `launcher.test.js`; **never executed** |
 
 ## 5. The remaining step to a real application
 
 On your Windows machine, in order:
 
-1. `start-arena-bridge.ps1 -Action Init` — creates the policy.
-2. Put a fine-grained GitHub token (contents: read/write on **your private**
-   repo) or the HTTP relay token where `arena poll` can read it.
-3. Write `jobs/profiles.json` with the real CV path and candidate emails.
+1. `-Action Init` — creates the policy (irreversible work disabled).
+2. Save the relay token (`<v6>/arena/github-token`) after granting the repo, then
+   run `-Action Doctor -Probe` until every line is PASS.
+3. Write `jobs/profiles.json` with your real CV path and candidate emails.
 4. Author **one** adapter for **one** employer in `arena/adapters.json`
-   (`type: http-post`, exact URL, field map, ack rule). Start against the
-   employer's staging/test form if they have one.
+   (`type: http-post`, exact URL, field map, acknowledgement rule). Start with a
+   staging/test form if the employer has one.
 5. Enable deliberately: add `job.submit` to `allowedKinds`, set
-   `allowIrreversible: true`, point `submission.adaptersFile` at that file.
-6. Run a single submission:
+   `allowIrreversible: true`, point `submission.adaptersFile` at that file, and
+   re-run `-Action Doctor` (the submission check must turn PASS).
+6. Run one submission and watch it happen:
    ```powershell
    .\scripts\v6\start-arena-bridge.ps1 -Action Task -Kind job.submit -Payload '{"applicationId":"<id>"}'
-   .\scripts\v6\start-arena-bridge.ps1 -Action Poll
-   node bin/majin-v6.mjs jobs list
+   .\scripts\v6\start-arena-bridge.ps1 -Action Watch
+   node bin\majin-v6.mjs jobs list
    ```
-7. Verify the portal acknowledgement and the confirmation email. Only then
-   enable the scheduled poller.
+7. Verify the acknowledgement in the portal and the confirmation email. Only
+   then enable the scheduled poller (`-Action InstallTask -Apply`).
 
-Until step 4 exists, `job.submit` returns `SUBMISSION_ADAPTER_NOT_CONFIGURED` —
-by design.
+Until step 4 exists, `job.submit` answers
+`SUBMISSION_ADAPTER_NOT_CONFIGURED` — by design, not by accident.
 
 ## 6. Honest limits of "Arena as the brain"
 
-- **This chat session cannot host the writer.** Arena's sandbox has no token for
+- **This chat cannot hold the signing key.** Arena's sandbox has no token for
   your private repo (403) and no route to your PC. A continuous
-  "Arena-thinks-while-you-sleep" loop needs a key holder that runs without this
-  chat: a GitHub Actions workflow with the signing secret, your own automation,
-  or the loopback API from a local Arena client. Do not paste the signing secret
-  into a chat window.
-- **Tokens are not exposed to the model.** Arena sees only the sanitized results
-  you publish back, which is what the outbox contains: state, receipt kind and
-  reference, error codes.
+  "Arena-thinks-while-you-sleep" loop needs a key holder that runs outside the
+  chat: GitHub Actions with the secret, your own scheduler, or a local client
+  using the loopback API. Never paste the signing secret into a chat.
+- **Arena sees sanitized results only.** The outbox carries state, receipt kind
+  and reference, error codes — not CV contents or email bodies.
 - **No shell.** There is deliberately no generic "run any command" envelope.
-  Adding one would turn a signed task queue into a remote shell.
+  The tool allowlist plus the owner lanes are the two gates in front of every
+  call, and both refused live in §4b.
+- **Browser, desktop and Gmail need the object they drive.** On this Linux host
+  the inventory marks those tools unavailable for a real reason (no browser
+  binary, Windows-only, no OAuth). On your Windows machine the tools exist but
+  each lane still needs the owner grant, and Gmail needs your OAuth client.
 - **Model choice is unchanged.** Nothing here calls OpenCode Go or any provider;
   `arena poll` performs zero inference.

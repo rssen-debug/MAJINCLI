@@ -33,6 +33,7 @@ export const DEFAULT_JOBS = [
 export async function startControlledStack({
   jobs = DEFAULT_JOBS,
   ackStatus = 200,
+  applyHang = false,
   ackText = 'Thank you for your application. Your application has been received. Reference: ACME-2026-0042',
   confirmationSubject = 'Thank you for your application',
   confirmationBody = 'We have received your application for Frontend Developer. Reference: ACME-2026-0042',
@@ -45,6 +46,7 @@ export async function startControlledStack({
     acks: [],
     gmailSearches: 0,
     tokenRequests: 0,
+    hungRequests: 0,
   };
 
   const readBody = (request) => new Promise((resolve, reject) => {
@@ -127,6 +129,12 @@ export async function startControlledStack({
       stats.submissionBodies.push({ hasCv, hasName, hasEmail, bytes: raw.length, sha256: createHash('sha256').update(raw).digest('hex') });
       if (!hasCv || !hasName || !hasEmail) {
         return sendText(response, 400, 'Missing required fields');
+      }
+      if (applyHang) {
+        // Accept the request, never answer: the worker stalls mid-submission so
+        // a crash test can kill it at the worst possible moment.
+        stats.hungRequests = (stats.hungRequests || 0) + 1;
+        return undefined;
       }
       return sendText(response, ackStatus, ackText);
     }

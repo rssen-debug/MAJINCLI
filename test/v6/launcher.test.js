@@ -61,7 +61,11 @@ test('V6 never shells out to the GitHub CLI or rewrites the active installation'
 
 test('the Arena bridge script is dry-run capable, loopback-only and never elevates', () => {
   const bridge = read('scripts/v6/start-arena-bridge.ps1');
-  assert.match(bridge, /\[ValidateSet\('Init', 'Status', 'Serve', 'Poll', 'Task', 'InstallTask', 'UninstallTask'\)\]/);
+  assert.match(bridge, /\[ValidateSet\('Init', 'Doctor', 'Start', 'Status', 'Serve', 'Poll', 'Relay', 'Watch', 'Task', 'InstallTask', 'UninstallTask'\)\]/);
+  assert.match(bridge, /'Start' \{/, 'there must be a single command that checks and then starts');
+  assert.match(bridge, /The bridge was NOT started/, 'Start must refuse to listen when the doctor fails');
+  assert.match(bridge, /'Relay' \{/, 'outbound polling must be a first-class action');
+  assert.match(bridge, /'Watch' \{/, 'the live view must be reachable from the same script');
   assert.match(bridge, /\[switch\]\$DryRun/);
   assert.match(bridge, /-RunLevel Limited/, 'the scheduled task must not run elevated');
   assert.match(bridge, /Refusing to run: the V6 home must not be the V5 data directory or inside it/);

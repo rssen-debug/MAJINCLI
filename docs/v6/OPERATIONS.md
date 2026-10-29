@@ -133,6 +133,8 @@ explicit URL/origin allowlist, field map, CV upload and acknowledgement rule
 Full detail in `docs/v6/ARENA_BRIDGE.md`. Short version:
 
 ```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Start    # doctor + loopback bridge
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Relay    # continuous relay polling
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Init
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Status
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Serve    # loopback API
@@ -173,6 +175,8 @@ The model must call `majin_tools_search` and `majin_tool_schema` before
 | `ARENA_REPLAY` | envelope already consumed | expected on redelivery; nothing executed |
 | `ARENA_KIND_NOT_ALLOWED` / `ARENA_TOOL_NOT_ALLOWED` | outside the owner policy | edit `arena/policy.json` deliberately |
 | `arena poll` exits with a relay error | token missing or repo not writable | check the token file; the poller never retries an unverified envelope |
+| `SYNC_TOKEN_SCOPE_DENIED` | the token is valid but the private repo is not on its access list | grant Contents: Read and write on that repo, then `arena doctor --probe` |
+| `arena doctor` exit 1 | a check is FAIL or BLOCKED | fix the `next actions` printed at the bottom; `-Action Start` refuses to listen |
 
 Uncertain task handling is intentionally not exposed as a one-line CLI escape
 hatch. A human must confirm the real outcome with evidence; the queue API

@@ -13,6 +13,7 @@ import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { ArenaError, signEnvelope } from './envelope.js';
 import { buildReport } from '../report.js';
+import { formatActivityLine } from '../activity.js';
 
 const MAX_BODY_BYTES = 256 * 1024;
 const RATE_LIMIT = { windowMs: 60_000, max: 60 };
@@ -128,6 +129,26 @@ export function createBridgeServer({
         });
         log?.append('arena.accepted', { workerId: 'bridge', envelopeId: envelope.id, taskId: added.task.id, kind: envelope.kind });
         return json(response, 202, { envelopeId: envelope.id, task: added.task, deduplicated: added.deduplicated });
+      }
+      if (request.method === 'GET' && url.pathname === '/v1/activity') {
+        const since = Number(url.searchParams.get('since')) || 0;
+        const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 50));
+        const events = log ? log.read({ limit: 2000 }) : [];
+        const items = events
+          .filter((event) => Number(event.seq) > since)
+          .slice(-limit)
+          .map((event) => ({
+            seq: event.seq, at: event.at, type: event.type,
+            ...(event.taskId ? { taskId: event.taskId } : {}),
+            line: formatActivityLine(event),
+          }));
+        return json(response, 200, {
+          schema: 'majin.v6.arena.activity/v1',
+          generatedAt: new Date(clock()).toISOString(),
+          cursor: items.length ? items.at(-1).seq : since,
+          queue: queue ? await queue.stats() : null,
+          items,
+        });
       }
       const match = /^\/v1\/tasks\/([A-Za-z0-9_-]+)$/.exec(url.pathname);
       if (request.method === 'GET' && match) {

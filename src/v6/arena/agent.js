@@ -194,6 +194,7 @@ export class ArenaAgent {
         state: task.state,
         attempts: task.attempts,
         summary: task.result?.summary || null,
+        output: task.result?.output ?? null,
         receipt: task.result?.receipt || null,
         error: task.lastError || null,
         blocked: task.blocked ? { code: task.blocked.code, requiresOwner: task.blocked.requiresOwner === true } : null,

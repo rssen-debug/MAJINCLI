@@ -12,6 +12,10 @@
   action without executing it.
 
 .EXAMPLE
+  # one command you actually need day to day
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Start
+
+.EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\v6\start-arena-bridge.ps1 -Action Init
 
 .EXAMPLE
@@ -25,7 +29,7 @@
 #>
 [CmdletBinding()]
 param(
-  [ValidateSet('Init', 'Status', 'Serve', 'Poll', 'Task', 'InstallTask', 'UninstallTask')]
+  [ValidateSet('Init', 'Doctor', 'Start', 'Status', 'Serve', 'Poll', 'Relay', 'Watch', 'Task', 'InstallTask', 'UninstallTask')]
   [string]$Action = 'Status',
 
   [string]$V6Home = (Join-Path $env:LOCALAPPDATA 'MAJIN\v6'),
@@ -51,6 +55,7 @@ param(
 
   [string]$TaskName = 'MAJIN-Arena-Poller',
 
+  [switch]$Probe,
   [switch]$Apply,
   [switch]$DryRun
 )
@@ -106,6 +111,10 @@ $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) { throw 'Node.js 22+ is required and was not found in PATH. This script does not install it.' }
 $nodeExe = $node.Source
 
+$dataDirExists = Test-Path -LiteralPath $v5Path -PathType Container
+if ((Test-Path -LiteralPath $workspacePath -PathType Container) -eq $false) {
+  throw "Workspace not found: $workspacePath. Point -Workspace at the folder MAJIN may work in."
+}
 $common = @('--v6-home', $v6Path)
 $pollArgs = @($cliScript, 'arena', 'poll', '--once') + $common +
             @('--max-tasks', "$MaxTasks", '--workspace', $workspacePath, '--data-dir', $v5Path)
@@ -133,6 +142,38 @@ switch ($Action) {
     Write-Host (Join-Path $v6Path 'arena\policy.json')
     Write-Host 'Irreversible work (job.submit) stays disabled until you enable it deliberately.'
     exit 0
+  }
+
+  'Doctor' {
+    $cliArgs = @($cliScript, 'arena', 'doctor') + $common
+    if ($dataDirExists) { $cliArgs += @('--data-dir', $v5Path) }
+    if ($Probe) { $cliArgs += @('--probe') }
+    exit (Invoke-Majin $cliArgs)
+  }
+
+  'Start' {
+    # Doctor first: never open a listener on a host that cannot work.
+    Write-Host 'Step 1/2 — checking the bridge for real' -ForegroundColor Cyan
+    $doctorArgs = @($cliScript, 'arena', 'doctor') + $common
+    if ($dataDirExists) { $doctorArgs += @('--data-dir', $v5Path) }
+    $code = Invoke-Majin $doctorArgs
+    if ($code -ne 0) {
+      Write-Host ''
+      Write-Host 'The bridge was NOT started: fix the BLOCKED items above first.' -ForegroundColor Yellow
+      exit $code
+    }
+    Write-Host 'Step 2/2 — starting the loopback bridge' -ForegroundColor Cyan
+    exit (Invoke-Majin (@($cliScript, 'arena', 'serve') + $common + @('--port', "$Port")))
+  }
+
+  'Relay' {
+    # Continuous outbound polling: this is the mode a Windows PC runs when Arena
+    # is the planner and the machine is remote.
+    exit (Invoke-Majin (@($cliScript, 'arena', 'poll') + $common + @('--max-tasks', "$MaxTasks", '--workspace', $workspacePath, '--data-dir', $v5Path)))
+  }
+
+  'Watch' {
+    exit (Invoke-Majin (@($cliScript, 'arena', 'watch') + $common))
   }
 
   'Status' {
